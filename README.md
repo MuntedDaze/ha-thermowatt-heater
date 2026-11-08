@@ -13,6 +13,9 @@ Rejected or unrecognised authentication requires an explicit operator reset.
 
 Read the [configuration, safe reset and installation guide](thermowatt-heater/DOCS.md),
 [security review](SECURITY_REVIEW.md), and [changelog](CHANGELOG.md) before installation.
+The [deployment-readiness report](DEPLOYMENT_READINESS.md) records passing native
+amd64/aarch64 builds and isolated startup/MQTT/shutdown checks, plus the checks
+that still require an approved Home Assistant installation.
 
 For a later owner-approved installation, add this repository to the Home Assistant
 app/add-on store: `https://github.com/MuntedDaze/ha-thermowatt-heater`.

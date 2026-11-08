@@ -2,8 +2,8 @@
 
 Cloud access and heater commands default to disabled. Installation alone does not
 authorise authentication. Keep both disabled while reviewing this candidate.
-No live account, cloud API, heater, Docker host, or Home Assistant installation was
-used to validate this change.
+No live account, cloud API, physical heater or owner's Home Assistant/Docker
+installation was used. Container checks ran only on disposable CI runners.
 
 ## Account compatibility and the original failure
 
@@ -177,10 +177,14 @@ Sources reviewed:
 [supported architectures](https://www.home-assistant.io/more-info/unsupported/system_architecture/),
 [MQTT water-heater modes](https://www.home-assistant.io/integrations/water_heater.mqtt/).
 
-This is a documentation/source review, not a tested OS/Supervisor compatibility
-claim. No container build, real MQTT broker, current HA discovery validation, or
-Supervisor installation was run on the owner's infrastructure. Multi-architecture
-builds and an isolated cloud-disabled Supervisor smoke test remain release gates.
+Native amd64 and aarch64 builds, installed dependencies, actual S6/Bashio startup,
+isolated authenticated MQTT, clean shutdown and restart have now passed in CI.
+The actual validators in official Supervisor 2026.10.5 and 2026.11.0 images also
+accepted the configuration/options. The cloud-disabled tests recorded zero HTTP
+attempts and could not issue heater commands. See the repository's
+[deployment-readiness report](../DEPLOYMENT_READINESS.md) for evidence and limits.
+No full Supervisor daemon, HA OS installation or HA Core discovery/UI validation
+was run. Those remain owner-approved installation checks, not assumed passes.
 
 ## Offline development checks
 
@@ -246,7 +250,8 @@ heater's safety controls; this project does not implement one.
 ## Release decision
 
 1.3.2 is a **review candidate**, suitable for an owner-approved isolated
-cloud-disabled installation after container checks. It is not approved for
+cloud-disabled installation following the passing isolated container checks and
+the real-HA checks listed in the deployment-readiness report. It is not approved for
 Thermann authentication, heater control, deployment or general release. Obtain
 vendor API/account confirmation before any authenticated Thermann trial. See the
 repository security review for the historical private key and token-storage risks.

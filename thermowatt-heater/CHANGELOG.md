@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add offline HTTP/socket-blocked tests, static checks and safety documentation.
 - Add an explicit standalone one-login diagnostic for later owner approval. It
   never retries, starts MQTT, persists tokens, polls or controls a heater.
+- Validate native amd64/aarch64 image builds, installed dependencies, actual
+  S6/Bashio startup, isolated authenticated MQTT, clean shutdown and restart in CI.
+  Disabled cloud/commands produced zero HTTP attempts despite synthetic commands.
+- Validate app configuration/options with official Supervisor 2026.10.5 and
+  2026.11.0 schemas without running a Supervisor daemon. Record evidence and
+  remaining real-HA installation checks in DEPLOYMENT_READINESS.md.
 
 ### Release limits
 
@@ -44,8 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compatibility is unverified for this owner. A first-hand upstream Thermann
   success report supports plausibility, not universal account compatibility.
   No endpoints or app identities were guessed.
-- No live cloud, real heater, container build or Supervisor deployment validation.
-  Owner approval and isolated build/installation checks remain required.
+- No live cloud, real heater, actual HA OS/Supervisor installation or HA Core UI
+  validation. Owner approval and the documented real-HA checks remain required.
 
 ## [1.3.1] - Previously published
 
