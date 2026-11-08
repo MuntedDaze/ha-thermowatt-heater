@@ -1,8 +1,7 @@
-import sys, json, time, uuid, os, requests, urllib3
+import sys, json, time, uuid, os, requests
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURATION ---
 EMAIL = sys.argv[1] if len(sys.argv) > 1 else None
