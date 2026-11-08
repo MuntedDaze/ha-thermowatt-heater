@@ -1,0 +1,68 @@
+name: Deployment readiness (isolated)
+
+on:
+  pull_request:
+  push:
+    branches: ["codex/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  image-and-smoke:
+    name: Native image and smoke (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install PyYAML==6.0.3
+      - name: Build the actual add-on Dockerfile
+        run: docker build --pull --tag thermowatt-readiness:local thermowatt-heater
+      - name: Check installed Python dependencies
+        run: docker run --rm --network none --entrypoint /opt/venv/bin/python3 thermowatt-readiness:local -m pip check
+      - name: Isolated S6, Bashio, MQTT, shutdown and restart checks
+        run: python tools/readiness/container_smoke.py --image thermowatt-readiness:local --arch '${{ matrix.arch }}' --output readiness-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: readiness-${{ matrix.arch }}
+          path: readiness-results/
+
+  supervisor-schema:
+    name: Supervisor schema (${{ matrix.version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Stable channel and latest published release reviewed on 2026-11-09.
+        version: ["2026.10.5", "2026.11.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install PyYAML==6.0.3
+      - name: Read the actual app YAML as JSON
+        run: python -c 'import json,yaml; json.dump(yaml.safe_load(open("thermowatt-heater/config.yaml")), open("app-config.json", "w"))'
+      - name: Validate with official Supervisor schemas (no daemon or network)
+        env:
+          SUPERVISOR_IMAGE: ghcr.io/home-assistant/amd64-hassio-supervisor:${{ matrix.version }}
+        run: |
+          docker pull "$SUPERVISOR_IMAGE"
+          docker image inspect "$SUPERVISOR_IMAGE" --format '{{json .RepoDigests}}'
+          docker run --rm --network none --entrypoint python3 \
+            --mount "type=bind,src=$PWD/tools/readiness/validate_supervisor.py,dst=/validate.py,readonly" \
+            --mount "type=bind,src=$PWD/app-config.json,dst=/app-config.json,readonly" \
+            "$SUPERVISOR_IMAGE" /validate.py
