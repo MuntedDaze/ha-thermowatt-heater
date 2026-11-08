@@ -77,7 +77,7 @@ class MyThermowattBridge:
         self.session.headers["x-api-key"] = self.API_KEY
         
         payload = {"username": EMAIL, "password": PASSWORD, "device_id": self.config["device_uuid"]}
-        r = self.session.post(f"{self.BASE_URL}/login", json=payload, verify=False)
+        r = self.session.post(f"{self.BASE_URL}/login", json=payload, verify=True)
         r.raise_for_status()
         res = r.json()['result']
         self._update_auth(res['accessToken'], res['refreshToken'])
@@ -88,7 +88,7 @@ class MyThermowattBridge:
         self.session.headers["x-api-key"] = self.API_KEY
         
         payload = {"username": EMAIL, "refreshToken": self.config["refresh_token"]}
-        r = self.session.post(f"{self.BASE_URL}/refresh", json=payload, verify=False)
+        r = self.session.post(f"{self.BASE_URL}/refresh", json=payload, verify=True)
         if r.status_code == 200:
             res = r.json()['result']
             self._update_auth(res['accessToken'], res['refreshToken'])
@@ -103,7 +103,7 @@ class MyThermowattBridge:
         if serial:
             self.session.headers["seriale"] = serial
         
-        resp = self.session.request(method, url, verify=False, **kwargs)
+        resp = self.session.request(method, url, verify=True, **kwargs)
         
         # Handle 401 - try refresh
         if resp.status_code == 401:
@@ -112,7 +112,7 @@ class MyThermowattBridge:
                 self._reset_headers()
                 if serial:
                     self.session.headers["seriale"] = serial
-                resp = self.session.request(method, url, verify=False, **kwargs)
+                resp = self.session.request(method, url, verify=True, **kwargs)
         
         return resp
 
