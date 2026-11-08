@@ -5,9 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.2] - Review candidate (2026-11-09)
+## [1.3.3] - Review candidate (2026-11-09)
 
-### Proposed read-only Thermann follow-up (not deployed)
+### Read-only Thermann update (not deployed)
 
 - Record owner-reported temperature agreement at 17°C current / 70°C target,
   app 3.15.17, heater 07.00.09.06 and Wi-Fi 01.03.21.
@@ -21,7 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a staged future test plan. No command/authentication changes, additional
   cloud requests, schedule edits or Windows diagnostic workflow.
 - Add mocked mode/status/Jinja/command-contract coverage and extend isolated
-  container discovery checks. Release numbering/deployment remains owner-reviewed.
+  container discovery checks.
+
+### Upgrade compatibility
+
+- Bump the existing add-on to 1.3.3 without changing its slug, options/schema,
+  option defaults, state paths, authentication code or existing MQTT entity IDs.
+- Preserve installed credentials, saved tokens, consumed retry generation,
+  lockouts and cloud/command settings. An interrupted authentication remains
+  fail-closed; upgrading is not an authentication reset.
+- Mark 1.3.3 as requiring attention because the heating sensor intentionally
+  changes to Unknown/null. Existing data/options are retained; this marker does
+  not enable or reset settings. New-install cloud and command defaults stay false.
+- Add actual-1.3.2-format synthetic upgrade fixtures, option/state compatibility
+  tests and native-container replacement checks with preserved private data.
+- Document the normal Update path and limits in UPGRADING_1_3_3.md. No feature,
+  command, schedule, live cloud test, merge or deployment is added.
+
+## [1.3.2] - Previously installed baseline
 
 ### Security and authentication
 

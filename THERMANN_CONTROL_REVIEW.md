@@ -6,6 +6,10 @@ commands or schedule changes were performed for this review. The separate Window
 login workflow remains cancelled. Authentication safeguards and command handling
 are unchanged; `commands_enabled` still defaults to false.
 
+The reviewed read-only correction is now packaged as the proposed 1.3.3 update.
+See [upgrade compatibility](UPGRADING_1_3_3.md). Its runtime behavior is unchanged
+by release preparation; no new control feature or live test is introduced.
+
 ## Evidence and its limits
 
 The owner reports the following for an Australian Thermann Smart Electric 315 L,

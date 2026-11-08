@@ -1,4 +1,10 @@
-# Thermowatt bridge 1.3.2 — review candidate
+# Thermowatt bridge 1.3.3 — review candidate
+
+This is the proposed update from the owner's working 1.3.2 installation. See the
+[upgrade notes](../UPGRADING_1_3_3.md): the existing slug, options, private data and
+old entity IDs are retained. Updating does not reset the authentication guard or
+change installed cloud/command settings. No new features are added during release
+preparation, and PR #2 remains draft and unmerged.
 
 Cloud access and heater commands default to disabled. Installation alone does not
 authorise authentication. Keep both disabled while reviewing this candidate.
@@ -208,8 +214,10 @@ The Dockerfile retains `ghcr.io/home-assistant/base:3.24`, uses its S6 init
 dependencies in a virtual environment. MQTT uses the supported `mqtt:need`
 Supervisor service and Bashio service discovery. No privileged mode, host
 network, host mappings or new Supervisor permissions are requested. The obsolete
-top-level `mqtt: true` key was removed. Boot defaults to manual and 1.3.2 is
-marked as a breaking version to prevent automatic update across this change.
+top-level `mqtt: true` key was removed in 1.3.2. Boot defaults to manual; 1.3.2 and
+1.3.3 are marked as attention-requiring versions. For 1.3.3 this highlights the
+intentional heating-state change to Unknown/null, without resetting installed
+options, credentials or private data.
 
 Sources reviewed:
 [configuration](https://contributors.home-assistant.io/apps/reference/configuration/),
@@ -296,8 +304,8 @@ heater's safety controls; this project does not implement one.
 
 ## Release decision
 
-1.3.2 remains a **review candidate**. The owner reports a successful real HA OS
-installation, authentication and initial read-only status display. This is not
+1.3.3 remains a **review candidate**. The owner reports a successful real HA OS
+1.3.2 installation, authentication and initial read-only status display. This is not
 approval for heater commands, automation, merging or general release. Keep the
 owner's commands disabled while the remaining functionality is reviewed. See the
 deployment-readiness report for unverified areas and the security review for the
