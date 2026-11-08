@@ -27,6 +27,10 @@ allowed_ip = os.environ["SMOKE_MQTT_IP"]
 
 def limited_connect(sock, address):
     if sock.family in (socket.AF_INET, socket.AF_INET6):
+        # Paho 2.1 uses a TCP socket pair on loopback to wake its network thread.
+        if address[0] in ("127.0.0.1", "::1"):
+            record("loopback_connect")
+            return original_connect(sock, address)
         if address[0] != allowed_ip or address[1] != 1883:
             record("forbidden_socket")
             raise AssertionError("External socket prohibited during smoke test")

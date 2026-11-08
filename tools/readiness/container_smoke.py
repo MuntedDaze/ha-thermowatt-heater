@@ -135,7 +135,7 @@ def smoke(image, arch, output):
                 mount(broker_config, "/fixture"),
                 BROKER_IMAGE,
                 "-c",
-                "mosquitto_passwd -b -c /fixture/password synthetic-mqtt SYNTHETIC_MQTT_PASSWORD && chmod 644 /fixture/password",
+                "mosquitto_passwd -b -c /fixture/password synthetic-mqtt SYNTHETIC_MQTT_PASSWORD && chown mosquitto:mosquitto /fixture/password && chmod 600 /fixture/password",
             )
             docker("network", "create", "--internal", network)
             assert json.loads(docker("network", "inspect", network).stdout)[0]["Internal"] is True
@@ -159,9 +159,13 @@ def smoke(image, arch, output):
                 broker,
                 "--network-alias",
                 "mqtt",
+                "--entrypoint",
+                "mosquitto",
                 "--mount",
                 mount(broker_config, "/mosquitto/config", True),
                 BROKER_IMAGE,
+                "-c",
+                "/mosquitto/config/mosquitto.conf",
             )
             wait_for(lambda: b"running" in docker("logs", broker).stdout, "isolated MQTT broker")
             broker_ip = json.loads(docker("inspect", broker).stdout)[0]["NetworkSettings"][
