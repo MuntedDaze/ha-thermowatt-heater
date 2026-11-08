@@ -44,14 +44,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2026.11.0 schemas without running a Supervisor daemon. Record evidence and
   remaining real-HA installation checks in DEPLOYMENT_READINESS.md.
 
+### Owner-reported verification — 2026-11-09
+
+- Owner reports successful 1.3.2 installation and Thermann Control authentication
+  in Home Assistant OS, MQTT heater discovery, and current/target temperature and
+  heating-status display with cloud enabled and commands disabled.
+- Additional Windows login diagnostic cancelled; its uncommitted implementation
+  was discarded. No further authentication or runtime changes were introduced.
+- Temperature accuracy, operating-mode mapping and heater commands remain
+  unverified. Further development is paused for owner review.
+
 ### Release limits
 
-- Thermann Control / Australian Thermann Smart Electric 315 L API/account
-  compatibility is unverified for this owner. A first-hand upstream Thermann
-  success report supports plausibility, not universal account compatibility.
-  No endpoints or app identities were guessed.
-- No live cloud, real heater, actual HA OS/Supervisor installation or HA Core UI
-  validation. Owner approval and the documented real-HA checks remain required.
+- Initial authentication/read-only operation now has an owner success report;
+  universal account compatibility, temperature accuracy, mode mapping and actual
+  control behaviour are not established. No endpoints or app identities were guessed.
+- No agent live requests or physical heater-control tests. Remaining validation
+  needs owner review. Anti-legionella protection, thermostat limits and fallback
+  schedules must be preserved; Off's effect on those protections is unverified.
 
 ## [1.3.1] - Previously published
 

@@ -24,8 +24,20 @@ on disposable GitHub-hosted Linux runners.
 | Disabled cloud/commands | PASS | Both images recorded zero HTTP attempts and zero forbidden DNS/socket attempts, despite 12 synthetic MQTT commands per architecture across two launches. Guard attempts stayed zero; no tokens or heater status appeared. |
 | Clean shutdown and persistent restart | PASS | Both launches per architecture stopped within 15 seconds, exit code 0, no OOM/forced kill, offline availability and MQTT DISCONNECT observed. Guard unchanged after restart. |
 | Existing 135 offline tests and static checks | PASS | CI passed Python 3.12/3.13/3.14, Ruff lint/format, compileall and Bash syntax checks. |
-| Real Home Assistant OS installation | NOT RUN | Requires an owner-approved test installation; see remaining checks below. |
-| Live Thermann authentication / physical heater | NOT RUN | Prohibited for this work; no compatibility claim made. |
+| Real Home Assistant OS initial installation | OWNER-REPORTED SUCCESS | Owner reports 1.3.2 installed and running; not tested by the agent. |
+| Real Thermann authentication and initial read-only display | OWNER-REPORTED SUCCESS | MQTT discovery and current/target temperature and heating status displayed; commands disabled. |
+| Temperature accuracy, mode mapping and heater commands | UNVERIFIED | No live command tests performed or authorised. |
+
+## Owner update — 2026-11-09
+
+The owner reports successful authentication directly through the HA OS add-on
+with the recovered Thermann Control account. MQTT discovered the heater and HA
+displays current temperature, target temperature and heating status. The reported
+settings are `cloud_enabled=true`, `commands_enabled=false`. This is real initial
+read-only success reported by the owner, separately from the earlier CI evidence.
+The agent made no live API request or server change to verify it independently.
+The separate Windows diagnostic was cancelled and its uncommitted changes were
+discarded. Further development is paused for owner review.
 
 ## Isolation and measurements
 
@@ -62,25 +74,30 @@ Tested image IDs (local to those disposable runners):
 
 ## Checks still requiring real Home Assistant
 
-The following have **not** passed by implication from Docker/schema tests:
+The initial real installation, authentication and discovery now have an owner
+success report. The following have **not** passed by implication from that report
+or from Docker/schema tests:
 
-- Installation/update through the Supervisor store on the target HA OS,
-  including its actual security profile and service dependency enforcement.
-- Real Supervisor MQTT provider registration/credentials, options migration,
-  `!secret` resolution, start/stop/Watchdog behaviour and persistent-data backups.
-- HA Core accepting discovery and presenting entities/availability/mode mapping
-  correctly in the UI. The isolated broker check verifies transport/publication.
+- Reinstallation/update, security-profile and service dependency enforcement.
+- Options migration, `!secret` resolution, start/stop/Watchdog behaviour and
+  persistent-data backup/restore. Initial MQTT connectivity/discovery is reported
+  working; these additional lifecycle behaviours are not independently verified.
+- Actual temperature accuracy, operating-mode mapping and availability behaviour
+  beyond the initially displayed current/target temperature and heating status.
+- Temperature setpoints, operating modes, heating requests and the effect of Off
+  on anti-legionella protection, thermostat limits and the fallback schedule.
 
-These can be checked later on an approved isolated installation with cloud and
-commands disabled. They do not require live Thermann credentials or a heater.
+Non-cloud lifecycle checks can be assessed later in an approved isolated
+installation. Read-only accuracy and individual commands need separate owner
+review/approval; no such testing is authorised now.
 The owner's Home Assistant server, Proxmox VMs and Docker infrastructure were
 not accessed or changed.
 
 ## Decision
 
-The requested isolated build/schema/runtime gates passed. Version 1.3.2 is ready
-for owner review and an explicitly approved **cloud-disabled controlled install**,
-subject to the real-HA checks above. It is not approved for merging, deployment,
-live Thermann authentication or heater control. Account compatibility and the
-historically exposed key remain separate open issues. The standalone one-login
-diagnostic has not been executed against any live API.
+The isolated build/schema/runtime gates passed, and the owner has now reported
+real authentication, discovery and initial read-only status success. Heater
+controls and automation remain unverified and disabled. Further development and
+live testing stop pending owner review; no merge or control approval is implied.
+The historical exposed-key concern remains open. The standalone diagnostic was
+not executed against a live API and is not needed for this owner's account.

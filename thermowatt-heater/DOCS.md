@@ -2,8 +2,30 @@
 
 Cloud access and heater commands default to disabled. Installation alone does not
 authorise authentication. Keep both disabled while reviewing this candidate.
-No live account, cloud API, physical heater or owner's Home Assistant/Docker
-installation was used. Container checks ran only on disposable CI runners.
+The agent's development checks used no live account, cloud API, physical heater
+or owner's Home Assistant/Docker installation. Container checks ran only on
+disposable CI runners. The later owner-reported result is recorded below.
+
+## Owner-reported initial read-only success — 2026-11-09
+
+The owner reports that 1.3.2 is installed and running in the Home Assistant OS VM,
+has authenticated directly with the recovered Thermann Control account, and has
+discovered the Thermann heater through MQTT. Home Assistant displays current
+temperature, target temperature and heating status. The reported configuration
+is `cloud_enabled: true`, `commands_enabled: false`.
+
+This is the owner's real-installation report, not a live test conducted by the
+agent. Actual temperature accuracy, operating-mode mapping and temperature/mode/
+heating commands remain unverified. The separate Windows authentication workflow
+was cancelled before completion and is not required. No further authentication
+changes, live requests or heater-control tests are authorised; development is
+paused until the owner reviews the remaining functionality.
+
+Later command assessment must preserve anti-legionella protection, thermostat
+limits and the existing fallback schedule. Whether Off preserves these
+protections is unverified. EMHASS/solar/tariff optimisation and the 7 am/~4 pm hot
+water objectives remain later stages, after read-only validation and individual
+verification of the existing API commands.
 
 ## Account compatibility and the original failure
 
@@ -33,11 +55,12 @@ and the unchanged add-on/backend. The same owner also
 These are that owner's observations, not vendor API documentation; the exact
 model, account region and authentication response were not supplied. No Thermann
 alternative API or account-specific contract was found in the local source or
-upstream code search. **Compatibility is plausible for some accounts, but
-unverified for this owner's Thermann Smart Electric 315 L and locked account.**
-This candidate does not guess endpoints or try app identities. Routine cloud
-activation remains disabled; the single-attempt diagnostic below is reserved
-for later explicit owner approval after account recovery.
+upstream code search. The current owner has since reported successful initial
+authentication and read-only operation for the Australian Thermann Smart Electric
+315 L, as recorded above. This does not establish universal account compatibility
+or verify heater controls. No endpoints or app identities were guessed. Cloud
+access remains disabled by default; the owner's current read-only installation
+uses cloud access enabled and commands disabled.
 
 ## Configuration
 
@@ -202,7 +225,12 @@ Dependency installation uses PyPI; the test suite itself blocks sockets, DNS and
 unmocked Requests calls. Every HTTP response and credential in tests is synthetic.
 Restart tests reconstruct bridges from the same temporary persistent data.
 
-## Single-attempt diagnostic reserved for later owner approval
+## Optional standalone diagnostic — not needed for the current owner
+
+The owner has already authenticated through the add-on. This older reference
+procedure is not the next verification step and should not be run for this task.
+The additional Windows diagnostic workflow was cancelled; no such workflow was
+added to the integration.
 
 **Not executed during development. This sends a real login when deliberately
 invoked. Do not use it while the vendor account is still locked.** It tests only
@@ -249,9 +277,10 @@ heater's safety controls; this project does not implement one.
 
 ## Release decision
 
-1.3.2 is a **review candidate**, suitable for an owner-approved isolated
-cloud-disabled installation following the passing isolated container checks and
-the real-HA checks listed in the deployment-readiness report. It is not approved for
-Thermann authentication, heater control, deployment or general release. Obtain
-vendor API/account confirmation before any authenticated Thermann trial. See the
-repository security review for the historical private key and token-storage risks.
+1.3.2 remains a **review candidate**. The owner reports a successful real HA OS
+installation, authentication and initial read-only status display. This is not
+approval for heater commands, automation, merging or general release. Keep the
+owner's commands disabled while the remaining functionality is reviewed. See the
+deployment-readiness report for unverified areas and the security review for the
+historical private key and token-storage risks. No further development is planned
+until owner review.

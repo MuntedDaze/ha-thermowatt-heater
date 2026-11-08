@@ -1,10 +1,15 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
 Version **1.3.2 is a review candidate** with persistent authentication protection.
-Cloud access and heater commands default to disabled. No live authentication or
-physical heater testing was performed. Compatibility with this owner's Thermann
-Control account is unverified; a single-login diagnostic is prepared for later
-explicit approval, with no automatic retries or heater access.
+Cloud access and heater commands default to disabled. On 2026-11-09 the owner
+reported successful Thermann Control authentication directly from the HA OS
+add-on, MQTT heater discovery, and current/target temperature and heating-status
+display, with `cloud_enabled: true` and `commands_enabled: false`.
+
+This establishes initial read-only operation for that account and installation.
+Temperature accuracy, operating-mode mapping and heater commands remain
+unverified. The additional Windows login diagnostic is no longer needed. Further
+development and control testing are paused for owner review.
 
 The bridge keeps Home Assistant MQTT discovery for compatible MyThermowatt
 heaters. It validates responses, survives authentication failures without exiting,
