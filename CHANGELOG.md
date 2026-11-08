@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - Review candidate (2026-11-09)
+
+### Security and authentication
+
+- Validate login/refresh HTTP status, JSON envelopes and token fields instead of
+  assuming every HTTP success contains `result`.
+- Persist authentication intent, lockouts, retry budgets and deadlines in private
+  `/data`; require a new operator retry generation after rejection, unknown
+  responses, interruption or exhausted transient retries.
+- Never fallback to password login after refresh rejection or unrelated failures.
+  Keep the process alive while locked to prevent Watchdog authentication loops.
+- Preserve TLS verification, add timeouts, disable redirects, and remove raw
+  response/exception logging and credential command-line arguments.
+- Remove unused bundled private key/certificates and their image copies. The key
+  remains exposed in Git history; issuer review/revocation is still required.
+
+### Reliability and compatibility
+
+- Default cloud access and commands to disabled, manual boot, and mark 1.3.2 as
+  a breaking version. Retain supported Supervisor options and MQTT service discovery.
+- Back off cloud failures without re-login; reject retained, stale and invalid
+  commands; serialize HTTP work and never replay writes.
+- Replace optimistic/fake state updates with validated, allowlisted cloud status
+  and MQTT availability. Preserve existing entity IDs.
+- Use supported MQTT heater modes (`off`, `eco`, `performance` for Manual).
+  Disable invented Holiday end dates;
+  temperature changes require fresh Manual status and preserve mode.
+- Retain HA base 3.24, use a Python virtual environment and pinned direct
+  dependencies; remove unsupported armv7 advertisement.
+- Add offline HTTP/socket-blocked tests, static checks and safety documentation.
+- Add an explicit standalone one-login diagnostic for later owner approval. It
+  never retries, starts MQTT, persists tokens, polls or controls a heater.
+- Validate native amd64/aarch64 image builds, installed dependencies, actual
+  S6/Bashio startup, isolated authenticated MQTT, clean shutdown and restart in CI.
+  Disabled cloud/commands produced zero HTTP attempts despite synthetic commands.
+- Validate app configuration/options with official Supervisor 2026.10.5 and
+  2026.11.0 schemas without running a Supervisor daemon. Record evidence and
+  remaining real-HA installation checks in DEPLOYMENT_READINESS.md.
+
+### Release limits
+
+- Thermann Control / Australian Thermann Smart Electric 315 L API/account
+  compatibility is unverified for this owner. A first-hand upstream Thermann
+  success report supports plausibility, not universal account compatibility.
+  No endpoints or app identities were guessed.
+- No live cloud, real heater, actual HA OS/Supervisor installation or HA Core UI
+  validation. Owner approval and the documented real-HA checks remain required.
+
+## [1.3.1] - Previously published
+
+- Retained HTTPS certificate verification and corrected the Home Assistant Docker
+  base image. Authentication retry safeguards were not present in this version.
+
 ## [1.3.0] - 2026-01-27
 
 ### Removed
