@@ -1,18 +1,17 @@
 FROM ghcr.io/home-assistant/base:3.24
 
 # Install python and dependencies
-RUN apk add --no-cache python3 py3-pip
+RUN apk add --no-cache python3 py3-pip ca-certificates
 
 # Install python libraries
-RUN pip3 install paho-mqtt requests urllib3 --break-system-packages
+COPY requirements.txt /requirements.txt
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir -r /requirements.txt
 
 ENV PYTHONUNBUFFERED=1
 # Copy data for add-on
 COPY run.sh /
 COPY thermowatt_bridge.py /
-COPY client.crt /
-COPY client.key /
-COPY root.pem /
 
 RUN chmod a+x /run.sh
 

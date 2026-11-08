@@ -25,3 +25,7 @@ Thumbs.db
 # --- Sensitive Environment Files ---
 .env
 .flaskenv
+.test-deps/
+.ruff_cache/
+auth_state.json
+thermowatt_config.json

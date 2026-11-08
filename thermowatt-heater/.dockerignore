@@ -1,0 +1,7 @@
+__pycache__
+*.pyc
+*.key
+*.crt
+*.pem
+auth_state.json
+thermowatt_config.json

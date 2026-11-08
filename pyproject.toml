@@ -1,0 +1,11 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = [".test-deps"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

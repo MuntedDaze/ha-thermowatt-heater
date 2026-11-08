@@ -1,0 +1,4 @@
+-r thermowatt-heater/requirements.txt
+pytest==9.0.2
+ruff==0.14.4
+PyYAML==6.0.3

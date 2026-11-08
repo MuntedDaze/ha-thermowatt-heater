@@ -1,20 +1,14 @@
 #!/usr/bin/with-contenv bashio
-set -e
+set -euo pipefail
+umask 077
 
+# Supervisor resolves options/secrets in /data/options.json. Never put credentials
+# on the process command line or log account identifiers.
+MQTT_HOST="$(bashio::services mqtt host)" || MQTT_HOST="core-mosquitto"
+MQTT_PORT="$(bashio::services mqtt port)" || MQTT_PORT="1883"
+MQTT_USER="$(bashio::services mqtt username)" || MQTT_USER=""
+MQTT_PASSWORD="$(bashio::services mqtt password)" || MQTT_PASSWORD=""
+export MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASSWORD
 
-EMAIL=$(bashio::config 'email')
-PASSWORD=$(bashio::config 'password')
-
-export MQTT_HOST
-export MQTT_PORT
-export MQTT_USER
-export MQTT_PASSWORD
-
-MQTT_HOST="$(bashio::services mqtt "host")"
-MQTT_PORT="$(bashio::services mqtt "port")"
-MQTT_USER="$(bashio::services mqtt "username")"
-MQTT_PASSWORD="$(bashio::services mqtt "password")"
-
-bashio::log.info "Starting Thermowatt Bridge for $EMAIL..."
-
-python3 -u /thermowatt_bridge.py "$EMAIL" "$PASSWORD"
+bashio::log.info "Starting Thermowatt bridge with cloud safety controls."
+exec /opt/venv/bin/python3 -u /thermowatt_bridge.py
