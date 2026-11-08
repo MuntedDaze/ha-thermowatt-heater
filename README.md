@@ -7,9 +7,17 @@ add-on, MQTT heater discovery, and current/target temperature and heating-status
 display, with `cloud_enabled: true` and `commands_enabled: false`.
 
 This establishes initial read-only operation for that account and installation.
-Temperature accuracy, operating-mode mapping and heater commands remain
-unverified. The additional Windows login diagnostic is no longer needed. Further
-development and control testing are paused for owner review.
+The owner subsequently reported matching current/target readings of 17°C/70°C,
+Thermann app 3.15.17, heater 07.00.09.06 and Wi-Fi 01.03.21. This is a matching
+snapshot, not full temperature calibration or proof of physical heating.
+
+The proposed read-only follow-up adds a Vendor mode sensor for Schedule and
+other inherited codes, while retaining the native heater entity and its IDs.
+The unverified heating binary sensor reports Unknown rather than claiming the
+element is off or on. Heater commands remain disabled and untested on this unit.
+See the [compatibility/control review](THERMANN_CONTROL_REVIEW.md) for the command
+matrix, schedule limitations and staged owner-approved testing plan. No separate
+Windows login workflow or automation is added.
 
 The bridge keeps Home Assistant MQTT discovery for compatible MyThermowatt
 heaters. It validates responses, survives authentication failures without exiting,

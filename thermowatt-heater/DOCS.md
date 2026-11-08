@@ -14,12 +14,18 @@ discovered the Thermann heater through MQTT. Home Assistant displays current
 temperature, target temperature and heating status. The reported configuration
 is `cloud_enabled: true`, `commands_enabled: false`.
 
-This is the owner's real-installation report, not a live test conducted by the
-agent. Actual temperature accuracy, operating-mode mapping and temperature/mode/
-heating commands remain unverified. The separate Windows authentication workflow
-was cancelled before completion and is not required. No further authentication
-changes, live requests or heater-control tests are authorised; development is
-paused until the owner reviews the remaining functionality.
+The owner subsequently reports matching app/heater and HA readings of 17°C
+current and 70°C target, with app 3.15.17, heater 07.00.09.06 and Wi-Fi 01.03.21.
+HA's Unknown mode corresponds to the app's Schedule label; its Heating: Normal
+display is not verified physical feedback. These are owner observations, not a
+live test by the agent or independent temperature calibration. No HA commands
+have been tested. The cancelled Windows workflow remains unnecessary.
+
+The proposed small read-only follow-up is described in the repository's
+[compatibility/control review](../THERMANN_CONTROL_REVIEW.md). It adds a Vendor
+mode sensor and makes the unverified physical heating state explicitly unknown.
+No authentication changes, live requests, heater commands or schedule changes
+are made for this review. Control testing and automation await separate approval.
 
 Later command assessment must preserve anti-legionella protection, thermostat
 limits and the existing fallback schedule. Whether Off preserves these
@@ -157,19 +163,32 @@ previous custom uppercase modes were incompatible with its current schema.
 `off`, `eco`, and `performance` now represent Off, Eco, and Manual. Auto/Holiday
 show unknown on the water-heater mode field rather than a misleading supported
 mode; their numeric `Cmd` is retained in the published status. Use the existing
-Thermann app for schedules. No new entities or controls are added. Existing
+Thermann app for schedules. One read-only Vendor mode sensor now labels Cmd 17
+as Schedule; it also exposes raw Cmd and WaterHeaterSts with heating interpretation
+marked unverified. Unknown nonnegative mode codes keep valid temperature data
+available. No new controls or cloud endpoints are added. Existing
 automations using uppercase heater modes need review. The existing explicit
 MQTT `MODE=Auto` command remains gated by `commands_enabled`; it activates the
-existing schedule and never creates one.
+legacy `/auto` route intended for the stored schedule. Its effect on this unit
+and preservation of the program have not been tested.
+
+The existing heating binary sensor retains its ID/topic but is labelled
+unverified and reports Unknown for every status code, including old retained
+heating booleans. No verified `WaterHeaterSts` bit definition was found. The
+published `result.heating` is null; consumers must not interpret it as false or
+as proof of an unpowered element. Use the raw value for later reviewed diagnosis.
 
 Commands are queued on the MQTT callback and executed serially by the main loop.
 Retained commands are rejected, including retained writes while connected using
 MQTT v5 retain-as-published. Stale/unknown commands and commands while unavailable
 are discarded. Temperature must be a whole number from 20–75 C and is accepted
-only when fresh status confirms Manual mode: the vendor `/manual` operation also
+only when fresh status confirms Manual mode: the existing `/manual` operation also
 changes mode, so using it from another mode would be a hidden side effect. Manual
 mode uses the last observed setpoint, never an invented default. Holiday writes
-are disabled because the old code silently invented a 30-day end date.
+are disabled because the old code silently invented a 30-day end date. The
+generic software range is not a verified Thermann operating envelope; resolve
+model-specific limits before authorising commands. The detailed review records
+manufacturer guidance and the remaining Off/resume/fallback uncertainties.
 
 A successful HTTP command status means only that it was submitted. The next
 validated status is published and the requested value is compared to observation.

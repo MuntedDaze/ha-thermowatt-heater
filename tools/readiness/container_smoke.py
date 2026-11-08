@@ -269,6 +269,20 @@ def smoke(image, arch, output):
             assert any(
                 row["topic"] == "homeassistant/water_heater/SYNTHETIC123/config" for row in messages
             )
+            mode_config = next(
+                json.loads(row["payload"])
+                for row in messages
+                if row["topic"] == "homeassistant/sensor/SYNTHETIC123/vendor_mode/config"
+            )
+            assert mode_config["unique_id"] == "thermowatt_SYNTHETIC123_vendor_mode"
+            assert "command_topic" not in mode_config
+            heating_config = next(
+                json.loads(row["payload"])
+                for row in messages
+                if row["topic"] == "homeassistant/binary_sensor/SYNTHETIC123/heating/config"
+            )
+            assert heating_config["unique_id"] == "thermowatt_SYNTHETIC123_heating"
+            assert heating_config["value_template"] == "{{ 'None' }}"
             assert not any(row["topic"].endswith("/STATUS") for row in messages), (
                 "Invented heater status"
             )

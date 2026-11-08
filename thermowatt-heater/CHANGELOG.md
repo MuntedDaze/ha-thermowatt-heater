@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.2] - Review candidate (2026-11-09)
 
+### Proposed read-only Thermann follow-up (not deployed)
+
+- Record owner-reported temperature agreement at 17°C current / 70°C target,
+  app 3.15.17, heater 07.00.09.06 and Wi-Fi 01.03.21.
+- Preserve water-heater IDs and native Unknown for Schedule/Holiday; add one
+  read-only Vendor mode sensor, mapping inherited Cmd 17 to Schedule with raw
+  Cmd/WaterHeaterSts attributes. New unknown codes retain valid temperatures.
+- Preserve the heating binary-sensor ID, but report Unknown and JSON null for
+  unverified physical heating instead of decoding bit zero. Ignore old retained
+  booleans so they cannot perpetuate a false physical-state claim.
+- Review existing commands, manufacturer guidance, schedule/diagnostic limits
+  and a staged future test plan. No command/authentication changes, additional
+  cloud requests, schedule edits or Windows diagnostic workflow.
+- Add mocked mode/status/Jinja/command-contract coverage and extend isolated
+  container discovery checks. Release numbering/deployment remains owner-reviewed.
+
 ### Security and authentication
 
 - Validate login/refresh HTTP status, JSON envelopes and token fields instead of

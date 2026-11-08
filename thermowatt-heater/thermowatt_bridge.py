@@ -202,7 +202,7 @@ class MyThermowattBridge:
     HTTP_TIMEOUT = (10, 20)
     MAX_BACKOFF = 300
     STATUS_FIELDS = ("T_Avg", "T_SetPoint", "Cmd", "WaterHeaterSts")
-    MODES = {9: "Manual", 3: "Eco", 17: "Auto", 65: "Holiday", 16: "off"}
+    MODES = {9: "Manual", 3: "Eco", 17: "Schedule", 65: "Holiday", 16: "Off"}
 
     def __init__(
         self,
@@ -462,16 +462,33 @@ class MyThermowattBridge:
         )
         heating = {
             "unique_id": f"thermowatt_{serial}_heating",
-            "name": f"Boiler {name} Heating",
+            "name": f"Boiler {name} Heating (unverified)",
             "state_topic": f"P/{serial}/STATUS",
             "device_class": "heat",
-            "value_template": "{{ 'ON' if value_json.result.heating else 'OFF' }}",
+            # No verified bit definition exists. Ignore legacy retained booleans too.
+            "value_template": "{{ 'None' }}",
             "availability": availability,
             "availability_mode": "all",
             "device": device,
         }
         self.mqtt_client.publish(
             f"homeassistant/binary_sensor/{serial}/heating/config", json.dumps(heating), retain=True
+        )
+        vendor_mode = {
+            "unique_id": f"thermowatt_{serial}_vendor_mode",
+            "name": f"Boiler {name} Vendor mode",
+            "state_topic": f"P/{serial}/STATUS",
+            "value_template": "{{ value_json.result.vendor_mode | default('Unknown') }}",
+            "json_attributes_topic": f"P/{serial}/STATUS",
+            "json_attributes_template": "{{ {'Cmd': value_json.result.Cmd, 'WaterHeaterSts': value_json.result.WaterHeaterSts, 'heating_status_verified': false} | tojson }}",
+            "availability": availability,
+            "availability_mode": "all",
+            "device": device,
+        }
+        self.mqtt_client.publish(
+            f"homeassistant/sensor/{serial}/vendor_mode/config",
+            json.dumps(vendor_mode),
+            retain=True,
         )
 
     def _subscribe(self, serial):
@@ -545,7 +562,7 @@ class MyThermowattBridge:
                 raise ValueError
             if not 0 <= values["T_Avg"] <= 100 or not 20 <= values["T_SetPoint"] <= 75:
                 raise ValueError
-            if values["Cmd"] != int(values["Cmd"]) or int(values["Cmd"]) not in self.MODES:
+            if values["Cmd"] < 0 or values["Cmd"] != int(values["Cmd"]):
                 raise ValueError
             if values["WaterHeaterSts"] < 0 or values["WaterHeaterSts"] != int(
                 values["WaterHeaterSts"]
@@ -554,7 +571,9 @@ class MyThermowattBridge:
         except (KeyError, TypeError, ValueError, OverflowError):
             raise CloudError("status_unrecognised") from None
         safe = {key: result[key] for key in self.STATUS_FIELDS}
-        safe["heating"] = bool(int(values["WaterHeaterSts"]) & 1)
+        safe["vendor_mode"] = self.MODES.get(int(values["Cmd"]), "Unknown")
+        # WaterHeaterSts is an opaque diagnostic value, not proven element feedback.
+        safe["heating"] = None
         self.confirmed[serial] = (self.monotonic(), values)
         self.mqtt_client.publish(f"P/{serial}/STATUS", json.dumps({"result": safe}), retain=True)
         self._availability(serial, True)

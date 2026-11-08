@@ -37,7 +37,11 @@ settings are `cloud_enabled=true`, `commands_enabled=false`. This is real initia
 read-only success reported by the owner, separately from the earlier CI evidence.
 The agent made no live API request or server change to verify it independently.
 The separate Windows diagnostic was cancelled and its uncommitted changes were
-discarded. Further development is paused for owner review.
+discarded. The subsequent owner report matches app/heater and HA temperatures at
+17°C current / 70°C target; app Schedule appears as native HA Unknown. The
+[read-only compatibility/control review](THERMANN_CONTROL_REVIEW.md) proposes the
+minimal presentation correction and records unverified heating/control behaviour.
+Live command testing remains paused for owner approval.
 
 ## Isolation and measurements
 
