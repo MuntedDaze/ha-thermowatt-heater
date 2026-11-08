@@ -19,6 +19,8 @@ SPEC.loader.exec_module(bridge_module)
 
 @pytest.fixture(autouse=True)
 def prohibit_network(monkeypatch):
+    monkeypatch.setattr(bridge_module.MyThermowattBridge, "API_KEY", "SYNTHETIC_API_KEY")
+
     def denied(*args, **kwargs):
         raise AssertionError("Unmocked network access prohibited")
 
