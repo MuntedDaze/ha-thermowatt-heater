@@ -1,0 +1,140 @@
+{
+  "source_commit": "41ace62667e63bd9cd51cf1efe7f9e149c1b9bbe",
+  "source_version": "1.3.6",
+  "provenance": "Generated offline from the released 1.3.6 constructor and local AuthGuard transitions; custom legacy polling/retry values and synthetic tokens; no HTTP/authentication.",
+  "addon_config": {
+    "name": "Thermowatt Smart Boiler",
+    "description": "Opt-in MyThermowatt cloud bridge with persistent authentication protection.",
+    "version": "1.3.6",
+    "slug": "thermowatt_boiler",
+    "arch": [
+      "aarch64",
+      "amd64"
+    ],
+    "init": false,
+    "boot": "manual",
+    "breaking_versions": [
+      "1.3.2",
+      "1.3.3",
+      "1.3.4",
+      "1.3.6"
+    ],
+    "options": {
+      "email": "",
+      "password": "",
+      "cloud_enabled": false,
+      "commands_enabled": false,
+      "poll_interval_minutes": 30,
+      "min_cloud_retry_minutes": 60,
+      "auth_retry_generation": 0
+    },
+    "schema": {
+      "email": "str",
+      "password": "password",
+      "cloud_enabled": "bool",
+      "commands_enabled": "bool",
+      "poll_interval_minutes": "int(5,120)",
+      "min_cloud_retry_minutes": "int(5,1440)",
+      "auth_retry_generation": "int(0,)"
+    },
+    "services": [
+      "mqtt:need"
+    ]
+  },
+  "options": {
+    "email": "synthetic@example.invalid",
+    "password": "SYNTHETIC_UPGRADE_PASSWORD",
+    "cloud_enabled": false,
+    "commands_enabled": false,
+    "auth_retry_generation": 7,
+    "poll_interval_minutes": 15,
+    "min_cloud_retry_minutes": 120
+  },
+  "metadata": {
+    "device_uuid": "00000000-0000-4000-8000-000000000001",
+    "devices": {
+      "SYNTHETIC123": {
+        "name": "Synthetic heater"
+      }
+    }
+  },
+  "auth_states": {
+    "authorized": {
+      "version": 1,
+      "generation": 7,
+      "mode": "authorized",
+      "reason": null,
+      "attempts": 0,
+      "next_retry": 0,
+      "action": "login",
+      "account": "faa296d58b7dcae9eec26d1991a5e3cc322ea91f0e668c0a720642817d7b0469",
+      "access_token": "SYNTHETIC_UPGRADE_ACCESS",
+      "refresh_token": "SYNTHETIC_UPGRADE_REFRESH"
+    },
+    "in_flight": {
+      "version": 1,
+      "generation": 7,
+      "mode": "in_flight",
+      "reason": null,
+      "attempts": 1,
+      "next_retry": 0,
+      "action": "refresh",
+      "account": "faa296d58b7dcae9eec26d1991a5e3cc322ea91f0e668c0a720642817d7b0469",
+      "access_token": "SYNTHETIC_UPGRADE_ACCESS",
+      "refresh_token": "SYNTHETIC_UPGRADE_REFRESH"
+    },
+    "retry": {
+      "version": 1,
+      "generation": 7,
+      "mode": "retry",
+      "reason": "auth_transient",
+      "attempts": 1,
+      "next_retry": 1060,
+      "action": "refresh",
+      "account": "faa296d58b7dcae9eec26d1991a5e3cc322ea91f0e668c0a720642817d7b0469",
+      "access_token": "SYNTHETIC_UPGRADE_ACCESS",
+      "refresh_token": "SYNTHETIC_UPGRADE_REFRESH"
+    },
+    "blocked": {
+      "version": 1,
+      "generation": 7,
+      "mode": "blocked",
+      "reason": "auth_http_401",
+      "attempts": 1,
+      "next_retry": 1060,
+      "action": "refresh",
+      "account": "faa296d58b7dcae9eec26d1991a5e3cc322ea91f0e668c0a720642817d7b0469",
+      "access_token": null,
+      "refresh_token": null
+    },
+    "authorized_refresh": {
+      "version": 1,
+      "generation": 7,
+      "mode": "authorized",
+      "reason": null,
+      "attempts": 0,
+      "next_retry": 1300,
+      "action": "refresh",
+      "account": "faa296d58b7dcae9eec26d1991a5e3cc322ea91f0e668c0a720642817d7b0469",
+      "access_token": "SYNTHETIC_UPGRADE_ACCESS",
+      "refresh_token": "SYNTHETIC_UPGRADE_REFRESH"
+    },
+    "blocked_refresh": {
+      "version": 1,
+      "generation": 7,
+      "mode": "blocked",
+      "reason": "cloud_http_429",
+      "attempts": 0,
+      "next_retry": 1300,
+      "action": "refresh",
+      "account": "faa296d58b7dcae9eec26d1991a5e3cc322ea91f0e668c0a720642817d7b0469",
+      "access_token": null,
+      "refresh_token": null
+    }
+  },
+  "mqtt_ids": {
+    "homeassistant/water_heater/SYNTHETIC123/config": "thermowatt_SYNTHETIC123_v314",
+    "homeassistant/binary_sensor/SYNTHETIC123/heating/config": "thermowatt_SYNTHETIC123_heating",
+    "homeassistant/sensor/SYNTHETIC123/vendor_mode/config": "thermowatt_SYNTHETIC123_vendor_mode"
+  }
+}

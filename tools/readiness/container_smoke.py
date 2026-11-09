@@ -79,6 +79,7 @@ def smoke(image, arch, output):
             "commands_enabled": False,
             "poll_interval_minutes": 30,
             "min_cloud_retry_minutes": 60,
+            "on_demand_refresh_enabled": True,  # Cloud disabled must still prevent every read.
             "auth_retry_generation": 1,
         }
         # Deliberately arm the guard so a default lockout cannot mask a cloud-disable bug.
@@ -315,13 +316,17 @@ def smoke(image, arch, output):
                 ("1.3.3", "authorized_refresh"),
                 ("1.3.3", "blocked"),
                 ("1.3.3", "blocked_refresh"),
+                ("1.3.6", "authorized"),
+                ("1.3.6", "authorized_refresh"),
+                ("1.3.6", "blocked"),
+                ("1.3.6", "blocked_refresh"),
             ]
             for index, (version, upgrade_state) in enumerate(upgrade_cases, start=3):
                 upgrade_fixture = (
                     FIXTURES.parents[1] / f"tests/fixtures/upgrade_{version.replace('.', '_')}.json"
                 )
                 legacy = json.loads(upgrade_fixture.read_text())
-                result_key = f"upgrade_{version.replace('.', '_')}_to_1_3_7"
+                result_key = f"upgrade_{version.replace('.', '_')}_to_1_3_8"
                 results.setdefault(result_key, {})
                 docker(
                     "run",
@@ -384,8 +389,10 @@ def smoke(image, arch, output):
                     + docker("logs", replacement).stderr.decode()
                 )
                 assert "Bridge running; cloud=False, commands=False" in replacement_logs
-                assert "Poll interval=1800 seconds." in replacement_logs  # Legacy option fallback.
-                assert "Minimum cloud retry=60 minutes." in replacement_logs
+                interval = legacy["options"].get("poll_interval_minutes", 30) * 60
+                retry = legacy["options"].get("min_cloud_retry_minutes", 60)
+                assert f"Poll interval={interval} seconds." in replacement_logs
+                assert f"Minimum cloud retry={retry} minutes." in replacement_logs
                 assert (
                     "Traceback" not in replacement_logs and "Startup paused" not in replacement_logs
                 )

@@ -33,6 +33,8 @@ jobs:
         run: docker run --rm --network none --entrypoint /opt/venv/bin/python3 thermowatt-readiness:local -m pip check
       - name: Isolated S6, Bashio, MQTT, shutdown and restart checks
         run: python tools/readiness/container_smoke.py --image thermowatt-readiness:local --arch '${{ matrix.arch }}' --output readiness-results
+      - name: Packaged read-only demand worker (mocked HTTP, no network)
+        run: docker run --rm --network none --entrypoint /opt/venv/bin/python3 --mount "type=bind,src=$PWD/tools/readiness/demand_smoke.py,dst=/demand-smoke.py,readonly" thermowatt-readiness:local /demand-smoke.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

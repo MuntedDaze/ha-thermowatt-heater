@@ -20,3 +20,6 @@ configuration:
   auth_retry_generation:
     name: Authentication retry generation
     description: Do not change during an update or to investigate quota errors. Increasing it permits another authentication cycle.
+  on_demand_refresh_enabled:
+    name: Allow read-only on-demand refresh
+    description: Disabled by default. Accepts non-retained refresh requests for known devices, coalesced in the existing worker. Waits at least 5 minutes after any status attempt and never bypasses guards or cloud-error cooldowns. Do not trigger from rapidly changing solar values.

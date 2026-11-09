@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.8] - Phase 1 dependent review candidate
+
+- Add optional `on_demand_refresh_enabled`, disabled by default. Non-retained
+  `P/<serial>/refresh` with payload `refresh` requests a known-device read in the
+  existing worker; the MQTT callback performs no HTTP/authentication.
+- Coalesce duplicate requests, enforce five minutes after any status attempt,
+  and discard requests during auth lockouts, error cooldowns, disconnection or
+  incomplete accounting. Never use demand reads as recovery probes or immediate
+  retries. Per-device background deadlines avoid redundant reads/starvation.
+- Retain authentication/command implementations and all freshness guards.
+  Restore exponential ordinary-error history after restart even when its wait
+  expired; healthy local cooldown state remains separate from authentication.
+- Extend upgrade fixtures from released 1.3.6 with custom saved intervals and
+  add mocked demand/permission/multi-device tests plus a packaged-image smoke
+  test with no network, synthetic HTTP and zero heater writes.
+- Document Smart polling as a slow-background/explicit-demand pattern, not an
+  automatic solar-triggered mode. Phase 2 remains design only. Owner review of
+  both dependent PRs is required; neither is merged or deployed by the agent.
+
 ## [1.3.7] - Phase 1 review candidate
 
 - Add a Seconds/Minutes selector and clearly labelled single polling value,

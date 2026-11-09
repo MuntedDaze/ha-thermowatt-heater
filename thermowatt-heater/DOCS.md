@@ -1,4 +1,9 @@
-# Thermowatt bridge 1.3.7 — read-only review candidate
+# Thermowatt bridge 1.3.8 — dependent read-only review candidate
+
+This candidate depends on the 1.3.7 foundation. Optional
+`on_demand_refresh_enabled` is false by default; see
+[UPGRADING_1_3_8.md](../UPGRADING_1_3_8.md). Normal operation still defaults to
+30-minute background polls. Both PRs remain unmerged for owner review.
 
 Phase 1 adds a unit selector, exact JSON quota classification, a private
 persistent attempt/cooldown ledger and diagnostic entities. See
@@ -97,6 +102,7 @@ commands_enabled: false
 poll_interval_minutes: 30
 poll_interval_unit: minutes
 min_cloud_retry_minutes: 60
+on_demand_refresh_enabled: false
 auth_retry_generation: 0
 ```
 
@@ -131,6 +137,19 @@ See the upgrade notes for storage quality, privacy and restart limitations.
   generation is persisted; leaving the same value configured cannot reset a
   subsequent lockout. Lowering it, changing a password, restarting, updating, or
   toggling Watchdog does not clear an existing lockout. Changes apply at restart.
+- `on_demand_refresh_enabled`: optional read-only MQTT refresh, default false.
+  When explicitly enabled after review, non-retained `refresh` on
+  `P/<serial>/refresh` queues one known-device read in the existing worker.
+  Duplicate requests coalesce; demand waits at least 300 seconds since any
+  status-attempt start and never bypasses auth or ordinary-error barriers.
+  Unknown/retained/malformed requests and requests during cooldown are dropped,
+  not saved for later execution. No caller automation is installed.
+
+Smart polling is the optional pattern of slow background reads plus explicit
+bounded fresh-data requests. There is no automatic solar/price/dashboard-trigger
+mode. Fast-changing inputs must not publish refresh requests. The caller must
+use a bounded wait for a genuinely newer valid timestamp, respect denied reads
+and fail closed; enabling this option is not permission to issue heater commands.
 
 An owner-approved first MyThermowatt trial would set cloud access true and change
 generation 0 to 1, with commands still false. **Do not use the normal polling

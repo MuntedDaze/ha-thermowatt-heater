@@ -24,6 +24,9 @@ tariff schedule, then compare/store UTC instants. Do not advance deadlines by
 fixed 24-hour UTC offsets across DST. Test both DST transitions, weekends,
 missing/duplicated local times, and tariffs that may use fixed standard time.
 Deduplicate decisions by local date/deadline and optimiser publication ID.
+Last successful poll is the client read time, not a verified heater measurement
+timestamp. A recent valid cloud response alone cannot prove the underlying
+device sample is new; validate cloud/device lag before making it a control gate.
 
 ## Thermal model and uncertainty
 

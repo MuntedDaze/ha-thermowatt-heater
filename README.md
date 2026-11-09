@@ -1,7 +1,10 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
-The **1.3.7 Phase 1 foundation is a review candidate**, not a deployed update.
-It adds a clear seconds/minutes polling selector, exact confirmed quota-error
+The **1.3.7 foundation and dependent 1.3.8 demand-refresh PRs are review
+candidates**, not deployed updates. The dependent
+[1.3.8 notes](UPGRADING_1_3_8.md) document the optional read-only interface,
+disabled by default. Both retain a 30-minute background default.
+The foundation adds a clear seconds/minutes polling selector, exact confirmed quota-error
 classification, private persistent attempt accounting and five read-only
 diagnostic sensors. Existing credentials, guard records, commands-disabled
 defaults and MQTT IDs remain. See [upgrade notes](UPGRADING_1_3_7.md),

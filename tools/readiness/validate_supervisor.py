@@ -27,6 +27,7 @@ for change in (
     {"poll_interval_minutes": 0},
     {"poll_interval_minutes": 7201},
     {"poll_interval_unit": "hours"},
+    {"on_demand_refresh_enabled": "not-a-boolean"},
     {"poll_interval_minutes": "not-a-number"},
     {"min_cloud_retry_minutes": 4},
     {"min_cloud_retry_minutes": 1441},
