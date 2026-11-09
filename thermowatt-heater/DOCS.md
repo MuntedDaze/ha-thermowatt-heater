@@ -1,4 +1,11 @@
-# Thermowatt bridge 1.3.6 — configurable polling
+# Thermowatt bridge 1.3.7 — read-only review candidate
+
+Phase 1 adds a unit selector, exact JSON quota classification, a private
+persistent attempt/cooldown ledger and diagnostic entities. See
+[UPGRADING_1_3_7.md](../UPGRADING_1_3_7.md) for migration/privacy limits and
+[the fork comparison](../PHASE1_FORK_REVIEW.md) for the selected ideas. Owner
+review is required; this is not deployed. Phase 2 control is
+[design only](../PHASE2_CONTROL_DESIGN.md); commands remain disabled.
 
 This adds the owner's approved 30-minute polling trial after the 1.3.5 diagnostic
 release. See the [upgrade notes](../UPGRADING_1_3_6.md): the existing slug, options, private data and
@@ -88,6 +95,7 @@ password: ""
 cloud_enabled: false
 commands_enabled: false
 poll_interval_minutes: 30
+poll_interval_unit: minutes
 min_cloud_retry_minutes: 60
 auth_retry_generation: 0
 ```
@@ -96,7 +104,10 @@ auth_retry_generation: 0
   existing MyThermowatt API. Missing options also default to false on upgrade.
 - `commands_enabled`: separate permission for MQTT commands. Leave false for
   read-only observation. This does not establish Thermann compatibility.
-- `poll_interval_minutes`: whole minutes from 5 to 120; default 30. Applies to
+- `poll_interval_minutes`: the single numeric **Polling interval** field. The
+  historic key is retained for migration. With `poll_interval_unit: minutes`
+  (default/missing), use 1–120; with `seconds`, use 60–7200. Combined bounds are
+  validated before startup. Applies to
   normal status/discovery cycles, measured from completion of the last cycle.
   Older saved options without the key also use 30. Changes apply after restart.
 - `min_cloud_retry_minutes`: whole minutes from 5 to 1440; default 60. Ordinary
@@ -106,12 +117,15 @@ auth_retry_generation: 0
   frequent than the normal interval. Missing keys use 60 on upgrade. This does
   not change authentication retry budgets/deadlines or command handling.
 
-Startup shows both intervals and that request counts reset on restart. Each
+Startup shows both intervals; per-process log counts reset on restart. Each
 actual HTTP attempt logs only a fixed category, category count and total since
 startup. Status counts include command-confirmation reads; auth refresh and GET
 replays count separately. These are local attempted requests, not confirmed
 vendor usage, and exclude the official app/other clients. No enforced daily
-budget or vendor reset time is configured. See the upgrade notes for the decision.
+budget or vendor reset time is configured. New diagnostic sensors expose a
+separate persistent local lifetime ledger with six categories (confirmation
+reads are separate from ordinary status), not confirmed server consumption.
+See the upgrade notes for storage quality, privacy and restart limitations.
 - `auth_retry_generation`: a monotonically increasing, non-secret integer. Zero
   starts locked. Increasing it authorises one authentication cycle. The accepted
   generation is persisted; leaving the same value configured cannot reset a
@@ -333,8 +347,10 @@ heater's safety controls; this project does not implement one.
 In 1.3.6 an ordinary polling warning means the next cycle waits for the displayed
 backoff, at least both configured intervals (60 minutes initially by default).
 It does not mean a permanent halt. Identical operation/code/backoff warnings
-remain suppressed; per-attempt count logs still show attempts. Ordinary polling
-deadlines and counts are in memory, so restarting permits another initial cycle.
+remain suppressed; per-attempt count logs still show attempts. In 1.3.7, healthy
+private storage preserves the ordinary-error deadline and aggregate ledger
+across restart; per-process log counts reset. Last successful poll/age start
+unknown until a new validated sample.
 Do not repeatedly restart to retry a daily-limit failure or change generation.
 
 The owner reports `auth_refresh_accepted` followed by
@@ -363,13 +379,13 @@ Old generic messages alone cannot identify the actual cloud failure.
 
 ## Release decision
 
-1.3.6 implements the owner's explicit approval for a configurable polling and
-ordinary cloud-error backoff change, with squash merge only after final-head CI
-and review checks pass. It adds no API compatibility fix or control functionality.
+1.3.7 is an owner-reviewed Phase 1 candidate. New quota handling and ordinary
+cooldown persistence require explicit review; this PR will not automatically
+merge. It adds no API compatibility fix or heater-control functionality.
 The owner reports an explicit status failure and an app daily-limit warning;
 the quota and exact response meaning remain unverified. This is not approval
 for heater commands or automation. Keep the
 owner's commands disabled while the remaining functionality is reviewed. See the
 deployment-readiness report for unverified areas and the security review for the
 historical private key and token-storage risks. No additional control functionality
-is part of 1.3.6; installation and command testing remain owner-controlled.
+is part of 1.3.7; installation and command testing remain owner-controlled.

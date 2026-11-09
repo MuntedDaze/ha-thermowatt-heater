@@ -181,7 +181,7 @@ def test_saved_options_keep_credentials_flags_generation_and_custom_interval(
     bridge.session.request.assert_not_called()
 
 
-@pytest.mark.parametrize("minutes", [0, -1, 4, 121, True, False, 30.5, "30", None, []])
+@pytest.mark.parametrize("minutes", [0, -1, 121, True, False, 30.5, "30", None, []])
 def test_invalid_poll_option_fails_before_startup(module, tmp_path, minutes):
     path = tmp_path / "options.json"
     path.write_text(json.dumps({"poll_interval_minutes": minutes}))

@@ -23,11 +23,13 @@ def snapshot(version="1.3.2"):
 def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(source_version):
     old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == source_version and new["version"] == "1.3.6"
+    assert old["version"] == source_version and new["version"] == "1.3.7"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
-    assert "1.3.6" in new["breaking_versions"]
+    assert "1.3.7" in new["breaking_versions"]
     assert new["options"].pop("poll_interval_minutes") == 30
-    assert new["schema"].pop("poll_interval_minutes") == "int(5,120)"
+    assert new["schema"].pop("poll_interval_minutes") == "int(1,7200)"
+    assert new["options"].pop("poll_interval_unit") == "minutes"
+    assert new["schema"].pop("poll_interval_unit") == "list(seconds|minutes)"
     assert new["options"].pop("min_cloud_retry_minutes") == 60
     assert new["schema"].pop("min_cloud_retry_minutes") == "int(5,1440)"
     for key in ("version", "breaking_versions"):
@@ -102,7 +104,7 @@ def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
     }
     assert {topic: ids[topic] for topic in old["mqtt_ids"]} == old["mqtt_ids"]
     # No added entity since 1.3.3; only its already-reviewed vendor sensor since 1.3.2.
-    assert len(ids) == len(old["mqtt_ids"]) + (source_version == "1.3.2")
+    assert len(ids) == len(old["mqtt_ids"]) + (source_version == "1.3.2") + 5
 
 
 @pytest.mark.parametrize("state_name", ["authorized", "authorized_refresh"])

@@ -1,6 +1,7 @@
 """MyThermowatt bridge: cloud opt-in, persistent auth guard, observed MQTT state."""
 
 import hashlib
+from datetime import datetime, timezone
 import json
 import logging
 import math
@@ -17,6 +18,8 @@ import uuid
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
 import requests
+
+from thermowatt_read_only import RequestUsage, daily_limit, poll_seconds
 
 LOG = logging.getLogger("thermowatt")
 _APP_API_KEY = "YVjArWssxKH631jv1dnnWOTr6gijsSAGz7rQJ4hJoUNRffxYvbQaMbePBEZalena"
@@ -58,6 +61,7 @@ def safe_diagnostic(code):
         "cloud_error_nonempty",
         "cloud_result_missing",
         "cloud_result_wrong_type",
+        "cloud_daily_limit",
         "device_list_unrecognised",
         "status_fields_missing",
         "status_values_non_numeric",
@@ -271,7 +275,7 @@ class MyThermowattBridge:
         monotonic=time.monotonic,
     ):
         self.options = options
-        self.poll_interval = options.get("poll_interval_minutes", 30) * 60
+        self.poll_interval = poll_seconds(options)
         self.min_cloud_retry = options.get("min_cloud_retry_minutes", 60) * 60
         self.request_counts = {
             kind: 0
@@ -280,6 +284,13 @@ class MyThermowattBridge:
         self.clock = clock
         self.monotonic = monotonic
         self.data_dir = Path(data_dir)
+        self.usage = RequestUsage(self.data_dir / "request_usage.json", clock, atomic_json)
+        self.confirmation_read = False
+        self.last_success = {}
+        self.last_error = safe_diagnostic(self.usage.last_error) if self.usage.last_error else None
+        self.quota_signal = None
+        self.cloud_health = "starting" if options.get("cloud_enabled", False) else "disabled"
+        self.next_diagnostics = 0
         self.config_path = self.data_dir / "thermowatt_config.json"
         self.config = {"device_uuid": str(uuid.uuid4()), "devices": {}}
         if self.config_path.exists():
@@ -319,6 +330,10 @@ class MyThermowattBridge:
         self.next_cloud = 0
         self.next_poll = 0
         self.failures = 0
+        if self.usage.cooldown_until > self.clock():
+            self.next_cloud = self.next_poll = self.usage.cooldown_until
+            self.failures = self.usage.failures
+            self.cloud_health = "backoff"
         self.discovered = False
         self.last_diagnostic = None
         self.operation = "authentication_guard"
@@ -352,13 +367,15 @@ class MyThermowattBridge:
             "/status": "status",
         }.get(endpoint, "command")
         self.request_counts[kind] += 1
+        self.usage.record("confirmation" if kind == "status" and self.confirmation_read else kind)
         LOG.info(
             "Cloud request attempt: kind=%s count_since_start=%s total_since_start=%s.",
             kind,
             self.request_counts[kind],
             sum(self.request_counts.values()),
         )
-        return self.session.request(
+        self.quota_signal = None
+        response = self.session.request(
             method,
             f"{self.BASE_URL}{endpoint}",
             headers=headers,
@@ -367,6 +384,15 @@ class MyThermowattBridge:
             allow_redirects=False,
             **kwargs,
         )
+        if response.status_code == 429:
+            self.quota_signal = "cloud_http_429"
+        else:
+            try:
+                if daily_limit(response.json()):
+                    self.quota_signal = "cloud_daily_limit"
+            except (ValueError, TypeError):
+                pass
+        return response
 
     def _authenticate(self, action, diagnostic=False):
         self.operation = "password_login" if action == "login" else "token_refresh"
@@ -506,6 +532,8 @@ class MyThermowattBridge:
         # Preserve the existing acceptance rules and first-failure order.
         if not isinstance(body, dict):
             raise CloudError("cloud_envelope_not_object")
+        if daily_limit(body):
+            raise CloudError("cloud_daily_limit")
         if body.get("success") is False:
             raise CloudError("cloud_success_false")
         if body.get("error"):
@@ -594,6 +622,76 @@ class MyThermowattBridge:
             json.dumps(vendor_mode),
             retain=True,
         )
+        for key, label, extra in (
+            ("last_successful_poll", "Last successful poll", {"device_class": "timestamp"}),
+            (
+                "status_age_seconds",
+                "Status age",
+                {"device_class": "duration", "unit_of_measurement": "s"},
+            ),
+            ("cloud_health", "Cloud health", {}),
+            ("last_error", "Last cloud error", {}),
+            (
+                "request_attempts",
+                "Cloud request attempts (local lifetime)",
+                {"state_class": "total_increasing"},
+            ),
+        ):
+            diagnostic = {
+                "unique_id": f"thermowatt_{serial}_{key}",
+                "name": label,
+                "state_topic": f"P/{serial}/DIAGNOSTICS",
+                "value_template": "{{ value_json."
+                + key
+                + " if value_json."
+                + key
+                + " is not none else 'None' }}",
+                "json_attributes_topic": f"P/{serial}/DIAGNOSTICS",
+                "entity_category": "diagnostic",
+                "device": device,
+                "availability": [{"topic": "thermowatt/bridge/availability"}],
+                **extra,
+            }
+            self._publish_read_only(f"homeassistant/sensor/{serial}/{key}/config", diagnostic)
+
+    def _publish_read_only(self, topic, payload):
+        try:
+            self.mqtt_client.publish(topic, json.dumps(payload), retain=True)
+        except (OSError, ValueError, TypeError, RuntimeError):
+            LOG.warning("Read-only diagnostics unavailable: code=mqtt_publish_failed.")
+
+    def publish_diagnostics(self, force=False):
+        if not force and self.clock() < self.next_diagnostics:
+            return
+        self.next_diagnostics = self.clock() + 30
+        if not self.options.get("cloud_enabled", False):
+            health = "disabled"
+        elif self.guard.state["mode"] == "blocked" and self.cloud_health != "quota_limited":
+            health = "auth_locked"
+        else:
+            health = self.cloud_health
+        for serial in self.config["devices"]:
+            timestamp = self.last_success.get(serial)
+            payload = {
+                "last_successful_poll": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
+                if timestamp is not None
+                else None,
+                "status_age_seconds": max(0, int(self.clock() - timestamp))
+                if timestamp is not None
+                else None,
+                "cloud_health": health,
+                "last_error": self.last_error or "none",
+                "request_attempts": self.usage.total,
+                "request_categories": dict(self.usage.counts),
+                "accounting_since": self.usage.since,
+                "accounting_persistent": self.usage.persistent,
+                "accounting_complete": self.usage.complete,
+                "auth_guard_mode": self.guard.state["mode"],
+                "cooldown_remaining_seconds": max(0, int(self.usage.cooldown_until - self.clock())),
+                "consumption_basis": "local_attempts_not_vendor_consumption",
+                "poll_interval_seconds": self.poll_interval,
+            }
+            self._publish_read_only(f"P/{serial}/DIAGNOSTICS", payload)
 
     def _subscribe(self, serial):
         # MQTT v5 preserves RETAIN on live retained writes as well as replay.
@@ -610,6 +708,7 @@ class MyThermowattBridge:
                 self.publish_discovery(serial, self.config["devices"][serial]["name"])
                 self._subscribe(serial)
             client.publish("thermowatt/bridge/availability", "online", qos=1, retain=True)
+            self.publish_diagnostics(force=True)
 
     def on_mqtt_disconnect(self, client, userdata, flags, reason_code, properties):
         self.mqtt_connected.clear()
@@ -661,8 +760,12 @@ class MyThermowattBridge:
         self.discovered = True
 
     def poll_status(self, serial):
+        self.confirmation_read = self.operation == "heater_command"
         self.operation = "status_poll"
-        result = self._result(self.request("GET", "/status", serial))
+        try:
+            result = self._result(self.request("GET", "/status", serial))
+        finally:
+            self.confirmation_read = False
         if any(key not in result for key in self.STATUS_FIELDS):
             raise CloudError("status_fields_missing")
         try:
@@ -686,6 +789,9 @@ class MyThermowattBridge:
         self.confirmed[serial] = (self.monotonic(), values)
         self.mqtt_client.publish(f"P/{serial}/STATUS", json.dumps({"result": safe}), retain=True)
         self._availability(serial, True)
+        self.last_success[serial] = self.clock()
+        self.cloud_health = "ok"
+        self.publish_diagnostics(force=True)
         return values
 
     def process_command(self, command):
@@ -756,6 +862,7 @@ class MyThermowattBridge:
 
     def tick(self):
         """One bounded iteration; authentication failure idles instead of exiting."""
+        self.publish_diagnostics()
         if self.mqtt_reconnected.is_set():
             self.mqtt_reconnected.clear()
             self._offline()
@@ -787,9 +894,12 @@ class MyThermowattBridge:
                     self.poll_status(serial)
                 self.next_poll = self.clock() + self.poll_interval
                 self.failures = 0
+                self.usage.cooldown(0, 0)
                 if self.last_diagnostic is not None:
                     LOG.info("Bridge resumed: code=cloud_cycle_recovered.")
                 self.last_diagnostic = None
+                self.cloud_health = "ok"
+                self.publish_diagnostics(force=True)
             self.next_cloud = min(self.clock() + self.COMMAND_INTERVAL, self.next_poll)
         except (CloudError, OSError, ValueError, TypeError) as error:
             self._offline()
@@ -803,6 +913,7 @@ class MyThermowattBridge:
                 else:
                     delay = min(self.MAX_CLOUD_BACKOFF, base * 2 ** (self.failures - 1))
                     self.next_poll = self.clock() + delay
+                    self.usage.cooldown(self.next_poll, self.failures)
             self.next_cloud = self.clock() + delay
             if isinstance(error, CloudError):
                 code = safe_diagnostic(error.args[0] if error.args else None)
@@ -814,7 +925,17 @@ class MyThermowattBridge:
                     if isinstance(error, OSError)
                     else "internal_value_error"
                 )
+            if self.quota_signal:
+                code = self.quota_signal
             diagnostic = (self.operation, code, delay)
+            self.last_error = code
+            self.usage.last_error = code
+            self.usage.save()
+            if code in {"cloud_daily_limit", "cloud_http_429", "auth_http_429"}:
+                self.cloud_health = "quota_limited"
+            else:
+                self.cloud_health = "backoff"
+            self.publish_diagnostics(force=True)
             if diagnostic != self.last_diagnostic:
                 LOG.warning(
                     "Bridge paused: operation=%s code=%s backoff_seconds=%s "
@@ -833,12 +954,12 @@ class MyThermowattBridge:
         )
         self.mqtt_client.loop_start()
         LOG.info(
-            "Bridge running; cloud=%s, commands=%s. Poll interval=%s minutes. "
+            "Bridge running; cloud=%s, commands=%s. Poll interval=%s seconds. "
             "Minimum cloud retry=%s minutes. Request counts reset on restart. "
             "No automatic lockout reset.",
             self.options.get("cloud_enabled", False),
             self.options.get("commands_enabled", False),
-            self.poll_interval // 60,
+            self.poll_interval,
             self.min_cloud_retry // 60,
         )
         try:
@@ -876,10 +997,8 @@ def load_options(path):
     generation = options.get("auth_retry_generation", 0)
     if type(generation) is not int or generation < 0:
         raise ValueError
-    for key, default, maximum in (
-        ("poll_interval_minutes", 30, 120),
-        ("min_cloud_retry_minutes", 60, 1440),
-    ):
+    poll_seconds(options)
+    for key, default, maximum in (("min_cloud_retry_minutes", 60, 1440),):
         interval = options.get(key, default)
         if type(interval) is not int or not 5 <= interval <= maximum:
             raise ValueError

@@ -1,6 +1,6 @@
 name: "Thermowatt Smart Boiler"
 description: "Opt-in MyThermowatt cloud bridge with persistent authentication protection."
-version: "1.3.6"
+version: "1.3.7"
 slug: "thermowatt_boiler"
 arch:
   - aarch64
@@ -12,12 +12,14 @@ breaking_versions:
   - "1.3.3"
   - "1.3.4"
   - "1.3.6"
+  - "1.3.7"
 options:
   email: ""
   password: ""
   cloud_enabled: false
   commands_enabled: false
   poll_interval_minutes: 30
+  poll_interval_unit: minutes
   min_cloud_retry_minutes: 60
   auth_retry_generation: 0
 schema:
@@ -25,7 +27,8 @@ schema:
   password: password
   cloud_enabled: bool
   commands_enabled: bool
-  poll_interval_minutes: int(5,120)
+  poll_interval_minutes: int(1,7200)
+  poll_interval_unit: list(seconds|minutes)
   min_cloud_retry_minutes: int(5,1440)
   auth_retry_generation: int(0,)
 services:

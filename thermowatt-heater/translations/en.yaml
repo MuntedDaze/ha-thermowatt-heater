@@ -1,0 +1,22 @@
+configuration:
+  email:
+    name: Account email
+  password:
+    name: Account password
+  cloud_enabled:
+    name: Enable cloud access
+  commands_enabled:
+    name: Enable heater commands
+    description: Leave disabled for read-only use. Separate owner approval is required for control.
+  poll_interval_minutes:
+    name: Polling interval
+    description: Value in the selected unit. Seconds 60–7200; Minutes 1–120. This historic YAML key is retained for upgrades; missing units mean Minutes.
+  poll_interval_unit:
+    name: Polling interval unit
+    description: Select seconds or minutes for the single numeric Polling interval setting.
+  min_cloud_retry_minutes:
+    name: Minimum cloud error cooldown (minutes)
+    description: Default 60. Ordinary errors wait at least this and the normal polling interval, with bounded exponential backoff. This does not reset authentication lockouts.
+  auth_retry_generation:
+    name: Authentication retry generation
+    description: Do not change during an update or to investigate quota errors. Increasing it permits another authentication cycle.

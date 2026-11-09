@@ -1,4 +1,10 @@
-# Cloud failure diagnostics and polling in 1.3.6
+# Cloud failure diagnostics and polling
+
+The 1.3.7 review candidate adds exact JSON `error` classification as
+`cloud_daily_limit`, persistent private local attempt counts/cooldowns and
+read-only freshness/health diagnostics. See [upgrade notes](UPGRADING_1_3_7.md).
+HTTP 429 still locks the original authentication guard; no vendor quota or reset
+time is inferred. Near-match text and unrelated errors retain generic categories.
 
 1.3.5 refined 1.3.4's envelope diagnostic without changing validation or
 authentication policies. 1.3.6 adds the owner-approved configurable ordinary

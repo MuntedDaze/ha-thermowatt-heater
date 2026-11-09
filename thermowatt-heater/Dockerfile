@@ -11,7 +11,7 @@ RUN python3 -m venv /opt/venv \
 ENV PYTHONUNBUFFERED=1
 # Copy data for add-on
 COPY run.sh /
-COPY thermowatt_bridge.py /
+COPY thermowatt_bridge.py thermowatt_read_only.py /
 
 RUN chmod a+x /run.sh
 
