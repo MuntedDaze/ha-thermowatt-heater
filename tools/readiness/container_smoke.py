@@ -317,7 +317,7 @@ def smoke(image, arch, output):
                     FIXTURES.parents[1] / f"tests/fixtures/upgrade_{version.replace('.', '_')}.json"
                 )
                 legacy = json.loads(upgrade_fixture.read_text())
-                result_key = f"upgrade_{version.replace('.', '_')}_to_1_3_4"
+                result_key = f"upgrade_{version.replace('.', '_')}_to_1_3_5"
                 results.setdefault(result_key, {})
                 docker(
                     "run",

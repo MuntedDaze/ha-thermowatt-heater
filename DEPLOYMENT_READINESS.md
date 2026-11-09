@@ -2,9 +2,10 @@
 
 Historical baseline: [PR #1](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/1),
 branch `codex/auth-safety-1.3.2`, subsequently merged by the owner. PR #2's 1.3.3
-update was also merged and is now owner-reported installed. The proposed 1.3.4
-update is [draft PR #3](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/3);
-see [its upgrade notes](UPGRADING_1_3_4.md) and final-head CI for current results. Cloud and
+update was also merged. PR #3 / 1.3.4 was subsequently owner-merged and is now
+reported installed, with a status-envelope warning after successful refresh.
+The 1.3.5 follow-up only splits fixed envelope codes; see
+[its upgrade notes](UPGRADING_1_3_5.md) and final-head CI for current results. Cloud and
 commands remain disabled by default. These baseline checks added no integration
 features and required no correction to the bridge, Dockerfile or launcher.
 

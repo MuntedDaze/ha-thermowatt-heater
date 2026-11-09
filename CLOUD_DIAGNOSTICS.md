@@ -1,8 +1,14 @@
-# Cloud failure diagnostics in 1.3.4
+# Cloud failure diagnostics in 1.3.5
 
-The reviewed changes below are packaged as the 1.3.4 controlled-update candidate.
-See [UPGRADING_1_3_4.md](UPGRADING_1_3_4.md) for state/option preservation and
-the limits of offline upgrade validation. No live installation is changed here.
+1.3.5 refines 1.3.4's envelope diagnostic without changing its validation or
+authentication policies. See [UPGRADING_1_3_5.md](UPGRADING_1_3_5.md) for the
+controlled update and state preservation. No live installation is changed here.
+
+The owner now reports `auth_refresh_accepted` followed by
+`operation=status_poll code=cloud_response_unrecognised` on 1.3.4. In that code,
+this means the status read reached envelope validation after HTTP success and
+JSON decoding. It does not identify which condition failed. 1.3.5 distinguishes
+the conditions below without logging the body, keys present or field values.
 
 ## What the existing messages establish
 
@@ -19,7 +25,7 @@ or sending another password login. Failed cloud reads do not trigger password
 fallback. Therefore those old messages cannot identify which authentication
 operation occurred, or why a subsequent cloud operation failed.
 
-There is exactly one `cloud_operation_failed` producer: the exception handler in
+In 1.3.3 there was exactly one `cloud_operation_failed` producer: the exception handler in
 `tick()`. It catches `CloudError`, `OSError`, `ValueError` and `TypeError`. When
 the guard is blocked it logs the stored lockout reason; otherwise it discards the
 exception's existing diagnostic and emits the generic message. This masks:
@@ -55,7 +61,12 @@ cycle recovers. Recovery logs `cloud_cycle_recovered` once.
 | `auth_http_NNN` / `cloud_http_NNN` | Actual HTTP status, restricted to a three-digit status code. Auth 5xx uses the existing bounded transient policy; rejected authentication and cloud 401/403/429 lock as before. |
 | `auth_tls_error` / `cloud_tls_error` | Certificate/TLS error; no insecure fallback. |
 | `auth_transport_unrecognised` / `auth_response_unrecognised` | Unsupported auth transport or token response; persistent lockout. |
-| `cloud_invalid_json` / `cloud_response_unrecognised` | Invalid JSON or rejected/missing result envelope. |
+| `cloud_invalid_json` | JSON could not be decoded; unchanged from 1.3.4. |
+| `cloud_envelope_not_object` | Decoded response is not a JSON object. |
+| `cloud_success_false` | The success flag is explicitly boolean false. |
+| `cloud_error_nonempty` | The error field is nonempty/truthy under the existing rule. |
+| `cloud_result_missing` | The result key is absent. |
+| `cloud_result_wrong_type` | The result exists but is not an object, including null. |
 | `device_list_unrecognised` | Missing/malformed device list or invalid serial format. |
 | `status_fields_missing` | At least one required status field is missing. |
 | `status_values_non_numeric` / `status_values_non_finite` | A required status value cannot be interpreted as a finite number. |
@@ -74,7 +85,32 @@ enable commands, delete private state or increase authentication generation to
 collect diagnostics. A lockout remains locked until a separately approved
 operator action; restarting does not clear it.
 
-## Refresh handling
+## Envelope validation review
+
+The existing parser consumes `result.T_Avg`, `result.T_SetPoint`, `result.Cmd`
+and `result.WaterHeaterSts` for status, and `result.termostati` for discovery.
+This supports the current object-result contract in the source. It does not
+establish that the vendor always returns that contract, or prove that a direct
+status object, list, null result or another envelope is a compatible response.
+The owner's new fixed code can locate the failed rule but cannot alone prove
+that an alternative shape is safe to accept. No response schema evidence in the
+repository justifies loosening validation; no endpoint was probed.
+
+1.3.5 retains the original left-to-right precedence: non-object response,
+explicit boolean `success=false`, truthy `error`, missing result, then result
+type. Only the first failure is reported. Invalid JSON still uses
+`cloud_invalid_json`. Success need not be present or true; an absent/empty/false
+error field is still allowed. An empty result object still passes envelope
+validation, then fails field validation where appropriate. In particular,
+`cloud_error_nonempty` does not mean every mere presence of an `error` key is
+rejected. No field values or unexpected key names are included in diagnostics.
+
+Mocked tests compare acceptance with the released 1.3.4 predicate across missing,
+null, boolean, numeric, string, list and object field variants. Recovery and
+log-redaction tests cover discovery and polling without a new authentication
+request or guard-state change.
+
+## Refresh handling (unchanged from 1.3.4)
 
 Previously a GET 401 allowed one refresh and one read replay per request. A
 second 401 on the replay already locked persistently, but a successful replay
