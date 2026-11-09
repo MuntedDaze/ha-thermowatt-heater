@@ -61,6 +61,9 @@ An auth request interrupted by termination is treated as unknown and locks.
 Read failures never cause password fallback; write timeouts are never replayed.
 
 Mock tests verify local policy, not the vendor's undocumented API or physical
-device behaviour. Thermann Control compatibility and the observed vendor account
-lockout remain unverified. The owner's Home Assistant, VMs and Docker services
-were not accessed or modified.
+device behaviour. On 2026-11-09 the owner reported successful real HA OS
+authentication, MQTT discovery and initial read-only status display using the
+Thermann Control account with commands disabled. This does not verify temperature
+accuracy, mode mapping, heater controls or the cause of the earlier lockout.
+The agent did not access or modify the owner's Home Assistant, VMs or Docker
+services. Further development and control testing are paused for owner review.

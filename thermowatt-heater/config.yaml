@@ -1,6 +1,6 @@
 name: "Thermowatt Smart Boiler"
 description: "Opt-in MyThermowatt cloud bridge with persistent authentication protection."
-version: "1.3.2"
+version: "1.3.3"
 slug: "thermowatt_boiler"
 arch:
   - aarch64
@@ -9,6 +9,7 @@ init: false
 boot: manual
 breaking_versions:
   - "1.3.2"
+  - "1.3.3"
 options:
   email: ""
   password: ""

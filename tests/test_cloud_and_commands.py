@@ -42,7 +42,7 @@ def test_read_401_refreshes_once_and_replays_only_read(factory):
     bridge.poll_status("TEST123")
     assert [c.args[0] for c in bridge.session.request.call_args_list] == ["GET", "POST", "GET"]
     assert bridge.session.request.call_args_list[1].args[1].endswith("/refresh")
-    assert json.loads(status_messages(bridge)[0])["result"]["heating"] is True
+    assert json.loads(status_messages(bridge)[0])["result"]["heating"] is None
 
 
 def test_second_401_after_refresh_persistently_blocks(factory, module):
@@ -106,7 +106,7 @@ def test_cloud_rejection_locks_every_endpoint(factory, clock, status):
         {},
         {"result": {}},
         {"result": []},
-        {"result": {**STATUS["result"], "Cmd": "99"}},
+        {"result": {**STATUS["result"], "Cmd": "-1"}},
         {"result": {**STATUS["result"], "T_Avg": "nan"}},
     ],
 )
@@ -264,7 +264,8 @@ def test_discovery_preserves_ids_and_uses_confirmed_state(factory):
         "high_demand",
         "performance",
     }
-    assert "heating" in heating["value_template"]
+    assert heating["unique_id"] == "thermowatt_TEST123_heating"
+    assert heating["value_template"] == "{{ 'None' }}"
     assert "default(0)" not in str(heater)
 
 
@@ -310,3 +311,54 @@ def test_explicit_failure_status_with_result_is_not_published(factory, module):
     with pytest.raises(module.CloudError):
         bridge.poll_status("TEST123")
     assert not status_messages(bridge)
+
+
+@pytest.mark.parametrize(
+    "kind,payload,endpoint,cmd,setpoint",
+    [
+        ("MODE", "Manual", "/manual", 9, 70),
+        ("MODE", "Auto", "/auto", 17, 70),
+        ("MODE", "Eco", "/eco", 3, 70),
+        ("MODE", "off", "/off", 16, 70),
+        ("TEMP", "65", "/manual", 9, 65),
+    ],
+)
+def test_existing_command_contract_only_posts_once_then_reads_status(
+    factory, clock, kind, payload, endpoint, cmd, setpoint
+):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1]["T_SetPoint"] = 70
+    bridge.session.request.side_effect = [
+        response(204),
+        response(
+            body={
+                "result": {
+                    **STATUS["result"],
+                    "Cmd": str(cmd),
+                    "T_SetPoint": str(setpoint),
+                }
+            }
+        ),
+    ]
+    bridge.process_command((clock(), "TEST123", kind, payload))
+    write, read = bridge.session.request.call_args_list
+    assert write.args[0] == "POST" and write.args[1].endswith(endpoint)
+    assert read.args[0] == "GET" and read.args[1].endswith("/status")
+    if endpoint == "/manual":
+        assert write.kwargs["json"] == {"T_SetPoint": setpoint}
+    else:
+        assert write.kwargs["data"] == ""
+        assert write.kwargs["headers"]["Content-Type"] == "text/plain"
+    assert write.kwargs["headers"]["seriale"] == "TEST123"
+
+
+@pytest.mark.parametrize(
+    "kind,payload",
+    [("MODE", "Manual"), ("MODE", "Auto"), ("MODE", "Eco"), ("MODE", "off"), ("TEMP", "65")],
+)
+def test_all_reviewed_commands_remain_disabled_by_default(factory, clock, kind, payload):
+    bridge = factory()
+    ready(bridge)
+    bridge.process_command((clock(), "TEST123", kind, payload))
+    bridge.session.request.assert_not_called()

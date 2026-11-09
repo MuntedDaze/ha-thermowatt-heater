@@ -5,7 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.2] - Review candidate (2026-11-09)
+## [1.3.3] - Review candidate (2026-11-09)
+
+### Read-only Thermann update (not deployed)
+
+- Record owner-reported temperature agreement at 17°C current / 70°C target,
+  app 3.15.17, heater 07.00.09.06 and Wi-Fi 01.03.21.
+- Preserve water-heater IDs and native Unknown for Schedule/Holiday; add one
+  read-only Vendor mode sensor, mapping inherited Cmd 17 to Schedule with raw
+  Cmd/WaterHeaterSts attributes. New unknown codes retain valid temperatures.
+- Preserve the heating binary-sensor ID, but report Unknown and JSON null for
+  unverified physical heating instead of decoding bit zero. Ignore old retained
+  booleans so they cannot perpetuate a false physical-state claim.
+- Review existing commands, manufacturer guidance, schedule/diagnostic limits
+  and a staged future test plan. No command/authentication changes, additional
+  cloud requests, schedule edits or Windows diagnostic workflow.
+- Add mocked mode/status/Jinja/command-contract coverage and extend isolated
+  container discovery checks.
+
+### Upgrade compatibility
+
+- Bump the existing add-on to 1.3.3 without changing its slug, options/schema,
+  option defaults, state paths, authentication code or existing MQTT entity IDs.
+- Preserve installed credentials, saved tokens, consumed retry generation,
+  lockouts and cloud/command settings. An interrupted authentication remains
+  fail-closed; upgrading is not an authentication reset.
+- Mark 1.3.3 as requiring attention because the heating sensor intentionally
+  changes to Unknown/null. Existing data/options are retained; this marker does
+  not enable or reset settings. New-install cloud and command defaults stay false.
+- Add actual-1.3.2-format synthetic upgrade fixtures, option/state compatibility
+  tests and native-container replacement checks with preserved private data.
+- Document the normal Update path and limits in UPGRADING_1_3_3.md. No feature,
+  command, schedule, live cloud test, merge or deployment is added.
+
+## [1.3.2] - Previously installed baseline
 
 ### Security and authentication
 
@@ -44,14 +77,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2026.11.0 schemas without running a Supervisor daemon. Record evidence and
   remaining real-HA installation checks in DEPLOYMENT_READINESS.md.
 
+### Owner-reported verification — 2026-11-09
+
+- Owner reports successful 1.3.2 installation and Thermann Control authentication
+  in Home Assistant OS, MQTT heater discovery, and current/target temperature and
+  heating-status display with cloud enabled and commands disabled.
+- Additional Windows login diagnostic cancelled; its uncommitted implementation
+  was discarded. No further authentication or runtime changes were introduced.
+- Temperature accuracy, operating-mode mapping and heater commands remain
+  unverified. Further development is paused for owner review.
+
 ### Release limits
 
-- Thermann Control / Australian Thermann Smart Electric 315 L API/account
-  compatibility is unverified for this owner. A first-hand upstream Thermann
-  success report supports plausibility, not universal account compatibility.
-  No endpoints or app identities were guessed.
-- No live cloud, real heater, actual HA OS/Supervisor installation or HA Core UI
-  validation. Owner approval and the documented real-HA checks remain required.
+- Initial authentication/read-only operation now has an owner success report;
+  universal account compatibility, temperature accuracy, mode mapping and actual
+  control behaviour are not established. No endpoints or app identities were guessed.
+- No agent live requests or physical heater-control tests. Remaining validation
+  needs owner review. Anti-legionella protection, thermostat limits and fallback
+  schedules must be preserved; Off's effect on those protections is unverified.
 
 ## [1.3.1] - Previously published
 

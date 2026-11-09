@@ -269,6 +269,20 @@ def smoke(image, arch, output):
             assert any(
                 row["topic"] == "homeassistant/water_heater/SYNTHETIC123/config" for row in messages
             )
+            mode_config = next(
+                json.loads(row["payload"])
+                for row in messages
+                if row["topic"] == "homeassistant/sensor/SYNTHETIC123/vendor_mode/config"
+            )
+            assert mode_config["unique_id"] == "thermowatt_SYNTHETIC123_vendor_mode"
+            assert "command_topic" not in mode_config
+            heating_config = next(
+                json.loads(row["payload"])
+                for row in messages
+                if row["topic"] == "homeassistant/binary_sensor/SYNTHETIC123/heating/config"
+            )
+            assert heating_config["unique_id"] == "thermowatt_SYNTHETIC123_heating"
+            assert heating_config["value_template"] == "{{ 'None' }}"
             assert not any(row["topic"].endswith("/STATUS") for row in messages), (
                 "Invented heater status"
             )
@@ -287,12 +301,106 @@ def smoke(image, arch, output):
                 "SYNTHETIC_SUPERVISOR_TOKEN",
             ):
                 assert secret not in logs, "Sensitive configuration appeared in logs"
+            # Replace the container while preserving a 1.3.2-format /data volume.
+            # These states contain only synthetic credentials/tokens. HTTP remains
+            # prohibited and disabled; this is not a real Supervisor installation.
+            upgrade_fixture = FIXTURES.parents[1] / "tests/fixtures/upgrade_1_3_2.json"
+            legacy = json.loads(upgrade_fixture.read_text())
+            results["upgrade_1_3_2_to_1_3_3"] = {}
+            for index, upgrade_state in enumerate(("authorized", "blocked"), start=3):
+                docker(
+                    "run",
+                    "--rm",
+                    "--network",
+                    "none",
+                    "--entrypoint",
+                    PYTHON,
+                    "--mount",
+                    mount(data, "/data"),
+                    "--mount",
+                    mount(upgrade_fixture, "/upgrade.json", True),
+                    "--mount",
+                    mount(FIXTURES / "seed_upgrade.py", "/seed.py", True),
+                    image,
+                    "/seed.py",
+                    upgrade_state,
+                )
+                replacement = f"{prefix}-upgrade-{upgrade_state}"
+                start(
+                    replacement,
+                    "--env",
+                    "SUPERVISOR_TOKEN=SYNTHETIC_SUPERVISOR_TOKEN",
+                    "--env",
+                    "PYTHONPATH=/smoke-hooks",
+                    "--env",
+                    f"SMOKE_MQTT_IP={broker_ip}",
+                    "--mount",
+                    mount(FIXTURES / "hooks", "/smoke-hooks", True),
+                    "--mount",
+                    mount(data, "/data"),
+                    image,
+                )
+                wait_for(lambda index=index: online_count() >= index, "upgraded image MQTT startup")
+                wait_for(
+                    lambda index=index: sum(
+                        "/CMD/" in row["topic"] for row in json_lines(evidence / "mqtt.jsonl")
+                    )
+                    >= 6 * index,
+                    "synthetic commands delivered after replacement",
+                )
+                time.sleep(3)
+                docker("stop", "--time", "15", replacement)
+                state = json.loads(docker("inspect", replacement).stdout)[0]["State"]
+                assert state["ExitCode"] == 0 and not state["OOMKilled"]
+                assert (
+                    copied_file(replacement, "/data/options.json")
+                    == json.dumps(legacy["options"]).encode()
+                )
+                assert (
+                    json.loads(copied_file(replacement, "/data/thermowatt_config.json"))
+                    == legacy["metadata"]
+                )
+                assert (
+                    json.loads(copied_file(replacement, "/data/auth_state.json"))
+                    == legacy["auth_states"][upgrade_state]
+                )
+                replacement_logs = (
+                    docker("logs", replacement).stdout.decode()
+                    + docker("logs", replacement).stderr.decode()
+                )
+                assert "Bridge running; cloud=False, commands=False" in replacement_logs
+                assert (
+                    "Traceback" not in replacement_logs and "Startup paused" not in replacement_logs
+                )
+                for value in (
+                    legacy["options"]["email"],
+                    legacy["options"]["password"],
+                    "SYNTHETIC_UPGRADE_ACCESS",
+                    "SYNTHETIC_UPGRADE_REFRESH",
+                ):
+                    assert value not in replacement_logs
+                results["upgrade_1_3_2_to_1_3_3"][upgrade_state] = "PASS"
+            audit = Counter(
+                json.loads(line)["kind"]
+                for line in copied_file(replacement, "/data/network-audit.jsonl").splitlines()
+            )
+            assert audit["guard_loaded"] == 4 and audit["mqtt_connect"] >= 4
+            assert not any(
+                audit[k] for k in ("forbidden_http", "forbidden_dns", "forbidden_socket")
+            ), audit
+            final_messages = json_lines(evidence / "mqtt.jsonl")
+            assert not any(row["topic"].endswith("/STATUS") for row in final_messages)
+            for row in final_messages:
+                if row["topic"] in legacy["mqtt_ids"]:
+                    assert (
+                        json.loads(row["payload"])["unique_id"] == legacy["mqtt_ids"][row["topic"]]
+                    )
             results.update(
                 status="PASS",
                 startup_shutdown_restart="PASS",
                 mqtt_authentication="PASS",
                 mqtt_clean_disconnect="PASS",
-                synthetic_commands_sent=12,
+                synthetic_commands_sent=sum("/CMD/" in row["topic"] for row in final_messages),
                 external_http_attempts=audit["forbidden_http"],
                 network_audit=dict(audit),
                 supervisor_service_discovery="PASS",

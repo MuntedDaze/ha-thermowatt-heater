@@ -10,7 +10,7 @@ ADDON = ROOT / "thermowatt-heater"
 
 def test_supervisor_options_and_release_metadata(module):
     config = yaml.safe_load((ADDON / "config.yaml").read_text())
-    assert config["version"] == "1.3.2"
+    assert config["version"] == "1.3.3"
     assert config["version"] in config["breaking_versions"]
     assert set(config["arch"]) == {"amd64", "aarch64"}
     assert config["init"] is False
@@ -22,7 +22,7 @@ def test_supervisor_options_and_release_metadata(module):
     assert config["options"]["commands_enabled"] is False
     assert config["options"]["auth_retry_generation"] == 0
     assert config["schema"]["password"] == "password"
-    assert "1.3.2" in (ADDON / "CHANGELOG.md").read_text()
+    assert "1.3.3" in (ADDON / "CHANGELOG.md").read_text()
     assert (ADDON / "CHANGELOG.md").read_bytes() == (ROOT / "CHANGELOG.md").read_bytes()
 
 
