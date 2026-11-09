@@ -70,7 +70,7 @@ def test_discovery_schema_and_private_storage_errors_are_distinct(
     bridge.session.request.side_effect = [response(body={"result": {"termostati": None}})]
     bridge.tick()
     assert "operation=device_discovery code=device_list_unrecognised" in caplog.text
-    clock.advance()
+    clock.advance(bridge.next_cloud - clock())
     bridge.session.request.side_effect = [response(body={"result": {"termostati": []}})]
 
     def fail(*args):
@@ -82,17 +82,17 @@ def test_discovery_schema_and_private_storage_errors_are_distinct(
     assert "SENSITIVE_PATH" not in caplog.text
 
 
-def test_diagnostics_deduplicate_and_report_recovery(factory, clock, caplog):
+def test_diagnostics_report_changed_backoff_and_recovery(factory, clock, caplog):
     caplog.set_level("INFO")
     bridge = factory()
     ready(bridge)
     caplog.clear()
     bridge.session.request.side_effect = [response(503), response(503), response(body=STATUS)]
     bridge.tick()
-    clock.advance()
+    clock.advance(bridge.next_cloud - clock())
     bridge.tick()
-    assert caplog.text.count("operation=status_poll code=cloud_http_503") == 1
-    clock.advance()
+    assert caplog.text.count("operation=status_poll code=cloud_http_503") == 2
+    clock.advance(bridge.next_cloud - clock())
     bridge.tick()
     assert "cloud_cycle_recovered" in caplog.text
     assert bridge.failures == 0 and bridge.last_diagnostic is None
@@ -132,11 +132,14 @@ def test_password_login_refresh_and_reuse_logs_are_distinct(factory, caplog):
     "replay",
     [response(body=STATUS), response(503), requests.Timeout(), response(body=ValueError())],
 )
-def test_successful_refresh_cannot_loop_after_later_401(factory, clock, restart, replay, caplog):
+def test_successful_refresh_cannot_loop_after_later_401(factory, clock, restart, replay, module):
     bridge = factory()
     ready(bridge)
     bridge.session.request.side_effect = [response(401), response(body=TOKENS), replay]
-    bridge.tick()
+    try:
+        bridge.poll_status("TEST123")
+    except module.CloudError:
+        pass
     assert bridge.session.request.call_count == 3
     persisted = json.loads(bridge.guard.path.read_text())
     assert persisted["next_retry"] == clock() + bridge.guard.REFRESH_COOLDOWN
@@ -147,10 +150,10 @@ def test_successful_refresh_cannot_loop_after_later_401(factory, clock, restart,
     clock.advance(100)
     bridge.session.request.reset_mock(side_effect=True)
     bridge.session.request.side_effect = [response(401)]
-    bridge.tick()
+    with pytest.raises(module.AuthBlocked, match="cloud_refresh_cooldown"):
+        bridge.poll_status("TEST123")
     assert bridge.session.request.call_count == 1
     assert bridge.session.request.call_args.args[0] == "GET"
-    assert "code=cloud_refresh_cooldown" in caplog.text
     assert bridge.guard.state["reason"] == "cloud_http_401"
     for instance in (bridge, factory()):
         for _ in range(10):
@@ -256,7 +259,7 @@ def test_discovery_recovers_without_another_authentication(factory, clock, caplo
     authenticate(bridge)
     bridge.session.request.side_effect = [response(503)]
     bridge.tick()
-    clock.advance()
+    clock.advance(bridge.next_cloud - clock())
     bridge.session.request.side_effect = [
         response(body={"result": {"termostati": [{"seriale": "TEST123"}]}}),
         response(body=STATUS),

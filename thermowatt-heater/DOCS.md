@@ -1,10 +1,11 @@
-# Thermowatt bridge 1.3.5 — envelope diagnostics
+# Thermowatt bridge 1.3.6 — configurable polling
 
-This is a diagnostic-only update from the owner's installed 1.3.4 add-on. See the
-[upgrade notes](../UPGRADING_1_3_5.md): the existing slug, options, private data and
+This adds the owner's approved 30-minute polling trial after the 1.3.5 diagnostic
+release. See the [upgrade notes](../UPGRADING_1_3_6.md): the existing slug, options, private data and
 entity IDs are retained. Updating does not reset the authentication guard or
-change installed cloud/command settings. Only the fixed envelope-failure codes
-change; validation, authentication and refresh policies remain the same.
+change installed cloud/command settings. Ordinary polling and its error-backoff
+floor use the configured interval; validation and authentication policies remain
+the same. No heater controls or scheduling features are added.
 
 Cloud access and heater commands default to disabled. Installation alone does not
 authorise authentication. Preserve installed options; the owner's current
@@ -86,6 +87,8 @@ email: ""
 password: ""
 cloud_enabled: false
 commands_enabled: false
+poll_interval_minutes: 30
+min_cloud_retry_minutes: 60
 auth_retry_generation: 0
 ```
 
@@ -93,6 +96,22 @@ auth_retry_generation: 0
   existing MyThermowatt API. Missing options also default to false on upgrade.
 - `commands_enabled`: separate permission for MQTT commands. Leave false for
   read-only observation. This does not establish Thermann compatibility.
+- `poll_interval_minutes`: whole minutes from 5 to 120; default 30. Applies to
+  normal status/discovery cycles, measured from completion of the last cycle.
+  Older saved options without the key also use 30. Changes apply after restart.
+- `min_cloud_retry_minutes`: whole minutes from 5 to 1440; default 60. Ordinary
+  errors start at the larger of this value and the normal poll interval, double
+  with repeated failures (up to five exponent levels), and cap at 24 hours.
+  Successful polling resets the backoff. It cannot make ordinary polling more
+  frequent than the normal interval. Missing keys use 60 on upgrade. This does
+  not change authentication retry budgets/deadlines or command handling.
+
+Startup shows both intervals and that request counts reset on restart. Each
+actual HTTP attempt logs only a fixed category, category count and total since
+startup. Status counts include command-confirmation reads; auth refresh and GET
+replays count separately. These are local attempted requests, not confirmed
+vendor usage, and exclude the official app/other clients. No enforced daily
+budget or vendor reset time is configured. See the upgrade notes for the decision.
 - `auth_retry_generation`: a monotonically increasing, non-secret integer. Zero
   starts locked. Increasing it authorises one authentication cycle. The accepted
   generation is persisted; leaving the same value configured cannot reset a
@@ -129,8 +148,13 @@ service to investigate a currently locked or unverified Thermann account.**
    operator approval. `storage_invalid` / `guard_storage_unavailable`: keep cloud
    disabled and repair private persistent storage before authorising any retry.
 
-For ordinary cloud outages, the bridge marks entities unavailable and backs off
-up to 300 seconds. It does not re-login for server errors, malformed device/status
+For ordinary polling failures, the bridge marks entities unavailable and uses
+the larger of both configured intervals with exponential backoff. Defaults wait
+60, 120, 240, 480, then 960 minutes; further failures stay at that fifth level.
+Other settings cap at 24 hours. Fixed warning fields show `backoff_seconds`,
+guard mode and request count; a blocked guard never unlocks when backoff expires.
+This replaces the former five-minute retry loop. Authentication retries retain their
+existing persisted budgets/deadlines and outer backoff. It does not re-login for server errors, malformed device/status
 responses, zero devices, local MQTT outages, or programming errors. A GET 401 can
 refresh once and replay that read once; a second 401, any 403 or 429 locks cloud
 access. A command POST is never replayed or followed by password fallback.
@@ -216,9 +240,9 @@ dependencies in a virtual environment. MQTT uses the supported `mqtt:need`
 Supervisor service and Bashio service discovery. No privileged mode, host
 network, host mappings or new Supervisor permissions are requested. The obsolete
 top-level `mqtt: true` key was removed in 1.3.2. Boot defaults to manual; 1.3.2,
-1.3.3 and 1.3.4 are marked as attention-requiring versions. 1.3.3 highlights the
+1.3.3, 1.3.4 and 1.3.6 are marked as attention-requiring versions. 1.3.3 highlights the
 intentional heating-state change to Unknown/null; 1.3.4 highlights the persistent
-refresh cooldown. These markers do not reset installed options, credentials or
+refresh cooldown; 1.3.6 highlights the slower status/error-retry cadence. These markers do not reset installed options, credentials or
 private data.
 
 Sources reviewed:
@@ -306,6 +330,13 @@ heater's safety controls; this project does not implement one.
 
 ## Cloud failure diagnostics
 
+In 1.3.6 an ordinary polling warning means the next cycle waits for the displayed
+backoff, at least both configured intervals (60 minutes initially by default).
+It does not mean a permanent halt. Identical operation/code/backoff warnings
+remain suppressed; per-attempt count logs still show attempts. Ordinary polling
+deadlines and counts are in memory, so restarting permits another initial cycle.
+Do not repeatedly restart to retry a daily-limit failure or change generation.
+
 The owner reports `auth_refresh_accepted` followed by
 `operation=status_poll code=cloud_response_unrecognised` on 1.3.4. Version 1.3.5
 replaces that envelope code with `cloud_envelope_not_object`,
@@ -332,12 +363,13 @@ Old generic messages alone cannot identify the actual cloud failure.
 
 ## Release decision
 
-1.3.5 follows the owner's low-risk diagnostic release workflow, with automatic
-squash merge only after final-head CI and review checks pass. It adds no API
-compatibility fix or control functionality. The owner's 1.3.4 report narrows the
-failure to status-envelope validation; the next fixed code is needed to identify
-the failed check. This is not approval for heater commands or automation. Keep the
+1.3.6 implements the owner's explicit approval for a configurable polling and
+ordinary cloud-error backoff change, with squash merge only after final-head CI
+and review checks pass. It adds no API compatibility fix or control functionality.
+The owner reports an explicit status failure and an app daily-limit warning;
+the quota and exact response meaning remain unverified. This is not approval
+for heater commands or automation. Keep the
 owner's commands disabled while the remaining functionality is reviewed. See the
 deployment-readiness report for unverified areas and the security review for the
 historical private key and token-storage risks. No additional control functionality
-is part of 1.3.5; installation and command testing await separate owner approval.
+is part of 1.3.6; installation and command testing remain owner-controlled.
