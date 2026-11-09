@@ -302,6 +302,24 @@ for a supported integration. Any external switching/control alternative should
 be assessed with the manufacturer and a qualified installer, preserving the
 heater's safety controls; this project does not implement one.
 
+## Cloud failure diagnostics
+
+The follow-up diagnostics change distinguishes password login
+(`auth_login_accepted`) from token refresh (`auth_refresh_accepted`). Reusing a
+stored session does not emit another authentication-accepted message. Warnings
+now identify a fixed operation and code, for example
+`operation=status_poll code=cloud_invalid_json`, instead of hiding the cause as
+`cloud_operation_failed`. Neither response bodies nor raw exceptions are logged.
+
+A second GET 401 within five minutes of successful refresh locks persistently
+before another refresh (`cloud_refresh_cooldown`, stored reason `cloud_http_401`).
+The deadline survives restarts; ordinary successful reads remain permitted.
+Existing auth retry budgets and lockout protections remain in place. Keep
+commands disabled and do not change the authentication generation or delete
+state to diagnose this warning. See the
+[diagnostic review and code table](https://github.com/MuntedDaze/ha-thermowatt-heater/blob/main/CLOUD_DIAGNOSTICS.md).
+Old generic messages alone cannot identify the actual cloud failure.
+
 ## Release decision
 
 1.3.3 remains a **review candidate**. The owner reports a successful real HA OS

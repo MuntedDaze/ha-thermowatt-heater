@@ -30,6 +30,54 @@ class AuthBlocked(CloudError):
     pass
 
 
+def safe_diagnostic(code):
+    """Never interpolate arbitrary exception messages, paths or response content."""
+    fixed = {
+        "guard_storage_unavailable",
+        "auth_locked_operator_action_required",
+        "auth_retry_wait",
+        "auth_retry_exhausted",
+        "cloud_disabled",
+        "missing_credentials",
+        "missing_refresh_token",
+        "auth_tls_error",
+        "auth_transient",
+        "auth_timeout",
+        "auth_connection_error",
+        "auth_transport_unrecognised",
+        "auth_response_unrecognised",
+        "authentication_not_ready",
+        "cloud_backoff",
+        "cloud_tls_error",
+        "cloud_timeout",
+        "cloud_connection_error",
+        "cloud_network_error",
+        "cloud_invalid_json",
+        "cloud_response_unrecognised",
+        "device_list_unrecognised",
+        "status_fields_missing",
+        "status_values_non_numeric",
+        "status_values_non_finite",
+        "status_temperature_out_of_range",
+        "status_mode_invalid",
+        "status_heater_state_invalid",
+        "command_rejected",
+        "cloud_refresh_cooldown",
+        "operator_required",
+        "storage_invalid",
+        "interrupted_auth",
+        "account_changed",
+        "unexpected_internal_error",
+        "diagnostic_complete",
+        "diagnostic_transient_no_retry",
+    }
+    if isinstance(code, str) and (
+        code in fixed or re.fullmatch(r"(?:auth|cloud)_http_[1-5][0-9]{2}", code)
+    ):
+        return code
+    return "cloud_error_unclassified"
+
+
 def atomic_json(path, value):
     """Durably replace a private file before allowing network I/O."""
     path = Path(path)
@@ -57,6 +105,7 @@ class AuthGuard:
 
     MAX_ATTEMPTS = 3
     RETRY_DELAYS = (60, 300)
+    REFRESH_COOLDOWN = 300
 
     def __init__(self, path, generation, account, clock=time.time):
         self.path = Path(path)
@@ -172,7 +221,10 @@ class AuthGuard:
             mode="authorized",
             reason=None,
             attempts=0,
-            next_retry=0,
+            # Reuse the existing persisted deadline; normal reads remain allowed.
+            next_retry=(self.clock() + self.REFRESH_COOLDOWN)
+            if self.state["action"] == "refresh"
+            else 0,
             access_token=access,
             refresh_token=refresh,
         )
@@ -257,6 +309,7 @@ class MyThermowattBridge:
         self.failures = 0
         self.discovered = False
         self.last_diagnostic = None
+        self.operation = "authentication_guard"
 
     @staticmethod
     def valid_serial(serial):
@@ -291,6 +344,7 @@ class MyThermowattBridge:
         )
 
     def _authenticate(self, action, diagnostic=False):
+        self.operation = "password_login" if action == "login" else "token_refresh"
         if not self.options.get("cloud_enabled", False):
             raise AuthBlocked("cloud_disabled")
         self.guard.check()
@@ -311,12 +365,15 @@ class MyThermowattBridge:
         except requests.exceptions.SSLError:
             self.guard.block("auth_tls_error")
             raise AuthBlocked("auth_tls_error") from None
-        except (requests.Timeout, requests.ConnectionError):
+        except (requests.Timeout, requests.ConnectionError) as error:
             if diagnostic:
                 self.guard.block("diagnostic_transient_no_retry")
             else:
                 self.guard.transient()
-            raise CloudError("auth_transient") from None
+            code = (
+                "auth_timeout" if isinstance(error, requests.Timeout) else "auth_connection_error"
+            )
+            raise CloudError(code) from None
         except requests.RequestException:
             self.guard.block("auth_transport_unrecognised")
             raise AuthBlocked("auth_transport_unrecognised") from None
@@ -325,7 +382,7 @@ class MyThermowattBridge:
                 self.guard.block("diagnostic_transient_no_retry")
             else:
                 self.guard.transient()
-            raise CloudError("auth_server_error")
+            raise CloudError(f"auth_http_{response.status_code}")
         if response.status_code != 200:
             code = f"auth_http_{response.status_code}"
             self.guard.block(code)
@@ -352,7 +409,11 @@ class MyThermowattBridge:
             )
         else:
             self.guard.success(result["accessToken"], result["refreshToken"])
-            LOG.info("Authentication accepted; tokens stored privately.")
+            LOG.info(
+                "Authentication accepted: operation=%s code=%s; tokens stored privately.",
+                self.operation,
+                "auth_login_accepted" if action == "login" else "auth_refresh_accepted",
+            )
         return True
 
     def diagnose_auth_once(self):
@@ -382,11 +443,25 @@ class MyThermowattBridge:
         try:
             response = self._send(method, endpoint, serial, **kwargs)
             if response.status_code == 401 and method == "GET":
+                if (
+                    self.guard.state["action"] == "refresh"
+                    and self.clock() < self.guard.state["next_retry"]
+                ):
+                    # A newly refreshed session should not need another refresh.
+                    # Fail closed across polls/restarts rather than refreshing in a loop.
+                    self.guard.block("cloud_http_401")
+                    raise AuthBlocked("cloud_refresh_cooldown")
+                operation = self.operation
                 self.refresh_session()
+                self.operation = operation
                 response = self._send(method, endpoint, serial, **kwargs)
         except requests.exceptions.SSLError:
             self.guard.block("cloud_tls_error")
             raise AuthBlocked("cloud_tls_error") from None
+        except requests.Timeout:
+            raise CloudError("cloud_timeout") from None
+        except requests.ConnectionError:
+            raise CloudError("cloud_connection_error") from None
         except requests.RequestException:
             raise CloudError("cloud_network_error") from None
         if response.status_code in (401, 403, 429):
@@ -535,6 +610,7 @@ class MyThermowattBridge:
             LOG.warning("Command discarded: invalid encoding or queue full.")
 
     def discover_devices(self):
+        self.operation = "device_discovery"
         result = self._result(self.request("GET", "/user-info"))
         devices = result.get("termostati")
         if not isinstance(devices, list) or any(
@@ -551,25 +627,29 @@ class MyThermowattBridge:
             self._availability(serial, False)
             self._subscribe(serial)
         self.active_devices = active
+        self.operation = "device_cache_storage"
         atomic_json(self.config_path, self.config)
         self.discovered = True
 
     def poll_status(self, serial):
+        self.operation = "status_poll"
         result = self._result(self.request("GET", "/status", serial))
+        if any(key not in result for key in self.STATUS_FIELDS):
+            raise CloudError("status_fields_missing")
         try:
             values = {key: float(result[key]) for key in self.STATUS_FIELDS}
-            if not all(math.isfinite(v) for v in values.values()):
-                raise ValueError
-            if not 0 <= values["T_Avg"] <= 100 or not 20 <= values["T_SetPoint"] <= 75:
-                raise ValueError
-            if values["Cmd"] < 0 or values["Cmd"] != int(values["Cmd"]):
-                raise ValueError
-            if values["WaterHeaterSts"] < 0 or values["WaterHeaterSts"] != int(
-                values["WaterHeaterSts"]
-            ):
-                raise ValueError
-        except (KeyError, TypeError, ValueError, OverflowError):
-            raise CloudError("status_unrecognised") from None
+        except (TypeError, ValueError, OverflowError):
+            raise CloudError("status_values_non_numeric") from None
+        if not all(math.isfinite(v) for v in values.values()):
+            raise CloudError("status_values_non_finite")
+        if not 0 <= values["T_Avg"] <= 100 or not 20 <= values["T_SetPoint"] <= 75:
+            raise CloudError("status_temperature_out_of_range")
+        if values["Cmd"] < 0 or values["Cmd"] != int(values["Cmd"]):
+            raise CloudError("status_mode_invalid")
+        if values["WaterHeaterSts"] < 0 or values["WaterHeaterSts"] != int(
+            values["WaterHeaterSts"]
+        ):
+            raise CloudError("status_heater_state_invalid")
         safe = {key: result[key] for key in self.STATUS_FIELDS}
         safe["vendor_mode"] = self.MODES.get(int(values["Cmd"]), "Unknown")
         # WaterHeaterSts is an opaque diagnostic value, not proven element feedback.
@@ -627,6 +707,7 @@ class MyThermowattBridge:
                 arguments = {"data": ""}
         if not endpoint:
             return
+        self.operation = "heater_command"
         self._availability(serial, False)
         response = self.request("POST", endpoint, serial, **arguments)
         try:
@@ -654,6 +735,7 @@ class MyThermowattBridge:
             self._offline()
             return
         try:
+            self.operation = "authentication_guard"
             self.guard.check()
             if self.clock() < self.next_cloud:
                 return
@@ -670,19 +752,27 @@ class MyThermowattBridge:
                 self.poll_status(serial)
             self.failures = 0
             self.next_cloud = self.clock() + self.POLL_INTERVAL
+            if self.last_diagnostic is not None:
+                LOG.info("Bridge resumed: code=cloud_cycle_recovered.")
             self.last_diagnostic = None
-        except (CloudError, OSError, ValueError, TypeError):
+        except (CloudError, OSError, ValueError, TypeError) as error:
             self._offline()
             self.failures = min(self.failures + 1, 5)
             self.next_cloud = self.clock() + min(self.MAX_BACKOFF, 20 * 2**self.failures)
-            code = (
-                self.guard.state["reason"]
-                if self.guard.state["mode"] == "blocked"
-                else "cloud_operation_failed"
-            )
-            if code != self.last_diagnostic:
-                LOG.warning("Bridge paused: %s. See authentication troubleshooting.", code)
-                self.last_diagnostic = code
+            if isinstance(error, CloudError):
+                code = safe_diagnostic(error.args[0] if error.args else None)
+                if code == "auth_locked_operator_action_required":
+                    code = safe_diagnostic(self.guard.state["reason"])
+            else:
+                code = (
+                    "private_storage_error"
+                    if isinstance(error, OSError)
+                    else "internal_value_error"
+                )
+            diagnostic = (self.operation, code)
+            if diagnostic != self.last_diagnostic:
+                LOG.warning("Bridge paused: operation=%s code=%s.", *diagnostic)
+                self.last_diagnostic = diagnostic
 
     def run(self, stop=None):
         stop = stop if stop is not None else threading.Event()

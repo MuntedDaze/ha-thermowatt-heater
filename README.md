@@ -28,6 +28,10 @@ Rejected or unrecognised authentication requires an explicit operator reset.
 
 Read the [configuration, safe reset and installation guide](thermowatt-heater/DOCS.md),
 [security review](SECURITY_REVIEW.md), and [changelog](CHANGELOG.md) before installation.
+For repeated authentication messages or `cloud_operation_failed`, see the
+[cloud diagnostic review](CLOUD_DIAGNOSTICS.md). It explains the hidden error
+paths, fixed diagnostic codes and restart-persistent refresh cooldown without
+requiring a new login or diagnostic environment.
 The [deployment-readiness report](DEPLOYMENT_READINESS.md) records passing native
 amd64/aarch64 builds and isolated startup/MQTT/shutdown checks, plus the checks
 that still require an approved Home Assistant installation.
