@@ -2,7 +2,8 @@
 
 1.3.5 refined 1.3.4's envelope diagnostic without changing validation or
 authentication policies. 1.3.6 adds the owner-approved configurable ordinary
-polling/error-backoff interval, default 30 minutes. See
+polling interval (default 30 minutes) and minimum ordinary-error retry interval
+(default 60 minutes), plus safe per-run request-attempt accounting. See
 [UPGRADING_1_3_6.md](UPGRADING_1_3_6.md). No live installation is changed here.
 
 After the diagnostic release, the owner reported `cloud_success_false` and an
@@ -11,8 +12,9 @@ exhaustion a plausible explanation, not a verified mapping of the vendor error.
 The public quota, scope and reset window remain unknown; 30-minute polling is
 an owner-chosen trial, not a vendor-confirmed safe allowance.
 
-In 1.3.6 successful ordinary cycles and retries of failed ordinary cycles are
-at least the configured interval apart, measured from cycle completion. This
+In 1.3.6 successful ordinary cycles use the normal interval. Failed ordinary
+cycles use the larger of both configured intervals with exponential backoff and
+a 24-hour ceiling, measured from cycle completion. This
 includes discovery, status transport/HTTP failures and envelope/field validation
 failures. The former five-minute ordinary-error loop no longer applies at the
 30-minute default. Authentication retries and GET 401 refresh/replay keep their
@@ -66,8 +68,13 @@ not establish a cloud-side cause from the old logs.
 Warnings have the form `Bridge paused: operation=status_poll code=cloud_http_503.`
 Operation codes are `authentication_guard`, `password_login`, `token_refresh`,
 `device_discovery`, `device_cache_storage`, `status_poll` and `heater_command`.
-The same operation/code pair is suppressed until it changes or a complete cloud
-cycle recovers. Recovery logs `cloud_cycle_recovered` once.
+The same operation/code/backoff tuple is suppressed until it changes or a complete
+cloud cycle recovers. Warnings include safe `backoff_seconds`, guard mode and
+total requests since startup; a locked guard never unlocks on that timer. Each
+HTTP attempt logs a fixed category and category/total counts, including failed
+attempts and command-confirmation reads. No values from requests or responses
+are logged. Counts reset on process restart and are not a vendor daily meter.
+Recovery logs `cloud_cycle_recovered` once.
 
 | Code | Meaning |
 | --- | --- |

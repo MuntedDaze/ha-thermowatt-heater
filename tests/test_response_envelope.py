@@ -51,7 +51,7 @@ def test_fixed_envelope_codes_no_secrets_no_auth_changes_and_read_recovery(
     # Ordinary cloud failure waits for the configured polling interval.
     bridge.tick()
     assert bridge.session.request.call_count == 1
-    clock.advance(bridge.poll_interval)
+    clock.advance(bridge.next_cloud - clock())
     recovery = [response(body=STATUS)]
     if operation == "device_discovery":
         recovery.insert(0, response(body={"result": {"termostati": [{"seriale": "TEST123"}]}}))

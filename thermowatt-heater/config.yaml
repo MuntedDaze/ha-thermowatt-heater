@@ -18,13 +18,15 @@ options:
   cloud_enabled: false
   commands_enabled: false
   poll_interval_minutes: 30
+  min_cloud_retry_minutes: 60
   auth_retry_generation: 0
 schema:
   email: str
   password: password
   cloud_enabled: bool
   commands_enabled: bool
-  poll_interval_minutes: int(1,1440)
+  poll_interval_minutes: int(5,120)
+  min_cloud_retry_minutes: int(5,1440)
   auth_retry_generation: int(0,)
 services:
   - mqtt:need

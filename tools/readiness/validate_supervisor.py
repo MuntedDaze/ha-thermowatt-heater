@@ -25,8 +25,12 @@ for change in (
     {"cloud_enabled": "not-a-boolean"},
     {"password": 123},
     {"poll_interval_minutes": 0},
-    {"poll_interval_minutes": 1441},
+    {"poll_interval_minutes": 4},
+    {"poll_interval_minutes": 121},
     {"poll_interval_minutes": "not-a-number"},
+    {"min_cloud_retry_minutes": 4},
+    {"min_cloud_retry_minutes": 1441},
+    {"min_cloud_retry_minutes": "not-a-number"},
 ):
     try:
         options.validate({**raw["options"], **change})

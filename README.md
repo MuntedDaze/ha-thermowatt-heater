@@ -1,8 +1,10 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
 Version **1.3.6** adds `poll_interval_minutes`, default **30 minutes**, for the
-owner-approved slow-polling trial. Ordinary polling failures wait at least the
-configured interval too. The owner reports `cloud_success_false` and an official
+owner-approved slow-polling trial (5–120 minutes). `min_cloud_retry_minutes`
+defaults to **60 minutes**; ordinary errors use the larger interval with bounded
+exponential backoff. Fixed-category request-attempt counts are logged since
+startup; no daily quota is assumed or enforced. The owner reports `cloud_success_false` and an official
 app daily-limit message; their exact connection and the numerical quota remain
 unverified. See the [upgrade/trial instructions](UPGRADING_1_3_6.md).
 Authentication retries, persistent guards, commands and safety behavior remain

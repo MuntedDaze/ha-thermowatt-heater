@@ -27,7 +27,9 @@ def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(sou
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
     assert "1.3.6" in new["breaking_versions"]
     assert new["options"].pop("poll_interval_minutes") == 30
-    assert new["schema"].pop("poll_interval_minutes") == "int(1,1440)"
+    assert new["schema"].pop("poll_interval_minutes") == "int(5,120)"
+    assert new["options"].pop("min_cloud_retry_minutes") == 60
+    assert new["schema"].pop("min_cloud_retry_minutes") == "int(5,1440)"
     for key in ("version", "breaking_versions"):
         old.pop(key)
         new.pop(key)
@@ -69,6 +71,7 @@ def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
     )
     assert bridge.options == options
     assert bridge.poll_interval == 1800  # Saved options need not contain the new key.
+    assert bridge.min_cloud_retry == 3600
     assert options_path.read_bytes() == original_options
     assert bridge.config == old["metadata"]
     expected_guard = deepcopy(original_guard)

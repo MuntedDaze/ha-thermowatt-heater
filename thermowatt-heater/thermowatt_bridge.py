@@ -257,6 +257,7 @@ class MyThermowattBridge:
     COMMAND_INTERVAL = 20
     HTTP_TIMEOUT = (10, 20)
     MAX_BACKOFF = 300
+    MAX_CLOUD_BACKOFF = 86400
     STATUS_FIELDS = ("T_Avg", "T_SetPoint", "Cmd", "WaterHeaterSts")
     MODES = {9: "Manual", 3: "Eco", 17: "Schedule", 65: "Holiday", 16: "Off"}
 
@@ -271,6 +272,11 @@ class MyThermowattBridge:
     ):
         self.options = options
         self.poll_interval = options.get("poll_interval_minutes", 30) * 60
+        self.min_cloud_retry = options.get("min_cloud_retry_minutes", 60) * 60
+        self.request_counts = {
+            kind: 0
+            for kind in ("password_login", "token_refresh", "discovery", "status", "command")
+        }
         self.clock = clock
         self.monotonic = monotonic
         self.data_dir = Path(data_dir)
@@ -339,6 +345,19 @@ class MyThermowattBridge:
             headers["Authorization"] = f"Bearer {self.guard.state['access_token']}"
         if "data" in kwargs:
             headers["Content-Type"] = "text/plain"
+        kind = {
+            "/login": "password_login",
+            "/refresh": "token_refresh",
+            "/user-info": "discovery",
+            "/status": "status",
+        }.get(endpoint, "command")
+        self.request_counts[kind] += 1
+        LOG.info(
+            "Cloud request attempt: kind=%s count_since_start=%s total_since_start=%s.",
+            kind,
+            self.request_counts[kind],
+            sum(self.request_counts.values()),
+        )
         return self.session.request(
             method,
             f"{self.BASE_URL}{endpoint}",
@@ -776,10 +795,14 @@ class MyThermowattBridge:
             self._offline()
             self.failures = min(self.failures + 1, 5)
             delay = min(self.MAX_BACKOFF, 20 * 2**self.failures)
-            if polling and self.operation not in {"password_login", "token_refresh"}:
-                # Ordinary read failures must not turn slow polling into a retry loop.
-                delay = max(delay, self.poll_interval)
-                self.next_poll = self.clock() + delay
+            if polling:
+                base = max(self.poll_interval, self.min_cloud_retry)
+                if self.operation in {"password_login", "token_refresh"}:
+                    # Auth retries keep their old timing; ordinary reads still wait.
+                    self.next_poll = self.clock() + base
+                else:
+                    delay = min(self.MAX_CLOUD_BACKOFF, base * 2 ** (self.failures - 1))
+                    self.next_poll = self.clock() + delay
             self.next_cloud = self.clock() + delay
             if isinstance(error, CloudError):
                 code = safe_diagnostic(error.args[0] if error.args else None)
@@ -791,9 +814,15 @@ class MyThermowattBridge:
                     if isinstance(error, OSError)
                     else "internal_value_error"
                 )
-            diagnostic = (self.operation, code)
+            diagnostic = (self.operation, code, delay)
             if diagnostic != self.last_diagnostic:
-                LOG.warning("Bridge paused: operation=%s code=%s.", *diagnostic)
+                LOG.warning(
+                    "Bridge paused: operation=%s code=%s backoff_seconds=%s "
+                    "guard=%s total_requests_since_start=%s.",
+                    *diagnostic,
+                    self.guard.state["mode"],
+                    sum(self.request_counts.values()),
+                )
                 self.last_diagnostic = diagnostic
 
     def run(self, stop=None):
@@ -805,10 +834,12 @@ class MyThermowattBridge:
         self.mqtt_client.loop_start()
         LOG.info(
             "Bridge running; cloud=%s, commands=%s. Poll interval=%s minutes. "
+            "Minimum cloud retry=%s minutes. Request counts reset on restart. "
             "No automatic lockout reset.",
             self.options.get("cloud_enabled", False),
             self.options.get("commands_enabled", False),
             self.poll_interval // 60,
+            self.min_cloud_retry // 60,
         )
         try:
             while not stop.is_set():
@@ -845,9 +876,13 @@ def load_options(path):
     generation = options.get("auth_retry_generation", 0)
     if type(generation) is not int or generation < 0:
         raise ValueError
-    interval = options.get("poll_interval_minutes", 30)
-    if type(interval) is not int or not 1 <= interval <= 1440:
-        raise ValueError
+    for key, default, maximum in (
+        ("poll_interval_minutes", 30, 120),
+        ("min_cloud_retry_minutes", 60, 1440),
+    ):
+        interval = options.get(key, default)
+        if type(interval) is not int or not 5 <= interval <= maximum:
+            raise ValueError
     return options
 
 

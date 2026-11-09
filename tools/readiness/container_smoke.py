@@ -78,6 +78,7 @@ def smoke(image, arch, output):
             "cloud_enabled": False,
             "commands_enabled": False,
             "poll_interval_minutes": 30,
+            "min_cloud_retry_minutes": 60,
             "auth_retry_generation": 1,
         }
         # Deliberately arm the guard so a default lockout cannot mask a cloud-disable bug.
@@ -295,6 +296,7 @@ def smoke(image, arch, output):
             logs = docker("logs", addon).stdout.decode() + docker("logs", addon).stderr.decode()
             assert "Bridge running; cloud=False, commands=False" in logs
             assert "Poll interval=30 minutes." in logs
+            assert "Minimum cloud retry=60 minutes." in logs
             assert "Traceback" not in logs and "Startup paused" not in logs
             for secret in (
                 options["password"],
@@ -383,6 +385,7 @@ def smoke(image, arch, output):
                 )
                 assert "Bridge running; cloud=False, commands=False" in replacement_logs
                 assert "Poll interval=30 minutes." in replacement_logs  # Legacy option fallback.
+                assert "Minimum cloud retry=60 minutes." in replacement_logs
                 assert (
                     "Traceback" not in replacement_logs and "Startup paused" not in replacement_logs
                 )

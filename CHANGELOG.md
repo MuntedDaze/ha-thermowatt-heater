@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.6] - 2026-11-09
 
-- Add `poll_interval_minutes` (whole minutes, 1–1440), defaulting to 30 both in
+- Add `poll_interval_minutes` (whole minutes, 5–120), defaulting to 30 both in
   Supervisor configuration and when older saved options omit the key.
-- Schedule normal status/discovery cycles at that interval. Ordinary polling
-  failures, including `cloud_success_false`, wait at least that interval before
-  another cycle instead of falling back to five-minute retries.
+- Add `min_cloud_retry_minutes` (5–1440), default 60. Ordinary errors, including
+  `cloud_success_false`, wait at least both intervals and use bounded exponential
+  backoff (24-hour ceiling) instead of five-minute retries.
+- Log configured intervals, error backoff and fixed-category HTTP-attempt counts
+  since startup. Include login/refresh, discovery, status, command writes and
+  confirmation reads without secrets. Counts reset on restart; no vendor quota
+  or reset window is assumed. Defer an enforced persistent daily budget.
 - Keep authentication retries, tokens, cooldowns and persistent lockouts unchanged.
   Retain the existing command-loop cadence, read-after-command behavior and all
   freshness/safety guards; command permissions remain separate and disabled by default.

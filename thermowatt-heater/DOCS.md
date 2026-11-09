@@ -88,6 +88,7 @@ password: ""
 cloud_enabled: false
 commands_enabled: false
 poll_interval_minutes: 30
+min_cloud_retry_minutes: 60
 auth_retry_generation: 0
 ```
 
@@ -95,12 +96,22 @@ auth_retry_generation: 0
   existing MyThermowatt API. Missing options also default to false on upgrade.
 - `commands_enabled`: separate permission for MQTT commands. Leave false for
   read-only observation. This does not establish Thermann compatibility.
-- `poll_interval_minutes`: whole minutes from 1 to 1440; default 30. Applies to
-  normal status/discovery polling and the minimum delay after ordinary polling
-  errors, including `cloud_success_false`. Older saved options without the key
-  also use 30. Changes apply after restart. The first eligible cycle runs on
-  startup; subsequent cycles wait from completion of the last cycle. It is not
-  a vendor-confirmed quota or a cap on authentication/command requests.
+- `poll_interval_minutes`: whole minutes from 5 to 120; default 30. Applies to
+  normal status/discovery cycles, measured from completion of the last cycle.
+  Older saved options without the key also use 30. Changes apply after restart.
+- `min_cloud_retry_minutes`: whole minutes from 5 to 1440; default 60. Ordinary
+  errors start at the larger of this value and the normal poll interval, double
+  with repeated failures (up to five exponent levels), and cap at 24 hours.
+  Successful polling resets the backoff. It cannot make ordinary polling more
+  frequent than the normal interval. Missing keys use 60 on upgrade. This does
+  not change authentication retry budgets/deadlines or command handling.
+
+Startup shows both intervals and that request counts reset on restart. Each
+actual HTTP attempt logs only a fixed category, category count and total since
+startup. Status counts include command-confirmation reads; auth refresh and GET
+replays count separately. These are local attempted requests, not confirmed
+vendor usage, and exclude the official app/other clients. No enforced daily
+budget or vendor reset time is configured. See the upgrade notes for the decision.
 - `auth_retry_generation`: a monotonically increasing, non-secret integer. Zero
   starts locked. Increasing it authorises one authentication cycle. The accepted
   generation is persisted; leaving the same value configured cannot reset a
@@ -137,9 +148,12 @@ service to investigate a currently locked or unverified Thermann account.**
    operator approval. `storage_invalid` / `guard_storage_unavailable`: keep cloud
    disabled and repair private persistent storage before authorising any retry.
 
-For ordinary polling failures, the bridge marks entities unavailable and waits
-at least `poll_interval_minutes` before another cycle. This replaces the former
-five-minute retry loop for such failures. Authentication retries retain their
+For ordinary polling failures, the bridge marks entities unavailable and uses
+the larger of both configured intervals with exponential backoff. Defaults wait
+60, 120, 240, 480, then 960 minutes; further failures stay at that fifth level.
+Other settings cap at 24 hours. Fixed warning fields show `backoff_seconds`,
+guard mode and request count; a blocked guard never unlocks when backoff expires.
+This replaces the former five-minute retry loop. Authentication retries retain their
 existing persisted budgets/deadlines and outer backoff. It does not re-login for server errors, malformed device/status
 responses, zero devices, local MQTT outages, or programming errors. A GET 401 can
 refresh once and replay that read once; a second 401, any 403 or 429 locks cloud
@@ -316,10 +330,11 @@ heater's safety controls; this project does not implement one.
 
 ## Cloud failure diagnostics
 
-In 1.3.6 an ordinary polling warning means the next cycle waits at least the
-configured interval (30 minutes by default). It does not mean a permanent halt.
-Identical warnings remain suppressed; quiet logs are not a request counter.
-Polling deadlines are in memory, so restarting permits another initial cycle.
+In 1.3.6 an ordinary polling warning means the next cycle waits for the displayed
+backoff, at least both configured intervals (60 minutes initially by default).
+It does not mean a permanent halt. Identical operation/code/backoff warnings
+remain suppressed; per-attempt count logs still show attempts. Ordinary polling
+deadlines and counts are in memory, so restarting permits another initial cycle.
 Do not repeatedly restart to retry a daily-limit failure or change generation.
 
 The owner reports `auth_refresh_accepted` followed by
