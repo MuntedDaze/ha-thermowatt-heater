@@ -53,7 +53,11 @@ def safe_diagnostic(code):
         "cloud_connection_error",
         "cloud_network_error",
         "cloud_invalid_json",
-        "cloud_response_unrecognised",
+        "cloud_envelope_not_object",
+        "cloud_success_false",
+        "cloud_error_nonempty",
+        "cloud_result_missing",
+        "cloud_result_wrong_type",
         "device_list_unrecognised",
         "status_fields_missing",
         "status_values_non_numeric",
@@ -478,13 +482,17 @@ class MyThermowattBridge:
             body = response.json()
         except ValueError:
             raise CloudError("cloud_invalid_json") from None
-        if (
-            not isinstance(body, dict)
-            or body.get("success") is False
-            or body.get("error")
-            or not isinstance(body.get("result"), dict)
-        ):
-            raise CloudError("cloud_response_unrecognised")
+        # Preserve the existing acceptance rules and first-failure order.
+        if not isinstance(body, dict):
+            raise CloudError("cloud_envelope_not_object")
+        if body.get("success") is False:
+            raise CloudError("cloud_success_false")
+        if body.get("error"):
+            raise CloudError("cloud_error_nonempty")
+        if "result" not in body:
+            raise CloudError("cloud_result_missing")
+        if not isinstance(body["result"], dict):
+            raise CloudError("cloud_result_wrong_type")
         return body["result"]
 
     def _availability(self, serial, available, force=False):

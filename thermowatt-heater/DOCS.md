@@ -1,11 +1,10 @@
-# Thermowatt bridge 1.3.4 — controlled-update candidate
+# Thermowatt bridge 1.3.5 — envelope diagnostics
 
-This is the proposed update from the owner's installed 1.3.3 add-on. See the
-[upgrade notes](../UPGRADING_1_3_4.md): the existing slug, options, private data and
+This is a diagnostic-only update from the owner's installed 1.3.4 add-on. See the
+[upgrade notes](../UPGRADING_1_3_5.md): the existing slug, options, private data and
 entity IDs are retained. Updating does not reset the authentication guard or
-change installed cloud/command settings. This packages the reviewed diagnostic
-and refresh-protection changes without further runtime changes. PR #3 remains
-draft and unmerged.
+change installed cloud/command settings. Only the fixed envelope-failure codes
+change; validation, authentication and refresh policies remain the same.
 
 Cloud access and heater commands default to disabled. Installation alone does not
 authorise authentication. Preserve installed options; the owner's current
@@ -307,6 +306,14 @@ heater's safety controls; this project does not implement one.
 
 ## Cloud failure diagnostics
 
+The owner reports `auth_refresh_accepted` followed by
+`operation=status_poll code=cloud_response_unrecognised` on 1.3.4. Version 1.3.5
+replaces that envelope code with `cloud_envelope_not_object`,
+`cloud_success_false`, `cloud_error_nonempty`, `cloud_result_missing` or
+`cloud_result_wrong_type`. Only the first failed check is reported, without
+field values or response contents. Empty/false error values retain their old
+acceptance behavior; no guessed alternative envelope is accepted.
+
 The follow-up diagnostics change distinguishes password login
 (`auth_login_accepted`) from token refresh (`auth_refresh_accepted`). Reusing a
 stored session does not emit another authentication-accepted message. Warnings
@@ -325,12 +332,12 @@ Old generic messages alone cannot identify the actual cloud failure.
 
 ## Release decision
 
-1.3.4 remains a **controlled-update candidate**. The owner reports successful HA OS
-authentication and initial read-only status display, followed on 1.3.3 by repeated
-authentication messages and hidden cloud failures. See the upgrade and diagnostic
-notes; old generic warnings cannot establish the actual response. This is not
-approval for heater commands, automation, merging or general release. Keep the
+1.3.5 follows the owner's low-risk diagnostic release workflow, with automatic
+squash merge only after final-head CI and review checks pass. It adds no API
+compatibility fix or control functionality. The owner's 1.3.4 report narrows the
+failure to status-envelope validation; the next fixed code is needed to identify
+the failed check. This is not approval for heater commands or automation. Keep the
 owner's commands disabled while the remaining functionality is reviewed. See the
 deployment-readiness report for unverified areas and the security review for the
 historical private key and token-storage risks. No additional control functionality
-is part of 1.3.4; installation and command testing await separate owner approval.
+is part of 1.3.5; installation and command testing await separate owner approval.

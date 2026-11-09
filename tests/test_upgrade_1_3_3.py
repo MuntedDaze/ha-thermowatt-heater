@@ -1,4 +1,4 @@
-"""Read released 1.3.2/1.3.3 synthetic state with 1.3.4; HTTP is always mocked."""
+"""Read released 1.3.2/1.3.3 synthetic state with 1.3.5; HTTP is always mocked."""
 
 from copy import deepcopy
 import json
@@ -23,7 +23,7 @@ def snapshot(version="1.3.2"):
 def test_upgrade_config_only_changes_version_and_attention_marker(source_version):
     old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == source_version and new["version"] == "1.3.4"
+    assert old["version"] == source_version and new["version"] == "1.3.5"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
     assert "1.3.4" in new["breaking_versions"]
     for key in ("version", "breaking_versions"):

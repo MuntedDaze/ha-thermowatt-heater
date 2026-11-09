@@ -22,8 +22,8 @@ from test_cloud_and_commands import ready, status_messages
         (response(403), "cloud_http_403"),
         (response(429), "cloud_http_429"),
         (response(body=ValueError("SENSITIVE_BODY")), "cloud_invalid_json"),
-        (response(body={"error": "SENSITIVE_BODY"}), "cloud_response_unrecognised"),
-        (response(body={"result": []}), "cloud_response_unrecognised"),
+        (response(body={"error": "SENSITIVE_BODY"}), "cloud_error_nonempty"),
+        (response(body={"result": []}), "cloud_result_wrong_type"),
     ],
 )
 def test_tick_logs_safe_operation_and_failure(factory, operation, failure, code, caplog):

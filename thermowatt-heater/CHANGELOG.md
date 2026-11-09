@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-11-09
+
+- Split the read-response envelope diagnostic into fixed codes for a non-object
+  body, explicit `success=false`, nonempty `error`, missing `result` and a result
+  of the wrong type. No response contents, field values or identifiers are logged.
+- Preserve the exact 1.3.4 acceptance rules and first-failure order, including
+  optional success flags and empty/false error values. No guessed API forms or
+  validation relaxation are introduced.
+- Retain authentication, persistent refresh cooldown/lockouts, read backoff,
+  heater commands, safety checks, private state/options and MQTT IDs unchanged.
+- Add mocked diagnostic/redaction/recovery tests and compare envelope acceptance
+  against the released 1.3.4 predicate. Document the next controlled update in
+  UPGRADING_1_3_5.md. No live test or Home Assistant deployment was performed.
+
 ## [1.3.4] - Controlled-update candidate (2026-11-09)
 
 - Replace hidden `cloud_operation_failed` warnings with allowlisted operation

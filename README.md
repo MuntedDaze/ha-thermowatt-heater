@@ -1,10 +1,11 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
-Version **1.3.4 is a controlled-update candidate** for the installed 1.3.3 add-on.
-The [upgrade notes](UPGRADING_1_3_4.md) explain retained state/options, fixed cloud
-diagnostics and the persistent refresh cooldown. PR #3 remains draft and unmerged;
-the agent has not deployed it. The owner reports 1.3.3 is running but has emitted
-repeated authentication messages and a hidden `cloud_operation_failed` warning.
+Version **1.3.5** is a diagnostic-only follow-up to the owner's installed 1.3.4.
+The owner reports successful token refresh followed by
+`operation=status_poll code=cloud_response_unrecognised`. The
+[upgrade notes](UPGRADING_1_3_5.md) explain the five fixed envelope diagnostics
+and retained state/options. No validation, authentication, cooldown, command or
+safety behavior is changed, and the agent has not deployed or live-tested it.
 Cloud access and heater commands default to disabled. On 2026-11-09 the owner
 reported successful Thermann Control authentication directly from the HA OS
 add-on, MQTT heater discovery, and current/target temperature and heating-status
