@@ -30,6 +30,8 @@ def on_message(client, userdata, msg):
         for mode in ("Manual", "off", "Eco", "Auto", "Holiday"):
             client.publish("P/SYNTHETIC123/CMD/MODE", mode, qos=1)
         client.publish("P/SYNTHETIC123/CMD/TEMP", "65", qos=1)
+        client.publish("P/SYNTHETIC123/refresh", "refresh", qos=1)
+        client.publish("P/SYNTHETIC123/refresh", "refresh", qos=1, retain=True)
 
 
 client.on_connect = on_connect

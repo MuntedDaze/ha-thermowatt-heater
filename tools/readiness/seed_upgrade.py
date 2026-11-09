@@ -8,7 +8,7 @@ sys.path.insert(0, "/")
 from thermowatt_bridge import atomic_json  # noqa: E402
 
 snapshot = json.loads(Path("/upgrade.json").read_text())
-assert snapshot["source_version"] in {"1.3.2", "1.3.3"}
+assert snapshot["source_version"] in {"1.3.2", "1.3.3", "1.3.6"}
 assert snapshot["options"]["cloud_enabled"] is False
 assert snapshot["options"]["commands_enabled"] is False
 assert sys.argv[1] in {"authorized", "authorized_refresh", "blocked", "blocked_refresh"}

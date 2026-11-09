@@ -262,6 +262,7 @@ class MyThermowattBridge:
     HTTP_TIMEOUT = (10, 20)
     MAX_BACKOFF = 300
     MAX_CLOUD_BACKOFF = 86400
+    DEMAND_MIN_SPACING = 300
     STATUS_FIELDS = ("T_Avg", "T_SetPoint", "Cmd", "WaterHeaterSts")
     MODES = {9: "Manual", 3: "Eco", 17: "Schedule", 65: "Holiday", 16: "Off"}
 
@@ -329,6 +330,10 @@ class MyThermowattBridge:
         self.availability = {}
         self.next_cloud = 0
         self.next_poll = 0
+        self.next_background = {}
+        self.last_status_attempt = {}
+        self.refresh_requested = set()
+        self.refresh_lock = threading.Lock()
         self.failures = self.usage.failures
         if self.usage.cooldown_until > self.clock():
             self.next_cloud = self.next_poll = self.usage.cooldown_until
@@ -366,12 +371,16 @@ class MyThermowattBridge:
             "/status": "status",
         }.get(endpoint, "command")
         self.request_counts[kind] += 1
-        self.usage.record("confirmation" if kind == "status" and self.confirmation_read else kind)
+        usage_category = "confirmation" if kind == "status" and self.confirmation_read else kind
+        self.usage.record(usage_category)
         LOG.info(
-            "Cloud request attempt: kind=%s count_since_start=%s total_since_start=%s.",
+            "Cloud request attempt: kind=%s count_since_start=%s total_since_start=%s. "
+            "usage_category=%s lifetime_attempts=%s.",
             kind,
             self.request_counts[kind],
             sum(self.request_counts.values()),
+            usage_category,
+            self.usage.total,
         )
         self.quota_signal = None
         response = self.session.request(
@@ -553,6 +562,8 @@ class MyThermowattBridge:
 
     def _offline(self):
         self.confirmed.clear()
+        with self.refresh_lock:
+            self.refresh_requested.clear()
         for serial in self.config["devices"]:
             self._availability(serial, False)
         while True:
@@ -689,6 +700,8 @@ class MyThermowattBridge:
                 "cooldown_remaining_seconds": max(0, int(self.usage.cooldown_until - self.clock())),
                 "consumption_basis": "local_attempts_not_vendor_consumption",
                 "poll_interval_seconds": self.poll_interval,
+                "consecutive_failures": self.failures,
+                "on_demand_refresh_enabled": self.options.get("on_demand_refresh_enabled", False),
             }
             self._publish_read_only(f"P/{serial}/DIAGNOSTICS", payload)
 
@@ -697,6 +710,10 @@ class MyThermowattBridge:
         self.mqtt_client.subscribe(
             f"P/{serial}/CMD/#", options=mqtt.SubscribeOptions(qos=0, retainAsPublished=True)
         )
+        if self.options.get("on_demand_refresh_enabled", False):
+            self.mqtt_client.subscribe(
+                f"P/{serial}/refresh", options=mqtt.SubscribeOptions(qos=0, retainAsPublished=True)
+            )
 
     def on_mqtt_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code == 0:
@@ -714,13 +731,23 @@ class MyThermowattBridge:
 
     def on_mqtt_message(self, client, userdata, msg):
         # Callback thread only queues. It never touches HTTP or authentication.
-        if (
-            msg.retain
-            or not self.options.get("commands_enabled", False)
-            or not self.mqtt_connected.is_set()
-        ):
+        if msg.retain or not self.mqtt_connected.is_set():
             return
         parts = msg.topic.split("/")
+        if len(parts) == 3 and parts[0] == "P" and parts[2] == "refresh":
+            serial = parts[1]
+            if (
+                msg.payload == b"refresh"
+                and self._demand_allowed()
+                and serial in self.active_devices
+                and self.monotonic() - self.last_status_attempt.get(serial, float("-inf"))
+                >= self.DEMAND_MIN_SPACING
+            ):
+                with self.refresh_lock:
+                    self.refresh_requested.add(serial)
+            return
+        if not self.options.get("commands_enabled", False):
+            return
         if (
             len(parts) != 4
             or parts[0] != "P"
@@ -735,6 +762,32 @@ class MyThermowattBridge:
             self.commands.put_nowait((self.monotonic(), parts[1], parts[3], payload))
         except (UnicodeError, queue.Full):
             LOG.warning("Command discarded: invalid encoding or queue full.")
+
+    def _demand_allowed(self):
+        return (
+            self.options.get("on_demand_refresh_enabled", False)
+            and self.options.get("cloud_enabled", False)
+            and self.mqtt_connected.is_set()
+            and self.discovered
+            and self.guard.state["mode"] == "authorized"
+            and not self.guard.failed_storage
+            and self.usage.complete
+            and self.clock() >= self.usage.cooldown_until
+            and self.cloud_health not in {"backoff", "quota_limited"}
+        )
+
+    def _take_demand(self):
+        with self.refresh_lock:
+            pending = self.refresh_requested & self.active_devices
+            self.refresh_requested.clear()
+        if not self._demand_allowed():
+            return set()
+        return {
+            serial
+            for serial in pending
+            if self.monotonic() - self.last_status_attempt.get(serial, float("-inf"))
+            >= self.DEMAND_MIN_SPACING
+        }
 
     def discover_devices(self):
         self.operation = "device_discovery"
@@ -759,6 +812,7 @@ class MyThermowattBridge:
         self.discovered = True
 
     def poll_status(self, serial):
+        self.last_status_attempt[serial] = self.monotonic()
         self.confirmation_read = self.operation == "heater_command"
         self.operation = "status_poll"
         try:
@@ -887,11 +941,22 @@ class MyThermowattBridge:
                 command = None
             if command is not None:
                 self.process_command(command)
+            targets = self._take_demand()
             if poll_due:
+                targets |= {
+                    serial
+                    for serial in self.active_devices
+                    if self.next_background.get(serial, 0) <= self.clock()
+                }
+            if poll_due or targets:
                 polling = True
-                for serial in sorted(self.active_devices):
+                for serial in sorted(targets):
                     self.poll_status(serial)
-                self.next_poll = self.clock() + self.poll_interval
+                    self.next_background[serial] = self.clock() + self.poll_interval
+                self.next_poll = min(
+                    (self.next_background.get(serial, 0) for serial in self.active_devices),
+                    default=self.clock() + self.poll_interval,
+                )
                 self.failures = 0
                 self.usage.cooldown(0, 0)
                 if self.last_diagnostic is not None:
@@ -990,7 +1055,7 @@ def load_options(path):
     for key in ("email", "password"):
         if not isinstance(options.get(key, ""), str):
             raise ValueError
-    for key in ("cloud_enabled", "commands_enabled"):
+    for key in ("cloud_enabled", "commands_enabled", "on_demand_refresh_enabled"):
         if type(options.get(key, False)) is not bool:
             raise ValueError
     generation = options.get("auth_retry_generation", 0)
@@ -1012,7 +1077,14 @@ def main():
         signal.signal(signum, lambda *_: stop.set())
     try:
         bridge = MyThermowattBridge(load_options("/data/options.json"))
-    except Exception:
+    except Exception as error:
+        if isinstance(error, ValueError) and error.args == ("poll_interval_invalid",):
+            LOG.error(
+                "Startup paused: code=poll_interval_invalid. Seconds 60-7200; Minutes 1-120. "
+                "No cloud requests sent."
+            )
+            stop.wait()
+            return
         LOG.error(
             "Startup paused: configuration or private storage invalid. No cloud requests sent."
         )

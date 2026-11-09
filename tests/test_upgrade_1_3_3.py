@@ -19,19 +19,26 @@ def snapshot(version="1.3.2"):
     return json.loads(path.read_text())
 
 
-@pytest.mark.parametrize("source_version", ["1.3.2", "1.3.3"])
+@pytest.mark.parametrize("source_version", ["1.3.2", "1.3.3", "1.3.6"])
 def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(source_version):
     old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == source_version and new["version"] == "1.3.7"
+    assert old["version"] == source_version and new["version"] == "1.3.8"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
-    assert "1.3.7" in new["breaking_versions"]
+    assert "1.3.8" in new["breaking_versions"]
+    assert new["options"].pop("on_demand_refresh_enabled") is False
+    assert new["schema"].pop("on_demand_refresh_enabled") == "bool"
     assert new["options"].pop("poll_interval_minutes") == 30
     assert new["schema"].pop("poll_interval_minutes") == "int(1,7200)"
     assert new["options"].pop("poll_interval_unit") == "minutes"
     assert new["schema"].pop("poll_interval_unit") == "list(seconds|minutes)"
     assert new["options"].pop("min_cloud_retry_minutes") == 60
     assert new["schema"].pop("min_cloud_retry_minutes") == "int(5,1440)"
+    if source_version == "1.3.6":
+        assert old["options"].pop("poll_interval_minutes") == 30
+        assert old["schema"].pop("poll_interval_minutes") == "int(5,120)"
+        assert old["options"].pop("min_cloud_retry_minutes") == 60
+        assert old["schema"].pop("min_cloud_retry_minutes") == "int(5,1440)"
     for key in ("version", "breaking_versions"):
         old.pop(key)
         new.pop(key)
@@ -46,10 +53,14 @@ def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(sou
     "source_version,state_name",
     [
         (version, state)
-        for version in ("1.3.2", "1.3.3")
+        for version in ("1.3.2", "1.3.3", "1.3.6")
         for state in ("authorized", "blocked", "retry", "in_flight")
     ]
-    + [("1.3.3", "authorized_refresh"), ("1.3.3", "blocked_refresh")],
+    + [
+        (version, state)
+        for version in ("1.3.3", "1.3.6")
+        for state in ("authorized_refresh", "blocked_refresh")
+    ],
 )
 def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
     module, tmp_path, cloud, commands, source_version, state_name
@@ -72,8 +83,8 @@ def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
         clock=lambda: 1000,
     )
     assert bridge.options == options
-    assert bridge.poll_interval == 1800  # Saved options need not contain the new key.
-    assert bridge.min_cloud_retry == 3600
+    assert bridge.poll_interval == options.get("poll_interval_minutes", 30) * 60
+    assert bridge.min_cloud_retry == options.get("min_cloud_retry_minutes", 60) * 60
     assert options_path.read_bytes() == original_options
     assert bridge.config == old["metadata"]
     expected_guard = deepcopy(original_guard)

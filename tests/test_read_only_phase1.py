@@ -291,6 +291,7 @@ def test_json_quota_on_login_classifies_without_changing_original_auth_lock(fact
 def test_auth_quota_requires_operator_even_after_time_and_restart(
     factory, clock, caplog, action, http_status
 ):
+    caplog.set_level("INFO")
     bridge = factory()
     if action == "refresh":
         ready(bridge)
