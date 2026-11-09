@@ -1,4 +1,8 @@
-# Cloud failure diagnostics after 1.3.3
+# Cloud failure diagnostics in 1.3.4
+
+The reviewed changes below are packaged as the 1.3.4 controlled-update candidate.
+See [UPGRADING_1_3_4.md](UPGRADING_1_3_4.md) for state/option preservation and
+the limits of offline upgrade validation. No live installation is changed here.
 
 ## What the existing messages establish
 

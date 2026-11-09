@@ -1,4 +1,4 @@
-"""Read real 1.3.2-format synthetic state with 1.3.3; all HTTP remains prohibited."""
+"""Read released 1.3.2/1.3.3 synthetic state with 1.3.4; HTTP is always mocked."""
 
 from copy import deepcopy
 import json
@@ -9,19 +9,23 @@ import pytest
 import requests
 import yaml
 
+from conftest import STATUS, TOKENS, response
+
 FIXTURE = Path(__file__).parent / "fixtures/upgrade_1_3_2.json"
 
 
-def snapshot():
-    return json.loads(FIXTURE.read_text())
+def snapshot(version="1.3.2"):
+    path = FIXTURE.with_name(f"upgrade_{version.replace('.', '_')}.json")
+    return json.loads(path.read_text())
 
 
-def test_upgrade_config_only_changes_version_and_attention_marker():
-    old = snapshot()["addon_config"]
+@pytest.mark.parametrize("source_version", ["1.3.2", "1.3.3"])
+def test_upgrade_config_only_changes_version_and_attention_marker(source_version):
+    old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == "1.3.2" and new["version"] == "1.3.3"
+    assert old["version"] == source_version and new["version"] == "1.3.4"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
-    assert "1.3.3" in new["breaking_versions"]
+    assert "1.3.4" in new["breaking_versions"]
     for key in ("version", "breaking_versions"):
         old.pop(key)
         new.pop(key)
@@ -32,11 +36,19 @@ def test_upgrade_config_only_changes_version_and_attention_marker():
 @pytest.mark.parametrize(
     "cloud,commands", [(False, False), (True, False), (False, True), (True, True)]
 )
-@pytest.mark.parametrize("state_name", ["authorized", "blocked", "retry", "in_flight"])
+@pytest.mark.parametrize(
+    "source_version,state_name",
+    [
+        (version, state)
+        for version in ("1.3.2", "1.3.3")
+        for state in ("authorized", "blocked", "retry", "in_flight")
+    ]
+    + [("1.3.3", "authorized_refresh"), ("1.3.3", "blocked_refresh")],
+)
 def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
-    module, tmp_path, cloud, commands, state_name
+    module, tmp_path, cloud, commands, source_version, state_name
 ):
-    old = snapshot()
+    old = snapshot(source_version)
     options = {**old["options"], "cloud_enabled": cloud, "commands_enabled": commands}
     options_path = tmp_path / "options.json"
     options_path.write_text(json.dumps(options))
@@ -65,9 +77,9 @@ def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
     assert bridge.guard.state == expected_guard
     assert json.loads((tmp_path / "auth_state.json").read_text()) == expected_guard
     assert bridge.guard.state["generation"] == options["auth_retry_generation"]
-    if state_name == "authorized":
+    if state_name.startswith("authorized"):
         assert bridge.login() is True  # Reuse state without another password request.
-    elif state_name in {"blocked", "in_flight"}:
+    elif state_name.startswith("blocked") or state_name == "in_flight":
         with pytest.raises(module.AuthBlocked):
             bridge.login()
     else:
@@ -83,4 +95,57 @@ def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
         if call.args[0].endswith("/config")
     }
     assert {topic: ids[topic] for topic in old["mqtt_ids"]} == old["mqtt_ids"]
-    assert len(ids) == len(old["mqtt_ids"]) + 1  # Only the already-reviewed vendor-mode sensor.
+    # No added entity since 1.3.3; only its already-reviewed vendor sensor since 1.3.2.
+    assert len(ids) == len(old["mqtt_ids"]) + (source_version == "1.3.2")
+
+
+@pytest.mark.parametrize("state_name", ["authorized", "authorized_refresh"])
+def test_legacy_authorized_session_can_read_and_refresh_without_password_login(
+    factory, tmp_path, clock, state_name
+):
+    old = snapshot("1.3.3")
+    (tmp_path / "auth_state.json").write_text(json.dumps(old["auth_states"][state_name]))
+    (tmp_path / "thermowatt_config.json").write_text(json.dumps(old["metadata"]))
+    bridge = factory(**{**old["options"], "cloud_enabled": True})
+    assert bridge.guard.state["next_retry"] == 0  # No cooldown invented at upgrade.
+    bridge.login()
+    bridge.session.request.assert_not_called()
+    bridge.session.request.side_effect = [response(body=STATUS)]
+    bridge.poll_status("SYNTHETIC123")
+    assert bridge.guard.state == old["auth_states"][state_name]
+    bridge.session.request.side_effect = [
+        response(401),
+        response(body=TOKENS),
+        response(body=STATUS),
+    ]
+    bridge.poll_status("SYNTHETIC123")
+    assert bridge.guard.state["next_retry"] == clock() + 300
+    assert bridge.guard.state["generation"] == old["options"]["auth_retry_generation"]
+    assert not any(c.args[1].endswith("/login") for c in bridge.session.request.call_args_list)
+
+
+def test_existing_authorized_cooldown_and_cloud_lockout_records_survive_restart(
+    factory, tmp_path, clock, module
+):
+    old = snapshot("1.3.3")
+    cooldown = {**old["auth_states"]["authorized_refresh"], "next_retry": clock() + 300}
+    (tmp_path / "auth_state.json").write_text(json.dumps(cooldown))
+    (tmp_path / "thermowatt_config.json").write_text(json.dumps(old["metadata"]))
+    options = {**old["options"], "cloud_enabled": True}
+    bridge = factory(**options)
+    assert bridge.guard.state == cooldown
+    bridge.login()
+    bridge.session.request.assert_not_called()
+    bridge.session.request.side_effect = [response(body=STATUS), response(401)]
+    bridge.poll_status("SYNTHETIC123")
+    assert bridge.guard.state == cooldown  # Normal reads do not consume/extend the deadline.
+    with pytest.raises(module.AuthBlocked, match="cloud_refresh_cooldown"):
+        bridge.poll_status("SYNTHETIC123")
+    assert all(c.args[0] == "GET" for c in bridge.session.request.call_args_list)
+    locked = deepcopy(bridge.guard.state)
+    assert locked["reason"] == "cloud_http_401"
+    clock.advance(600)
+    restart = factory(**options)
+    assert restart.guard.state == locked  # Expired cooldown never unlocks blocked state.
+    restart.tick()
+    restart.session.request.assert_not_called()
