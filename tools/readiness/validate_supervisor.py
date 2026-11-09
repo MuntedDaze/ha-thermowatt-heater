@@ -24,6 +24,9 @@ for change in (
     {"auth_retry_generation": -1},
     {"cloud_enabled": "not-a-boolean"},
     {"password": 123},
+    {"poll_interval_minutes": 0},
+    {"poll_interval_minutes": 1441},
+    {"poll_interval_minutes": "not-a-number"},
 ):
     try:
         options.validate({**raw["options"], **change})

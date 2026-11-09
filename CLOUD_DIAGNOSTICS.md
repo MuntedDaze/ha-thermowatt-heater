@@ -1,8 +1,24 @@
-# Cloud failure diagnostics in 1.3.5
+# Cloud failure diagnostics and polling in 1.3.6
 
-1.3.5 refines 1.3.4's envelope diagnostic without changing its validation or
-authentication policies. See [UPGRADING_1_3_5.md](UPGRADING_1_3_5.md) for the
-controlled update and state preservation. No live installation is changed here.
+1.3.5 refined 1.3.4's envelope diagnostic without changing validation or
+authentication policies. 1.3.6 adds the owner-approved configurable ordinary
+polling/error-backoff interval, default 30 minutes. See
+[UPGRADING_1_3_6.md](UPGRADING_1_3_6.md). No live installation is changed here.
+
+After the diagnostic release, the owner reported `cloud_success_false` and an
+official app message that its daily request limit was exceeded. This makes quota
+exhaustion a plausible explanation, not a verified mapping of the vendor error.
+The public quota, scope and reset window remain unknown; 30-minute polling is
+an owner-chosen trial, not a vendor-confirmed safe allowance.
+
+In 1.3.6 successful ordinary cycles and retries of failed ordinary cycles are
+at least the configured interval apart, measured from cycle completion. This
+includes discovery, status transport/HTTP failures and envelope/field validation
+failures. The former five-minute ordinary-error loop no longer applies at the
+30-minute default. Authentication retries and GET 401 refresh/replay keep their
+existing bounded behavior. Explicit enabled commands and their confirmation
+reads are not ordinary polling; command checks and safety guards are unchanged.
+See the upgrade notes for timing, startup/restart and stale-state limitations.
 
 The owner now reports `auth_refresh_accepted` followed by
 `operation=status_poll code=cloud_response_unrecognised` on 1.3.4. In that code,

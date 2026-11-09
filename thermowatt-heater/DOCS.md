@@ -1,10 +1,11 @@
-# Thermowatt bridge 1.3.5 — envelope diagnostics
+# Thermowatt bridge 1.3.6 — configurable polling
 
-This is a diagnostic-only update from the owner's installed 1.3.4 add-on. See the
-[upgrade notes](../UPGRADING_1_3_5.md): the existing slug, options, private data and
+This adds the owner's approved 30-minute polling trial after the 1.3.5 diagnostic
+release. See the [upgrade notes](../UPGRADING_1_3_6.md): the existing slug, options, private data and
 entity IDs are retained. Updating does not reset the authentication guard or
-change installed cloud/command settings. Only the fixed envelope-failure codes
-change; validation, authentication and refresh policies remain the same.
+change installed cloud/command settings. Ordinary polling and its error-backoff
+floor use the configured interval; validation and authentication policies remain
+the same. No heater controls or scheduling features are added.
 
 Cloud access and heater commands default to disabled. Installation alone does not
 authorise authentication. Preserve installed options; the owner's current
@@ -86,6 +87,7 @@ email: ""
 password: ""
 cloud_enabled: false
 commands_enabled: false
+poll_interval_minutes: 30
 auth_retry_generation: 0
 ```
 
@@ -93,6 +95,12 @@ auth_retry_generation: 0
   existing MyThermowatt API. Missing options also default to false on upgrade.
 - `commands_enabled`: separate permission for MQTT commands. Leave false for
   read-only observation. This does not establish Thermann compatibility.
+- `poll_interval_minutes`: whole minutes from 1 to 1440; default 30. Applies to
+  normal status/discovery polling and the minimum delay after ordinary polling
+  errors, including `cloud_success_false`. Older saved options without the key
+  also use 30. Changes apply after restart. The first eligible cycle runs on
+  startup; subsequent cycles wait from completion of the last cycle. It is not
+  a vendor-confirmed quota or a cap on authentication/command requests.
 - `auth_retry_generation`: a monotonically increasing, non-secret integer. Zero
   starts locked. Increasing it authorises one authentication cycle. The accepted
   generation is persisted; leaving the same value configured cannot reset a
@@ -129,8 +137,10 @@ service to investigate a currently locked or unverified Thermann account.**
    operator approval. `storage_invalid` / `guard_storage_unavailable`: keep cloud
    disabled and repair private persistent storage before authorising any retry.
 
-For ordinary cloud outages, the bridge marks entities unavailable and backs off
-up to 300 seconds. It does not re-login for server errors, malformed device/status
+For ordinary polling failures, the bridge marks entities unavailable and waits
+at least `poll_interval_minutes` before another cycle. This replaces the former
+five-minute retry loop for such failures. Authentication retries retain their
+existing persisted budgets/deadlines and outer backoff. It does not re-login for server errors, malformed device/status
 responses, zero devices, local MQTT outages, or programming errors. A GET 401 can
 refresh once and replay that read once; a second 401, any 403 or 429 locks cloud
 access. A command POST is never replayed or followed by password fallback.
@@ -216,9 +226,9 @@ dependencies in a virtual environment. MQTT uses the supported `mqtt:need`
 Supervisor service and Bashio service discovery. No privileged mode, host
 network, host mappings or new Supervisor permissions are requested. The obsolete
 top-level `mqtt: true` key was removed in 1.3.2. Boot defaults to manual; 1.3.2,
-1.3.3 and 1.3.4 are marked as attention-requiring versions. 1.3.3 highlights the
+1.3.3, 1.3.4 and 1.3.6 are marked as attention-requiring versions. 1.3.3 highlights the
 intentional heating-state change to Unknown/null; 1.3.4 highlights the persistent
-refresh cooldown. These markers do not reset installed options, credentials or
+refresh cooldown; 1.3.6 highlights the slower status/error-retry cadence. These markers do not reset installed options, credentials or
 private data.
 
 Sources reviewed:
@@ -306,6 +316,12 @@ heater's safety controls; this project does not implement one.
 
 ## Cloud failure diagnostics
 
+In 1.3.6 an ordinary polling warning means the next cycle waits at least the
+configured interval (30 minutes by default). It does not mean a permanent halt.
+Identical warnings remain suppressed; quiet logs are not a request counter.
+Polling deadlines are in memory, so restarting permits another initial cycle.
+Do not repeatedly restart to retry a daily-limit failure or change generation.
+
 The owner reports `auth_refresh_accepted` followed by
 `operation=status_poll code=cloud_response_unrecognised` on 1.3.4. Version 1.3.5
 replaces that envelope code with `cloud_envelope_not_object`,
@@ -332,12 +348,13 @@ Old generic messages alone cannot identify the actual cloud failure.
 
 ## Release decision
 
-1.3.5 follows the owner's low-risk diagnostic release workflow, with automatic
-squash merge only after final-head CI and review checks pass. It adds no API
-compatibility fix or control functionality. The owner's 1.3.4 report narrows the
-failure to status-envelope validation; the next fixed code is needed to identify
-the failed check. This is not approval for heater commands or automation. Keep the
+1.3.6 implements the owner's explicit approval for a configurable polling and
+ordinary cloud-error backoff change, with squash merge only after final-head CI
+and review checks pass. It adds no API compatibility fix or control functionality.
+The owner reports an explicit status failure and an app daily-limit warning;
+the quota and exact response meaning remain unverified. This is not approval
+for heater commands or automation. Keep the
 owner's commands disabled while the remaining functionality is reviewed. See the
 deployment-readiness report for unverified areas and the security review for the
 historical private key and token-storage risks. No additional control functionality
-is part of 1.3.5; installation and command testing await separate owner approval.
+is part of 1.3.6; installation and command testing remain owner-controlled.

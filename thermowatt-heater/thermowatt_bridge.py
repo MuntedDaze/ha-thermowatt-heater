@@ -254,7 +254,7 @@ class AuthGuard:
 class MyThermowattBridge:
     API_KEY = _APP_API_KEY  # Existing embedded app identifier; never log it.
     BASE_URL = "https://myapp-connectivity.com/api/v1"
-    POLL_INTERVAL = 20
+    COMMAND_INTERVAL = 20
     HTTP_TIMEOUT = (10, 20)
     MAX_BACKOFF = 300
     STATUS_FIELDS = ("T_Avg", "T_SetPoint", "Cmd", "WaterHeaterSts")
@@ -270,6 +270,7 @@ class MyThermowattBridge:
         monotonic=time.monotonic,
     ):
         self.options = options
+        self.poll_interval = options.get("poll_interval_minutes", 30) * 60
         self.clock = clock
         self.monotonic = monotonic
         self.data_dir = Path(data_dir)
@@ -310,6 +311,7 @@ class MyThermowattBridge:
         self.confirmed = {}
         self.availability = {}
         self.next_cloud = 0
+        self.next_poll = 0
         self.failures = 0
         self.discovered = False
         self.last_diagnostic = None
@@ -742,31 +744,43 @@ class MyThermowattBridge:
         if not self.options.get("cloud_enabled", False) or not self.mqtt_connected.is_set():
             self._offline()
             return
+        polling = False
         try:
             self.operation = "authentication_guard"
             self.guard.check()
             if self.clock() < self.next_cloud:
                 return
             self.login()
-            if not self.discovered:
+            poll_due = self.clock() >= self.next_poll
+            polling = poll_due
+            if poll_due and not self.discovered:
                 self.discover_devices()
+            polling = False
             try:
                 command = self.commands.get_nowait()
             except queue.Empty:
                 command = None
             if command is not None:
                 self.process_command(command)
-            for serial in sorted(self.active_devices):
-                self.poll_status(serial)
-            self.failures = 0
-            self.next_cloud = self.clock() + self.POLL_INTERVAL
-            if self.last_diagnostic is not None:
-                LOG.info("Bridge resumed: code=cloud_cycle_recovered.")
-            self.last_diagnostic = None
+            if poll_due:
+                polling = True
+                for serial in sorted(self.active_devices):
+                    self.poll_status(serial)
+                self.next_poll = self.clock() + self.poll_interval
+                self.failures = 0
+                if self.last_diagnostic is not None:
+                    LOG.info("Bridge resumed: code=cloud_cycle_recovered.")
+                self.last_diagnostic = None
+            self.next_cloud = min(self.clock() + self.COMMAND_INTERVAL, self.next_poll)
         except (CloudError, OSError, ValueError, TypeError) as error:
             self._offline()
             self.failures = min(self.failures + 1, 5)
-            self.next_cloud = self.clock() + min(self.MAX_BACKOFF, 20 * 2**self.failures)
+            delay = min(self.MAX_BACKOFF, 20 * 2**self.failures)
+            if polling and self.operation not in {"password_login", "token_refresh"}:
+                # Ordinary read failures must not turn slow polling into a retry loop.
+                delay = max(delay, self.poll_interval)
+                self.next_poll = self.clock() + delay
+            self.next_cloud = self.clock() + delay
             if isinstance(error, CloudError):
                 code = safe_diagnostic(error.args[0] if error.args else None)
                 if code == "auth_locked_operator_action_required":
@@ -790,9 +804,11 @@ class MyThermowattBridge:
         )
         self.mqtt_client.loop_start()
         LOG.info(
-            "Bridge running; cloud=%s, commands=%s. No automatic lockout reset.",
+            "Bridge running; cloud=%s, commands=%s. Poll interval=%s minutes. "
+            "No automatic lockout reset.",
             self.options.get("cloud_enabled", False),
             self.options.get("commands_enabled", False),
+            self.poll_interval // 60,
         )
         try:
             while not stop.is_set():
@@ -828,6 +844,9 @@ def load_options(path):
             raise ValueError
     generation = options.get("auth_retry_generation", 0)
     if type(generation) is not int or generation < 0:
+        raise ValueError
+    interval = options.get("poll_interval_minutes", 30)
+    if type(interval) is not int or not 1 <= interval <= 1440:
         raise ValueError
     return options
 

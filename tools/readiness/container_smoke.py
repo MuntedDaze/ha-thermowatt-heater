@@ -77,6 +77,7 @@ def smoke(image, arch, output):
             "password": "SYNTHETIC_CLOUD_PASSWORD",
             "cloud_enabled": False,
             "commands_enabled": False,
+            "poll_interval_minutes": 30,
             "auth_retry_generation": 1,
         }
         # Deliberately arm the guard so a default lockout cannot mask a cloud-disable bug.
@@ -293,6 +294,7 @@ def smoke(image, arch, output):
             )
             logs = docker("logs", addon).stdout.decode() + docker("logs", addon).stderr.decode()
             assert "Bridge running; cloud=False, commands=False" in logs
+            assert "Poll interval=30 minutes." in logs
             assert "Traceback" not in logs and "Startup paused" not in logs
             for secret in (
                 options["password"],
@@ -317,7 +319,7 @@ def smoke(image, arch, output):
                     FIXTURES.parents[1] / f"tests/fixtures/upgrade_{version.replace('.', '_')}.json"
                 )
                 legacy = json.loads(upgrade_fixture.read_text())
-                result_key = f"upgrade_{version.replace('.', '_')}_to_1_3_5"
+                result_key = f"upgrade_{version.replace('.', '_')}_to_1_3_6"
                 results.setdefault(result_key, {})
                 docker(
                     "run",
@@ -380,6 +382,7 @@ def smoke(image, arch, output):
                     + docker("logs", replacement).stderr.decode()
                 )
                 assert "Bridge running; cloud=False, commands=False" in replacement_logs
+                assert "Poll interval=30 minutes." in replacement_logs  # Legacy option fallback.
                 assert (
                     "Traceback" not in replacement_logs and "Startup paused" not in replacement_logs
                 )

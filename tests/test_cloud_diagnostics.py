@@ -70,7 +70,7 @@ def test_discovery_schema_and_private_storage_errors_are_distinct(
     bridge.session.request.side_effect = [response(body={"result": {"termostati": None}})]
     bridge.tick()
     assert "operation=device_discovery code=device_list_unrecognised" in caplog.text
-    clock.advance()
+    clock.advance(bridge.poll_interval)
     bridge.session.request.side_effect = [response(body={"result": {"termostati": []}})]
 
     def fail(*args):
@@ -89,10 +89,10 @@ def test_diagnostics_deduplicate_and_report_recovery(factory, clock, caplog):
     caplog.clear()
     bridge.session.request.side_effect = [response(503), response(503), response(body=STATUS)]
     bridge.tick()
-    clock.advance()
+    clock.advance(bridge.poll_interval)
     bridge.tick()
     assert caplog.text.count("operation=status_poll code=cloud_http_503") == 1
-    clock.advance()
+    clock.advance(bridge.poll_interval)
     bridge.tick()
     assert "cloud_cycle_recovered" in caplog.text
     assert bridge.failures == 0 and bridge.last_diagnostic is None
@@ -133,7 +133,7 @@ def test_password_login_refresh_and_reuse_logs_are_distinct(factory, caplog):
     [response(body=STATUS), response(503), requests.Timeout(), response(body=ValueError())],
 )
 def test_successful_refresh_cannot_loop_after_later_401(factory, clock, restart, replay, caplog):
-    bridge = factory()
+    bridge = factory(poll_interval_minutes=1)
     ready(bridge)
     bridge.session.request.side_effect = [response(401), response(body=TOKENS), replay]
     bridge.tick()
@@ -142,7 +142,7 @@ def test_successful_refresh_cannot_loop_after_later_401(factory, clock, restart,
     assert persisted["next_retry"] == clock() + bridge.guard.REFRESH_COOLDOWN
     assert persisted["generation"] == 1
     if restart:
-        bridge = factory()
+        bridge = factory(poll_interval_minutes=1)
         assert bridge.guard.state["next_retry"] == persisted["next_retry"]
     clock.advance(100)
     bridge.session.request.reset_mock(side_effect=True)
@@ -256,7 +256,7 @@ def test_discovery_recovers_without_another_authentication(factory, clock, caplo
     authenticate(bridge)
     bridge.session.request.side_effect = [response(503)]
     bridge.tick()
-    clock.advance()
+    clock.advance(bridge.poll_interval)
     bridge.session.request.side_effect = [
         response(body={"result": {"termostati": [{"seriale": "TEST123"}]}}),
         response(body=STATUS),

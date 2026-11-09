@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2026-11-09
+
+- Add `poll_interval_minutes` (whole minutes, 1–1440), defaulting to 30 both in
+  Supervisor configuration and when older saved options omit the key.
+- Schedule normal status/discovery cycles at that interval. Ordinary polling
+  failures, including `cloud_success_false`, wait at least that interval before
+  another cycle instead of falling back to five-minute retries.
+- Keep authentication retries, tokens, cooldowns and persistent lockouts unchanged.
+  Retain the existing command-loop cadence, read-after-command behavior and all
+  freshness/safety guards; command permissions remain separate and disabled by default.
+- Preserve installed credentials, cloud/command flags, generation, private state
+  and MQTT identities. Mark 1.3.6 as requiring attention for the slower data cadence.
+- Add mocked interval/boundary/failure/recovery/upgrade tests and extend Supervisor
+  option and isolated container checks. Document the owner-approved polling trial
+  in UPGRADING_1_3_6.md. No quota system, live API test or deployment is added.
+
 ## [1.3.5] - 2026-11-09
 
 - Split the read-response envelope diagnostic into fixed codes for a non-object

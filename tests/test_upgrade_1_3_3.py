@@ -1,4 +1,4 @@
-"""Read released 1.3.2/1.3.3 synthetic state with 1.3.5; HTTP is always mocked."""
+"""Read released 1.3.2/1.3.3 synthetic state with 1.3.6; HTTP is always mocked."""
 
 from copy import deepcopy
 import json
@@ -20,12 +20,14 @@ def snapshot(version="1.3.2"):
 
 
 @pytest.mark.parametrize("source_version", ["1.3.2", "1.3.3"])
-def test_upgrade_config_only_changes_version_and_attention_marker(source_version):
+def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(source_version):
     old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == source_version and new["version"] == "1.3.5"
+    assert old["version"] == source_version and new["version"] == "1.3.6"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
-    assert "1.3.4" in new["breaking_versions"]
+    assert "1.3.6" in new["breaking_versions"]
+    assert new["options"].pop("poll_interval_minutes") == 30
+    assert new["schema"].pop("poll_interval_minutes") == "int(1,1440)"
     for key in ("version", "breaking_versions"):
         old.pop(key)
         new.pop(key)
@@ -66,6 +68,7 @@ def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
         clock=lambda: 1000,
     )
     assert bridge.options == options
+    assert bridge.poll_interval == 1800  # Saved options need not contain the new key.
     assert options_path.read_bytes() == original_options
     assert bridge.config == old["metadata"]
     expected_guard = deepcopy(original_guard)

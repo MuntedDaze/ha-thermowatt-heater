@@ -80,7 +80,7 @@ def test_poll_errors_backoff_without_login_or_state_publish(factory, clock, fail
     for _ in range(10):
         bridge.tick()
     assert bridge.session.request.call_count == 1
-    clock.advance()
+    clock.advance(bridge.poll_interval)
     bridge.tick()
     assert bridge.session.request.call_count == 2
     assert all(c.args[0] == "GET" for c in bridge.session.request.call_args_list)

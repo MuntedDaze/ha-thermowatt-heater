@@ -1,11 +1,12 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
-Version **1.3.5** is a diagnostic-only follow-up to the owner's installed 1.3.4.
-The owner reports successful token refresh followed by
-`operation=status_poll code=cloud_response_unrecognised`. The
-[upgrade notes](UPGRADING_1_3_5.md) explain the five fixed envelope diagnostics
-and retained state/options. No validation, authentication, cooldown, command or
-safety behavior is changed, and the agent has not deployed or live-tested it.
+Version **1.3.6** adds `poll_interval_minutes`, default **30 minutes**, for the
+owner-approved slow-polling trial. Ordinary polling failures wait at least the
+configured interval too. The owner reports `cloud_success_false` and an official
+app daily-limit message; their exact connection and the numerical quota remain
+unverified. See the [upgrade/trial instructions](UPGRADING_1_3_6.md).
+Authentication retries, persistent guards, commands and safety behavior remain
+unchanged. The agent has not deployed or live-tested this release.
 Cloud access and heater commands default to disabled. On 2026-11-09 the owner
 reported successful Thermann Control authentication directly from the HA OS
 add-on, MQTT heater discovery, and current/target temperature and heating-status
