@@ -23,5 +23,6 @@ jobs:
       - run: python -m pytest
       - run: python -m ruff check .
       - run: python -m ruff format --check .
+      - run: python -m mypy --strict thermowatt-heater/thermowatt_read_only.py
       - run: python -m compileall -q thermowatt-heater tests
       - run: bash -n thermowatt-heater/run.sh

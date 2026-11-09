@@ -10,8 +10,8 @@ ADDON = ROOT / "thermowatt-heater"
 
 def test_supervisor_options_and_release_metadata(module):
     config = yaml.safe_load((ADDON / "config.yaml").read_text())
-    assert config["version"] == "1.3.6"
-    assert config["breaking_versions"] == ["1.3.2", "1.3.3", "1.3.4", "1.3.6"]
+    assert config["version"] == "1.3.7"
+    assert config["breaking_versions"] == ["1.3.2", "1.3.3", "1.3.4", "1.3.6", "1.3.7"]
     assert set(config["arch"]) == {"amd64", "aarch64"}
     assert config["init"] is False
     assert config["boot"] == "manual"
@@ -22,11 +22,13 @@ def test_supervisor_options_and_release_metadata(module):
     assert config["options"]["commands_enabled"] is False
     assert config["options"]["auth_retry_generation"] == 0
     assert config["options"]["poll_interval_minutes"] == 30
-    assert config["schema"]["poll_interval_minutes"] == "int(5,120)"
+    assert config["schema"]["poll_interval_minutes"] == "int(1,7200)"
+    assert config["options"]["poll_interval_unit"] == "minutes"
+    assert config["schema"]["poll_interval_unit"] == "list(seconds|minutes)"
     assert config["options"]["min_cloud_retry_minutes"] == 60
     assert config["schema"]["min_cloud_retry_minutes"] == "int(5,1440)"
     assert config["schema"]["password"] == "password"
-    assert "## [1.3.6]" in (ADDON / "CHANGELOG.md").read_text()
+    assert "## [1.3.7]" in (ADDON / "CHANGELOG.md").read_text()
     assert (ADDON / "CHANGELOG.md").read_bytes() == (ROOT / "CHANGELOG.md").read_bytes()
 
 

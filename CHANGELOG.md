@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.7] - Phase 1 review candidate
+
+- Add a Seconds/Minutes selector and clearly labelled single polling value,
+  validated to 60–7200 seconds. Retain the historical numeric YAML key and use
+  Minutes when units are absent, preserving existing 1.3.6 configurations.
+- Classify the exact JSON `error` phrase `Daily request limit exceeded`, even
+  with HTTP 200. Preserve unrelated diagnostic codes and the existing persistent
+  operator lockout on HTTP 429; do not infer vendor limits or reset times.
+- Persist private local attempt totals in six categories, including confirmation
+  reads, and ordinary error cooldowns. Best-effort accounting cannot authorise or
+  deny authentication/commands; incomplete history is explicitly reported.
+- Retain ordinary failure history when restarting after an expired cooldown;
+  another failed read continues exponential backoff until a successful cycle.
+- Add read-only diagnostic sensors for last successful poll, status age, cloud
+  health, last known fixed error and local lifetime request attempts. Retain all
+  existing entity IDs and unverified physical-heating state.
+- Review the requested forks without copying source files, and document Phase 2
+  solar/comfort/control design separately. No heater controls or optimiser added.
+- Add mocked upgrade/privacy/quota/diagnostic coverage, strict type checking for
+  the new support module, Supervisor validation and native container checks.
+  Owner review is required; no automatic merge, deployment or live API testing.
+
 ## [1.3.6] - 2026-11-09
 
 - Add `poll_interval_minutes` (whole minutes, 5–120), defaulting to 30 both in

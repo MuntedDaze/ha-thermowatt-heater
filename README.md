@@ -1,6 +1,15 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
-Version **1.3.6** adds `poll_interval_minutes`, default **30 minutes**, for the
+The **1.3.7 Phase 1 foundation is a review candidate**, not a deployed update.
+It adds a clear seconds/minutes polling selector, exact confirmed quota-error
+classification, private persistent attempt accounting and five read-only
+diagnostic sensors. Existing credentials, guard records, commands-disabled
+defaults and MQTT IDs remain. See [upgrade notes](UPGRADING_1_3_7.md),
+[fork comparison](PHASE1_FORK_REVIEW.md) and the
+[design-only HA/EMHASS plan](PHASE2_CONTROL_DESIGN.md). Owner review is required;
+no automatic merge or live heater/cloud testing is authorised.
+
+Baseline **1.3.6** added `poll_interval_minutes`, default **30 minutes**, for the
 owner-approved slow-polling trial (5–120 minutes). `min_cloud_retry_minutes`
 defaults to **60 minutes**; ordinary errors use the larger interval with bounded
 exponential backoff. Fixed-category request-attempt counts are logged since

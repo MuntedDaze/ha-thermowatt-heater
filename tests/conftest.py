@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
+sys.path.insert(0, str(Path(__file__).parents[1] / "thermowatt-heater"))
 SPEC = importlib.util.spec_from_file_location(
     "thermowatt_bridge", Path(__file__).parents[1] / "thermowatt-heater/thermowatt_bridge.py"
 )
