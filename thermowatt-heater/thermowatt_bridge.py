@@ -329,10 +329,9 @@ class MyThermowattBridge:
         self.availability = {}
         self.next_cloud = 0
         self.next_poll = 0
-        self.failures = 0
+        self.failures = self.usage.failures
         if self.usage.cooldown_until > self.clock():
             self.next_cloud = self.next_poll = self.usage.cooldown_until
-            self.failures = self.usage.failures
             self.cloud_health = "backoff"
         self.discovered = False
         self.last_diagnostic = None

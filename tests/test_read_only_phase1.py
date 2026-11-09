@@ -284,3 +284,81 @@ def test_json_quota_on_login_classifies_without_changing_original_auth_lock(fact
     restart = factory()
     restart.tick()
     restart.session.request.assert_not_called()
+
+
+@pytest.mark.parametrize("action", ["login", "refresh"])
+@pytest.mark.parametrize("http_status", [200, 429])
+def test_auth_quota_requires_operator_even_after_time_and_restart(
+    factory, clock, caplog, action, http_status
+):
+    bridge = factory()
+    if action == "refresh":
+        ready(bridge)
+    quota = response(http_status, {"success": False, "error": "Daily request limit exceeded"})
+    bridge.session.request.side_effect = [response(401), quota] if action == "refresh" else [quota]
+    bridge.tick()
+    assert bridge.guard.state["mode"] == "blocked"
+    assert bridge.guard.state["reason"] == (
+        "auth_http_429" if http_status == 429 else "auth_response_unrecognised"
+    )
+    assert bridge.guard.state["access_token"] is None
+    assert bridge.guard.state["refresh_token"] is None
+    assert bridge.usage.counts["token_refresh" if action == "refresh" else "password_login"] == 1
+    attempts = bridge.session.request.call_count
+    for _ in range(3):
+        clock.advance(86400)
+        bridge.tick()
+    assert bridge.session.request.call_count == attempts
+    restart = factory()
+    restart.tick()
+    restart.session.request.assert_not_called()
+    assert restart.guard.state["mode"] == "blocked"
+    for secret in (bridge.options["email"], bridge.options["password"], *TOKENS["result"].values()):
+        assert secret not in caplog.text
+
+
+@pytest.mark.parametrize("discovery", [False, True])
+def test_ordinary_json_quota_recovers_only_after_saved_cooldown(factory, clock, discovery):
+    bridge = factory()
+    ready(bridge)
+    bridge.discovered = not discovery
+    original_guard = bridge.guard.path.read_bytes()
+    bridge.session.request.side_effect = [
+        response(body={"success": False, "error": "Daily request limit exceeded"})
+    ]
+    bridge.tick()
+    deadline = bridge.next_cloud
+    assert deadline == clock() + 3600
+    clock.now = deadline - 1
+    restart = factory()
+    restart.tick()
+    restart.session.request.assert_not_called()
+    clock.advance(1)
+    restart.session.request.side_effect = [
+        response(body={"result": {"termostati": [{"seriale": "TEST123"}]}}),
+        response(body=STATUS),
+    ]
+    restart.tick()
+    assert restart.session.request.call_count == 2
+    assert restart.cloud_health == "ok"
+    assert restart.usage.cooldown_until == restart.usage.failures == 0
+    assert restart.guard.path.read_bytes() == original_guard
+    assert restart.next_poll == clock() + 1800
+    assert restart.request_counts["password_login"] == restart.request_counts["token_refresh"] == 0
+
+
+@pytest.mark.parametrize("http_status", [200, 503])
+def test_expired_cooldown_keeps_failure_history_until_success(factory, clock, http_status):
+    bridge = factory()
+    ready(bridge)
+    bridge.session.request.side_effect = [
+        response(http_status, {"success": False, "error": "Daily request limit exceeded"})
+    ]
+    bridge.tick()
+    clock.now = bridge.next_cloud
+    restart = factory()
+    assert restart.failures == 1
+    restart.session.request.side_effect = [response(503)]
+    restart.tick()
+    assert restart.next_cloud == clock() + 7200
+    assert restart.usage.failures == 2

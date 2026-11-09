@@ -57,6 +57,19 @@ operator action. Exact JSON `error: Daily request limit exceeded` is labelled
 `cloud_daily_limit`; unrelated failures retain generic diagnostics. No automatic
 probe at a guessed vendor midnight/reset is introduced.
 
+The operation matters: an HTTP-200 daily-limit error during discovery/status
+keeps an authorised session and can recover on the next scheduled attempt after
+the ordinary cooldown. Failure history survives restart even after its deadline
+expires; only a successful read cycle resets it. A quota response during password
+login or token refresh instead retains the original persistent authentication
+lock: HTTP 429 records `auth_http_429`, and the JSON error records
+`auth_response_unrecognised`. Tokens are cleared by that existing security policy.
+Time passing, vendor quota recovery and restarts cannot unlock these records.
+HTTP 429 during a read also remains operator-locked. Automatic recovery therefore
+applies only to ordinary non-locking read failures, not every quota response.
+Do not reset authentication generation just to probe whether quota has recovered;
+any deliberate authentication retry needs separate owner approval.
+
 Five additional **read-only diagnostic sensors** share the existing device:
 last successful poll, status age, cloud health, last known fixed error and local
 lifetime request attempts. Diagnostic availability follows the bridge, so errors

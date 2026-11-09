@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Persist private local attempt totals in six categories, including confirmation
   reads, and ordinary error cooldowns. Best-effort accounting cannot authorise or
   deny authentication/commands; incomplete history is explicitly reported.
+- Retain ordinary failure history when restarting after an expired cooldown;
+  another failed read continues exponential backoff until a successful cycle.
 - Add read-only diagnostic sensors for last successful poll, status age, cloud
   health, last known fixed error and local lifetime request attempts. Retain all
   existing entity IDs and unverified physical-heating state.
