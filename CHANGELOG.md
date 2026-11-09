@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - Controlled-update candidate (2026-11-09)
+
+- Replace hidden `cloud_operation_failed` warnings with allowlisted operation
+  and failure codes, distinguishing discovery, status, auth, HTTP, transport,
+  response validation and private-storage failures without sensitive logging.
+- Distinguish successful password login from token refresh; report recovery
+  after a failed cloud cycle. Reused stored tokens do not imply another login.
+- Persist a five-minute successful-refresh cooldown in the existing guard
+  deadline. A repeated GET 401 during it locks before another refresh, including
+  across devices and restarts. Preserve transient retry budgets, existing state
+  schema, authentication generation and default-disabled commands.
+- Add mocked failure/recovery/redaction and repeated-401 regression tests and
+  document why historical warnings cannot establish the actual failing response.
+  No live API calls, diagnostic environment or deployment.
+- Package the reviewed changes as 1.3.4, retaining the add-on identity, options,
+  credentials, tokens, version-1 guard records and all existing MQTT entity IDs.
+  Installed cloud/command flags and authentication generation are not reset.
+- Add released-1.3.3 synthetic upgrade fixtures, cooldown/session compatibility
+  tests and native-container replacement checks for authorised and blocked data.
+  Retain the existing 1.3.2 upgrade checks as well.
+- Document the controlled Update path in UPGRADING_1_3_4.md. The 1.3.4 attention
+  marker highlights the refresh policy change; it does not alter private data or
+  settings. No further runtime changes are made during release preparation.
+
 ## [1.3.3] - Review candidate (2026-11-09)
 
 ### Read-only Thermann update (not deployed)

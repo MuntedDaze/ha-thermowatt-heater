@@ -1,13 +1,15 @@
-# Thermowatt bridge 1.3.3 — review candidate
+# Thermowatt bridge 1.3.4 — controlled-update candidate
 
-This is the proposed update from the owner's working 1.3.2 installation. See the
-[upgrade notes](../UPGRADING_1_3_3.md): the existing slug, options, private data and
-old entity IDs are retained. Updating does not reset the authentication guard or
-change installed cloud/command settings. No new features are added during release
-preparation, and PR #2 remains draft and unmerged.
+This is the proposed update from the owner's installed 1.3.3 add-on. See the
+[upgrade notes](../UPGRADING_1_3_4.md): the existing slug, options, private data and
+entity IDs are retained. Updating does not reset the authentication guard or
+change installed cloud/command settings. This packages the reviewed diagnostic
+and refresh-protection changes without further runtime changes. PR #3 remains
+draft and unmerged.
 
 Cloud access and heater commands default to disabled. Installation alone does not
-authorise authentication. Keep both disabled while reviewing this candidate.
+authorise authentication. Preserve installed options; the owner's current
+`cloud_enabled=true`, `commands_enabled=false` values are retained by an update.
 The agent's development checks used no live account, cloud API, physical heater
 or owner's Home Assistant/Docker installation. Container checks ran only on
 disposable CI runners. The later owner-reported result is recorded below.
@@ -214,10 +216,11 @@ The Dockerfile retains `ghcr.io/home-assistant/base:3.24`, uses its S6 init
 dependencies in a virtual environment. MQTT uses the supported `mqtt:need`
 Supervisor service and Bashio service discovery. No privileged mode, host
 network, host mappings or new Supervisor permissions are requested. The obsolete
-top-level `mqtt: true` key was removed in 1.3.2. Boot defaults to manual; 1.3.2 and
-1.3.3 are marked as attention-requiring versions. For 1.3.3 this highlights the
-intentional heating-state change to Unknown/null, without resetting installed
-options, credentials or private data.
+top-level `mqtt: true` key was removed in 1.3.2. Boot defaults to manual; 1.3.2,
+1.3.3 and 1.3.4 are marked as attention-requiring versions. 1.3.3 highlights the
+intentional heating-state change to Unknown/null; 1.3.4 highlights the persistent
+refresh cooldown. These markers do not reset installed options, credentials or
+private data.
 
 Sources reviewed:
 [configuration](https://contributors.home-assistant.io/apps/reference/configuration/),
@@ -302,12 +305,32 @@ for a supported integration. Any external switching/control alternative should
 be assessed with the manufacturer and a qualified installer, preserving the
 heater's safety controls; this project does not implement one.
 
+## Cloud failure diagnostics
+
+The follow-up diagnostics change distinguishes password login
+(`auth_login_accepted`) from token refresh (`auth_refresh_accepted`). Reusing a
+stored session does not emit another authentication-accepted message. Warnings
+now identify a fixed operation and code, for example
+`operation=status_poll code=cloud_invalid_json`, instead of hiding the cause as
+`cloud_operation_failed`. Neither response bodies nor raw exceptions are logged.
+
+A second GET 401 within five minutes of successful refresh locks persistently
+before another refresh (`cloud_refresh_cooldown`, stored reason `cloud_http_401`).
+The deadline survives restarts; ordinary successful reads remain permitted.
+Existing auth retry budgets and lockout protections remain in place. Keep
+commands disabled and do not change the authentication generation or delete
+state to diagnose this warning. See the
+[diagnostic review and code table](https://github.com/MuntedDaze/ha-thermowatt-heater/blob/main/CLOUD_DIAGNOSTICS.md).
+Old generic messages alone cannot identify the actual cloud failure.
+
 ## Release decision
 
-1.3.3 remains a **review candidate**. The owner reports a successful real HA OS
-1.3.2 installation, authentication and initial read-only status display. This is not
+1.3.4 remains a **controlled-update candidate**. The owner reports successful HA OS
+authentication and initial read-only status display, followed on 1.3.3 by repeated
+authentication messages and hidden cloud failures. See the upgrade and diagnostic
+notes; old generic warnings cannot establish the actual response. This is not
 approval for heater commands, automation, merging or general release. Keep the
 owner's commands disabled while the remaining functionality is reviewed. See the
 deployment-readiness report for unverified areas and the security review for the
-historical private key and token-storage risks. No further development is planned
-until owner review.
+historical private key and token-storage risks. No additional control functionality
+is part of 1.3.4; installation and command testing await separate owner approval.

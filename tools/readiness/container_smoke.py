@@ -301,13 +301,24 @@ def smoke(image, arch, output):
                 "SYNTHETIC_SUPERVISOR_TOKEN",
             ):
                 assert secret not in logs, "Sensitive configuration appeared in logs"
-            # Replace the container while preserving a 1.3.2-format /data volume.
+            # Replace containers while preserving released 1.3.2/1.3.3 /data.
             # These states contain only synthetic credentials/tokens. HTTP remains
             # prohibited and disabled; this is not a real Supervisor installation.
-            upgrade_fixture = FIXTURES.parents[1] / "tests/fixtures/upgrade_1_3_2.json"
-            legacy = json.loads(upgrade_fixture.read_text())
-            results["upgrade_1_3_2_to_1_3_3"] = {}
-            for index, upgrade_state in enumerate(("authorized", "blocked"), start=3):
+            upgrade_cases = [
+                ("1.3.2", "authorized"),
+                ("1.3.2", "blocked"),
+                ("1.3.3", "authorized"),
+                ("1.3.3", "authorized_refresh"),
+                ("1.3.3", "blocked"),
+                ("1.3.3", "blocked_refresh"),
+            ]
+            for index, (version, upgrade_state) in enumerate(upgrade_cases, start=3):
+                upgrade_fixture = (
+                    FIXTURES.parents[1] / f"tests/fixtures/upgrade_{version.replace('.', '_')}.json"
+                )
+                legacy = json.loads(upgrade_fixture.read_text())
+                result_key = f"upgrade_{version.replace('.', '_')}_to_1_3_4"
+                results.setdefault(result_key, {})
                 docker(
                     "run",
                     "--rm",
@@ -325,7 +336,7 @@ def smoke(image, arch, output):
                     "/seed.py",
                     upgrade_state,
                 )
-                replacement = f"{prefix}-upgrade-{upgrade_state}"
+                replacement = f"{prefix}-upgrade-{version}-{upgrade_state}"
                 start(
                     replacement,
                     "--env",
@@ -379,12 +390,13 @@ def smoke(image, arch, output):
                     "SYNTHETIC_UPGRADE_REFRESH",
                 ):
                     assert value not in replacement_logs
-                results["upgrade_1_3_2_to_1_3_3"][upgrade_state] = "PASS"
+                results[result_key][upgrade_state] = "PASS"
             audit = Counter(
                 json.loads(line)["kind"]
                 for line in copied_file(replacement, "/data/network-audit.jsonl").splitlines()
             )
-            assert audit["guard_loaded"] == 4 and audit["mqtt_connect"] >= 4
+            launches = 2 + len(upgrade_cases)
+            assert audit["guard_loaded"] == launches and audit["mqtt_connect"] >= launches
             assert not any(
                 audit[k] for k in ("forbidden_http", "forbidden_dns", "forbidden_socket")
             ), audit
@@ -410,7 +422,9 @@ def smoke(image, arch, output):
         finally:
             for name in containers:
                 logs = docker("logs", name, check=False)
-                (output / f"{name.rsplit('-', 1)[-1]}.log").write_bytes(logs.stdout + logs.stderr)
+                (output / f"{name.removeprefix(prefix + '-')}.log").write_bytes(
+                    logs.stdout + logs.stderr
+                )
             (output / "results.json").write_text(json.dumps(results, indent=2) + "\n")
             print(json.dumps(results, indent=2), flush=True)
             for name in reversed(containers):
