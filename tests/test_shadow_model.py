@@ -9,6 +9,7 @@ from types import ModuleType
 import json
 import ast
 from types import SimpleNamespace
+from types import MappingProxyType
 
 import pytest
 
@@ -339,6 +340,7 @@ def test_component_has_no_actuation_or_network_imports_and_no_fake_measurement_c
         assert "_attr_state_class" not in source
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
     assert manifest["requirements"] == [] and manifest["version"] == "0.2.0"
+    assert manifest["integration_type"] == "hub"
 
 
 @pytest.mark.parametrize(
@@ -426,6 +428,26 @@ def test_mocked_ha_unknown_mode_attributes_native_reference_and_zero_extra_reque
     assert instance.details["control_capable"] is False
     assert instance.details["observed_refresh_pattern_attempts_per_day"] == 144
     assert not hasattr(instance.hass, "services")  # reads cannot call one
+
+
+@pytest.mark.parametrize("scenario", ["planning", "missing", "manual", "quota", "stale"])
+def test_diagnostic_attributes_copy_config_mapping_and_remain_json_compatible(runtime, scenario):
+    instance, report, clock = runtime
+    instance.sources = MappingProxyType(dict(instance.sources))
+    if scenario == "missing":
+        instance.hass.states = SimpleNamespace(get=lambda entity: None)
+    elif scenario == "manual":
+        report("mode", "Manual")
+    elif scenario == "quota":
+        report("cloud_health", "quota_limited")
+    elif scenario == "stale":
+        clock[0] += timedelta(hours=1)
+    instance.update(clock[0])
+    encoded = json.dumps(instance.details, allow_nan=False)
+    assert json.loads(encoded)["sources"] == dict(instance.sources)
+    assert type(instance.details["sources"]) is dict
+    assert instance.details["sources"] is not instance.sources
+    assert instance.details["control_capable"] is False
 
 
 def test_startup_without_any_source_states_stays_loaded_and_blocked(runtime):

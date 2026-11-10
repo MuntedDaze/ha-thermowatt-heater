@@ -158,7 +158,9 @@ read [the native On/Off review](NATIVE_ON_OFF_REVIEW.md). Planning is unchanged.
 
 Actual owner installation, visual dashboard rendering and owner-exported historical
 replay remain untested. Isolated CI uses real HA Core config/options/sensor/reload
-and unload paths, alongside all bridge/native/Supervisor regressions. The replay
+and unload paths, Add Integration hub listing, WebSocket state/event encoding and
+Recorder attribute encoding with an in-memory SQLite round trip, alongside all
+bridge/native/Supervisor regressions. The replay
 command `python tools/replay_shadow.py shadow_controller/scenarios.json` is fully
 local; bundled samples are synthetic, partly based on owner-reported observations.
 Use de-identified numeric history only; no credentials or response bodies.

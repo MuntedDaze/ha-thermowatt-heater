@@ -2,6 +2,11 @@
 
 ## 0.2.0 — confirmed-owner Phase 2A candidate
 
+- Fix Add Integration discovery by classifying the integration as a hub. Copy
+  immutable source mappings before exposing diagnostic attributes. Test actual
+  WebSocket state/event serialization and Recorder attribute/SQLite storage paths
+  on isolated Home Assistant Core, including a mappingproxy negative control.
+
 - Documentation/source review clarifies manufacturer app On/Off hygiene support,
   missing API resume/retention evidence, outages, bounded future cycles and shadow
   installation. Add mocked source-contract tests; no runtime/version change.

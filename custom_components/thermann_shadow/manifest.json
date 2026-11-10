@@ -7,7 +7,7 @@
     "@MuntedDaze"
   ],
   "config_flow": true,
-  "integration_type": "entity",
+  "integration_type": "hub",
   "iot_class": "local_polling",
   "requirements": []
 }

@@ -4,23 +4,115 @@ import asyncio
 from dataclasses import replace
 from datetime import timedelta
 import json
+import logging
 from pathlib import Path
 import shutil
 import socket
 import sys
 import tempfile
+from types import MappingProxyType, SimpleNamespace
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, State
 from homeassistant import bootstrap, config_entries, loader
+from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.components.recorder.const import SupportedDialect
+from homeassistant.components.recorder.db_schema import StateAttributes
+from homeassistant.components.websocket_api.commands import handle_get_states
+from homeassistant.components.websocket_api.messages import cached_state_diff_message
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
+from sqlalchemy import create_engine, select
 
 ROOT = Path("/workspace")
 
 
 def denied(*args, **kwargs):
     raise AssertionError("Shadow integration attempted external I/O or a service call")
+
+
+def assert_entity_serialization(hass, sources):
+    """Exercise actual get_states, state-change frames and Recorder encoders/SQL."""
+    states = [
+        state
+        for state in hass.states.async_all("sensor")
+        if state.entity_id.startswith("sensor.thermann_shadow_")
+    ]
+    assert len(states) == 35
+    frames = []
+    connection = SimpleNamespace(
+        user=SimpleNamespace(is_admin=True),
+        send_message=frames.append,
+        logger=logging.getLogger(__name__),
+    )
+    handle_get_states(hass, connection, {"id": 1, "type": "get_states"})
+    response = json.loads(frames[0])
+    assert response["success"] is True
+    returned = {state["entity_id"]: state for state in response["result"]}
+    assert all(state.entity_id in returned for state in states)  # no silent omission
+    assert returned["sensor.thermann_shadow_controller"]["attributes"]["sources"] == dict(sources)
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        StateAttributes.__table__.create(engine)
+        with engine.begin() as db:
+            for state in states:
+                event = Event(
+                    EVENT_STATE_CHANGED,
+                    {"entity_id": state.entity_id, "old_state": None, "new_state": state},
+                    context=state.context,
+                )
+                frame = json.loads(cached_state_diff_message(b"2", event))
+                assert frame["type"] == "event"
+                attrs = frame["event"]["a"][state.entity_id]["a"]
+                encoded = StateAttributes.shared_attrs_bytes_from_event(
+                    event, SupportedDialect.SQLITE
+                )
+                pg_encoded = StateAttributes.shared_attrs_bytes_from_event(
+                    event, SupportedDialect.POSTGRESQL
+                )
+                if state.entity_id == "sensor.thermann_shadow_controller":
+                    assert attrs["sources"] == dict(sources)
+                    assert json.loads(encoded)["sources"] == dict(sources)
+                    assert json.loads(pg_encoded)["sources"] == dict(sources)
+                row = db.execute(
+                    StateAttributes.__table__.insert().values(
+                        hash=StateAttributes.hash_shared_attrs_bytes(encoded),
+                        shared_attrs=encoded.decode("utf-8"),
+                    )
+                )
+                stored = db.execute(
+                    select(StateAttributes.shared_attrs).where(
+                        StateAttributes.attributes_id == row.inserted_primary_key[0]
+                    )
+                ).scalar_one()
+                assert json.loads(stored) == json.loads(encoded)
+    finally:
+        engine.dispose()
+
+
+def assert_original_mappingproxy_failure_is_detected(hass, sources):
+    """Negative control: HA storage alone accepts attrs that both paths reject."""
+    controller = hass.states.get("sensor.thermann_shadow_controller")
+    bad = State(
+        controller.entity_id,
+        controller.state,
+        {**controller.attributes, "sources": MappingProxyType(dict(sources))},
+    )
+    try:
+        _ = bad.as_dict_json  # encoder used by WebSocket get_states
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("WebSocket negative control failed")
+    event = Event(
+        EVENT_STATE_CHANGED, {"entity_id": bad.entity_id, "old_state": None, "new_state": bad}
+    )
+    try:
+        StateAttributes.shared_attrs_bytes_from_event(event, SupportedDialect.SQLITE)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("Recorder negative control failed")
 
 
 async def main():
@@ -41,6 +133,7 @@ async def main():
         socket.getaddrinfo = denied
         type(hass.services).async_call = denied
         assert await async_setup_component(hass, "sensor", {})
+        assert "thermann_shadow" in await loader.async_get_config_flows(hass, "hub")
         result = await hass.config_entries.flow.async_init(
             "thermann_shadow", context={"source": "user"}
         )
@@ -58,7 +151,10 @@ async def main():
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
         runtime = hass.data[DOMAIN][entry.entry_id]
+        assert isinstance(runtime.sources, MappingProxyType)
         assert runtime.plan.state == "shadow_blocked"
+        assert_entity_serialization(hass, runtime.sources)
+        assert_original_mappingproxy_failure_is_detected(hass, runtime.sources)
         now = dt_util.utcnow()
         values = {
             "heater": ("unknown", {"current_temperature": 63, "temperature": 70}),
@@ -86,6 +182,7 @@ async def main():
         assert runtime.details["additional_cloud_requests"] == 0
         assert runtime.details["control_capable"] is False
         assert runtime.details["observed_refresh_pattern_attempts_per_day"] == 144
+        assert_entity_serialization(hass, runtime.sources)
         # Real config/options flows reject bad tariffs; owner can edit mappings.
         flow = await hass.config_entries.options.async_init(entry.entry_id)
         flow = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_SOURCES)
@@ -117,6 +214,7 @@ async def main():
         hass.states.async_set(DEFAULT_SOURCES["cloud_health"], "quota_limited")
         runtime.update(dt_util.utcnow())
         assert runtime.plan.state == "shadow_blocked"
+        assert_entity_serialization(hass, runtime.sources)
         # A fresh HA report of old retained cloud data is not a new poll after restart.
         fresh = {
             key: Reading(value, now, "°C" if key in {"target", "temperature"} else "W")
@@ -154,6 +252,9 @@ async def main():
         assert runtime.settings.meter_verified and runtime.settings.tariff_verified
         assert runtime.plan.state == "shadow_blocked"
         assert entry.options["sources"] == DEFAULT_SOURCES
+        runtime.sources = MappingProxyType(dict(runtime.sources))
+        runtime.update(dt_util.utcnow())
+        assert_entity_serialization(hass, runtime.sources)
         assert set(sensor_ids) == {
             state.entity_id
             for state in hass.states.async_all("sensor")
@@ -173,6 +274,10 @@ async def main():
                     "request_replay_accounting": "PASS",
                     "manual_intervention_latch": "PASS",
                     "options_reload_and_ids": "PASS",
+                    "add_integration_hub_listing": "PASS",
+                    "websocket_states_and_events_json": "PASS",
+                    "recorder_attributes_and_sqlite_roundtrip": "PASS",
+                    "mappingproxy_negative_control": "PASS",
                     "clean_unload": "PASS",
                     "live_cloud_requests": 0,
                     "service_calls": 0,

@@ -292,7 +292,7 @@ class ShadowRuntime:
             "t_comfort_setting_is_reference_only": True,
             "native_permitted_minutes_before_comfort_deadline": native_minutes,
             "native_window_capacity_is_not_measured_energy": True,
-            "sources": self.sources,
+            "sources": dict(self.sources),
         }
         for listener in tuple(self.listeners):
             listener()
