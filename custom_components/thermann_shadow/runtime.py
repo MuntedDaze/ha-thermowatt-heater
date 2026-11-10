@@ -32,7 +32,10 @@ class ShadowRuntime:
         self.native_periods = parse_native(self.native_options["native_schedule_periods"])
 
     def _reading(self, key, attribute=None):
-        state = self.hass.states.get(self.sources[key])
+        entity_id = self.sources.get(key)
+        if not isinstance(entity_id, str):
+            return None
+        state = self.hass.states.get(entity_id)
         # Schedule is deliberately Unknown on the water_heater entity. Its
         # numeric attributes remain useful; mode comes from the vendor sensor.
         if (
@@ -85,7 +88,11 @@ class ShadowRuntime:
             else "unrecognised"
         )
         for key in ("temperature", "target", "pv", "house", "grid"):
-            reading = readings.get(key) if key in readings else self._reading(key)
+            reading = (
+                readings.get(key)
+                if key in {"temperature", "target", "grid"}
+                else self._reading(key)
+            )
             value = None
             try:
                 max_age = (

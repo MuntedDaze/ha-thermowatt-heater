@@ -292,6 +292,7 @@ def test_tariff_gaps_or_invalid_periods_are_rejected(bad):
         ("meter_verified", "true"),
         ("tariff_clock", "UTC"),
         ("status_max_age_minutes", 500),
+        ("peak_rate", 100),
     ],
 )
 def test_bad_settings_rejected(option, value):
@@ -416,6 +417,17 @@ def test_mocked_ha_unknown_mode_attributes_native_reference_and_zero_extra_reque
     assert not hasattr(instance.hass, "services")  # reads cannot call one
 
 
+def test_startup_without_any_source_states_stays_loaded_and_blocked(runtime):
+    instance, _, clock = runtime
+    instance.hass.states = SimpleNamespace(get=lambda entity: None)
+    instance.update(clock[0])
+    assert instance.plan.state == "shadow_blocked"
+    assert instance.plan.reasons == ["required_mapping_missing"]
+    assert instance.values["temperature"] is None
+    assert instance.values["target"] is None
+    assert instance.values["grid"] is None
+
+
 def test_observed_request_growth_includes_refresh_replay_and_detects_reset(runtime):
     instance, report, clock = runtime
     instance.update(clock[0])
@@ -480,3 +492,48 @@ def test_synthetic_replay_of_owner_observations_outages_and_shortage():
     assert plans[5]["reasons"] == ["cloud_not_healthy"]
     assert plans[7]["reasons"] == ["status_stale_or_pre_restart"]
     assert plans[8]["state"] == "shadow_native_intervention"
+
+
+@pytest.mark.parametrize("case", ["negative", "nan", "overlap", "expired", "naive", "too_far"])
+def test_invalid_net_forecast_scenarios_never_produce_plans(case, tariffs):
+    now = local()
+    forecast = [m.Forecast(now + timedelta(hours=1), now + timedelta(hours=2), 4)]
+    if case == "negative":
+        forecast[0] = replace(forecast[0], export_kw=-1)
+    elif case == "nan":
+        forecast[0] = replace(forecast[0], export_kw=float("nan"))
+    elif case == "overlap":
+        forecast.append(forecast[0])
+    elif case == "expired":
+        forecast[0] = replace(forecast[0], start=now - timedelta(hours=1))
+    elif case == "naive":
+        forecast[0] = replace(forecast[0], start=now.replace(tzinfo=None))
+    else:
+        forecast[0] = replace(forecast[0], end=now + timedelta(hours=49))
+    result = m.evaluate(
+        now,
+        now - timedelta(minutes=1),
+        readings(now),
+        m.Settings(meter_verified=True, tariff_verified=True),
+        tariffs,
+        tuple(forecast),
+    )
+    assert result.state == "shadow_blocked" and result.windows == []
+    assert result.reasons == ["forecast_invalid"]
+
+
+def test_tariff_changes_and_pause_only_change_shadow_model_outputs():
+    now = local()
+    settings, cheap = c.parse_options(
+        {"meter_verified": True, "tariff_verified": True, "off_peak_rate": 0.2}
+    )
+    _, expensive = c.parse_options({"off_peak_rate": 0.5})
+    values = readings(now, grid=0)
+    first = m.evaluate(now, now - timedelta(minutes=1), values, settings, cheap)
+    second = m.evaluate(now, now - timedelta(minutes=1), values, settings, expensive)
+    assert first.estimated_import_kwh == second.estimated_import_kwh
+    assert second.estimated_cost_aud > first.estimated_cost_aud
+    paused = m.evaluate(
+        now, now - timedelta(minutes=1), values, replace(settings, paused=True), expensive
+    )
+    assert paused.state == "shadow_paused" and paused.windows == []

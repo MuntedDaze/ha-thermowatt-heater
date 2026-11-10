@@ -64,6 +64,8 @@ def parse_options(options):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
     rates = {kind: number(values[f"{kind}_rate"]) for kind in ("off_peak", "shoulder", "peak")}
+    if any(not -5 <= rate <= 10 for rate in rates.values()):
+        raise ValueError("tariff_invalid")
     raw = values["tariff_periods"]
     if not isinstance(raw, str) or len(raw) > 8192:
         raise ValueError("tariff_invalid")

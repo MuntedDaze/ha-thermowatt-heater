@@ -52,6 +52,7 @@ async def main():
         assert result["type"] == "create_entry", result
         entry = result["result"]
         await hass.async_block_till_done()
+        assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
         runtime = hass.data[DOMAIN][entry.entry_id]
         assert runtime.plan.state == "shadow_blocked"
         now = dt_util.utcnow()
