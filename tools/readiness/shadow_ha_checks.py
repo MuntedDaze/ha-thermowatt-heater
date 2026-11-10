@@ -428,7 +428,9 @@ async def check_forecasts(hass, entry, entity_for):
     generated = dt_util.utcnow().isoformat()
     emhass_state(hass, pv_id, "p_pv_forecast", 4500, generated)
     emhass_state(hass, load_id, "p_load_forecast", 600, generated)
-    report_inputs(hass, DEFAULT_SOURCES, temperature=55, grid=3000, pv=4500)
+    # 30°C needs heat for either goal (40°C morning or 65-70°C afternoon), so the
+    # fallback reservation exists whatever time of day CI runs.
+    report_inputs(hass, DEFAULT_SOURCES, temperature=30, grid=3000, pv=4500)
     runtime.update(dt_util.utcnow())
     results = {}
     assert runtime.forecast.source == "published_pv_and_house_load", runtime.forecast.warnings
@@ -465,7 +467,8 @@ async def check_forecasts(hass, entry, entity_for):
         emhass_state(hass, load_id, "p_load_forecast", 600, generated)
         runtime.update(dt_util.utcnow())
         assert runtime.forecast.source == "unavailable", label
-        assert not runtime.forecast.slots and runtime.plan.grid_fallback_start is not None
+        assert not runtime.forecast.slots, label
+        assert runtime.plan.grid_fallback_start is not None, (label, runtime.plan)
         assert runtime.values["forecast_net_surplus_kw"] is None
         assert runtime.values["decision"] != "wait_for_forecast_solar", label
         results[label] = runtime.values["decision"]
