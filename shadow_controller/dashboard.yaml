@@ -1,0 +1,77 @@
+title: Thermann Shadow
+views:
+  - title: Shadow hot water
+    path: thermann-shadow
+    icon: mdi:water-boiler
+    cards:
+      - type: markdown
+        content: |
+          ## Thermann — SHADOW ONLY
+          Native Schedule remains in control. No heater commands or extra cloud requests.
+          **Measured:** source temperatures and electrical power. **Calculated:** plans, thermal energy, time and cost. **Unverified:** usable reserve, physical element state, hygiene and fallback.
+      - type: entities
+        title: Controller and cloud (read only)
+        entities:
+          - sensor.thermann_shadow_controller
+          - sensor.thermann_shadow_cloud_health
+          - sensor.thermann_shadow_status_age
+          - sensor.thermann_shadow_observed_request_attempts
+          - sensor.thermann_shadow_observed_requests_per_hour
+      - type: entities
+        title: Measured sources / explicit sign interpretation
+        entities:
+          - sensor.thermann_shadow_measured_pv
+          - sensor.thermann_shadow_measured_house_load
+          - sensor.thermann_shadow_measured_signed_grid
+          - sensor.thermann_shadow_derived_net_export
+          - sensor.thermann_shadow_bottom_temperature
+          - sensor.thermann_shadow_reported_target
+          - sensor.thermann_shadow_reported_schedule_window
+          - sensor.thermann_shadow_t_comfort_reference
+          - sensor.home_boiler_home_vendor_mode
+      - type: entities
+        title: Hypothetical plan — not a heater schedule
+        entities:
+          - sensor.thermann_shadow_comfort_deadline
+          - sensor.thermann_shadow_configured_afternoon_peak
+          - sensor.thermann_shadow_planning_deadline
+          - sensor.thermann_shadow_hypothetical_heating_start
+          - sensor.thermann_shadow_mixed_tank_energy_estimate
+          - sensor.thermann_shadow_heating_time_estimate
+          - sensor.thermann_shadow_modelled_energy_shortfall
+          - sensor.thermann_shadow_plan_import_estimate
+          - sensor.thermann_shadow_plan_solar_estimate
+          - sensor.thermann_shadow_plan_cost_estimate
+          - sensor.thermann_shadow_scenario_cost_difference
+      - type: markdown
+        title: Reasons, warnings and windows
+        content: |
+          **State:** {{ states('sensor.thermann_shadow_controller') }}
+          **Reasons:**
+          {% for item in state_attr('sensor.thermann_shadow_controller', 'reasons') or [] %}
+          - {{ item }}
+          {% endfor %}
+          **Warnings:**
+          {% for item in state_attr('sensor.thermann_shadow_controller', 'warnings') or [] %}
+          - {{ item }}
+          {% endfor %}
+          **Hypothetical windows (UTC, no actions):**
+          {% for item in state_attr('sensor.thermann_shadow_controller', 'windows') or [] %}
+          - {{ item.start }} → {{ item.end }} · {{ item.source }}
+          {% endfor %}
+          Cost difference compares the same scheduled model energy at the current rate; it is **not measured savings against the native schedule**. Foregone export revenue is included. Unserved energy is a shortfall, never a saving.
+          Reported Schedule: weekdays ≈04–08 & 11–17; weekends ≈06–22. This permits heating but does not prove the element is on. T-Comfort **10°C is not a usable hot-water reserve**. Reference settings never change the heater.
+          30-minute background ≈48 cycles/day; the observed status→refresh→replay pattern ≈144 HTTP attempts/day, **not a quota or upper bound**. This planner adds **zero** cloud requests.
+      - type: history-graph
+        title: Local observations (no refresh requests)
+        hours_to_show: 24
+        entities:
+          - sensor.thermann_shadow_measured_pv
+          - sensor.thermann_shadow_measured_house_load
+          - sensor.thermann_shadow_measured_signed_grid
+      - type: button
+        name: Edit mappings and shadow assumptions
+        icon: mdi:cog
+        tap_action:
+          action: navigate
+          navigation_path: /config/integrations/integration/thermann_shadow

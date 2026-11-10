@@ -1,7 +1,8 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
-The **1.3.7 foundation and dependent 1.3.8 demand-refresh PRs are review
-candidates**, not deployed updates. The dependent
+The **1.3.7 and 1.3.8 PRs have been owner-approved and merged**. The owner reports
+1.3.8 installed and reporting temperature, target, Schedule and cloud diagnostics.
+The
 [1.3.8 notes](UPGRADING_1_3_8.md) document the optional read-only interface,
 disabled by default. Both retain a 30-minute background default.
 The foundation adds a clear seconds/minutes polling selector, exact confirmed quota-error
@@ -9,8 +10,16 @@ classification, private persistent attempt accounting and five read-only
 diagnostic sensors. Existing credentials, guard records, commands-disabled
 defaults and MQTT IDs remain. See [upgrade notes](UPGRADING_1_3_7.md),
 [fork comparison](PHASE1_FORK_REVIEW.md) and the
-[design-only HA/EMHASS plan](PHASE2_CONTROL_DESIGN.md). Owner review is required;
-no automatic merge or live heater/cloud testing is authorised.
+[HA/EMHASS plan](PHASE2_CONTROL_DESIGN.md). GitHub merges do not authorise live
+heater/cloud testing or deployment by the agent.
+
+**Phase 2A: [Thermann Shadow Planner 0.1.0](shadow_controller/README.md)** is a
+separate owner-review component and dashboard. It reads existing HA entities,
+models hypothetical heating/cost windows and explains missing-data/comfort risks.
+It has no heater-command, MQTT-write or cloud-request path. The bridge stays
+1.3.8; commands and on-demand refresh stay disabled. Native Schedule and the
+owner's 10°C T-Comfort remain unchanged. No automatic merge or deployment of the
+shadow component is authorised.
 
 Baseline **1.3.6** added `poll_interval_minutes`, default **30 minutes**, for the
 owner-approved slow-polling trial (5–120 minutes). `min_cloud_retry_minutes`

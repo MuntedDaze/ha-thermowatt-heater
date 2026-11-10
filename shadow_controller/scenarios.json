@@ -1,0 +1,22 @@
+{
+  "provenance": "Synthetic replay. First two snapshots use owner-reported values/times, anchored to a test date; not an exported or synchronised historian. Tariffs are invented test values, not the owner's contract.",
+  "options": {
+    "meter_verified": true,
+    "tariff_verified": true,
+    "off_peak_rate": 0.25,
+    "feed_in_rate": 0.08,
+    "import_positive": false
+  },
+  "rows": [
+    {"at":"2026-11-10T14:33:00+11:00","temperature":63,"grid_w":1501},
+    {"at":"2026-11-10T15:03:00+11:00","temperature":63,"grid_w":1501},
+    {"at":"2026-11-11T03:00:00+11:00","temperature":40,"grid_w":-800},
+    {"at":"2026-11-11T06:50:00+11:00","temperature":17,"grid_w":-500},
+    {"at":"2026-11-11T11:00:00+11:00","temperature":48,"grid_w":4000},
+    {"at":"2026-11-11T11:30:00+11:00","temperature":48,"grid_w":0,"cloud_health":"quota_limited"},
+    {"at":"2026-11-11T12:00:00+11:00","temperature":48,"grid_w":0,"cloud_health":"backoff"},
+    {"at":"2026-11-11T13:00:00+11:00","temperature":48,"grid_w":0,"poll_age_minutes":61},
+    {"at":"2026-11-11T14:00:00+11:00","temperature":50,"grid_w":1800,"mode":"Manual"},
+    {"at":"2026-11-11T15:00:00+11:00","temperature":65,"grid_w":1200,"mode":"Schedule"}
+  ]
+}

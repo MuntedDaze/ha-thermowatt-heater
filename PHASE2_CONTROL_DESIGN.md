@@ -1,6 +1,8 @@
 # Phase 2 — Home Assistant / EMHASS design only
 
-No controller, automation, heater command, native schedule edit or deployment is
+Phase 2A now has a separate **shadow-only** sensor component under
+`custom_components/thermann_shadow`; see `shadow_controller/README.md`. It cannot
+send commands or cloud requests. No live control, native schedule edit or deployment is
 implemented here. Each live control capability needs separate owner approval and
 supervised qualification. The integration supplies reliable read-only data and
 existing control primitives; optimisation belongs in separate HA/EMHASS code.
