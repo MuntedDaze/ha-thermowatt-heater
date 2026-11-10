@@ -1,0 +1,370 @@
+"""Claude review of Phase 2B: decisions, forecast adapters, restore/undo, averaging."""
+
+from datetime import timedelta
+import importlib
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from test_shadow_model import c, m, local, readings, runtime  # noqa: F401
+from test_shadow_phase2b import catalog, cycle_plan, cycles, forecast, series
+
+decision = importlib.import_module(f"{m.__package__}.decision")
+
+
+def run(policy, start, minutes, plan_for, settings, tariffs, future=lambda at: ()):
+    result = None
+    for index in range(minutes):
+        at = start + timedelta(minutes=index)
+        result = policy.step(at, plan_for(at), settings, tariffs, future(at), at)
+    return result
+
+
+def decide(plan, result, policy, settings, enabled=False, source="disabled"):
+    return decision.decide(plan, result, policy.active, enabled, source, settings)
+
+
+# --- Decisions: every branch is reachable and honest --------------------------------
+
+
+@pytest.mark.parametrize(
+    "state,code,label",
+    [
+        ("shadow_paused", "paused", "PAUSED"),
+        ("shadow_native_intervention", "owner_review_required", "OWNER REVIEW"),
+        ("shadow_blocked", "data_unavailable", "DATA UNAVAILABLE"),
+        ("shadow_awaiting_validation", "data_unavailable", "DATA UNAVAILABLE"),
+    ],
+)
+def test_gated_decisions_never_recommend_heating(state, code, label):
+    now = local(hour=11)
+    settings, tariffs = c.parse_options({})
+    plan = cycle_plan(now, now + timedelta(hours=5))
+    plan.state = state
+    policy = cycles.CyclePolicy()
+    result = policy.step(now, plan, settings, tariffs, sample_at=now)
+    assert decide(plan, result, policy, settings)[:2] == (code, label)
+
+
+def test_partial_solar_full_solar_and_grace_period_decisions():
+    now = local(hour=11)
+    settings, tariffs = c.parse_options({"switching_benefit_aud": 0.01, "export_headroom_kw": 0})
+    deadline = now + timedelta(hours=8)
+    policy = cycles.CyclePolicy()
+    result = run(policy, now, 11, lambda at: cycle_plan(at, deadline, 2), settings, tariffs)
+    plan = cycle_plan(now, deadline, 2)
+    code, label, text = decide(plan, result, policy, settings)
+    assert policy.start_reason == "economic"
+    assert (code, label) == ("heat_now_partial_solar", "HEAT NOW")
+    assert "2.0 kW" in text and "67%" in text and "foregone feed-in" in text
+    result = policy.step(
+        now + timedelta(minutes=11), cycle_plan(now, deadline, 4), settings, tariffs
+    )
+    assert decide(plan, result, policy, settings)[0] == "heat_now_solar"
+    result = policy.step(
+        now + timedelta(minutes=12), cycle_plan(now, deadline, 0), settings, tariffs
+    )
+    assert policy.active  # one cloudy minute does not stop the cycle
+    assert decide(plan, result, policy, settings)[0] == "heat_now_grace_period"
+
+
+def test_grid_fallback_insufficient_time_and_no_topup_decisions():
+    now = local(hour=14)
+    settings, tariffs = c.parse_options({})
+    policy = cycles.CyclePolicy()
+    plan = cycle_plan(now, now + timedelta(hours=1), 0, 60)  # fallback due now
+    result = policy.step(now, plan, settings, tariffs, sample_at=now)
+    assert policy.start_reason == "comfort"
+    assert decide(plan, result, policy, settings)[:2] == ("begin_grid_fallback", "GRID FALLBACK")
+    short = cycles.CyclePolicy()
+    plan = cycle_plan(now, now + timedelta(minutes=30), 0, 90)
+    plan.state = "shadow_shortfall"
+    result = short.step(now, plan, settings, tariffs, sample_at=now)
+    assert short.active and result["continuing_cost_aud"] is None
+    assert decide(plan, result, short, settings)[:2] == ("insufficient_time", "INSUFFICIENT TIME")
+    done = cycles.CyclePolicy()
+    plan = cycle_plan(now, now + timedelta(hours=1), 0, 0)
+    plan.planning_target_c = 40
+    result = done.step(now, plan, settings, tariffs, sample_at=now)
+    code, label, text = decide(plan, result, done, settings)
+    assert (code, label) == ("no_topup_required", "NO HEATING NEEDED") and "40°C" in text
+
+
+def test_waiting_decisions_distinguish_forecast_solar_cost_and_unavailable_forecast():
+    now = local(hour=10)
+    settings, tariffs = c.parse_options({})
+    deadline = now + timedelta(hours=6)
+    policy = cycles.CyclePolicy()
+    plan = cycle_plan(now, deadline, 0, 60)
+    sunny = (m.Forecast(now + timedelta(hours=2), now + timedelta(hours=4), 3.5),)
+    result = policy.step(now, plan, settings, tariffs, sunny, now)
+    assert not policy.active and result["later_solar_kwh"] > 0
+    code, label, text = decide(plan, result, policy, settings, True, "published_pv_and_house_load")
+    assert (code, label) == ("wait_for_forecast_solar", "WAIT FOR SOLAR") and "reserved" in text
+    result = cycles.CyclePolicy().step(now, plan, settings, tariffs, (), now)
+    assert decide(plan, result, policy, settings, True, "unavailable")[0] == (
+        "forecast_unavailable_conservative_fallback"
+    )
+    assert decide(plan, result, policy, settings)[0] == "wait_for_cheaper_window"
+    # Qualifying solar is labelled as a wait, never as heating. (10:00 Hobart
+    # daylight time is still fixed-AEST peak, where solar loses to later off-peak.)
+    noon = local(hour=12)
+    sunny_now = cycles.CyclePolicy()
+    low, _ = c.parse_options({"switching_benefit_aud": 0.01})
+    plan = cycle_plan(noon, noon + timedelta(hours=4), 4, 60)
+    result = sunny_now.step(noon, plan, low, tariffs, (), noon)
+    assert decide(plan, result, sunny_now, low)[:2] == ("qualifying_solar", "WAIT FOR SOLAR")
+
+
+# --- Forecast adapters -------------------------------------------------------------
+
+
+def forecast_solar_state(now, **attrs):
+    """Shape of an owner trigger-template buffer of forecast_solar.get_forecast."""
+    today = now.astimezone(m.HOBART).replace(minute=0, second=0, microsecond=0)
+    watts = {}
+    for day in (0, 1):
+        for hour in range(6, 20):
+            at = (today.replace(hour=hour) + timedelta(days=day)).isoformat()
+            watts[at] = 0 if hour in (6, 19) else 4500
+    return SimpleNamespace(
+        state=str(len(watts)),
+        attributes={
+            "unit_of_measurement": "W",
+            "watts": watts,
+            "forecast_generated_at": now.isoformat(),
+            **attrs,
+        },
+    )
+
+
+def test_forecast_solar_overnight_gap_is_zero_solar_not_an_invalid_series():
+    now = local(hour=11)
+    settings, _ = c.parse_options(
+        {"forecast_enabled": True, "forecast_uncertainty": 0, "forecast_house_margin_kw": 0}
+    )
+    result = forecast.build_forecast(
+        now, now - timedelta(minutes=1), settings, forecast_solar_state(now), series(now, "load", 1)
+    )
+    assert result.source == "published_pv_and_house_load", result.warnings
+    assert result.slots[0].export_kw == pytest.approx(3.5)
+    overnight = [
+        slot
+        for slot in result.slots
+        if slot.start.astimezone(m.HOBART).hour >= 20 or slot.start.astimezone(m.HOBART).hour < 6
+    ]
+    assert not overnight  # a gap never becomes free (or held) solar
+
+
+def test_emhass_string_values_and_custom_entity_keys_are_read():
+    now = local(hour=11)
+    settings, _ = c.parse_options(
+        {"forecast_enabled": True, "forecast_uncertainty": 0, "forecast_house_margin_kw": 0}
+    )
+
+    def emhass(key, value):
+        rows = [
+            {"date": (now + timedelta(minutes=30 * i)).isoformat(), key: str(value)}
+            for i in range(8)
+        ]
+        return SimpleNamespace(
+            state=str(value),
+            attributes={
+                "unit_of_measurement": "W",
+                "forecasts": rows,
+                "forecast_generated_at": now.isoformat(),
+            },
+        )
+
+    result = forecast.build_forecast(
+        now,
+        now - timedelta(minutes=1),
+        settings,
+        emhass("mpc_pv_forecast", 4000.0),
+        emhass("p_load_forecast", 750.5),
+    )
+    assert result.slots[0].export_kw == pytest.approx(3.2495)
+    ambiguous = emhass("mpc_pv_forecast", 4000)
+    ambiguous.attributes["forecasts"][0]["extra"] = 1
+    bad = forecast.build_forecast(
+        now, now - timedelta(minutes=1), settings, ambiguous, emhass("p_load_forecast", 1)
+    )
+    assert not bad.slots and "forecast_series_invalid" in bad.warnings
+
+
+def test_measured_pv_correction_fades_and_never_increases():
+    now = local(hour=11)
+    settings, _ = c.parse_options(
+        {"forecast_enabled": True, "forecast_uncertainty": 0, "forecast_house_margin_kw": 0}
+    )
+    pv = series(now, value=4)
+    load = series(now, "load", 0)
+    result = forecast.build_forecast(now, now - timedelta(minutes=1), settings, pv, load, 1)
+    assert result.correction == 0.25 and result.pv_error_kw == -3
+    by_start = {slot.start: slot.export_kw for slot in result.slots}
+    assert by_start[now] == pytest.approx(1)
+    assert by_start[now + timedelta(hours=1.5)] == pytest.approx(4 * (1 - 0.5 * 0.75))
+    assert by_start[now + timedelta(hours=3)] == pytest.approx(4)  # faded out
+    assert max(by_start.values()) <= 4
+
+
+def test_flat_statistics_household_baseline_and_its_freshness():
+    now = local(hour=11)
+    settings, _ = c.parse_options(
+        {"forecast_enabled": True, "forecast_uncertainty": 0.25, "forecast_house_margin_kw": 0.3}
+    )
+    baseline = SimpleNamespace(
+        state="800", attributes={"unit_of_measurement": "W"}, last_reported=now
+    )
+    result = forecast.build_forecast(
+        now, now - timedelta(minutes=1), settings, series(now), baseline
+    )
+    assert result.load_basis == "flat_measured_household_baseline"
+    assert result.slots[0].export_kw == pytest.approx(4 * 0.75 - 0.8 * 1.25 - 0.3)
+    assert "household_load_is_flat_baseline_not_daily_profile" in result.warnings
+    baseline.last_reported = now - timedelta(hours=3)
+    stale = forecast.build_forecast(now, now - timedelta(hours=4), settings, series(now), baseline)
+    assert not stale.slots and "forecast_stale_or_pre_restart" in stale.warnings
+
+
+# --- Restore, undo and truthful defaults -------------------------------------------
+
+
+def test_restore_preserves_tariff_contract_and_undo_reverts_only_preferences():
+    current = c.saved_options(
+        {
+            "target_c": 65,
+            "margin_minutes": 45,
+            "peak_rate": 0.4,
+            "feed_in_rate": 0.05,
+            "peak_evening_start": "17:00",
+            "paused": True,
+        }
+    )
+    restored = catalog.recommended_options(current)
+    assert restored["target_c"] == 70 and restored["margin_minutes"] == 30
+    assert restored["peak_rate"] == 0.4 and restored["feed_in_rate"] == 0.05
+    assert restored["peak_evening_start"] == "17:00" and restored["paused"] is True
+    assert restored[catalog.BACKUP_KEY] == {"target_c": 65, "margin_minutes": 45}
+    c.parse_options(restored)  # stored snapshot does not break validation
+    edited = catalog.apply_changes(restored, {"margin_minutes": 20})
+    assert edited[catalog.BACKUP_KEY] == {"target_c": 65}  # newest owner edit wins
+    undone = catalog.undo_restore(edited)
+    assert undone["target_c"] == 65 and undone["margin_minutes"] == 20
+    assert catalog.BACKUP_KEY not in undone
+    with pytest.raises(ValueError):
+        catalog.undo_restore(undone)
+    again = catalog.recommended_options(catalog.recommended_options(current))
+    assert catalog.BACKUP_KEY not in again  # nothing new changed: no stale undo
+
+
+def test_describe_reports_current_recommended_and_original():
+    info = catalog.describe("switching_benefit_aud", 0.2)
+    assert info["current_value"] == 0.2 and info["recommended_default"] == 0.10
+    assert info["original_default"] == 0.10 and info["recommended_equals_original"]
+    assert info["changed_from_recommended"] and info["restore_recommended"] == "restores"
+    assert catalog.describe("peak_rate", 0.361878)["restore_recommended"] == "preserves"
+    # Original defaults are pinned: a future recommendation change must not
+    # silently rewrite what shipped. Update DEFAULT_OPTIONS only, never this.
+    pinned = {
+        "morning_threshold_c": 40.0,
+        "morning_time": "07:00",
+        "target_c": 70.0,
+        "margin_minutes": 30.0,
+        "solar_hold_minutes": 10.0,
+        "solar_loss_minutes": 20.0,
+        "minimum_cycle_minutes": 30.0,
+        "minimum_gap_minutes": 30.0,
+        "export_headroom_kw": 0.3,
+        "switching_benefit_aud": 0.10,
+        "peak_rate": 0.361878,
+        "off_peak_rate": 0.170200,
+        "feed_in_rate": 0.092760,
+        "tariff_clock": "standard",
+    }
+    assert {key: catalog.ORIGINAL_DEFAULTS[key] for key in pinned} == pinned
+
+
+# --- Runtime: averaging, native load warning, decision wiring -----------------------
+
+
+def test_runtime_pv_average_damps_a_single_cloudy_sample(runtime):  # noqa: F811
+    instance, report, clock = runtime
+    instance.apply_options({"forecast_enabled": True}, instance.sources)
+    instance.sources = {
+        **instance.sources,
+        "forecast_pv": "sensor.pv_f",
+        "forecast_load": "sensor.ld",
+    }
+    states = instance.hass.states
+    original_get = states.get
+    start = clock[0]
+
+    def get(entity):
+        if entity == "sensor.pv_f":
+            return series(start, value=4)
+        if entity == "sensor.ld":
+            return series(start, "load", 0.5)
+        return original_get(entity)
+
+    instance.hass.states = SimpleNamespace(get=get)
+    instance.boot = start - timedelta(minutes=1)
+    for minute, watts in enumerate([4000, 4000, 4000, 400], start=1):
+        clock[0] = start + timedelta(minutes=minute)
+        for key, value in {"grid": 3000, "pv": watts, "house": 500}.items():
+            report(key, value, {"unit_of_measurement": "W"})
+        report("last_poll", clock[0].isoformat())
+        instance.update(clock[0])
+    # Rolling mean of fresh distinct reports (2.322 from setup, then 4, 4, 4, 0.4):
+    assert instance.forecast.measured_pv_average_kw == pytest.approx(14.722 / 5, abs=1e-3)
+    assert instance.forecast.correction == pytest.approx(14.722 / 5 / 4, abs=1e-3)
+    assert instance.values["decision"] in decision.LABELS
+    assert instance.values["recommendation"] == decision.LABELS[instance.values["decision"]]
+    assert instance.details["decision_explanation"]
+    json.dumps(instance.details, allow_nan=False)
+
+
+def test_runtime_warns_when_native_window_may_already_include_element_load(runtime):  # noqa: F811
+    instance, report, clock = runtime
+    clock[0] = local(hour=12)  # weekday 11:00-17:00 native reference window
+    report("heater", "unknown", {"current_temperature": 45, "temperature": 70})
+    for key, value in {"grid": 1000, "pv": 4000, "house": 3000}.items():
+        report(key, value, {"unit_of_measurement": "W"})
+    report("last_poll", clock[0].isoformat())
+    for key in ("mode", "cloud_health"):
+        report(key, {"mode": "Schedule", "cloud_health": "ok"}[key])
+    instance.update(clock[0])
+    assert instance.values["native_schedule_window"] == "within_reported_window"
+    assert "measured_grid_may_already_include_native_element_load" in instance.plan.warnings
+    assert instance.values["measured_net_export_kw"] == 1.0  # never de-embedded
+
+
+def test_usable_forecast_solar_is_capped_at_element_power(runtime):  # noqa: F811
+    instance, _, clock = runtime
+    module = importlib.import_module(type(instance).__module__)
+    settings, _ = c.parse_options({"export_headroom_kw": 0.3})
+    now = clock[0]
+    slots = (
+        m.Forecast(now, now + timedelta(hours=1), 5),
+        m.Forecast(now + timedelta(hours=1), now + timedelta(hours=2), 1.3),
+    )
+    assert module._usable_solar(slots, now, now + timedelta(hours=1.5), settings) == 3.5
+    assert module._usable_solar((), now, now, settings) is None
+
+
+def test_measured_only_benefit_cap_is_reported_not_hidden(runtime):  # noqa: F811
+    """Default AUD 0.10 vs 15 measured minutes: (0.1702-0.09276)*0.75 ~= 0.058."""
+    instance, report, clock = runtime
+    clock[0] = local(hour=12)
+    report("heater", "unknown", {"current_temperature": 55, "temperature": 70})
+    for key, value in {"grid": 4000, "pv": 4800, "house": 800}.items():
+        report(key, value, {"unit_of_measurement": "W"})
+    for key, value in {"mode": "Schedule", "cloud_health": "ok"}.items():
+        report(key, value)
+    report("last_poll", clock[0].isoformat())
+    instance.update(clock[0])
+    benefit = instance.details["cycle"]["benefit_vs_grid_alternative_aud"]
+    assert benefit == pytest.approx((0.1702 - 0.09276) * 0.75, abs=0.002)
+    assert "measured_only_solar_benefit_below_switching_threshold" in instance.plan.warnings
+    assert instance.settings.switching_benefit_aud == 0.10  # never silently lowered

@@ -275,9 +275,7 @@ def test_new_preferences_reject_invalid_values_atomically(key, value):
         "[]",
         "not json",
         json.dumps([{"days": [0], "start": "00:00", "end": "00:00", "kind": "off_peak"}]),
-        json.dumps(
-            [{"days": list(range(7)), "start": "00:00", "end": "00:00", "kind": "free"}]
-        ),
+        json.dumps([{"days": list(range(7)), "start": "00:00", "end": "00:00", "kind": "free"}]),
     ],
 )
 def test_stored_custom_periods_are_validated_even_in_aurora_mode(profile, periods):

@@ -13,7 +13,7 @@ from .config import (
     parse_options,
     saved_options,
 )
-from .settings import CATALOG
+from .settings import CATALOG, apply_changes
 
 
 def sources_schema(values):
@@ -93,7 +93,7 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
         errors = {}
         values = saved_options(self._entry.options)
         if user_input is not None:
-            values.update(user_input)
+            values = apply_changes(values, user_input)
             try:
                 parse_options(values)
             except (ValueError, TypeError, KeyError, OverflowError):

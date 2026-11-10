@@ -4,13 +4,21 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .config import DEFAULT_OPTIONS, DOMAIN, parse_options, saved_options
-from .settings import CATALOG, recommended_options
+from .config import DOMAIN, parse_options, saved_options
+from .settings import CATALOG, apply_changes, describe, recommended_options, undo_restore
 
 
-async def save(hass, entry, changes=None, restore=False):
+async def save(hass, entry, changes=None, restore=False, undo=False):
     values = saved_options(entry.options)
-    values = recommended_options(values) if restore else {**values, **changes}
+    if undo:
+        try:
+            values = undo_restore(values)
+        except ValueError:
+            raise HomeAssistantError("There is no restore to undo. Nothing was changed.") from None
+    elif restore:
+        values = recommended_options(values)
+    else:
+        values = apply_changes(values, changes)
     try:
         parse_options(values)
     except (ValueError, TypeError, KeyError, OverflowError):
@@ -48,9 +56,8 @@ class SettingEntity:
 
     @property
     def extra_state_attributes(self):
-        default = DEFAULT_OPTIONS[self.key]
         return {
-            "recommended_and_original_default": default,
+            **describe(self.key, self.current),
             "explanation": self.meta.explanation,
             "group": self.meta.group,
             "shadow_only": True,

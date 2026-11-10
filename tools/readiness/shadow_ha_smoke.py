@@ -42,7 +42,7 @@ def assert_entity_serialization(hass, sources):
     from custom_components.thermann_shadow.sensor import SENSORS
     from custom_components.thermann_shadow.settings import CATALOG
 
-    assert len(states) == len(SENSORS) + sum(meta.kind != "form" for meta in CATALOG.values()) + 1
+    assert len(states) == len(SENSORS) + sum(meta.kind != "form" for meta in CATALOG.values()) + 2
     frames = []
     connection = SimpleNamespace(
         user=SimpleNamespace(is_admin=True),

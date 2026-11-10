@@ -28,6 +28,7 @@ class CyclePolicy:
     grid_comparison_cost: float = 0.0
     previous_export: float = 0.0
     previous_rate: float = 0.0
+    start_reason: str | None = None  # why the SIMULATED cycle began: comfort or economic
     diagnostics: dict = field(default_factory=dict)
 
     def step(
@@ -180,7 +181,7 @@ class CyclePolicy:
                 self.disadvantage_since = None
                 reason = "continue_existing_simulated_cycle"
         elif urgent:
-            self._start(now)
+            self._start(now, "comfort")
             reason = "comfort_overrides_economic_hold_and_gap"
         elif opportunity:
             hold = (
@@ -190,7 +191,7 @@ class CyclePolicy:
             )
             elapsed = (now - self.stopped).total_seconds() / 60 if self.stopped else float("inf")
             if hold >= settings.solar_hold_minutes and elapsed >= settings.minimum_gap_minutes:
-                self._start(now)
+                self._start(now, "economic")
                 reason = "qualified_economic_opportunity_start_simulation"
             else:
                 reason, suppressed = "qualifying_opportunity_or_optional_gap", "start"
@@ -208,6 +209,12 @@ class CyclePolicy:
             if remaining <= 1e-7
             else "simulated_waiting",
             "reason": reason,
+            "start_reason": self.start_reason if self.active else None,
+            "urgent": urgent,
+            "economic_opportunity": opportunity,
+            "later_window_cheaper": disadvantage,
+            "later_solar_kwh": round(later.solar_kwh, 4) if later else None,
+            "current_solar_fraction": round(min(1.0, self.previous_export / ELEMENT_KW), 4),
             "physical_heating_state": "unverified",
             "simulated_cycle_count": self.starts,
             "simulated_stop_count": self.stops,
@@ -235,14 +242,14 @@ class CyclePolicy:
         }
         return dict(self.diagnostics)
 
-    def _start(self, now):
-        self.active, self.started = True, now
+    def _start(self, now, why):
+        self.active, self.started, self.start_reason = True, now, why
         self.starts += 1
         self.advantage_since = self.disadvantage_since = None
 
     def _stop(self, now):
         if self.active:
-            self.active, self.stopped = False, now
+            self.active, self.stopped, self.start_reason = False, now, None
             self.stops += 1
         self.advantage_since = self.disadvantage_since = None
 

@@ -54,6 +54,8 @@ SENSORS = {
     "forecast_age_minutes": ("Forecast age", "min"),
     "deadline_countdown_minutes": ("Comfort countdown", "min"),
     "completion_time": ("Simulated completion", None),
+    "decision": ("Decision code", None),
+    "forecast_usable_solar_kwh": ("Forecast usable solar before deadline", "kWh"),
 }
 
 

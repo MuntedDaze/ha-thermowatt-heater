@@ -2,7 +2,7 @@
 
 from dataclasses import asdict
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.util import dt as dt_util
 
@@ -11,6 +11,12 @@ from .config import DEFAULT_OPTIONS
 from .native import parse_native, permitted_minutes, scheduled_permission
 from .forecast import build_forecast
 from .cycles import CyclePolicy
+from .decision import decide
+from .settings import BACKUP_KEY, describe
+
+# Measured-vs-forecast PV correction uses a short rolling mean, so one passing
+# cloud sample cannot discard the whole horizon. Window is deliberately fixed.
+PV_AVERAGE_MINUTES = 15
 
 
 class ShadowRuntime:
@@ -30,6 +36,7 @@ class ShadowRuntime:
         self.last_count = None
         self.count_started = None
         self.solar_samples = deque(maxlen=121)
+        self.pv_samples = deque(maxlen=64)  # (observed_at, kW), fresh distinct reports
         self.cycle = CyclePolicy()
         self.set_native_reference({})
 
@@ -45,6 +52,7 @@ class ShadowRuntime:
         if changed_mapping or settings != self.settings or tariffs != self.tariffs:
             self.cycle = CyclePolicy()
             self.solar_samples.clear()
+            self.pv_samples.clear()
         if changed_mapping:
             self.boot = dt_util.utcnow()
             self.last_native = None
@@ -125,9 +133,21 @@ class ShadowRuntime:
             pv = self._reading("pv")
             if pv:
                 _fresh(pv, now, self.boot, self.settings.grid_max_age_seconds)
-                measured_pv = _power(pv)
+                value = _power(pv)
+                if value < 0:
+                    raise ValueError("pv_negative")
+                if not self.pv_samples or pv.observed_at > self.pv_samples[-1][0]:
+                    self.pv_samples.append((pv.observed_at, value))
         except (ValueError, TypeError, OverflowError):
             pass
+        while self.pv_samples and now - self.pv_samples[0][0] > timedelta(
+            minutes=PV_AVERAGE_MINUTES
+        ):
+            self.pv_samples.popleft()
+        if self.pv_samples and now - self.pv_samples[-1][0] <= timedelta(
+            seconds=self.settings.grid_max_age_seconds
+        ):
+            measured_pv = sum(value for _, value in self.pv_samples) / len(self.pv_samples)
         self.forecast = build_forecast(
             now,
             self.boot,
@@ -135,6 +155,9 @@ class ShadowRuntime:
             self.hass.states.get(self.sources.get("forecast_pv", "")),
             self.hass.states.get(self.sources.get("forecast_load", "")),
             measured_pv,
+        )
+        self.forecast.measured_pv_average_kw = (
+            None if measured_pv is None else round(measured_pv, 3)
         )
         self.plan = evaluate(
             now,
@@ -155,19 +178,31 @@ class ShadowRuntime:
             self.forecast.slots,
             readings["grid"].observed_at if "grid" in readings else None,
         )
+        solar_benefit = cycle["benefit_vs_grid_alternative_aud"]
+        if (
+            not self.forecast.slots
+            and solar_benefit is not None
+            and 0 < solar_benefit < self.settings.switching_benefit_aud
+            and (self.plan.net_export_kw or 0) - self.settings.export_headroom_kw
+            >= self.settings.min_solar_kw
+        ):
+            # Honest limitation, not a silent default change: without a forecast,
+            # only solar_window_minutes of measured surplus is credited, which can
+            # cap the benefit below the owner's switching threshold.
+            self.plan.warnings.append("measured_only_solar_benefit_below_switching_threshold")
+        code, label, explanation = decide(
+            self.plan,
+            cycle,
+            self.cycle.active,
+            self.settings.forecast_enabled,
+            self.forecast.source,
+            self.settings,
+        )
         self.values = asdict(self.plan)
         self.values.update(
             {
-                "recommendation": "DATA UNAVAILABLE"
-                if cycle["state"] == "suspended"
-                else "NO HEATING NEEDED"
-                if cycle["state"] == "simulated_satisfied"
-                else "GRID FALLBACK"
-                if self.cycle.active
-                and cycle["reason"] == "comfort_overrides_economic_hold_and_gap"
-                else "HEAT NOW"
-                if self.cycle.active
-                else "WAIT FOR SOLAR / PLANNED WINDOW",
+                "recommendation": label,
+                "decision": code,
                 "simulated_cycle_state": cycle["state"],
                 "simulated_cycle_count": self.cycle.starts,
                 "simulated_stop_count": self.cycle.stops,
@@ -180,6 +215,9 @@ class ShadowRuntime:
                 if self.forecast.slots
                 else None,
                 "forecast_age_minutes": self.forecast.age_minutes,
+                "forecast_usable_solar_kwh": _usable_solar(
+                    self.forecast.slots, now, self.plan.deadline, self.settings
+                ),
                 "deadline_countdown_minutes": max(
                     0, round((self.plan.deadline - now).total_seconds() / 60)
                 )
@@ -281,6 +319,16 @@ class ShadowRuntime:
             else "unknown_not_schedule"
         )
         self.values["t_comfort_reference_c"] = self.native_options["t_comfort_reference_c"]
+        temperature = self.values.get("temperature")
+        if (
+            self.values["native_schedule_window"] == "within_reported_window"
+            and temperature is not None
+            and temperature < self.settings.expected_native_target_c - 8
+        ):
+            # The native thermostat may already be calling for heat, so the
+            # measured grid can include the REAL 3 kW element. The planner does not
+            # de-embed an unverified load: solar economics are then understated.
+            self.plan.warnings.append("measured_grid_may_already_include_native_element_load")
         self.plan.warnings.extend(
             [
                 "schedule_permission_is_not_element_power",
@@ -377,35 +425,23 @@ class ShadowRuntime:
             "native_window_capacity_is_not_measured_energy": True,
             "sources": dict(self.sources),
             "cycle": cycle,
-            "decision_explanation": {
-                "data_or_owner_gate": "Fresh healthy inputs and unchanged native mode/target are required. No action is taken.",
-                "comfort_overrides_economic_hold_and_gap": "Start the required fallback in the simulation; comfort takes priority over economic waiting.",
-                "comfort_requires_continuing_simulation": "Continue the simulated cycle to protect the comfort deadline.",
-                "qualified_economic_opportunity_start_simulation": "A sustained economic opportunity qualifies a hypothetical full-power cycle.",
-                "continue_existing_simulated_cycle": "Continue the existing hypothetical cycle; do not start a new one each minute.",
-                "continue_through_temporary_cost_disadvantage": "Keep the simulated cycle through a temporary disadvantage or minimum dwell.",
-                "sustained_cost_disadvantage_stop_simulation": "A sustained cost disadvantage justifies stopping the simulation and heating later.",
-                "simulated_target_satisfied_not_physical_thermostat": "No further heat in this ideal-energy scenario. This does not prove the real thermostat is satisfied.",
-                "qualifying_opportunity_or_optional_gap": "Wait for sustained benefit or the optional cycle gap. No heater command is sent.",
-                "wait_for_cheaper_window_or_conservative_fallback": "Wait for a cheaper feasible window; retain the independent full grid fallback.",
-            }.get(
-                cycle["reason"],
-                "Waiting for qualified local inputs or a useful economic opportunity.",
-            ),
+            "decision": code,
+            "decision_explanation": explanation,
             "forecast": {
                 "source": self.forecast.source,
                 "age_minutes": self.forecast.age_minutes,
                 "pv_error_kw": self.forecast.pv_error_kw,
-                "pv_correction": self.forecast.correction,
+                "pv_correction_now": self.forecast.correction,
+                "pv_correction_fades_to_none_after_hours": self.forecast.correction_hours,
+                "measured_pv_average_kw": self.forecast.measured_pv_average_kw,
+                "load_basis": self.forecast.load_basis,
                 "intervals": len(self.forecast.slots),
             },
             "advanced_form_settings": {
-                key: {
-                    "current": self.native_options[key],
-                    "recommended_and_original_default": DEFAULT_OPTIONS[key],
-                }
+                key: describe(key, self.native_options[key])
                 for key in ("tariff_periods", "native_schedule_periods")
             },
+            "restore_undo_available": isinstance(self.native_options.get(BACKUP_KEY), dict),
         }
         for listener in tuple(self.listeners):
             listener()
@@ -413,3 +449,16 @@ class ShadowRuntime:
     def subscribe(self, listener):
         self.listeners.add(listener)
         return lambda: self.listeners.discard(listener)
+
+
+def _usable_solar(slots, now, deadline, settings):
+    """Forecast surplus the full 3 kW element could absorb before the deadline (kWh)."""
+    if not slots or deadline is None:
+        return None
+    total = 0.0
+    for item in slots:
+        start, end = max(item.start, now), min(item.end, deadline)
+        if end > start:
+            usable = min(3.0, max(0.0, item.export_kw - settings.export_headroom_kw))
+            total += usable * (end - start).total_seconds() / 3600
+    return round(total, 3)

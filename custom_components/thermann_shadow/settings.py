@@ -1,6 +1,7 @@
 """One metadata catalogue for native controls, forms, defaults and validation."""
 
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from .config import DEFAULT_OPTIONS
 
@@ -296,22 +297,94 @@ for key in ("peak_morning_start", "peak_morning_end", "peak_evening_start", "pea
     )
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 
-PRESERVE_ON_RESTORE = {
-    "meter_verified",
-    "tariff_verified",
-    "import_positive",
-    "expected_native_target_c",
-    "native_schedule_periods",
-    "native_schedule_clock",
-    "native_schedule_clock_verified",
-    "native_clock_check_date",
-    "t_comfort_reference_c",
-}
+# Truthful "original" defaults: the value each setting first shipped with
+# (0.2.0 for shared keys, 0.3.0 for new keys; identical today). RECOMMENDED is
+# DEFAULT_OPTIONS. A future release that changes a recommendation must change
+# DEFAULT_OPTIONS only and keep this mapping, so the dashboard stays honest.
+ORIGINAL_DEFAULTS = MappingProxyType(dict(DEFAULT_OPTIONS))
+
+# Owner facts, verifications, contract data and references are never
+# "preferences": restoring recommendations must not rewrite them.
+PRESERVE_ON_RESTORE = frozenset(
+    {
+        "paused",
+        "meter_verified",
+        "tariff_verified",
+        "import_positive",
+        "expected_native_target_c",
+        "native_schedule_periods",
+        "native_schedule_clock",
+        "native_schedule_clock_verified",
+        "native_clock_check_date",
+        "t_comfort_reference_c",
+        # Tariff contract: a verified contract is not reset to the Aurora 93
+        # defaults merely because comfort/cycle preferences are restored.
+        "tariff_clock",
+        "tariff_profile",
+        "tariff_periods",
+        "weekend_peak",
+        "off_peak_rate",
+        "shoulder_rate",
+        "peak_rate",
+        "feed_in_rate",
+        "peak_morning_start",
+        "peak_morning_end",
+        "peak_evening_start",
+        "peak_evening_end",
+    }
+)
+RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
+BACKUP_KEY = "restore_backup"
 
 
 def recommended_options(current):
-    """Only preferences; never rewrite mappings, verification or native references."""
+    """Only preferences; never rewrite mappings, verification, tariff or references.
+
+    The replaced values are kept under BACKUP_KEY so one restore can be undone.
+    """
+    backup = {key: current[key] for key in RESTORED if current.get(key) != DEFAULT_OPTIONS[key]}
+    restored = {**current, **{key: DEFAULT_OPTIONS[key] for key in RESTORED}}
+    restored.pop(BACKUP_KEY, None)  # never let Undo revert to an older restore
+    if backup:
+        restored[BACKUP_KEY] = backup
+    return restored
+
+
+def undo_restore(current):
+    """Re-apply the preferences replaced by the last restore, then forget them."""
+    backup = current.get(BACKUP_KEY)
+    if not isinstance(backup, dict) or not backup or not set(backup) <= set(RESTORED):
+        raise ValueError("no_restore_to_undo")
+    result = {key: value for key, value in current.items() if key != BACKUP_KEY}
+    return {**result, **backup}
+
+
+def apply_changes(values, changes):
+    """Ordinary edits. After a restore, an edited key leaves the undo snapshot:
+    it is the owner's newest decision and must not be reverted by Undo."""
+    result = {**values, **changes}
+    backup = result.get(BACKUP_KEY)
+    if isinstance(backup, dict):
+        backup = {
+            key: value
+            for key, value in backup.items()
+            if key not in changes or changes[key] == values.get(key)
+        }
+        if backup:
+            result[BACKUP_KEY] = backup
+        else:
+            result.pop(BACKUP_KEY)
+    return result
+
+
+def describe(key, current):
+    """CURRENT, RECOMMENDED and ORIGINAL values; identical defaults are combined."""
+    recommended, original = DEFAULT_OPTIONS[key], ORIGINAL_DEFAULTS[key]
     return {
-        **current,
-        **{key: value for key, value in DEFAULT_OPTIONS.items() if key not in PRESERVE_ON_RESTORE},
+        "current_value": current,
+        "recommended_default": recommended,
+        "original_default": original,
+        "recommended_equals_original": recommended == original,
+        "changed_from_recommended": current != recommended,
+        "restore_recommended": "restores" if key in RESTORED else "preserves",
     }
