@@ -45,7 +45,11 @@ async def main():
             "thermann_shadow", context={"source": "user"}
         )
         assert result["type"] == "form"
-        from custom_components.thermann_shadow.config import DEFAULT_SOURCES, DOMAIN
+        from custom_components.thermann_shadow.config import (
+            DEFAULT_OPTIONS,
+            DEFAULT_SOURCES,
+            DOMAIN,
+        )
         from custom_components.thermann_shadow.model import Reading, evaluate
 
         result = await hass.config_entries.flow.async_configure(result["flow_id"], DEFAULT_SOURCES)
@@ -138,6 +142,23 @@ async def main():
             if state.entity_id.startswith("sensor.thermann_shadow_")
         ]
         assert len(sensor_ids) == 24, sensor_ids
+        # Save through the real options flow. Reload retains entity identities,
+        # releases listeners, keeps validation false and waits for a normal poll.
+        old_runtime = runtime
+        saved = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_OPTIONS)
+        assert saved["type"] == "create_entry"
+        await hass.async_block_till_done()
+        assert entry.state is config_entries.ConfigEntryState.LOADED
+        runtime = hass.data[DOMAIN][entry.entry_id]
+        assert runtime is not old_runtime and not old_runtime.listeners
+        assert not runtime.settings.meter_verified and not runtime.settings.tariff_verified
+        assert runtime.plan.state == "shadow_blocked"
+        assert entry.options["sources"] == DEFAULT_SOURCES
+        assert set(sensor_ids) == {
+            state.entity_id
+            for state in hass.states.async_all("sensor")
+            if state.entity_id.startswith("sensor.thermann_shadow_")
+        }
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
         assert not runtime.listeners
@@ -151,6 +172,7 @@ async def main():
                     "unknown_water_heater_attributes": "PASS",
                     "request_replay_accounting": "PASS",
                     "manual_intervention_latch": "PASS",
+                    "options_reload_and_ids": "PASS",
                     "clean_unload": "PASS",
                     "live_cloud_requests": 0,
                     "service_calls": 0,
