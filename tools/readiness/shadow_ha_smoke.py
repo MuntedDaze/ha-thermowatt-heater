@@ -11,6 +11,7 @@ import sys
 import tempfile
 
 from homeassistant.core import HomeAssistant
+from homeassistant import bootstrap, config_entries, loader
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
@@ -28,6 +29,9 @@ async def main():
         shutil.copytree(ROOT / "custom_components/thermann_shadow", target)
         sys.path.insert(0, folder)
         hass = HomeAssistant(folder)
+        loader.async_setup(hass)
+        hass.config_entries = config_entries.ConfigEntries(hass, {})
+        assert await bootstrap.async_load_base_functionality(hass)
         await hass.config.async_set_time_zone("Australia/Hobart")
         hass.config.units = METRIC_SYSTEM
         # No connection, DNS, or Home Assistant service calls are allowed.
