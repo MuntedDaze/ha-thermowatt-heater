@@ -133,7 +133,10 @@ async def main():
         socket.getaddrinfo = denied
         type(hass.services).async_call = denied
         assert await async_setup_component(hass, "sensor", {})
-        assert "thermann_shadow" in await loader.async_get_config_flows(hass, "hub")
+        assert "thermann_shadow" in await loader.async_get_config_flows(hass)
+        descriptions = await loader.async_get_integration_descriptions(hass)
+        listed = descriptions["custom"]["integration"]["thermann_shadow"]
+        assert listed["integration_type"] == "hub" and listed["config_flow"] is True
         result = await hass.config_entries.flow.async_init(
             "thermann_shadow", context={"source": "user"}
         )
