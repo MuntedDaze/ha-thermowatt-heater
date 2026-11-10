@@ -4,6 +4,9 @@ Phase 2A has no command path. The owner accepts occasional manual recovery after
 serious outages; universal automatic Schedule handback is not required. This does
 not approve live tests, unsafe setpoints or changes to native safety functions.
 See CONTROL_AND_RECOVERY.md for source findings and the unverified factory reset.
+The product's documented app On/Off is a credible candidate; see
+NATIVE_ON_OFF_REVIEW.md. Qualify the official-app recovery first, before any
+separately approved API-Off trial. No raw On route is assumed to exist.
 
 1. Preserve the known programme, 70°C target and 10°C T-Comfort. Confirm model,
    firmware, clock/DST, applicable manufacturer guidance and the supported app

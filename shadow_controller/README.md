@@ -138,6 +138,10 @@ No proactive token refresh, budget reset or new quota-management system is added
 
 ## Later installation — owner approval required
 
+Use [the concise installation/verification checklist](INSTALL_SHADOW_0_2_0.md).
+For the documented app power function versus the still-unverified API resume,
+read [the native On/Off review](NATIVE_ON_OFF_REVIEW.md). Planning is unchanged.
+
 1. Review PR #9 and back up HA. This branch has not been merged or deployed.
 2. Copy only `custom_components/thermann_shadow` into the matching
    `/config/custom_components/thermann_shadow` folder. No bridge update is needed.

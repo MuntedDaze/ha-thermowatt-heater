@@ -14,7 +14,8 @@ No deployment, commands, authentication changes or native programme edits occur.
   weekend 16:00 is a comfort goal, not a tariff peak. The device clock is separate.
 - Execution: FUTURE ONLY. Existing Manual, Auto/Eco/Off community contracts need
   focused source/physical qualification. Manual at 65–70°C is not bounded on/off;
-  a verified stop/park/resume mechanism remains unresolved. No guessed endpoints.
+  product app On/Off is documented, but its API resume/retention contract remains
+  unresolved. See `shadow_controller/NATIVE_ON_OFF_REVIEW.md`. No guessed endpoints.
 - Recovery: owner accepts occasional manual intervention during serious outages.
   Universal automatic Schedule restoration is no longer a design prerequisite.
   Preserve protections, confirm when possible, expose faults and supply verified

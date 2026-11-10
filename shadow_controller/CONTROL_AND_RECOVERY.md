@@ -6,6 +6,13 @@ recovery during serious outages. Automatic Schedule restoration in every failure
 is **not** a required architecture guarantee. Thermostat, over-temperature and
 manufacturer hygiene protections remain mandatory; read-only Phase 2A remains.
 
+**Native On/Off evidence update:** app-level antibacterial retention is expressly
+documented; the remaining uncertainty is API equivalence/resume and firmware
+qualification, not whether the manufacturer describes such a product function.
+See [the On/Off review](NATIVE_ON_OFF_REVIEW.md) for pinned source evidence,
+retention/outage findings and a bounded-cycle proposal. The accepted optimiser is
+unchanged. [Shadow installation checklist](INSTALL_SHADOW_0_2_0.md).
+
 ## What the existing v1.3.8 bridge implements
 
 These are inherited community API contracts, verified in source and mocks only,
@@ -19,7 +26,7 @@ The shadow planner neither imports nor invokes them.
 | Setpoint | Same `/manual` route; TEMP accepted only when already Manual | No 40°C storage command is proposed. Legacy bridge 20–75°C validation is not model-specific approval. |
 | Auto/Schedule | POST `/auto`; empty text body; expect Cmd 17 | Desired handback when communications work. Mode readback alone does not prove programme retention, power resume or physical heating. |
 | Eco | POST `/eco`; expect Cmd 3 | Adaptive native behaviour, not an optimisation on/off switch. |
-| Off | POST `/off`; expect Cmd 16 | A known source route, but API-specific power, resume and protection behaviour remain unqualified. No automatic Off is proposed. |
+| Off | POST `/off`; empty text/plain body; expect Cmd 16 | Product app Off has documented antibacterial retention; raw API equivalence and its missing inverse remain unqualified. No automatic Off is proposed. |
 | Separate On/resume or unconditional boost | Not implemented/verified | Do not invent endpoints or reinterpret Auto as a verified power-on command. |
 | Holiday/programme/T-Comfort writes | Intentionally unsupported | No dates invented and no programme/comfort-setting edits. |
 
@@ -53,8 +60,9 @@ factory-reset-to-65°C procedure was established in the reviewed documentation.*
 The guidance does not qualify the raw API as a reversible power switch.
 
 If the app and communications work, the candidate owner recovery is to select
-native Schedule, verify the saved programme/target, and observe subsequent
-operation. Conventional Manual around 65°C is another documented mode, but it
+the app power button when Off, then inspect mode/target before returning to
+native Schedule and observing operation. Choosing a mode alone is not verified
+power resume. Conventional Manual around 65°C is another documented mode, but it
 is not automatically recovered by a power cycle. Neither procedure has been
 physically tested in this development task. If communications fail completely,
 there is no verified remote or owner factory-reset recovery path to promise.
