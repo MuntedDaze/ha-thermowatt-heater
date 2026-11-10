@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import socket
+import sys
 import tempfile
 
 from homeassistant.core import HomeAssistant
@@ -25,15 +26,16 @@ async def main():
     with tempfile.TemporaryDirectory() as folder:
         target = Path(folder) / "custom_components/thermann_shadow"
         shutil.copytree(ROOT / "custom_components/thermann_shadow", target)
+        sys.path.insert(0, folder)
         hass = HomeAssistant(folder)
-        hass.config.set_time_zone("Australia/Hobart")
+        await hass.config.async_set_time_zone("Australia/Hobart")
         hass.config.units = METRIC_SYSTEM
         # No connection, DNS, or Home Assistant service calls are allowed.
         socket.socket.connect = denied
         socket.socket.connect_ex = denied
         socket.create_connection = denied
         socket.getaddrinfo = denied
-        hass.services.async_call = denied
+        type(hass.services).async_call = denied
         assert await async_setup_component(hass, "sensor", {})
         result = await hass.config_entries.flow.async_init(
             "thermann_shadow", context={"source": "user"}
