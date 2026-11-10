@@ -13,9 +13,10 @@ defaults and MQTT IDs remain. See [upgrade notes](UPGRADING_1_3_7.md),
 [HA/EMHASS plan](PHASE2_CONTROL_DESIGN.md). GitHub merges do not authorise live
 heater/cloud testing or deployment by the agent.
 
-**Phase 2A: [Thermann Shadow Planner 0.2.0](shadow_controller/README.md)** is a
+**Phase 2B: [Thermann Shadow Planner 0.3.0](shadow_controller/README.md)** is a
 separate owner-review component and dashboard. It reads existing HA entities,
-models hypothetical heating/cost windows and explains missing-data/comfort risks.
+models hypothetical heating/cost windows, optional forecasts and stateful cycles,
+and provides native dashboard preference controls and missing-data/comfort risks.
 It has no heater-command, MQTT-write or cloud-request path. The bridge stays
 1.3.8; commands and on-demand refresh stay disabled. Native Schedule and the
 owner's 10°C T-Comfort remain unchanged. No automatic merge or deployment of the

@@ -22,6 +22,7 @@ from homeassistant.components.websocket_api.messages import cached_state_diff_me
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
+from homeassistant.helpers.entity_platform import async_get_platforms
 from sqlalchemy import create_engine, select
 
 ROOT = Path("/workspace")
@@ -35,10 +36,13 @@ def assert_entity_serialization(hass, sources):
     """Exercise actual get_states, state-change frames and Recorder encoders/SQL."""
     states = [
         state
-        for state in hass.states.async_all("sensor")
-        if state.entity_id.startswith("sensor.thermann_shadow_")
+        for state in hass.states.async_all()
+        if state.entity_id.split(".", 1)[1].startswith("thermann_shadow_")
     ]
-    assert len(states) == 35
+    from custom_components.thermann_shadow.sensor import SENSORS
+    from custom_components.thermann_shadow.settings import CATALOG
+
+    assert len(states) == len(SENSORS) + sum(meta.kind != "form" for meta in CATALOG.values()) + 1
     frames = []
     connection = SimpleNamespace(
         user=SimpleNamespace(is_admin=True),
@@ -242,7 +246,9 @@ async def main():
             for state in hass.states.async_all("sensor")
             if state.entity_id.startswith("sensor.thermann_shadow_")
         ]
-        assert len(sensor_ids) == 35, sensor_ids
+        from custom_components.thermann_shadow.sensor import SENSORS
+
+        assert len(sensor_ids) == len(SENSORS), sensor_ids
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
@@ -251,13 +257,53 @@ async def main():
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED
         runtime = hass.data[DOMAIN][entry.entry_id]
-        assert runtime is not old_runtime and not old_runtime.listeners
+        assert runtime is old_runtime  # preference saves recalculate, not reload
         assert runtime.settings.meter_verified and runtime.settings.tariff_verified
         assert runtime.plan.state == "shadow_blocked"
         assert entry.options["sources"] == DEFAULT_SOURCES
         runtime.sources = MappingProxyType(dict(runtime.sources))
         runtime.update(dt_util.utcnow())
         assert_entity_serialization(hass, runtime.sources)
+        # Native dashboard controls and Configure share one authoritative entry.
+        entities = {
+            entity.entity_id: entity
+            for platform in async_get_platforms(hass, DOMAIN)
+            for entity in platform.entities.values()
+        }
+        number = entities["number.thermann_shadow_afternoon_storage_target"]
+        await number.async_set_native_value(65)
+        await hass.async_block_till_done()
+        assert entry.options["target_c"] == runtime.settings.target_c == number.native_value == 65
+        assert runtime is old_runtime
+        try:
+            await number.async_set_native_value(40)
+        except Exception as error:
+            from homeassistant.exceptions import HomeAssistantError
+
+            assert isinstance(error, HomeAssistantError)
+        else:
+            raise AssertionError("Invalid planning target accepted")
+        assert entry.options["target_c"] == 65
+        from datetime import time
+
+        await entities["time.thermann_shadow_morning_deadline"].async_set_value(time(6, 30))
+        await entities["switch.thermann_shadow_use_published_forecasts"].async_turn_on()
+        await entities["select.thermann_shadow_tariff_clock"].async_select_option("standard")
+        await hass.async_block_till_done()
+        assert runtime.settings.morning == time(6, 30) and runtime.settings.forecast_enabled
+        assert entry.options["sources"] == DEFAULT_SOURCES
+        # Restore retains safety/mapping/native references and has UI confirmation.
+        await entities["button.thermann_shadow_restore_recommended_preferences"].async_press()
+        await hass.async_block_till_done()
+        assert entry.options["target_c"] == 70 and runtime.settings.morning == time(7)
+        assert not runtime.settings.forecast_enabled
+        assert_entity_serialization(hass, runtime.sources)
+        # Actual unload/setup simulates HA restart, preserving options and IDs.
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        runtime = hass.data[DOMAIN][entry.entry_id]
+        assert runtime is not old_runtime and not old_runtime.listeners
+        assert runtime.cycle.starts == 0 and runtime.plan.state == "shadow_blocked"
         assert set(sensor_ids) == {
             state.entity_id
             for state in hass.states.async_all("sensor")
@@ -277,6 +323,7 @@ async def main():
                     "request_replay_accounting": "PASS",
                     "manual_intervention_latch": "PASS",
                     "options_reload_and_ids": "PASS",
+                    "native_preference_controls_and_restore": "PASS",
                     "add_integration_hub_listing": "PASS",
                     "websocket_states_and_events_json": "PASS",
                     "recorder_attributes_and_sqlite_roundtrip": "PASS",

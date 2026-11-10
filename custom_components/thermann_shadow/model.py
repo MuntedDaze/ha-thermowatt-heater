@@ -57,6 +57,15 @@ class Settings:
     grid_max_age_seconds: float = 120.0
     solar_hold_minutes: float = 10.0
     solar_window_minutes: float = 15.0
+    min_solar_kw: float = 0.1
+    switching_benefit_aud: float = 0.10
+    solar_loss_minutes: float = 20.0
+    minimum_cycle_minutes: float = 30.0
+    minimum_gap_minutes: float = 30.0
+    forecast_enabled: bool = False
+    forecast_uncertainty: float = 0.25
+    forecast_max_age_minutes: float = 120.0
+    forecast_house_margin_kw: float = 0.3
     morning: time = time(7)
     evening: time = time(16)
 
@@ -216,7 +225,13 @@ def validate_settings(settings: Settings) -> None:
     if (
         any(
             type(getattr(settings, key)) is not bool
-            for key in ("paused", "meter_verified", "tariff_verified", "import_positive")
+            for key in (
+                "paused",
+                "meter_verified",
+                "tariff_verified",
+                "import_positive",
+                "forecast_enabled",
+            )
         )
         or settings.tariff_clock not in {"local", "standard"}
         or not 65 <= settings.target_c <= 70
@@ -229,8 +244,20 @@ def validate_settings(settings: Settings) -> None:
         or not 0 <= settings.feed_in_rate <= 2
         or not 5 <= settings.solar_hold_minutes <= 30
         or not 5 <= settings.solar_window_minutes <= 30
-        or settings.morning != time(7)
-        or settings.evening != time(16)
+        or not 0 <= settings.min_solar_kw <= 3
+        or not 0 <= settings.switching_benefit_aud <= 5
+        or not 0 <= settings.solar_loss_minutes <= 120
+        or not 0 <= settings.minimum_cycle_minutes <= 180
+        or not 0 <= settings.minimum_gap_minutes <= 180
+        or not 0 <= settings.forecast_uncertainty <= 0.9
+        or not 15 <= settings.forecast_max_age_minutes <= 360
+        or not 0 <= settings.forecast_house_margin_kw <= 5
+        or not isinstance(settings.morning, time)
+        or settings.morning.tzinfo is not None
+        or not isinstance(settings.evening, time)
+        or settings.evening.tzinfo is not None
+        or not time(0) <= settings.morning <= time(11, 59)
+        or not time(12) <= settings.evening <= time(23, 59)
     ):
         raise ValueError("settings_invalid")
 
@@ -412,9 +439,8 @@ def evaluate(
             else sorted(
                 slots,
                 key=lambda slot: (
-                    slot[0],
                     slot[1],
-                    slot[2].timestamp() if not slot[0] else -slot[2].timestamp(),
+                    slot[2].timestamp() if slot[5] > 0 else -slot[2].timestamp(),
                 ),
             )
         )

@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Read-only entity mapping",
-        "description": "Shadow analysis only. No heater commands, service calls, MQTT writes or cloud requests. Defaults are owner-reported entity IDs; select your local entities. Schedule comes from the vendor-mode sensor, not the water-heater state.",
+        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional PV/load forecast mappings require timestamped published forecast series. Configure and dashboard controls share the same stored preferences.",
         "data": {
           "heater": "Water heater (temperature attributes only)",
           "mode": "Native vendor mode",
@@ -15,7 +15,9 @@
           "pv": "PV production (display only)",
           "house": "House consumption (display only)",
           "import_energy": "Cumulative grid import (reference only)",
-          "export_energy": "Cumulative grid export (reference only)"
+          "export_energy": "Cumulative grid export (reference only)",
+          "forecast_pv": "Optional published PV forecast",
+          "forecast_load": "Optional published household load forecast"
         }
       }
     },
@@ -27,7 +29,7 @@
     "step": {
       "init": {
         "title": "Edit read-only sources",
-        "description": "Mappings take effect after the settings step. Reload waits for a new normal cloud poll; it never requests one.",
+        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional PV/load forecast mappings require timestamped published forecast series. Configure and dashboard controls share the same stored preferences.",
         "data": {
           "heater": "Water heater (temperature attributes only)",
           "mode": "Native vendor mode",
@@ -38,42 +40,61 @@
           "pv": "PV production (display only)",
           "house": "House consumption (display only)",
           "import_energy": "Cumulative grid import (reference only)",
-          "export_energy": "Cumulative grid export (reference only)"
+          "export_energy": "Cumulative grid export (reference only)",
+          "forecast_pv": "Optional published PV forecast",
+          "forecast_load": "Optional published household load forecast"
         }
       },
       "settings": {
         "title": "Shadow assumptions and tariff contract",
-        "description": "Shadow planning only; no setting enables heater control. Owner-confirmed Aurora Tariff 93 defaults use fixed AEST (UTC+10); the tariff automatically displays one hour later in Hobart during DST. Meter direction is owner-confirmed export-positive. Explicit saved overrides are preserved. The 40°C morning value is a decision threshold, NEVER a storage setpoint. Weekly periods use Monday=0 to Sunday=6 and cover every minute exactly once.",
+        "description": "Local shadow preferences only; no setting enables execution. Dashboard controls use these exact same saved values. Recommended/original defaults and guidance are on the Settings dashboard. Morning is before noon; afternoon after noon; tariff peak times must increase. Aurora 93 uses fixed AEST, weekends off-peak. Custom weekly periods require gap-free coverage.",
         "data": {
+          "morning_threshold_c": "Morning comfort threshold",
+          "morning_time": "Morning deadline",
+          "target_c": "Afternoon storage target",
+          "evening_time": "Afternoon comfort preference",
+          "margin_minutes": "Heating time allowance",
+          "min_solar_kw": "Minimum useful net surplus",
+          "export_headroom_kw": "Solar headroom",
+          "forecast_enabled": "Use published forecasts",
+          "forecast_uncertainty": "Forecast uncertainty margin",
+          "forecast_house_margin_kw": "Extra forecast household load",
+          "solar_hold_minutes": "Solar start qualification",
+          "solar_loss_minutes": "Economic loss grace period",
+          "minimum_cycle_minutes": "Minimum optional cycle",
+          "minimum_gap_minutes": "Minimum optional cycle gap",
+          "switching_benefit_aud": "Minimum economic switching benefit",
           "paused": "Pause shadow planning",
-          "meter_verified": "Owner-confirmed meter sign/units load test",
-          "tariff_verified": "Owner-confirmed contract rates, periods and clock",
-          "import_positive": "Positive signed grid means IMPORT (OFF = export-positive)",
-          "tariff_clock": "Tariff wall clock (local or fixed standard)",
-          "target_c": "Afternoon storage planning target (65–70°C; no command)",
-          "expected_native_target_c": "Expected reported native target (reference only, Â°C)",
-          "margin_minutes": "Extra model heating allowance (minutes; uncalibrated)",
-          "feed_in_rate": "Export compensation (AUD/kWh)",
-          "off_peak_rate": "Off-peak import (AUD/kWh)",
-          "shoulder_rate": "Shoulder import (AUD/kWh)",
-          "peak_rate": "Peak import (AUD/kWh)",
-          "export_headroom_kw": "Surplus headroom (kW; not a cloud trigger)",
-          "status_max_age_minutes": "Maximum client poll age for shadow planning (minutes)",
-          "grid_max_age_seconds": "Maximum grid reading age (seconds)",
-          "tariff_periods": "Weekly tariff periods (JSON; see shadow documentation)",
-          "native_schedule_periods": "Reported native Schedule (JSON reference only; no writes)",
-          "native_schedule_clock": "Native Schedule clock (local or fixed standard)",
-          "native_schedule_clock_verified": "Device Schedule clock / DST independently verified",
-          "t_comfort_reference_c": "Reported T-Comfort setting (reference only; never changes heater)",
-          "morning_threshold_c": "Morning bottom-temperature comfort threshold (°C; NOT heater setpoint)",
-          "solar_hold_minutes": "Sustained export observation required (minutes)",
-          "solar_window_minutes": "Bounded recent-export planning window (minutes; not a forecast)",
-          "native_clock_check_date": "Date you last checked/adjusted the Thermann clock (YYYY-MM-DD; blank = unknown)"
+          "meter_verified": "Meter sign and units verified",
+          "tariff_verified": "Tariff contract verified",
+          "import_positive": "Positive grid means import",
+          "tariff_clock": "Tariff clock",
+          "tariff_profile": "Tariff periods mode",
+          "weekend_peak": "Use peak periods on weekends",
+          "off_peak_rate": "Off-peak import price",
+          "peak_rate": "Peak import price",
+          "shoulder_rate": "Shoulder import price",
+          "feed_in_rate": "Export compensation",
+          "forecast_max_age_minutes": "Maximum forecast generation age",
+          "solar_window_minutes": "Recent-export scenario horizon",
+          "status_max_age_minutes": "Maximum cloud poll age",
+          "grid_max_age_seconds": "Maximum power reading age",
+          "expected_native_target_c": "Expected native target",
+          "native_schedule_clock": "Native schedule clock reference",
+          "native_schedule_clock_verified": "Native clock checked",
+          "t_comfort_reference_c": "T-Comfort reference",
+          "native_clock_check_date": "Native clock check date",
+          "tariff_periods": "Custom weekly tariff periods",
+          "native_schedule_periods": "Native schedule reference",
+          "peak_morning_start": "Peak morning start",
+          "peak_morning_end": "Peak morning end",
+          "peak_evening_start": "Peak evening start",
+          "peak_evening_end": "Peak evening end"
         }
       }
     },
     "error": {
-      "invalid_settings": "Invalid settings or tariff coverage. Check finite numbers, ranges, days, HH:MM times, gaps and overlaps. No plan was enabled."
+      "invalid_settings": "Nothing saved. Check finite planning bounds; morning before noon and afternoon after noon; increasing tariff times without overlaps; custom weekly coverage; T-Comfort reference not above expected native target. No heater settings were changed."
     }
   }
 }

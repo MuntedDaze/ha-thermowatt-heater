@@ -339,7 +339,7 @@ def test_component_has_no_actuation_or_network_imports_and_no_fake_measurement_c
                 }
         assert "_attr_state_class" not in source
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.2.0"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.3.0"
     assert manifest["integration_type"] == "hub"
 
 
@@ -509,8 +509,21 @@ def test_custom_settings_and_dashboard_have_no_control_actions():
         (ROOT / "shadow_controller/dashboard.yaml").read_text(encoding="utf-8")
     )
     content = json.dumps(dashboard)
-    for forbidden in ("call-service", "perform-action", "water_heater.", "/CMD/", "/refresh"):
+    for forbidden in ("call-service", "water_heater.", "/CMD/", "/refresh"):
         assert forbidden not in content
+    # The sole dashboard action restores LOCAL preferences, with confirmation.
+    actions = [
+        card["tap_action"]
+        for view in dashboard["views"]
+        for card in view["cards"]
+        if card.get("tap_action", {}).get("action") == "perform-action"
+    ]
+    assert len(actions) == 1 and actions[0]["perform_action"] == "button.press"
+    assert (
+        actions[0]["target"]["entity_id"]
+        == "button.thermann_shadow_restore_recommended_preferences"
+    )
+    assert actions[0]["confirmation"]["text"]
 
 
 def test_synthetic_replay_of_owner_observations_outages_and_shortage():

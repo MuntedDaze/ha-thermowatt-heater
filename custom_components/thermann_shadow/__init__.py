@@ -12,6 +12,15 @@ from .config import DOMAIN, parse_options
 from .runtime import ShadowRuntime
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.NUMBER,
+    Platform.TIME,
+    Platform.SWITCH,
+    Platform.SELECT,
+    Platform.TEXT,
+    Platform.BUTTON,
+]
 
 
 async def async_setup_entry(hass, entry):
@@ -19,7 +28,7 @@ async def async_setup_entry(hass, entry):
     runtime = ShadowRuntime(hass, entry.options.get("sources", entry.data), settings, tariffs)
     runtime.set_native_reference(entry.options)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
-    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     @callback
     def update(now):
@@ -32,11 +41,13 @@ async def async_setup_entry(hass, entry):
 
 
 async def _reload(hass, entry):
-    await hass.config_entries.async_reload(entry.entry_id)
+    hass.data[DOMAIN][entry.entry_id].apply_options(
+        entry.options, entry.options.get("sources", entry.data)
+    )
 
 
 async def async_unload_entry(hass, entry):
-    if await hass.config_entries.async_unload_platforms(entry, [Platform.SENSOR]):
+    if await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
         return True
     return False

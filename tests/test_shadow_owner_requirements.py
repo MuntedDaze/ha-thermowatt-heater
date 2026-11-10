@@ -162,7 +162,8 @@ def test_short_export_spike_does_not_start_solar_opportunity(runtime):  # noqa: 
     assert instance.plan.estimated_solar_kwh == pytest.approx(0.75)
     report("grid", 1501, {"unit_of_measurement": "W"})
     instance.update(clock[0])
-    assert not instance.details["solar_hold_satisfied"]
+    assert instance.details["solar_hold_satisfied"]  # partial surplus remains useful
+    assert not instance.cycle.active  # separate economic benefit/qualification gate
     assert instance.details["additional_cloud_requests"] == 0
 
 

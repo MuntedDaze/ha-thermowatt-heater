@@ -1,96 +1,422 @@
-title: Thermann Shadow
+title: Thermann Hot Water
 views:
-  - title: Hot water
-    path: thermann-shadow
-    icon: mdi:water-boiler
+- title: Hot Water
+  path: thermann-shadow
+  icon: mdi:water-boiler
+  cards:
+  - type: markdown
+    content: '# Hot water
+
+      **SHADOW ONLY · no heater commands**
+
+      Native Schedule remains in charge. All heating decisions and cycle costs below
+      are hypothetical, not measured element operation.'
+  - type: markdown
+    content: '# {{ states(''sensor.thermann_shadow_bottom_temperature'') }} °C
+
+      Bottom-tank temperature · not whole-tank usable reserve
+
+      ## {{ states(''sensor.thermann_shadow_recommendation'') }}
+
+      {{ state_attr(''sensor.thermann_shadow_controller'',''decision_explanation'')
+      or ''Waiting for fresh inputs'' }}'
+  - type: grid
+    columns: 2
+    square: false
     cards:
-      - type: markdown
-        content: |
-          ## Hot water — SHADOW ONLY
-          Recommendations only. Native Schedule still controls the heater.
-          **No heater commands or extra cloud requests.** 40°C is a morning decision threshold, never a heater storage setpoint.
-      - type: entities
-        title: Hot water and electricity now
-        entities:
-          - sensor.thermann_shadow_bottom_temperature
-          - sensor.thermann_shadow_morning_comfort_threshold
-          - sensor.thermann_shadow_afternoon_storage_target
-          - sensor.thermann_shadow_measured_pv
-          - sensor.thermann_shadow_measured_house_load
-          - sensor.thermann_shadow_measured_grid_import
-          - sensor.thermann_shadow_measured_grid_export
-          - sensor.thermann_shadow_current_tariff
-          - sensor.thermann_shadow_current_import_price
-      - type: entities
-        title: Next recommendation (not executed)
-        entities:
-          - sensor.thermann_shadow_controller
-          - sensor.thermann_shadow_next_decision_threshold
-          - sensor.thermann_shadow_planning_deadline
-          - sensor.thermann_shadow_hypothetical_heating_start
-          - sensor.thermann_shadow_off_peak_fallback_start
-          - sensor.thermann_shadow_heating_time_estimate
-          - sensor.thermann_shadow_recommended_energy_source
-          - sensor.thermann_shadow_mixed_tank_energy_estimate
-          - sensor.thermann_shadow_plan_cost_estimate
-          - sensor.thermann_shadow_modelled_energy_shortfall
-      - type: entities
-        title: Connection and native reference
-        entities:
-          - sensor.thermann_shadow_cloud_health
-          - sensor.thermann_shadow_status_age
-          - sensor.home_boiler_home_vendor_mode
-          - sensor.thermann_shadow_reported_target
-          - sensor.thermann_shadow_device_clock_check
-      - type: markdown
-        title: Why and what needs attention
-        content: |
-          **Goal:** {{ state_attr('sensor.thermann_shadow_controller', 'planning_goal') }}
-          {% for item in state_attr('sensor.thermann_shadow_controller', 'reasons') or [] %}
-          - {{ item }}
-          {% endfor %}
-          {% for item in state_attr('sensor.thermann_shadow_controller', 'warnings') or [] %}
-          - {{ item }}
-          {% endfor %}
-          **Heater clock:** compare its clock manually with Hobart **{{ now().strftime('%a %d %b %H:%M') }}** after daylight-saving changes. The API does not report the actual clock. Record your check date in Configure.
-          Tariff 93 stays fixed AEST: weekday peaks 07–10 and 16–21 AEST (08–11 and 17–22 Hobart in summer). Weekends off-peak. Do not adjust tariff times manually for DST.
-          Estimates use bottom temperature directly and 315 L / 3 kW plus margin. They are not measurements of usable hot water or element power. Schedule permission is not proof the element is on.
-      - type: button
-        name: Edit entity mappings, targets and tariffs
-        icon: mdi:cog
-        tap_action:
-          action: navigate
-          navigation_path: /config/integrations/integration/thermann_shadow
-  - title: Diagnostics
-    path: diagnostics
-    icon: mdi:information-outline
+    - type: tile
+      entity: sensor.thermann_shadow_morning_comfort_threshold
+      icon: mdi:weather-sunset-up
+    - type: tile
+      entity: sensor.thermann_shadow_afternoon_storage_target
+      icon: mdi:water-thermometer
+    - type: tile
+      entity: sensor.thermann_shadow_comfort_countdown
+      icon: mdi:timer-sand
+    - type: tile
+      entity: sensor.thermann_shadow_simulated_completion
+      icon: mdi:clock-check-outline
+  - type: entities
+    title: Next hypothetical heating window
+    entities:
+    - sensor.thermann_shadow_hypothetical_heating_start
+    - sensor.thermann_shadow_planning_deadline
+    - sensor.thermann_shadow_off_peak_fallback_start
+    - sensor.thermann_shadow_heating_time_estimate
+    - sensor.thermann_shadow_mixed_tank_energy_estimate
+    - sensor.thermann_shadow_recommended_energy_source
+  - type: grid
+    columns: 2
+    square: false
     cards:
-      - type: entities
-        entities:
-          - sensor.thermann_shadow_measured_signed_grid
-          - sensor.thermann_shadow_derived_net_export
-          - sensor.thermann_shadow_comfort_deadline
-          - sensor.thermann_shadow_configured_afternoon_peak
-          - sensor.thermann_shadow_latest_continuous_heating_start
-          - sensor.thermann_shadow_plan_import_estimate
-          - sensor.thermann_shadow_plan_solar_estimate
-          - sensor.thermann_shadow_scenario_cost_difference
-          - sensor.thermann_shadow_reported_schedule_window
-          - sensor.thermann_shadow_t_comfort_reference
-          - sensor.thermann_shadow_observed_request_attempts
-          - sensor.thermann_shadow_observed_requests_per_hour
-      - type: markdown
-        title: Hypothetical windows and assumptions
-        content: |
-          {% for item in state_attr('sensor.thermann_shadow_controller', 'windows') or [] %}
-          - {{ item.start }} → {{ item.end }} UTC · {{ item.source }}
-          {% endfor %}
-          Cost difference compares the same scheduled model energy at the current rate, not measured savings against native Schedule. Foregone export revenue is included. A shortfall is never a saving.
-          Schedule reference: weekdays ≈04–08 & 11–17; weekends ≈06–22, target 70°C. T-Comfort 10°C is not a useful hot-water reserve and is not the optimiser.
-          48 half-hour cycles/day may mean 144 HTTP attempts/day with status→refresh→replay, plus other requests. This is not a quota or upper bound. This planner adds zero requests.
-      - type: history-graph
-        hours_to_show: 24
-        entities:
-          - sensor.thermann_shadow_measured_pv
-          - sensor.thermann_shadow_measured_house_load
-          - sensor.thermann_shadow_measured_signed_grid
+    - type: tile
+      entity: sensor.thermann_shadow_measured_pv
+      icon: mdi:solar-power
+    - type: tile
+      entity: sensor.thermann_shadow_measured_house_load
+      icon: mdi:home-lightning-bolt
+    - type: tile
+      entity: sensor.thermann_shadow_measured_grid_export
+      icon: mdi:transmission-tower-export
+    - type: tile
+      entity: sensor.thermann_shadow_measured_grid_import
+      icon: mdi:transmission-tower-import
+  - type: entities
+    title: Energy costs — calculated scenarios
+    entities:
+    - sensor.thermann_shadow_current_tariff
+    - sensor.thermann_shadow_current_import_price
+    - sensor.thermann_shadow_forecast_net_surplus
+    - sensor.thermann_shadow_continuous_cycle_cost_now
+    - sensor.thermann_shadow_continuous_cycle_cost_later
+    - sensor.thermann_shadow_benefit_of_heating_now
+  - type: markdown
+    content: '**Cost includes imported electricity and foregone solar exports.** Positive
+      benefit favours now; negative favours later. Forecast surplus is uncertain.
+      Required comfort wins over small savings. The bottom-temperature estimate and
+      8°C thermostat hysteresis do not prove a real element run.'
+  - type: history-graph
+    title: Bottom temperature · last 24 hours
+    hours_to_show: 24
+    entities:
+    - sensor.thermann_shadow_bottom_temperature
+    - sensor.thermann_shadow_reported_target
+  - type: history-graph
+    title: Measured solar, household and grid · kW
+    hours_to_show: 12
+    entities:
+    - sensor.thermann_shadow_measured_pv
+    - sensor.thermann_shadow_measured_house_load
+    - sensor.thermann_shadow_measured_signed_grid
+- title: Settings
+  path: settings
+  icon: mdi:cog
+  cards:
+  - type: markdown
+    content: '# Your hot-water preferences
+
+      **Local shadow settings only.** Controls and Configure share one saved configuration.
+      No setting enables execution or changes native Schedule/T-Comfort. Recommended
+      values are experimental starting points, not manufacturer safety limits. Current
+      values appear in the controls; matching recommended/original defaults are shown
+      once below. Changes reset the session simulation and recalculate locally; no
+      Thermann requests.'
+  - type: entities
+    title: Comfort
+    show_header_toggle: false
+    entities:
+    - number.thermann_shadow_morning_comfort_threshold
+    - time.thermann_shadow_morning_deadline
+    - number.thermann_shadow_afternoon_storage_target
+    - time.thermann_shadow_afternoon_comfort_preference
+    - number.thermann_shadow_heating_time_allowance
+  - type: markdown
+    content: '### Comfort · starting values & guidance
+
+
+      **Morning comfort threshold** — recommended & original: **40.0 °C**. Bottom-sensor
+      decision threshold; NEVER a heater setpoint or hygiene temperature.
+
+
+      **Morning deadline** — recommended & original: **07:00 **. Hobart local time,
+      independent of tariff boundaries; before noon.
+
+
+      **Afternoon storage target** — recommended & original: **70.0 °C**. Selected
+      model target is never silently reduced. 65–70°C is a planning range, not a newly
+      qualified command limit.
+
+
+      **Afternoon comfort preference** — recommended & original: **16:00 **. Hobart
+      local. Weekday storage deadline follows actual evening tariff peak; this preference
+      remains visible separately.
+
+
+      **Heating time allowance** — recommended & original: **30.0 min**. Extra full-power
+      model minutes when heat is required. Uncalibrated; comfort overrides optional
+      dwell.'
+  - type: entities
+    title: Solar & Forecasting
+    show_header_toggle: false
+    entities:
+    - number.thermann_shadow_minimum_useful_net_surplus
+    - number.thermann_shadow_solar_headroom
+    - switch.thermann_shadow_use_published_forecasts
+    - number.thermann_shadow_forecast_uncertainty_margin
+    - number.thermann_shadow_extra_forecast_household_load
+  - type: markdown
+    content: '### Solar & Forecasting · starting values & guidance
+
+
+      **Minimum useful net surplus** — recommended & original: **0.1 kW**. Partial
+      solar can be worthwhile. Economic comparison must also pass; never a variable-power
+      command.
+
+
+      **Solar headroom** — recommended & original: **0.3 kW**. Deduct from measured
+      surplus for uncertain household loads.
+
+
+      **Use published forecasts** — recommended & original: **Off **. Optional local
+      PV AND household-load forecasts with generation timestamps; missing forecasts
+      never delay fallback.
+
+
+      **Forecast uncertainty margin** — recommended & original: **0.25 **. Fraction:
+      reduce PV and increase household load. 0.25 means 25%; never guaranteed surplus.
+
+
+      **Extra forecast household load** — recommended & original: **0.3 kW**. Additional
+      allowance for competing appliances, beyond forecast demand.'
+  - type: entities
+    title: Heating Cycles
+    show_header_toggle: false
+    entities:
+    - number.thermann_shadow_solar_start_qualification
+    - number.thermann_shadow_economic_loss_grace_period
+    - number.thermann_shadow_minimum_optional_cycle
+    - number.thermann_shadow_minimum_optional_cycle_gap
+    - number.thermann_shadow_minimum_economic_switching_benefit
+  - type: markdown
+    content: '### Heating Cycles · starting values & guidance
+
+
+      **Solar start qualification** — recommended & original: **10.0 min**. Sustained
+      economic advantage on fresh observations before a SIMULATED optional start.
+
+
+      **Economic loss grace period** — recommended & original: **20.0 min**. Sustained
+      cost disadvantage before a SIMULATED optional stop; short clouds do not stop
+      a cycle.
+
+
+      **Minimum optional cycle** — recommended & original: **30.0 min**. SIMULATION
+      ONLY. Comfort, data gates, owner intervention and protections override dwell.
+
+
+      **Minimum optional cycle gap** — recommended & original: **30.0 min**. SIMULATION
+      ONLY. Comfort can start sooner. No physical On/resume contract is qualified.
+
+
+      **Minimum economic switching benefit** — recommended & original: **0.1 AUD**.
+      Whole remaining-cycle AUD advantage, not cents/kWh. Experimental $0.10 may deliberately
+      suppress small savings.'
+  - type: entities
+    title: Advanced
+    show_header_toggle: false
+    entities:
+    - switch.thermann_shadow_pause_shadow_planning
+    - switch.thermann_shadow_meter_sign_and_units_verified
+    - switch.thermann_shadow_tariff_contract_verified
+    - switch.thermann_shadow_positive_grid_means_import
+    - select.thermann_shadow_tariff_clock
+    - select.thermann_shadow_tariff_periods_mode
+    - switch.thermann_shadow_use_peak_periods_on_weekends
+    - number.thermann_shadow_off_peak_import_price
+    - number.thermann_shadow_peak_import_price
+    - number.thermann_shadow_shoulder_import_price
+    - number.thermann_shadow_export_compensation
+    - number.thermann_shadow_maximum_forecast_generation_age
+    - number.thermann_shadow_recent_export_scenario_horizon
+    - number.thermann_shadow_maximum_cloud_poll_age
+    - number.thermann_shadow_maximum_power_reading_age
+    - number.thermann_shadow_expected_native_target
+    - select.thermann_shadow_native_schedule_clock_reference
+    - switch.thermann_shadow_native_clock_checked
+    - number.thermann_shadow_t_comfort_reference
+    - text.thermann_shadow_native_clock_check_date
+    - time.thermann_shadow_peak_morning_start
+    - time.thermann_shadow_peak_morning_end
+    - time.thermann_shadow_peak_evening_start
+    - time.thermann_shadow_peak_evening_end
+  - type: markdown
+    content: '### Advanced · starting values & guidance
+
+
+      **Pause shadow planning** — recommended & original: **Off **. Pauses only hypothetical
+      decisions; native Schedule continues.
+
+
+      **Meter sign and units verified** — recommended & original: **On **. Owner verification,
+      not an optimisation preference. Restore recommendations preserves this flag.
+
+
+      **Tariff contract verified** — recommended & original: **On **. Owner confirmation
+      of rates, periods and clock. Restore preserves this flag.
+
+
+      **Positive grid means import** — recommended & original: **Off **. OFF means
+      export-positive HK1000. Never change without a load test; restore preserves
+      direction.
+
+
+      **Tariff clock** — recommended & original: **standard **. Confirmed Aurora 93
+      uses standard (fixed AEST UTC+10), automatically one hour later in Hobart summer.
+
+
+      **Tariff periods mode** — recommended & original: **aurora_93 **. aurora_93
+      uses editable weekday peak times below; custom retains advanced weekly JSON
+      periods in Configure.
+
+
+      **Use peak periods on weekends** — recommended & original: **Off **. OFF for
+      confirmed Aurora 93, all weekend off-peak.
+
+
+      **Off-peak import price** — recommended & original: **0.1702 AUD/kWh**. AUD/kWh
+      from your contract; includes all grid energy in the 3kW scenario.
+
+
+      **Peak import price** — recommended & original: **0.361878 AUD/kWh**. AUD/kWh;
+      actual clock boundaries affect every candidate minute.
+
+
+      **Shoulder import price** — recommended & original: **0.1702 AUD/kWh**. Used
+      only by custom weekly periods with shoulder entries.
+
+
+      **Export compensation** — recommended & original: **0.09276 AUD/kWh**. Foregone
+      feed-in revenue counts as a cost of solar self-consumption.
+
+
+      **Maximum forecast generation age** — recommended & original: **120.0 min**.
+      Require real generation time; republishing an old forecast does not freshen
+      it.
+
+
+      **Recent-export scenario horizon** — recommended & original: **15.0 min**. Bounded
+      assumption for current export, never a daily forecast or guaranteed solar.
+
+
+      **Maximum cloud poll age** — recommended & original: **45.0 min**. Only local
+      freshness gate; does not alter bridge polling or issue refresh requests.
+
+
+      **Maximum power reading age** — recommended & original: **120.0 s**. Missing/stale
+      observations reset economic holds; no cloud calls.
+
+
+      **Expected native target** — recommended & original: **70.0 °C**. Reference
+      only. Different observed mode/target latches intervention; never sets the heater.
+
+
+      **Native schedule clock reference** — recommended & original: **local **. Reference
+      only; never adjusts the device clock or native Schedule.
+
+
+      **Native clock checked** — recommended & original: **Off **. Owner observation
+      only; restore preserves this verification.
+
+
+      **T-Comfort reference** — recommended & original: **10.0 °C**. Reference only;
+      10°C is not a useful comfort reserve. Never changes T-Comfort.
+
+
+      **Native clock check date** — recommended & original: **blank / unknown **.
+      Owner check date YYYY-MM-DD, blank if unknown; reference only.
+
+
+      **Peak morning start** — recommended & original: **07:00 **. Tariff-clock HH:MM,
+      not Hobart comfort time. Must be increasing: morning start/end, evening start/end.
+
+
+      **Peak morning end** — recommended & original: **10:00 **. Tariff-clock HH:MM,
+      not Hobart comfort time. Must be increasing: morning start/end, evening start/end.
+
+
+      **Peak evening start** — recommended & original: **16:00 **. Tariff-clock HH:MM,
+      not Hobart comfort time. Must be increasing: morning start/end, evening start/end.
+
+
+      **Peak evening end** — recommended & original: **21:00 **. Tariff-clock HH:MM,
+      not Hobart comfort time. Must be increasing: morning start/end, evening start/end.'
+  - type: button
+    name: Entity mappings & custom weekly/reference periods
+    icon: mdi:cog-outline
+    tap_action:
+      action: navigate
+      navigation_path: /config/integrations/integration/thermann_shadow
+  - type: markdown
+    content: "**Advanced custom/reference periods:** edit in Configure (no Python/YAML).\
+      \ Current and recommended/original values:\n{% for name, item in (state_attr('sensor.thermann_shadow_controller','advanced_form_settings')\
+      \ or {}).items() %}\n- **{{ name }}** · current: `{{ item.current }}`\n  Recommended\
+      \ & original: `{{ item.recommended_and_original_default }}`\n{% endfor %}\n\
+      Custom periods apply only in custom tariff mode; native periods are references,\
+      \ never device writes."
+  - type: button
+    entity: button.thermann_shadow_restore_recommended_preferences
+    name: Restore recommended preferences
+    icon: mdi:restore
+    tap_action:
+      action: perform-action
+      perform_action: button.press
+      target:
+        entity_id: button.thermann_shadow_restore_recommended_preferences
+      confirmation:
+        text: Restore shadow recommendations and confirmed Aurora tariff defaults?
+          Entity mappings, meter verification/direction and native references stay
+          unchanged. This sends no heater commands.
+- title: Diagnostics
+  path: diagnostics
+  icon: mdi:information-outline
+  cards:
+  - type: entities
+    title: Connection and simulated cycles
+    entities:
+    - sensor.thermann_shadow_cloud_health
+    - sensor.thermann_shadow_status_age
+    - sensor.thermann_shadow_forecast_age
+    - sensor.thermann_shadow_simulated_cycle_state
+    - sensor.thermann_shadow_simulated_cycle_count
+    - sensor.thermann_shadow_simulated_stop_count
+    - sensor.thermann_shadow_suppressed_switching_episodes
+    - sensor.thermann_shadow_simulated_session_cost
+    - sensor.thermann_shadow_observed_request_attempts
+    - sensor.thermann_shadow_observed_requests_per_hour
+    - sensor.thermann_shadow_reported_schedule_window
+    - sensor.thermann_shadow_t_comfort_reference
+    - sensor.thermann_shadow_device_clock_check
+  - type: markdown
+    content: '## Reasons & warnings
+
+      {% for item in state_attr(''sensor.thermann_shadow_controller'',''reasons'')
+      or [] %}
+
+      - {{ item }}
+
+      {% endfor %}
+
+      {% for item in state_attr(''sensor.thermann_shadow_controller'',''warnings'')
+      or [] %}
+
+      - {{ item }}
+
+      {% endfor %}
+
+      ### Simulated cycle / forecast
+
+      `{{ state_attr(''sensor.thermann_shadow_controller'',''cycle'') }}`
+
+
+      `{{ state_attr(''sensor.thermann_shadow_controller'',''forecast'') }}`
+
+
+      Physical heating is **unverified**. Session counters/ideal energy reset on restart
+      or changed preferences; prevented-switching episodes are not a measured command
+      saving. No simulation restores or switches the heater. 30-minute cloud polls
+      can include status→refresh→replay (3 attempts); 48 cycles does not mean 48 HTTP
+      requests or a known quota. The planner adds zero requests.'
+  - type: markdown
+    content: '### Hypothetical windows
+
+      {% for item in state_attr(''sensor.thermann_shadow_controller'',''windows'')
+      or [] %}
+
+      - {{ item.start }} → {{ item.end }} UTC · {{ item.source }}
+
+      {% endfor %}
+
+      Native clock: compare manually with Hobart {{ now().strftime(''%a %d %b %H:%M'')
+      }} after DST changes. Tariff 93 remains fixed AEST. T-Comfort 10°C is not a
+      usable comfort reserve. Neither Schedule permission nor simulated heating proves
+      element power.'

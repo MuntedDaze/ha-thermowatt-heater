@@ -1,6 +1,7 @@
 """Shared configuration parsing, independent of Home Assistant."""
 
 import json
+from datetime import time
 
 from .model import Settings, Tariff, number, validate_tariffs, validate_settings
 
@@ -17,6 +18,7 @@ DEFAULT_SOURCES = {
     "import_energy": "sensor.goodwe_inverter_meter_total_energy_import",
     "export_energy": "sensor.goodwe_inverter_meter_total_energy_export",
 }
+OPTIONAL_SOURCES = {"forecast_pv": "", "forecast_load": ""}
 DEFAULT_OPTIONS = {
     "paused": False,
     "meter_verified": True,  # owner-reported HK1000 load test; direction preserved
@@ -36,6 +38,23 @@ DEFAULT_OPTIONS = {
     "grid_max_age_seconds": 120.0,
     "solar_hold_minutes": 10.0,
     "solar_window_minutes": 15.0,
+    "min_solar_kw": 0.1,
+    "switching_benefit_aud": 0.10,
+    "solar_loss_minutes": 20.0,
+    "minimum_cycle_minutes": 30.0,
+    "minimum_gap_minutes": 30.0,
+    "forecast_enabled": False,
+    "forecast_uncertainty": 0.25,
+    "forecast_max_age_minutes": 120.0,
+    "forecast_house_margin_kw": 0.3,
+    "morning_time": "07:00",
+    "evening_time": "16:00",
+    "tariff_profile": "aurora_93",
+    "peak_morning_start": "07:00",
+    "peak_morning_end": "10:00",
+    "peak_evening_start": "16:00",
+    "peak_evening_end": "21:00",
+    "weekend_peak": False,
     "tariff_periods": '[{"days":[0,1,2,3,4],"start":"00:00","end":"07:00","kind":"off_peak"},{"days":[0,1,2,3,4],"start":"07:00","end":"10:00","kind":"peak"},{"days":[0,1,2,3,4],"start":"10:00","end":"16:00","kind":"off_peak"},{"days":[0,1,2,3,4],"start":"16:00","end":"21:00","kind":"peak"},{"days":[0,1,2,3,4],"start":"21:00","end":"00:00","kind":"off_peak"},{"days":[5,6],"start":"00:00","end":"00:00","kind":"off_peak"}]',
     "native_schedule_periods": '[{"days":[0,1,2,3,4],"start":"04:00","end":"08:00"},{"days":[0,1,2,3,4],"start":"11:00","end":"17:00"},{"days":[5,6],"start":"06:00","end":"22:00"}]',
     "native_schedule_clock": "local",
@@ -46,6 +65,8 @@ DEFAULT_OPTIONS = {
 
 
 def _minute(value):
+    if isinstance(value, str) and len(value) == 8 and value.endswith(":00"):
+        value = value[:5]
     if not isinstance(value, str) or len(value) != 5 or value[2] != ":":
         raise ValueError("tariff_time_invalid")
     hour, minute = int(value[:2]), int(value[3:])
@@ -64,13 +85,56 @@ def parse_options(options):
         "tariff_verified",
         "import_positive",
         "native_schedule_clock_verified",
+        "forecast_enabled",
+        "weekend_peak",
     ):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
     rates = {kind: number(values[f"{kind}_rate"]) for kind in ("off_peak", "shoulder", "peak")}
     if any(not -5 <= rate <= 10 for rate in rates.values()):
         raise ValueError("tariff_invalid")
+    profile = values["tariff_profile"]
+    if (
+        "tariff_profile" not in options
+        and values["tariff_periods"] != DEFAULT_OPTIONS["tariff_periods"]
+    ):
+        profile = "custom"
+    if profile not in {"aurora_93", "custom"}:
+        raise ValueError("tariff_invalid")
     raw = values["tariff_periods"]
+    if profile == "aurora_93":
+        edges = [
+            "00:00",
+            *[
+                values[key]
+                for key in (
+                    "peak_morning_start",
+                    "peak_morning_end",
+                    "peak_evening_start",
+                    "peak_evening_end",
+                )
+            ],
+            "00:00",
+        ]
+        minutes = [_minute(v) for v in edges[:-1]] + [1440]
+        if any(a >= b for a, b in zip(minutes, minutes[1:], strict=False)):
+            raise ValueError("tariff_times_must_increase")
+        raw = json.dumps(
+            [
+                {
+                    "days": list(range(7 if values["weekend_peak"] else 5)),
+                    "start": a,
+                    "end": b,
+                    "kind": "peak" if index % 2 else "off_peak",
+                }
+                for index, (a, b) in enumerate(zip(edges, edges[1:], strict=False))
+            ]
+            + (
+                []
+                if values["weekend_peak"]
+                else [{"days": [5, 6], "start": "00:00", "end": "00:00", "kind": "off_peak"}]
+            )
+        )
     if not isinstance(raw, str) or len(raw) > 8192:
         raise ValueError("tariff_invalid")
     periods = json.loads(raw)
@@ -97,11 +161,20 @@ def parse_options(options):
         **{
             key: values[key]
             if key
-            in {"paused", "meter_verified", "tariff_verified", "import_positive", "tariff_clock"}
+            in {
+                "paused",
+                "meter_verified",
+                "tariff_verified",
+                "import_positive",
+                "tariff_clock",
+                "forecast_enabled",
+            }
             else number(values[key])
             for key in Settings.__dataclass_fields__
             if key not in {"morning", "evening"}
-        }
+        },
+        morning=time(*divmod(_minute(values["morning_time"]), 60)),
+        evening=time(*divmod(_minute(values["evening_time"]), 60)),
     )
     validate_settings(settings)
     from datetime import date
@@ -118,3 +191,14 @@ def parse_options(options):
     ):
         raise ValueError("native_reference_invalid")
     return settings, tariffs
+
+
+def saved_options(options):
+    """Merge defaults while preserving legacy custom tariff periods and overrides."""
+    values = {**DEFAULT_OPTIONS, **options}
+    if (
+        "tariff_profile" not in options
+        and values["tariff_periods"] != DEFAULT_OPTIONS["tariff_periods"]
+    ):
+        values["tariff_profile"] = "custom"
+    return values

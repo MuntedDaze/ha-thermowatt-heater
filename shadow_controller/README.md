@@ -1,4 +1,15 @@
-# Thermann Shadow Planner 0.2.0 — Phase 2A owner-review candidate
+# Thermann Shadow Planner — Phase 2B work in progress
+
+**Handoff checkpoint, not an install-ready release.** The component now identifies
+as 0.3.0. See [Phase 2B implementation](PHASE2B.md),
+[upgrade draft](UPGRADING_0_3_0.md) and the root `CLAUDE_HANDOFF_PHASE2B.md` for
+unfinished validation and next steps. No merge or deployment is authorised.
+
+The following 0.2.0 notes are historical: Phase 2B supersedes the full-surplus-only
+policy and reload-on-preference-change behaviour. They need consolidation before
+0.3.0 is declared ready.
+
+## Historical 0.2.0 — Phase 2A owner-review candidate
 
 This continues draft PR #9 and the existing planner; it is not a bridge rewrite.
 Thermowatt stays **v1.3.8**, with its files, credentials, tokens, lockouts, options,

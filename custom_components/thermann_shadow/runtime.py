@@ -2,12 +2,15 @@
 
 from dataclasses import asdict
 from collections import deque
+from datetime import datetime
 
 from homeassistant.util import dt as dt_util
 
 from .model import Plan, Reading, evaluate, number, _fresh, _power
 from .config import DEFAULT_OPTIONS
 from .native import parse_native, permitted_minutes, scheduled_permission
+from .forecast import build_forecast
+from .cycles import CyclePolicy
 
 
 class ShadowRuntime:
@@ -27,11 +30,27 @@ class ShadowRuntime:
         self.last_count = None
         self.count_started = None
         self.solar_samples = deque(maxlen=121)
+        self.cycle = CyclePolicy()
         self.set_native_reference({})
 
     def set_native_reference(self, options):
         self.native_options = {**DEFAULT_OPTIONS, **options}
         self.native_periods = parse_native(self.native_options["native_schedule_periods"])
+
+    def apply_options(self, options, sources):
+        from .config import parse_options
+
+        settings, tariffs = parse_options(options)
+        changed_mapping = dict(sources) != dict(self.sources)
+        if changed_mapping or settings != self.settings or tariffs != self.tariffs:
+            self.cycle = CyclePolicy()
+            self.solar_samples.clear()
+        if changed_mapping:
+            self.boot = dt_util.utcnow()
+            self.last_native = None
+        self.sources, self.settings, self.tariffs = sources, settings, tariffs
+        self.set_native_reference(options)
+        self.update(dt_util.utcnow())
 
     def _reading(self, key, attribute=None):
         entity_id = self.sources.get(key)
@@ -82,7 +101,10 @@ class ShadowRuntime:
             grid = readings["grid"]
             _fresh(grid, now, self.boot, self.settings.grid_max_age_seconds)
             export = _power(grid) * (-1 if self.settings.import_positive else 1)
-            if not self.settings.meter_verified or export < 3 + self.settings.export_headroom_kw:
+            if (
+                not self.settings.meter_verified
+                or export < self.settings.min_solar_kw + self.settings.export_headroom_kw
+            ):
                 self.solar_samples.clear()
             else:
                 if self.solar_samples and (
@@ -98,16 +120,76 @@ class ShadowRuntime:
                 ).total_seconds() >= self.settings.solar_hold_minutes * 60
         except (KeyError, ValueError, TypeError, OverflowError):
             self.solar_samples.clear()
+        measured_pv = None
+        try:
+            pv = self._reading("pv")
+            if pv:
+                _fresh(pv, now, self.boot, self.settings.grid_max_age_seconds)
+                measured_pv = _power(pv)
+        except (ValueError, TypeError, OverflowError):
+            pass
+        self.forecast = build_forecast(
+            now,
+            self.boot,
+            self.settings,
+            self.hass.states.get(self.sources.get("forecast_pv", "")),
+            self.hass.states.get(self.sources.get("forecast_load", "")),
+            measured_pv,
+        )
         self.plan = evaluate(
             now,
             self.boot,
             readings,
             self.settings,
             self.tariffs,
+            forecast=self.forecast.slots,
             intervention=self.intervention,
             solar_confirmed=solar_confirmed,
         )
+        self.plan.warnings.extend(self.forecast.warnings)
+        cycle = self.cycle.step(
+            now,
+            self.plan,
+            self.settings,
+            self.tariffs,
+            self.forecast.slots,
+            readings["grid"].observed_at if "grid" in readings else None,
+        )
         self.values = asdict(self.plan)
+        self.values.update(
+            {
+                "recommendation": "DATA UNAVAILABLE"
+                if cycle["state"] == "suspended"
+                else "NO HEATING NEEDED"
+                if cycle["state"] == "simulated_satisfied"
+                else "GRID FALLBACK"
+                if self.cycle.active
+                and cycle["reason"] == "comfort_overrides_economic_hold_and_gap"
+                else "HEAT NOW"
+                if self.cycle.active
+                else "WAIT FOR SOLAR / PLANNED WINDOW",
+                "simulated_cycle_state": cycle["state"],
+                "simulated_cycle_count": self.cycle.starts,
+                "simulated_stop_count": self.cycle.stops,
+                "suppressed_switching_episodes": self.cycle.suppressed_edges,
+                "simulated_cost_aud": cycle["simulated_cost_aud_session"],
+                "benefit_of_now_aud": cycle["benefit_of_now_aud"],
+                "continuing_cost_aud": cycle["continuing_cost_aud"],
+                "later_cost_aud": cycle["later_cost_aud"],
+                "forecast_net_surplus_kw": self.forecast.slots[0].export_kw
+                if self.forecast.slots
+                else None,
+                "forecast_age_minutes": self.forecast.age_minutes,
+                "deadline_countdown_minutes": max(
+                    0, round((self.plan.deadline - now).total_seconds() / 60)
+                )
+                if self.plan.deadline
+                else None,
+                "completion_time": datetime.fromisoformat(cycle["estimated_completion"])
+                if cycle["estimated_completion"]
+                else None,
+            }
+        )
         self.values["controller"] = self.plan.state
         self.values["morning_threshold_c"] = self.settings.morning_threshold_c
         self.values["storage_target_c"] = self.settings.target_c
@@ -273,8 +355,9 @@ class ShadowRuntime:
             "meter_sign_load_test_verified": self.settings.meter_verified,
             "tariff_contract_verified": self.settings.tariff_verified,
             "tariff_clock": self.settings.tariff_clock,
-            "morning_comfort_time": "07:00 Australia/Hobart",
-            "evening_comfort_time": "16:00 nominal; weekday storage deadline follows actual peak",
+            "morning_comfort_time": self.settings.morning.isoformat() + " Australia/Hobart",
+            "evening_comfort_time": self.settings.evening.isoformat()
+            + " nominal; weekday storage deadline follows actual peak",
             "planning_goal": self.plan.deadline_kind,
             "morning_threshold_is_not_a_setpoint": True,
             "manual_recovery_risk_accepted_by_owner": True,
@@ -293,6 +376,36 @@ class ShadowRuntime:
             "native_permitted_minutes_before_comfort_deadline": native_minutes,
             "native_window_capacity_is_not_measured_energy": True,
             "sources": dict(self.sources),
+            "cycle": cycle,
+            "decision_explanation": {
+                "data_or_owner_gate": "Fresh healthy inputs and unchanged native mode/target are required. No action is taken.",
+                "comfort_overrides_economic_hold_and_gap": "Start the required fallback in the simulation; comfort takes priority over economic waiting.",
+                "comfort_requires_continuing_simulation": "Continue the simulated cycle to protect the comfort deadline.",
+                "qualified_economic_opportunity_start_simulation": "A sustained economic opportunity qualifies a hypothetical full-power cycle.",
+                "continue_existing_simulated_cycle": "Continue the existing hypothetical cycle; do not start a new one each minute.",
+                "continue_through_temporary_cost_disadvantage": "Keep the simulated cycle through a temporary disadvantage or minimum dwell.",
+                "sustained_cost_disadvantage_stop_simulation": "A sustained cost disadvantage justifies stopping the simulation and heating later.",
+                "simulated_target_satisfied_not_physical_thermostat": "No further heat in this ideal-energy scenario. This does not prove the real thermostat is satisfied.",
+                "qualifying_opportunity_or_optional_gap": "Wait for sustained benefit or the optional cycle gap. No heater command is sent.",
+                "wait_for_cheaper_window_or_conservative_fallback": "Wait for a cheaper feasible window; retain the independent full grid fallback.",
+            }.get(
+                cycle["reason"],
+                "Waiting for qualified local inputs or a useful economic opportunity.",
+            ),
+            "forecast": {
+                "source": self.forecast.source,
+                "age_minutes": self.forecast.age_minutes,
+                "pv_error_kw": self.forecast.pv_error_kw,
+                "pv_correction": self.forecast.correction,
+                "intervals": len(self.forecast.slots),
+            },
+            "advanced_form_settings": {
+                key: {
+                    "current": self.native_options[key],
+                    "recommended_and_original_default": DEFAULT_OPTIONS[key],
+                }
+                for key in ("tariff_periods", "native_schedule_periods")
+            },
         }
         for listener in tuple(self.listeners):
             listener()

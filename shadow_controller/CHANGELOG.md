@@ -1,5 +1,27 @@
 # Thermann Shadow Planner
 
+## 0.3.0 — Phase 2B shadow-only review candidate
+
+- Add optional published EMHASS PV/house-load and buffered Forecast.Solar watts
+  adapters; require actual generation provenance, explicit W/kW and bounded data.
+  Apply conservative PV/load uncertainty and downward measured-PV correction.
+- Compare continuous full-power cycles and partial solar against imported energy
+  plus foregone feed-in revenue. Preserve independent full off-peak reservation.
+- Add stateful ideal-energy simulation: 10-minute start hold, 20-minute economic
+  loss grace, 30-minute optional run/gap, experimental AUD 0.10 switching benefit.
+  Comfort, missing data and owner/qualified stop overrides take precedence.
+- Native number/time/select/toggle controls use the same config-entry options as
+  Configure. Save/recalculate locally; confirmed dashboard restore preserves
+  mappings, meter verification/direction and native references. Existing saved
+  prices, targets, custom periods and entity IDs are retained.
+- Rework native-card Hot Water, Settings and Diagnostics dashboard. Expose
+  recommendations, forecast age, whole-cycle costs and explicitly simulated
+  cycle counts; no manufactured physical heating/power/energy measurements.
+- Add offline forecast/error/upgrade/seasonal/cloud-interruption regressions,
+  real HA preference/serialization/restart checks and reproducible cycle reports.
+  Keep the complete Thermowatt 1.3.8 directory unchanged; no executor or services
+  target the heater, native Schedule/T-Comfort, MQTT or cloud.
+
 ## 0.2.0 — confirmed-owner Phase 2A candidate
 
 - Fix Add Integration discovery by classifying the integration as a hub. Copy

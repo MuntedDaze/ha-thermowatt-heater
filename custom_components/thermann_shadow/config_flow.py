@@ -5,7 +5,15 @@ from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv, selector
 import voluptuous as vol
 
-from .config import DEFAULT_OPTIONS, DEFAULT_SOURCES, DOMAIN, parse_options
+from .config import (
+    DEFAULT_OPTIONS,
+    DEFAULT_SOURCES,
+    OPTIONAL_SOURCES,
+    DOMAIN,
+    parse_options,
+    saved_options,
+)
+from .settings import CATALOG
 
 
 def sources_schema(values):
@@ -17,6 +25,12 @@ def sources_schema(values):
                 )
             )
             for key, default in DEFAULT_SOURCES.items()
+        }
+        | {
+            vol.Optional(
+                key, **({"default": values[key]} if values.get(key) else {})
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor"))
+            for key in OPTIONAL_SOURCES
         }
     )
 
@@ -32,21 +46,14 @@ def options_schema(values):
             validator = selector.TextSelector(selector.TextSelectorConfig(multiline=True))
         elif key == "native_clock_check_date":
             validator = cv.string
+        elif CATALOG[key].kind == "select":
+            validator = selector.SelectSelector(
+                selector.SelectSelectorConfig(options=list(CATALOG[key].choices))
+            )
+        elif CATALOG[key].kind == "time":
+            validator = selector.TimeSelector()
         else:
-            ranges = {
-                "target_c": (65, 70),
-                "morning_threshold_c": (30, 60),
-                "expected_native_target_c": (20, 75),
-                "margin_minutes": (0, 120),
-                "feed_in_rate": (0, 2),
-                "export_headroom_kw": (0, 3),
-                "status_max_age_minutes": (30, 90),
-                "grid_max_age_seconds": (30, 300),
-                "t_comfort_reference_c": (10, 75),
-                "solar_hold_minutes": (5, 30),
-                "solar_window_minutes": (5, 30),
-            }
-            low, high = ranges.get(key, (-5, 10))
+            low, high = CATALOG[key].low, CATALOG[key].high
             validator = vol.All(vol.Coerce(float), vol.Range(min=low, max=high))
         fields[vol.Required(key, default=values.get(key, default))] = validator
     return vol.Schema(fields)
@@ -84,7 +91,7 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_settings(self, user_input=None):
         errors = {}
-        values = {**DEFAULT_OPTIONS, **self._entry.options}
+        values = saved_options(self._entry.options)
         if user_input is not None:
             values.update(user_input)
             try:
@@ -92,9 +99,7 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
             except (ValueError, TypeError, KeyError, OverflowError):
                 errors["base"] = "invalid_settings"
             else:
-                return self.async_create_entry(
-                    title="", data={**user_input, "sources": self._sources}
-                )
+                return self.async_create_entry(title="", data={**values, "sources": self._sources})
         return self.async_show_form(
             step_id="settings", data_schema=options_schema(values), errors=errors
         )

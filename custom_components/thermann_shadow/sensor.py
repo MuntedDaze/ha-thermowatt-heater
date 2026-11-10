@@ -41,6 +41,19 @@ SENSORS = {
     "device_clock_check": ("Device clock check", None),
     "measured_import_kw": ("Measured grid import", "kW"),
     "measured_export_kw": ("Measured grid export", "kW"),
+    "recommendation": ("Recommendation", None),
+    "simulated_cycle_state": ("Simulated cycle state", None),
+    "simulated_cycle_count": ("Simulated cycle count", None),
+    "simulated_stop_count": ("Simulated stop count", None),
+    "suppressed_switching_episodes": ("Suppressed switching episodes", None),
+    "simulated_cost_aud": ("Simulated session cost", "AUD"),
+    "benefit_of_now_aud": ("Benefit of heating now", "AUD"),
+    "continuing_cost_aud": ("Continuous cycle cost now", "AUD"),
+    "later_cost_aud": ("Continuous cycle cost later", "AUD"),
+    "forecast_net_surplus_kw": ("Forecast net surplus", "kW"),
+    "forecast_age_minutes": ("Forecast age", "min"),
+    "deadline_countdown_minutes": ("Comfort countdown", "min"),
+    "completion_time": ("Simulated completion", None),
 }
 
 
@@ -75,6 +88,7 @@ class ShadowSensor(SensorEntity):
             "planned_start",
             "latest_start",
             "grid_fallback_start",
+            "completion_time",
         }:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
