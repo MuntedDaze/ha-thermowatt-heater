@@ -1,176 +1,127 @@
-# Phase 2B — Shadow Planner 0.3.0
+# Phase 2B — Shadow Planner 0.3.0 design and review
 
-This is a read-only planning upgrade on draft PR #9, not a heater controller.
-Native Schedule and T-Comfort stay untouched. Thermowatt remains 1.3.8 with
-30-minute background polling, its existing cooldowns/authentication safeguards,
-commands disabled and on-demand refresh disabled. No additional Thermann HTTP
-requests are made. Local settings entities write only this integration's options.
+Read-only planning on draft PR #9, not a heater controller. Thermowatt stays
+1.3.8 (byte-identical to main) with commands and on-demand refresh disabled.
+Native Schedule and T-Comfort are untouched. No additional Thermann requests.
+Codex implemented the Phase 2B core (checkpoint `643ab8a`); Claude continued
+from that checkpoint, preserving its work, and completed the items below.
 
-## Forecasts and current reality
+## Architecture
 
-Forecasting is optional and off by default. Select two optional source entities
-in Configure: **published PV forecast** and **published household load forecast**.
-The component only reads HA state on its one-minute local timer. It does not
-start EMHASS, call a weather service or fetch Forecast.Solar itself.
+| Module | Role |
+|---|---|
+| `model.py` | thermal estimate, deadlines (Hobart DST, fixed-AEST tariff), minute-slot plan, independent off-peak fallback reservation, input gates |
+| `forecast.py` | read-only adapters: EMHASS `forecasts`, Forecast.Solar `watts`, flat measured baseline; uncertainty, fading measured correction |
+| `economics.py` | continuous full-3 kW cycle quote now vs the best feasible later cycle, import + foregone feed-in |
+| `cycles.py` | session-local stateful simulation: holds, grace, dwell, gap, comfort override, ideal-energy accounting |
+| `decision.py` | plain-language decision code, label and explanation |
+| `runtime.py` | reads HA states on a one-minute local timer; diagnostics |
+| `settings*.py` + platforms | one catalogue → native controls; one config-entry options store; restore/undo |
 
-- EMHASS publishes `sensor.p_pv_forecast` and `sensor.p_load_forecast` with
-  `forecasts` lists of `{date, p_pv_forecast}` / `{date, p_load_forecast}`. Units
-  must explicitly be W or kW. Custom prefixes/column names need a small owner
-  template that normalises to those documented standard keys. Horizon publishing
-  must be enabled. No EMHASS deferrable-load or command outputs are consumed.
-- Forecast.Solar's supported `forecast_solar.get_forecast` action returns cached
-  `watts` data without requesting a new provider forecast. An optional owner
-  template can buffer this into a sensor. Only hourly watts, not daily kWh or a
-  single "power now" reading, qualifies as a horizon. Owner-buffer examples and
-  exact generation-provenance wiring remain unfinished in this handoff.
-- **Both inputs require `forecast_generated_at`: an offset-aware ISO timestamp
-  of actual forecast calculation/provider update.** EMHASS can republish an old
-  horizon; its state `last_reported` is not proof of forecast freshness. Add this
-  provenance at the successful forecast/optimisation step or a validated template,
-  never by stamping each publish with `now()`. The example does not invent the
-  owner's EMHASS run-completion signal. After restart, require a post-start
-  generation/update; missing or stale provenance means conservative fallback.
-- Prefer the owner's existing EMHASS household-load prediction. With no qualified
-  load forecast, PV alone does not become guaranteed net surplus. Forecast use
-  is unavailable and the independent fallback remains. No new paid service or
-  machine-learning dependency is necessary. Forecast.Solar needs correct panel
-  orientation, tilt, 6.6 kWp capacity and 5 kW inverter cap; confirm these locally.
+Planning and any future execution remain separate: nothing here can command
+the heater, and `cycles.baseline_export` accepts only a separately *verified*
+element load (0 or 3 kW) for future traces.
 
-Default uncertainty reduces forecast PV by 25%, increases household demand by
-25%, and reserves an additional 0.3 kW for competing loads. A current fresh
-GoodWe PV observation can reduce (never increase) the horizon using the measured
-PV/expected-PV ratio. Diagnostics show this error/correction. This is a deliberately
-simple conservative correction, **not** a trained weather model. It is recomputed
-locally; GoodWe history is displayed, but no Recorder-mining or learned daily load
-model has been added. Optional weather inputs are not duplicated: Forecast.Solar
-or EMHASS already supplies weather-informed predictions.
+## Economics
 
-Gaps, bad units, malformed/oversized series, stale/future/pre-start generation,
-nonfinite values or missing load predictions discard the forecast safely. Last
-timestamps are end boundaries, never indefinitely held power. Up to 48 hours
-and 576 net intervals are accepted; unsupported denser data falls back. A maximum
-age of 120 minutes is a starting setting, not evidence the weather is reliable.
-Measured net export remains primary for the bounded recent-export scenario
-(15 minutes by default); later forecast opportunities cannot postpone the full
-grid reservation. Future showers or appliance loads are not guaranteed forecasts.
+- Element is always a full 3 kW load. Solar fraction = surplus ÷ 3 kW describes
+  the energy source, never modulated power.
+- Unit cost = `rate × (1 − f) + feed_in × f`. 2 kW surplus, 1 kW off-peak import
+  for an hour: **AUD 0.3557** vs **AUD 0.5106** all-grid. In peak, the same mixed
+  hour costs AUD 0.5474, so later all-grid off-peak can be cheaper.
+- Quotes integrate minute by minute across tariff and forecast boundaries;
+  candidate later starts every 5 minutes plus every boundary, bounded by the
+  fallback start. This is understandable bounded search, not global optimisation.
+- Measured net export is primary for the next `solar_window_minutes` (15);
+  qualified forecasts cover later intervals. Solar headroom (0.3 kW) is deducted
+  from **measured** surplus; forecast intervals already carry their own 25 %
+  uncertainty and 0.3 kW household allowance.
+- With forecasts off, a measured-only solar start is worth at most ≈ AUD 0.058,
+  below the AUD 0.10 threshold; a visible warning reports this. The owner's
+  threshold is not silently changed.
 
-Primary references: [HA Forecast.Solar](https://www.home-assistant.io/integrations/forecast_solar/),
-[cached forecast action](https://www.home-assistant.io/actions/forecast_solar.get_forecast/),
-[EMHASS publishing](https://emhass.readthedocs.io/en/latest/publish_data.html) and
-[EMHASS publication source](https://github.com/davidusb-geek/emhass/blob/master/src/emhass/retrieve_hass.py).
+## Cycle policy (simulation only)
 
-## Economic and comfort policy
-
-The thermal model is unchanged: 315 L × 4.186 / 3600 ≈ 0.3663 kWh/°C;
-the element is a full 3 kW load, not power modulated. Add 30 model minutes when
-heat is required. Bottom temperature is not whole-tank usable energy. The native
-approximately 8°C thermostat hysteresis and manufacturer protections remain
-authoritative; the planner cannot force a satisfied thermostat to heat.
-
-An hour with 2 kW of net surplus and 1 kW off-peak import costs
-`2 × 0.092760 + 1 × 0.170200 = AUD 0.355720`, including foregone exports.
-Three imported kWh off-peak costs AUD 0.510600: a model difference of AUD 0.154880.
-During peak the same mixed hour costs AUD 0.547398, so a no-solar off-peak hour
-later can be cheaper. A fixed surplus threshold alone does not decide.
-
-The existing minute-slot plan now ranks actual economic unit cost, not full
-solar ahead of all partial-solar slots. The cycle layer separately compares
-**continuous full-power windows**, splitting tariff and forecast boundaries and
-retaining finite completion time. Waiting candidates are five-minute spaced,
-plus tariff/forecast/latest feasible boundaries; this is understandable bounded
-search, not a global multi-day optimal-control claim.
-
-- Morning comfort: editable 40°C decision threshold by editable 07:00 Hobart.
-  At/above threshold, no additional morning heat is modelled. **Never a 40°C
-  storage setpoint.** 35→40°C is about 37 ideal minutes plus the allowance.
-- Afternoon: the selected 65–70°C target (70 default) is never silently reduced.
-  Weekday storage deadline follows actual afternoon tariff peak. Keep the
-  editable nominal household comfort time (16:00 default) visible separately;
-  weekend comfort uses that time with no invented peak. The next goal after an
-  afternoon deadline is morning, not continuous 70°C maintenance.
-- Confirmed Aurora 93 defaults are retained: 0.361878 peak, 0.170200 off-peak and
-  0.092760 export AUD/kWh; weekdays 07–10 and 16–21 fixed AEST UTC+10, weekends
-  off-peak. Hobart displays these an hour later during DST automatically.
-- Reserve sufficient grid time independently of forecasts. When due, start or
-  continue the simulated fallback despite economic hold/gap. Insufficient time
-  and unavoidable peak use stay visible. Invalid/stale essential data still
-  suspends the simulation; native Schedule remains the actual comfort fallback.
-
-## Stateful cycle policy — simulation timings only
-
-| Preference | Recommended / original starting value |
+| Preference | Recommended = original |
 |---|---:|
-| Economic start qualification | 10 minutes |
-| Sustained economic loss grace | 20 minutes |
-| Minimum optional cycle | 30 minutes |
-| Minimum optional gap | 30 minutes |
+| Solar start qualification | 10 min |
+| Economic loss grace | 20 min |
+| Minimum optional cycle | 30 min |
+| Minimum optional gap | 30 min |
 | Solar headroom | 0.3 kW |
-| Minimum switching benefit | AUD 0.10 per decision |
+| Minimum switching benefit | AUD 0.10 |
 
-An optional start needs fresh distinct observations, useful partial surplus and
-enough projected advantage against a feasible grid alternative. A forecast better
-window can justify waiting only if the difference exceeds the switching benefit.
-Once active, the simulation retains its start, remaining ideal energy and dwell;
-it is not a new cycle each minute. Stopping needs a sustained **economic** benefit
-from later heating, not just a drop below 3 kW. Short clouds or a small lost
-advantage can therefore be ridden through. Loss and start holds reset on gaps;
-repeated old samples cannot qualify them.
+An optional start needs fresh distinct meter samples showing a sustained benefit
+against the best grid alternative, plus the gap. A stop needs sustained economic
+disadvantage after the minimum cycle. Comfort (fallback due, latest start, or no
+time left) overrides holds, gaps and dwell. Data gates, owner intervention and
+qualified protection/fault overrides stop the simulation. Simulated energy is the
+**ideal** energy to the goal; the heating-time allowance only moves starts
+earlier. Delivered energy is credited between 30-minute polls; a new observed
+depletion restarts the goal; a warmer observation caps it. Restart or a changed
+preference resets the session.
 
-Comfort overrides ordinary economic dwell/gap. Model target satisfaction, owner
-intervention, missing/stale/cloud-failed data and explicitly modelled protection/
-fault overrides cancel ordinary simulated dwell. This does **not** claim the
-integration can observe a physical fault, antibacterial cycle or real thermostat
-satisfaction: those remain unqualified. New observed depletion invalidates a
-completed ideal-energy scenario. A newly warmer observation caps its remaining
-energy. Session counts reset on restart or changed preferences; no physical
-cycle/session is resumed or inferred from persisted state.
+The meter is never adjusted for simulated heating. The native Schedule may
+already be heating inside its window, so a warning flags that the measured grid
+may include the real element; it is not de-embedded without verification.
 
-The default AUD 0.10 threshold is experimental and deliberately conservative.
-With only a 15-minute recent-export assumption, small partial-solar opportunities
-may not clear it. Reliable longer forecasts, a larger economic difference, or a
-reviewed lower threshold may qualify; fallback never waits for that benefit.
-This avoids pretending a short current reading guarantees an hour of solar.
+## Review corrections made in this continuation
 
-Simulated activity subtracts 3 kW only in a labelled **counterfactual grid** value.
-The measured HK1000 reading is never rewritten or increased by 3 kW merely
-because a simulated cycle started. Native Schedule may already be using power;
-its unverified load cannot be safely de-embedded. A pure test helper demonstrates
-that a separately **verified** 3 kW element changes +2 kW export to −1 kW import
-without solar disappearing. Future execution needs independent verified power/
-state evidence before applying that correction.
+1. **Options-flow CI failure (`KeyError: 'errors'`).** The real HA flow accepted
+   `tariff_periods: "[]"` because Aurora mode ignored the stored custom table; a
+   bad table could later activate through the profile select. The table is now
+   always validated; the smoke test asserts the re-shown form and unchanged
+   options for three invalid inputs.
+2. Simulated cycles included the 1.5 kWh time allowance as heat, overstating
+   cost by ≈ 30 minutes of heating per cycle. Now ideal energy only.
+3. INSUFFICIENT TIME flapped during cycles (based on a 30-minute-old reading);
+   it now uses the cycle's credited remaining energy. Thermostat satisfaction is
+   no longer shown as DATA UNAVAILABLE. A due fallback starts on the tick before
+   its exact time.
+4. Solar headroom was deducted twice from forecasts.
+5. Forecast.Solar's overnight gap invalidated the whole series; gaps are now zero
+   solar. EMHASS custom entity keys and string values are accepted. The measured
+   correction uses a 15-minute mean and fades out over 3 hours. A flat measured
+   household baseline (Statistics helper) is supported.
+6. Restore now keeps the verified tariff contract and pause state, and stores an
+   undo snapshot. Settings expose current/recommended/original values.
+7. Decisions distinguish the brief's cases with numeric explanations.
 
-## Dashboard, settings and remaining execution limits
+## Validation
 
-Hot Water shows large temperature/recommendation, targets/countdown, planned
-start/completion, power flows, whole-cycle costs and history. Settings uses native
-number/time/select/toggle controls grouped into Comfort, Solar & Forecasting,
-Heating Cycles and Advanced. Current values are in controls; each entry's
-recommended/original default and explanation appears once in guidance and its
-attributes. Matching defaults are intentionally combined. Accepted planning
-ranges are **not newly certified device safety or Manual command limits**.
+- **Offline (Python 3.11 locally; CI 3.12/3.13/3.14):** full pytest suite,
+  Ruff lint/format, strict mypy for `model.py` and the bridge's read-only module,
+  compileall, Bash syntax. Includes economics, forecasts, cycles, decisions,
+  restore/undo, DST, dashboard contracts, the cycle report and **23 closed-loop
+  synthetic days** (`tools/replay_shadow_days.py`), all reproducible byte for byte.
+- **Real HA Core 2026.10.4 and 2026.11.1, `--network none`:** config/options
+  flows and validation errors; every settings entity driven through the HA service
+  layer (guarded: test driver only, settings domains only) with atomic
+  rejections, restore and undo; every dashboard entity reference resolved and every
+  markdown template rendered in blocked, planning and forecast states; EMHASS,
+  Forecast.Solar + baseline, stale, wrong-unit and missing forecast paths;
+  WebSocket/Recorder serialisation; reload/unload; and a genuine
+  **0.2.0 → 0.3.0 upgrade** over persisted HA storage (frozen 0.2.0 fixture).
+- **Native add-on images (amd64/aarch64) and Supervisor 2026.10.5/2026.11.0
+  schema** checks continue to pass on the unchanged 1.3.8 add-on.
 
-Controls and Configure both write **one config-entry options store**. Preference
-changes validate together, save persistently and recalculate locally without
-reloading the heater or requesting cloud data. Invalid changes save nothing.
-Changing mappings waits for new source data. Restore recommendations has a
-dashboard confirmation and retains mappings, meter direction/verification and
-native reference information; it explicitly restores confirmed Aurora tariff
-defaults. Custom arbitrary weekly periods and native reference JSON stay in
-Advanced Configure; common peak times/prices/weekend policy have native controls.
+## Remaining limitations
 
-Keep meter/clock verification, expected native target, tariff profile/custom
-periods, provenance/freshness limits and native references advanced-only. Do not
-lower freshness gates to mask an unavailable cloud. Diagnostics holds cycle
-details, forecast source/error, request counts, assumptions and native-clock checks.
+- No visual review of the dashboard on the owner's real desktop or phone.
+- No real-data forecast accuracy, no confirmation of the owner's EMHASS or
+  Forecast.Solar entity shapes, generation signal or array parameters.
+- Thermal model is a uniform-tank estimate from the bottom sensor; thermostat
+  hysteresis (~8 °C), stratification and standing losses are not modelled.
+- 30-minute cloud polling cannot confirm short physical cycles or thermostat stops.
+- Closed-loop days assume a hypothetical verified executor that does not exist.
 
-**No executor exists.** Commands and On/resume remain unqualified; 30-minute
-status polling cannot confirm short physical cycles or exact thermostat stop
-times. Any future execution needs separately approved start/stop/resume/retention
-and outage testing, protection evidence, bounded reads/writes and human recovery.
-Local solar updates must never cause additional Thermann requests. The source
-review in `NATIVE_ON_OFF_REVIEW.md` and supervised test plan still apply.
+## Before physical control could be considered (separate approval)
 
-See [upgrade procedure](UPGRADING_0_3_0.md) and
-[synthetic cycle results](CYCLE_SCENARIO_RESULTS.md). Visual rendering on the
-owner's actual desktop/mobile and real-history forecast accuracy are not claimed
-by isolated CI. No merge, deployment or live testing is authorised here.
+Qualify, on the real heater under supervision: a bounded start and a safe stop
+that both preserve manufacturer antibacterial and over-temperature protections;
+power-resume and programme retention after outages; command confirmation from
+readback; a verified element-power signal (so the meter can be de-embedded);
+bounded request/confirmation budgets within the cloud quota; and a human recovery
+route. See [control and recovery](CONTROL_AND_RECOVERY.md),
+[native On/Off review](NATIVE_ON_OFF_REVIEW.md) and
+[supervised validation](SUPERVISED_VALIDATION.md).

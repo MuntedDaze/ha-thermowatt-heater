@@ -1,5 +1,11 @@
 # Claude handoff — Thermann Phase 2B WIP
 
+> **Status (2026-11-11):** Claude continued from this checkpoint and completed the
+> outstanding items listed below. The current design, corrections and validation
+> evidence are in `shadow_controller/PHASE2B.md`; owner steps are in
+> `shadow_controller/UPGRADING_0_3_0.md` and `shadow_controller/FORECAST_SETUP.md`.
+> This file is kept unchanged below as the historical Codex handoff record.
+
 The owner has run out of Codex usage and explicitly requested handoff to Claude.
 Continue the existing work; do not restart the optimiser from scratch. This is
 an implementation checkpoint, **not a release-readiness claim**.

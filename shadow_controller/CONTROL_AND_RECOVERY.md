@@ -11,7 +11,7 @@ documented; the remaining uncertainty is API equivalence/resume and firmware
 qualification, not whether the manufacturer describes such a product function.
 See [the On/Off review](NATIVE_ON_OFF_REVIEW.md) for pinned source evidence,
 retention/outage findings and a bounded-cycle proposal. The accepted optimiser is
-unchanged. [Shadow installation checklist](INSTALL_SHADOW_0_2_0.md).
+unchanged. [Shadow installation and upgrade](UPGRADING_0_3_0.md).
 
 ## What the existing v1.3.8 bridge implements
 

@@ -2,25 +2,37 @@
 
 ## 0.3.0 — Phase 2B shadow-only review candidate
 
-- Add optional published EMHASS PV/house-load and buffered Forecast.Solar watts
-  adapters; require actual generation provenance, explicit W/kW and bounded data.
-  Apply conservative PV/load uncertainty and downward measured-PV correction.
-- Compare continuous full-power cycles and partial solar against imported energy
-  plus foregone feed-in revenue. Preserve independent full off-peak reservation.
-- Add stateful ideal-energy simulation: 10-minute start hold, 20-minute economic
-  loss grace, 30-minute optional run/gap, experimental AUD 0.10 switching benefit.
-  Comfort, missing data and owner/qualified stop overrides take precedence.
-- Native number/time/select/toggle controls use the same config-entry options as
-  Configure. Save/recalculate locally; confirmed dashboard restore preserves
-  mappings, meter verification/direction and native references. Existing saved
-  prices, targets, custom periods and entity IDs are retained.
-- Rework native-card Hot Water, Settings and Diagnostics dashboard. Expose
-  recommendations, forecast age, whole-cycle costs and explicitly simulated
-  cycle counts; no manufactured physical heating/power/energy measurements.
-- Add offline forecast/error/upgrade/seasonal/cloud-interruption regressions,
-  real HA preference/serialization/restart checks and reproducible cycle reports.
-  Keep the complete Thermowatt 1.3.8 directory unchanged; no executor or services
-  target the heater, native Schedule/T-Comfort, MQTT or cloud.
+- Optional forecasts read from HA states only: EMHASS `forecasts` lists (custom
+  entity keys, string values), buffered Forecast.Solar `watts` (overnight gaps
+  are zero solar) and a flat measured household baseline. Explicit W/kW and real
+  generation time are required; stale, pre-restart or malformed data falls back.
+  PV −25 %, load +25 %, +0.3 kW household allowance; a 15-minute measured PV mean
+  can only reduce the forecast, fading out over 3 hours.
+- Partial-surplus economics: a full 3 kW element, imported energy plus foregone
+  feed-in, continuous cycle now vs the best feasible later cycle across tariff
+  boundaries. Solar headroom applies to measured surplus only. The independent
+  off-peak fallback is reserved regardless of forecasts and starts when due.
+- Stateful ideal-energy cycle simulation: 10-minute start qualification,
+  20-minute loss grace, 30-minute minimum cycle and gap, AUD 0.10 switching
+  benefit. Comfort, data gates and protections take precedence. The heating-time
+  allowance moves starts earlier and is not simulated as extra heat.
+- Plain-language decisions: heat now (solar / partial solar / riding through
+  cloud), grid fallback, insufficient time, wait for solar, wait for planned
+  window, forecast unavailable, no heating needed, data unavailable, owner review.
+  New *Decision code* and *Forecast usable solar before deadline* sensors.
+- 39 native settings controls and Configure share one options store with atomic
+  validation; current/recommended/original values with explanations. The stored
+  custom tariff table is validated in every tariff mode. Restore recommended keeps
+  the tariff contract, mappings, verifications, meter direction, pause state and
+  native references, and can be undone once.
+- Redesigned native-card dashboard (sections layout) with a large colour-coded
+  recommendation, tank gauge, plan, costs, power, history, Settings and
+  Diagnostics views.
+- Tests: offline economics/forecast/cycle/decision/restore regressions, 23
+  reproducible closed-loop synthetic days, and real HA Core checks of every
+  settings entity via services, dashboard references/templates, forecast paths and
+  a genuine 0.2.0 → 0.3.0 upgrade over persisted storage. The Thermowatt 1.3.8
+  directory is unchanged; nothing targets the heater, Schedule, MQTT or cloud.
 
 ## 0.2.0 — confirmed-owner Phase 2A candidate
 

@@ -1,7 +1,7 @@
 # Phase 2 — current architecture and owner decisions
 
-Phase 2A continues on draft PR #9. The independent Thermann Shadow Planner 0.2.0
-extends the original 0.1.0 code; Thermowatt v1.3.8 remains the sole cloud bridge.
+Phase 2B continues on draft PR #9. The independent Thermann Shadow Planner 0.3.0
+(read-only) extends 0.2.0; Thermowatt v1.3.8 remains the sole cloud bridge.
 No deployment, commands, authentication changes or native programme edits occur.
 
 - Measurements: reported bottom temperature and vendor mode, GoodWe PV/house
