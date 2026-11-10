@@ -268,6 +268,28 @@ def test_new_preferences_reject_invalid_values_atomically(key, value):
         c.parse_options({key: value})
 
 
+@pytest.mark.parametrize("profile", ["aurora_93", "custom"])
+@pytest.mark.parametrize(
+    "periods",
+    [
+        "[]",
+        "not json",
+        json.dumps([{"days": [0], "start": "00:00", "end": "00:00", "kind": "off_peak"}]),
+        json.dumps(
+            [{"days": list(range(7)), "start": "00:00", "end": "00:00", "kind": "free"}]
+        ),
+    ],
+)
+def test_stored_custom_periods_are_validated_even_in_aurora_mode(profile, periods):
+    """Regression for the actual HA options-flow CI failure on 643ab8a.
+
+    The Aurora profile previously ignored the persisted custom table, so an
+    invalid table was saved and would only fail once the profile select changed.
+    """
+    with pytest.raises((ValueError, TypeError)):
+        c.parse_options({"tariff_profile": profile, "tariff_periods": periods})
+
+
 def test_legacy_options_upgrade_and_recommended_restore_preserve_authority():
     old = {
         "target_c": 65,

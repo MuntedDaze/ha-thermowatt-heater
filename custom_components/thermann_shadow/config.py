@@ -75,6 +75,33 @@ def _minute(value):
     return hour * 60 + minute
 
 
+def _periods(raw, rates, clock):
+    """Parse and fully validate one weekly tariff table (gap- and overlap-free)."""
+    if not isinstance(raw, str) or len(raw) > 8192:
+        raise ValueError("tariff_invalid")
+    periods = json.loads(raw)
+    if not isinstance(periods, list) or not 1 <= len(periods) <= 32:
+        raise ValueError("tariff_invalid")
+    tariffs = []
+    for item in periods:
+        if not isinstance(item, dict) or set(item) != {"days", "start", "end", "kind"}:
+            raise ValueError("tariff_invalid")
+        if not isinstance(item["days"], list) or item["kind"] not in rates:
+            raise ValueError("tariff_invalid")
+        tariffs.append(
+            Tariff(
+                tuple(item["days"]),
+                _minute(item["start"]),
+                _minute(item["end"]),
+                rates[item["kind"]],
+                item["kind"],
+            )
+        )
+    result = tuple(tariffs)
+    validate_tariffs(result, clock)
+    return result
+
+
 def parse_options(options):
     from .native import parse_native
 
@@ -102,6 +129,10 @@ def parse_options(options):
     if profile not in {"aurora_93", "custom"}:
         raise ValueError("tariff_invalid")
     raw = values["tariff_periods"]
+    # The stored custom weekly table is ALWAYS validated, even while the Aurora
+    # profile is active. It is persisted, and switching the profile select later
+    # must never activate an unvalidated table. One invalid field saves nothing.
+    _periods(raw, rates, values["tariff_clock"])
     if profile == "aurora_93":
         edges = [
             "00:00",
@@ -135,28 +166,7 @@ def parse_options(options):
                 else [{"days": [5, 6], "start": "00:00", "end": "00:00", "kind": "off_peak"}]
             )
         )
-    if not isinstance(raw, str) or len(raw) > 8192:
-        raise ValueError("tariff_invalid")
-    periods = json.loads(raw)
-    if not isinstance(periods, list) or not 1 <= len(periods) <= 32:
-        raise ValueError("tariff_invalid")
-    tariffs = []
-    for item in periods:
-        if not isinstance(item, dict) or set(item) != {"days", "start", "end", "kind"}:
-            raise ValueError("tariff_invalid")
-        if not isinstance(item["days"], list) or item["kind"] not in rates:
-            raise ValueError("tariff_invalid")
-        tariffs.append(
-            Tariff(
-                tuple(item["days"]),
-                _minute(item["start"]),
-                _minute(item["end"]),
-                rates[item["kind"]],
-                item["kind"],
-            )
-        )
-    tariffs = tuple(tariffs)
-    validate_tariffs(tariffs, values["tariff_clock"])
+    tariffs = _periods(raw, rates, values["tariff_clock"])
     settings = Settings(
         **{
             key: values[key]

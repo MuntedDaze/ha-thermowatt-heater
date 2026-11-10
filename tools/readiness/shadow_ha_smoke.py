@@ -194,9 +194,17 @@ async def main():
         flow = await hass.config_entries.options.async_init(entry.entry_id)
         flow = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_SOURCES)
         assert flow["step_id"] == "settings"
-        bad = {"tariff_periods": "[]"}
-        flow = await hass.config_entries.options.async_configure(flow["flow_id"], bad)
-        assert flow["errors"]["base"] == "invalid_settings"
+        # The stored custom table is validated in BOTH profiles; an invalid
+        # table must re-show the form with an error, never create an entry.
+        for bad in (
+            {"tariff_periods": "[]"},
+            {"tariff_profile": "custom", "tariff_periods": "[]"},
+            {"peak_morning_end": "17:00:00"},
+        ):
+            flow = await hass.config_entries.options.async_configure(flow["flow_id"], bad)
+            assert flow["type"] == "form" and flow["step_id"] == "settings", flow
+            assert flow["errors"] == {"base": "invalid_settings"}, flow
+            assert entry.options == {}, entry.options
         # Explicit synthetic-only qualified settings exercise planning on real HA states.
         runtime.settings = replace(runtime.settings, meter_verified=True, tariff_verified=True)
         runtime.update(now)
