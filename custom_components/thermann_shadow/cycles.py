@@ -1,10 +1,14 @@
 """Session-local counterfactual cycles. No executor, physical-state inference or I/O."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .economics import compare, unit_cost
 from .model import ELEMENT_KW, Forecast, Plan, Settings, Tariff, tariff_at
+
+# Decisions are re-evaluated on a one-minute local timer. A due fallback must
+# start on the tick BEFORE its exact time, never up to a minute late.
+EVALUATION_INTERVAL = timedelta(minutes=1)
 
 
 @dataclass
@@ -65,13 +69,16 @@ class CyclePolicy:
         export = plan.net_export_kw or 0.0
         self.previous_export = max(0.0, export - settings.export_headroom_kw)
         self.previous_rate = tariff_at(now, tariffs, settings.tariff_clock).rate
+        # IDEAL energy only. The heating-time allowance moves latest/fallback
+        # starts earlier (plan.latest_start, plan.grid_fallback_start); it is not
+        # extra heat to deliver, so a simulated cycle never runs 30 min past goal.
+        observed_energy = plan.mixed_model_energy_kwh or 0.0
         if self.goal != plan.deadline and not blocked:
             self._stop(now)
             self.goal = plan.deadline
-            self.goal_energy = (plan.modelled_heating_minutes or 0) * ELEMENT_KW / 60
+            self.goal_energy = observed_energy
             self.delivered = 0.0
             self.advantage_since = self.disadvantage_since = None
-        observed_energy = (plan.modelled_heating_minutes or 0) * ELEMENT_KW / 60
         if not blocked:
             if (
                 observed_energy > self.last_observed_energy + 0.3663
@@ -81,10 +88,7 @@ class CyclePolicy:
                 self.goal_energy, self.delivered = observed_energy, 0.0
             self.goal_energy = min(self.goal_energy, self.delivered + observed_energy)
             self.last_observed_energy = observed_energy
-        remaining = min(
-            max(0.0, self.goal_energy - self.delivered),
-            (plan.modelled_heating_minutes or 0) * ELEMENT_KW / 60,
-        )
+        remaining = min(max(0.0, self.goal_energy - self.delivered), observed_energy)
         now_quote = later = None
         benefit = None
         solar_benefit = None
@@ -111,8 +115,11 @@ class CyclePolicy:
             and remaining > 1e-7
             and (
                 now_quote is None
-                or (plan.grid_fallback_start and now >= plan.grid_fallback_start)
-                or (plan.latest_start and now >= plan.latest_start)
+                or (
+                    plan.grid_fallback_start
+                    and now + EVALUATION_INTERVAL > plan.grid_fallback_start
+                )
+                or (plan.latest_start and now + EVALUATION_INTERVAL > plan.latest_start)
             )
         )
         disadvantage = bool(benefit is not None and -benefit >= settings.switching_benefit_aud)

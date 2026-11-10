@@ -166,7 +166,10 @@ def cycle_plan(now, deadline, export=4, minutes=240):
         state="shadow_wait_for_window",
         net_export_kw=export,
         deadline=deadline,
-        modelled_heating_minutes=minutes,
+        # `minutes` is IDEAL heating time; the plan adds the 30-minute allowance
+        # to timing only (latest/fallback starts), never to delivered energy.
+        mixed_model_energy_kwh=minutes * 3 / 60,
+        modelled_heating_minutes=minutes + 30 if minutes else 0,
         latest_start=deadline - timedelta(minutes=minutes),
         grid_fallback_start=deadline - timedelta(minutes=minutes),
     )

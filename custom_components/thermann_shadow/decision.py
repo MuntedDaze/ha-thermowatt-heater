@@ -35,6 +35,12 @@ def decide(plan, cycle, active, forecast_enabled, forecast_source, settings):
             "The heater's native mode or target changed. Planning is latched for owner review; "
             "nothing is sent to the heater."
         )
+    elif cycle["reason"] == "thermostat_satisfied":
+        code = "no_topup_required"
+        text = "The heater's own thermostat reports it is satisfied. No further heat is needed."
+    elif cycle["reason"] in {"manufacturer_protection", "fault", "owner_intervention"}:
+        code = "owner_review_required"
+        text = "A protection, fault or owner action takes priority. Nothing is sent to the heater."
     elif plan.state in BLOCKED or cycle["state"] == "suspended":
         code = "data_unavailable"
         text = (
@@ -49,7 +55,9 @@ def decide(plan, cycle, active, forecast_enabled, forecast_source, settings):
             if target is not None
             else "No additional heat is modelled before the next deadline."
         )
-    elif active and (plan.state == "shadow_shortfall" or cycle["continuing_cost_aud"] is None):
+    elif active and cycle["continuing_cost_aud"] is None:
+        # Uses the cycle's OWN remaining energy (credited with heat delivered since
+        # the last 30-minute poll), not the plan's stale-reading shortfall.
         code = "insufficient_time"
         text = (
             "There is not enough time left to reach the goal before the deadline, even heating "
@@ -101,7 +109,11 @@ def decide(plan, cycle, active, forecast_enabled, forecast_source, settings):
             "The solar/load forecast is unavailable or stale, so no future solar is assumed. "
             "Wait for the planned off-peak window; the grid fallback is reserved."
         )
-    elif cycle["later_solar_kwh"] and cycle["later_solar_kwh"] > 0.01:
+    elif (
+        forecast_source == "published_pv_and_house_load"
+        and cycle["later_solar_kwh"]
+        and cycle["later_solar_kwh"] > 0.01
+    ):
         code = "wait_for_forecast_solar"
         text = (
             f"A later window is forecast to be cheaper ({_money(cycle['later_cost_aud'])} vs "

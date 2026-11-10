@@ -459,6 +459,6 @@ def _usable_solar(slots, now, deadline, settings):
     for item in slots:
         start, end = max(item.start, now), min(item.end, deadline)
         if end > start:
-            usable = min(3.0, max(0.0, item.export_kw - settings.export_headroom_kw))
+            usable = min(3.0, max(0.0, item.export_kw))  # already net of margins
             total += usable * (end - start).total_seconds() / 3600
     return round(total, 3)

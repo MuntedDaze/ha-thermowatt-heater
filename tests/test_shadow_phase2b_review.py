@@ -349,7 +349,8 @@ def test_usable_forecast_solar_is_capped_at_element_power(runtime):  # noqa: F81
         m.Forecast(now, now + timedelta(hours=1), 5),
         m.Forecast(now + timedelta(hours=1), now + timedelta(hours=2), 1.3),
     )
-    assert module._usable_solar(slots, now, now + timedelta(hours=1.5), settings) == 3.5
+    # Forecast surplus is already net of its own margins: no extra headroom deduction.
+    assert module._usable_solar(slots, now, now + timedelta(hours=1.5), settings) == 3.65
     assert module._usable_solar((), now, now, settings) is None
 
 

@@ -130,7 +130,24 @@ def timestamp(value: object) -> datetime:
     return result.astimezone(UTC)
 
 
+_TARIFF_CACHE: dict[tuple[float, int, str], tuple[tuple[Tariff, ...], Tariff]] = {}
+
+
 def tariff_at(at: datetime, tariffs: tuple[Tariff, ...], clock: str) -> Tariff:
+    # Tariffs change on wall-minute boundaries only: memoise per UTC minute and
+    # tariff-table identity (the cached entry holds the table, so ids stay valid).
+    key = (at.timestamp() // 60, id(tariffs), clock)
+    hit = _TARIFF_CACHE.get(key)
+    if hit is not None and hit[0] is tariffs:
+        return hit[1]
+    result = _tariff_at_minute(at, tariffs, clock)
+    if len(_TARIFF_CACHE) >= 50000:
+        _TARIFF_CACHE.clear()
+    _TARIFF_CACHE[key] = (tariffs, result)
+    return result
+
+
+def _tariff_at_minute(at: datetime, tariffs: tuple[Tariff, ...], clock: str) -> Tariff:
     local = at.astimezone(HOBART if clock == "local" else STANDARD)
     minute = local.hour * 60 + local.minute
     matches = []
@@ -396,7 +413,9 @@ def evaluate(
             )
             for item in forecast:
                 if item.start <= cursor and item.end >= end:
-                    surplus = max(0.0, item.export_kw - settings.export_headroom_kw)
+                    # Headroom is for MEASURED surplus; forecasts carry their own
+                    # uncertainty and household margin (no double deduction).
+                    surplus = max(0.0, item.export_kw)
                     break
             # Element is a full 3 kW load; fraction describes its energy source,
             # never variable element power or a modulated command.

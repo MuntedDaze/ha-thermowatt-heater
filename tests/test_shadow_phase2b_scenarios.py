@@ -72,7 +72,7 @@ def test_new_temperature_shortage_invalidates_completed_counterfactual():
     )
     result = policy.step(now, plan, settings, tariffs, sample_at=now)
     assert result["state"] == "simulated_satisfied"
-    plan.modelled_heating_minutes = 100
+    plan.mixed_model_energy_kwh = 5
     result = policy.step(
         now + timedelta(minutes=1), plan, settings, tariffs, sample_at=now + timedelta(minutes=1)
     )

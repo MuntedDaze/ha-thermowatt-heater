@@ -52,7 +52,8 @@ def replay_case(cloud_minutes, peak=False, urgent=False, fast=False):
             state="shadow_wait_for_window",
             net_export_kw=0 if cloudy else 4,
             deadline=deadline,
-            modelled_heating_minutes=120,
+            mixed_model_energy_kwh=6.0,  # 120 ideal minutes at 3 kW
+            modelled_heating_minutes=150,  # plus the 30-minute timing allowance
             latest_start=deadline - timedelta(minutes=120),
             grid_fallback_start=deadline - timedelta(minutes=120),
         )

@@ -49,6 +49,7 @@ def compare(
     cursor = now
     previous_rate = None
     recent_end = now + timedelta(minutes=settings.solar_window_minutes)
+    edges = {item.start for item in forecast} | {item.end for item in forecast}
     while cursor < deadline:
         end = min(cursor.replace(second=0, microsecond=0) + timedelta(minutes=1), deadline)
         surplus = 0.0
@@ -58,17 +59,15 @@ def compare(
             if cursor < item.end < end:
                 end = item.end
             if item.start <= cursor < item.end:
-                surplus = max(0.0, item.export_kw - settings.export_headroom_kw)
+                # Forecast NET surplus already deducts forecast uncertainty and the
+                # extra household margin; headroom applies to MEASURED surplus only.
+                surplus = max(0.0, item.export_kw)
         if cursor < recent_end:
             end = min(end, recent_end)
             surplus = max(0, export_kw - settings.export_headroom_kw)
         tariff = tariff_at(cursor, tariffs, settings.tariff_clock)
         second = (cursor - now).total_seconds()
-        if (
-            tariff.rate != previous_rate
-            or second % 300 == 0
-            or any(cursor in (item.start, item.end) for item in forecast)
-        ):
+        if tariff.rate != previous_rate or second % 300 == 0 or cursor in edges:
             candidates.add(second)
         previous_rate = tariff.rate
         cost, fraction = unit_cost(surplus, tariff.rate, settings.feed_in_rate)
