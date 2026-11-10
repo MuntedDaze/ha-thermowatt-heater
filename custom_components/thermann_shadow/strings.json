@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Read-only entity mapping",
-        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional PV/load forecast mappings require timestamped published forecast series. Configure and dashboard controls share the same stored preferences.",
+        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered Forecast.Solar watts) with forecast_generated_at, and a household load forecast or measured baseline. Configure and dashboard controls share the same stored preferences.",
         "data": {
           "heater": "Water heater (temperature attributes only)",
           "mode": "Native vendor mode",
@@ -12,12 +12,12 @@
           "cloud_health": "Cloud health",
           "requests": "Bridge local lifetime request attempts",
           "grid": "Signed NET grid power (W or kW)",
-          "pv": "PV production (display only)",
+          "pv": "PV production (display and forecast correction)",
           "house": "House consumption (display only)",
           "import_energy": "Cumulative grid import (reference only)",
           "export_energy": "Cumulative grid export (reference only)",
           "forecast_pv": "Optional published PV forecast",
-          "forecast_load": "Optional published household load forecast"
+          "forecast_load": "Optional household load forecast or measured baseline"
         }
       }
     },
@@ -29,7 +29,7 @@
     "step": {
       "init": {
         "title": "Edit read-only sources",
-        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional PV/load forecast mappings require timestamped published forecast series. Configure and dashboard controls share the same stored preferences.",
+        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered Forecast.Solar watts) with forecast_generated_at, and a household load forecast or measured baseline. Configure and dashboard controls share the same stored preferences.",
         "data": {
           "heater": "Water heater (temperature attributes only)",
           "mode": "Native vendor mode",
@@ -37,17 +37,17 @@
           "cloud_health": "Cloud health",
           "requests": "Bridge local lifetime request attempts",
           "grid": "Signed NET grid power",
-          "pv": "PV production (display only)",
+          "pv": "PV production (display and forecast correction)",
           "house": "House consumption (display only)",
           "import_energy": "Cumulative grid import (reference only)",
           "export_energy": "Cumulative grid export (reference only)",
           "forecast_pv": "Optional published PV forecast",
-          "forecast_load": "Optional published household load forecast"
+          "forecast_load": "Optional household load forecast or measured baseline"
         }
       },
       "settings": {
         "title": "Shadow assumptions and tariff contract",
-        "description": "Local shadow preferences only; no setting enables execution. Dashboard controls use these exact same saved values. Recommended/original defaults and guidance are on the Settings dashboard. Morning is before noon; afternoon after noon; tariff peak times must increase. Aurora 93 uses fixed AEST, weekends off-peak. Custom weekly periods require gap-free coverage.",
+        "description": "Local shadow preferences only; no setting enables execution. Dashboard controls use these exact same saved values. Current/recommended/original values and guidance are on the Settings dashboard. Morning is before noon; afternoon after noon; tariff peak times must increase. Aurora 93 uses fixed AEST, weekends off-peak. The stored custom weekly table is always validated and needs gap-free coverage.",
         "data": {
           "morning_threshold_c": "Morning comfort threshold",
           "morning_time": "Morning deadline",
@@ -94,7 +94,7 @@
       }
     },
     "error": {
-      "invalid_settings": "Nothing saved. Check finite planning bounds; morning before noon and afternoon after noon; increasing tariff times without overlaps; custom weekly coverage; T-Comfort reference not above expected native target. No heater settings were changed."
+      "invalid_settings": "Nothing saved. Check finite planning bounds; morning before noon and afternoon after noon; increasing tariff times without overlaps; gap-free custom weekly periods (validated in every tariff mode); T-Comfort reference not above expected native target. No heater settings were changed."
     }
   }
 }

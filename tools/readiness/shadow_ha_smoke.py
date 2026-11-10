@@ -6,24 +6,30 @@ from datetime import timedelta
 import json
 import logging
 from pathlib import Path
-import shutil
 import socket
-import sys
 import tempfile
 from types import MappingProxyType, SimpleNamespace
 
-from homeassistant.core import Event, HomeAssistant, State
-from homeassistant import bootstrap, config_entries, loader
+from homeassistant.core import Event, State
+from homeassistant import config_entries, loader
 from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.components.recorder.const import SupportedDialect
 from homeassistant.components.recorder.db_schema import StateAttributes
 from homeassistant.components.websocket_api.commands import handle_get_states
 from homeassistant.components.websocket_api.messages import cached_state_diff_message
-from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
-from homeassistant.util.unit_system import METRIC_SYSTEM
-from homeassistant.helpers.entity_platform import async_get_platforms
+from homeassistant.helpers import entity_registry as er
 from sqlalchemy import create_engine, select
+
+from shadow_ha_checks import (
+    DRIVER,
+    check_forecasts,
+    check_settings_services,
+    install_service_guard,
+    start_hass,
+    upgrade_from_0_2_0,
+    validate_dashboard,
+)
 
 ROOT = Path("/workspace")
 
@@ -120,23 +126,17 @@ def assert_original_mappingproxy_failure_is_detected(hass, sources):
 
 
 async def main():
+    # No connection or DNS at all; service calls only from the explicit test
+    # driver, and only to this integration's local settings entities.
+    socket.socket.connect = denied
+    socket.socket.connect_ex = denied
+    socket.create_connection = denied
+    socket.getaddrinfo = denied
+    install_service_guard()
+    with tempfile.TemporaryDirectory() as legacy:
+        upgrade = await upgrade_from_0_2_0(legacy)
     with tempfile.TemporaryDirectory() as folder:
-        target = Path(folder) / "custom_components/thermann_shadow"
-        shutil.copytree(ROOT / "custom_components/thermann_shadow", target)
-        sys.path.insert(0, folder)
-        hass = HomeAssistant(folder)
-        loader.async_setup(hass)
-        hass.config_entries = config_entries.ConfigEntries(hass, {})
-        assert await bootstrap.async_load_base_functionality(hass)
-        await hass.config.async_set_time_zone("Australia/Hobart")
-        hass.config.units = METRIC_SYSTEM
-        # No connection, DNS, or Home Assistant service calls are allowed.
-        socket.socket.connect = denied
-        socket.socket.connect_ex = denied
-        socket.create_connection = denied
-        socket.getaddrinfo = denied
-        type(hass.services).async_call = denied
-        assert await async_setup_component(hass, "sensor", {})
+        hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
         assert "thermann_shadow" in await loader.async_get_config_flows(hass)
         descriptions = await loader.async_get_integration_descriptions(hass)
         listed = descriptions["custom"]["integration"]["thermann_shadow"]
@@ -273,38 +273,22 @@ async def main():
         runtime.update(dt_util.utcnow())
         assert_entity_serialization(hass, runtime.sources)
         # Native dashboard controls and Configure share one authoritative entry.
-        entities = {
-            entity.entity_id: entity
-            for platform in async_get_platforms(hass, DOMAIN)
-            for entity in platform.entities.values()
-        }
-        number = entities["number.thermann_shadow_afternoon_storage_target"]
-        await number.async_set_native_value(65)
-        await hass.async_block_till_done()
-        assert entry.options["target_c"] == runtime.settings.target_c == number.native_value == 65
-        assert runtime is old_runtime
-        try:
-            await number.async_set_native_value(40)
-        except Exception as error:
-            from homeassistant.exceptions import HomeAssistantError
+        from custom_components.thermann_shadow.settings import CATALOG
 
-            assert isinstance(error, HomeAssistantError)
-        else:
-            raise AssertionError("Invalid planning target accepted")
-        assert entry.options["target_c"] == 65
-        from datetime import time
+        registry = er.async_get(hass)
 
-        await entities["time.thermann_shadow_morning_deadline"].async_set_value(time(6, 30))
-        await entities["switch.thermann_shadow_use_published_forecasts"].async_turn_on()
-        await entities["select.thermann_shadow_tariff_clock"].async_select_option("standard")
-        await hass.async_block_till_done()
-        assert runtime.settings.morning == time(6, 30) and runtime.settings.forecast_enabled
+        def entity_for(key):
+            entity_id = registry.async_get_entity_id(
+                CATALOG[key].kind, DOMAIN, f"{entry.entry_id}_setting_{key}"
+            )
+            assert entity_id, key
+            return entity_id
+
+        dashboard_refs, dashboard_templates = validate_dashboard(hass, "blocked")
+        settings_checked = await check_settings_services(hass, entry, runtime, entity_for)
+        assert runtime is old_runtime  # local saves recalculate; never a reload
         assert entry.options["sources"] == DEFAULT_SOURCES
-        # Restore retains safety/mapping/native references and has UI confirmation.
-        await entities["button.thermann_shadow_restore_recommended_preferences"].async_press()
-        await hass.async_block_till_done()
-        assert entry.options["target_c"] == 70 and runtime.settings.morning == time(7)
-        assert not runtime.settings.forecast_enabled
+        validate_dashboard(hass, "after_settings")
         assert_entity_serialization(hass, runtime.sources)
         # Actual unload/setup simulates HA restart, preserving options and IDs.
         assert await hass.config_entries.async_reload(entry.entry_id)
@@ -317,6 +301,9 @@ async def main():
             for state in hass.states.async_all("sensor")
             if state.entity_id.startswith("sensor.thermann_shadow_")
         }
+        forecast_paths = await check_forecasts(hass, entry, entity_for)
+        runtime = hass.data[DOMAIN][entry.entry_id]
+        assert_entity_serialization(hass, runtime.sources)
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
         assert not runtime.listeners
@@ -332,13 +319,20 @@ async def main():
                     "manual_intervention_latch": "PASS",
                     "options_reload_and_ids": "PASS",
                     "native_preference_controls_and_restore": "PASS",
+                    "settings_entities_driven_through_ha_services": settings_checked,
+                    "settings_service_calls": DRIVER["calls"],
+                    "restore_undo_and_atomic_rejections": "PASS",
+                    "dashboard_entity_references_resolved": dashboard_refs,
+                    "dashboard_templates_rendered": dashboard_templates,
+                    "forecast_paths": forecast_paths,
+                    "upgrade_0_2_0_to_0_3_0": upgrade,
                     "add_integration_hub_listing": "PASS",
                     "websocket_states_and_events_json": "PASS",
                     "recorder_attributes_and_sqlite_roundtrip": "PASS",
                     "mappingproxy_negative_control": "PASS",
                     "clean_unload": "PASS",
                     "live_cloud_requests": 0,
-                    "service_calls": 0,
+                    "integration_service_calls": 0,
                     "heater_commands": 0,
                 }
             )
