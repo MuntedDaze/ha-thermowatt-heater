@@ -1,7 +1,7 @@
 """Owner-reported Schedule reference, never inferred element power or reserve."""
 
 import json
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 
 from .config import _minute
 from .model import HOBART, STANDARD
@@ -50,3 +50,22 @@ def permitted_minutes(now, deadline, periods, clock):
             total += (end - cursor).total_seconds() / 60
         cursor = end
     return total
+
+
+def clock_check_required(now, checked):
+    """Manual device clock needs a new owner check after any DST transition."""
+    if not checked:
+        return True
+    try:
+        start = date.fromisoformat(checked)
+    except (ValueError, TypeError):
+        return True
+    today = now.astimezone(HOBART).date()
+    if not 0 <= (today - start).days <= 366:
+        return True
+    offset = datetime.combine(start, time(12), HOBART).utcoffset()
+    while start <= today:
+        if datetime.combine(start, time(12), HOBART).utcoffset() != offset:
+            return True
+        start += timedelta(days=1)
+    return False

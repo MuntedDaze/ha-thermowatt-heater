@@ -19,24 +19,28 @@ DEFAULT_SOURCES = {
 }
 DEFAULT_OPTIONS = {
     "paused": False,
-    "meter_verified": False,
-    "tariff_verified": False,
-    "import_positive": False,  # owner-provided export-positive observation, unqualified
-    "tariff_clock": "local",
-    "target_c": 65.0,
+    "meter_verified": True,  # owner-reported HK1000 load test; direction preserved
+    "tariff_verified": True,  # owner-confirmed Tariff 93, fixed AEST
+    "import_positive": False,
+    "tariff_clock": "standard",
+    "target_c": 70.0,
+    "morning_threshold_c": 40.0,
     "expected_native_target_c": 70.0,
     "margin_minutes": 30.0,
-    "feed_in_rate": 0.0,  # unknown contract; never used until tariff_verified
-    "off_peak_rate": 0.0,
-    "shoulder_rate": 0.0,
-    "peak_rate": 0.0,
+    "feed_in_rate": 0.092760,
+    "off_peak_rate": 0.170200,
+    "shoulder_rate": 0.170200,
+    "peak_rate": 0.361878,
     "export_headroom_kw": 0.3,
     "status_max_age_minutes": 45.0,
     "grid_max_age_seconds": 120.0,
-    "tariff_periods": '[{"days":[0,1,2,3,4,5,6],"start":"00:00","end":"00:00","kind":"off_peak"}]',
+    "solar_hold_minutes": 10.0,
+    "solar_window_minutes": 15.0,
+    "tariff_periods": '[{"days":[0,1,2,3,4],"start":"00:00","end":"07:00","kind":"off_peak"},{"days":[0,1,2,3,4],"start":"07:00","end":"10:00","kind":"peak"},{"days":[0,1,2,3,4],"start":"10:00","end":"16:00","kind":"off_peak"},{"days":[0,1,2,3,4],"start":"16:00","end":"21:00","kind":"peak"},{"days":[0,1,2,3,4],"start":"21:00","end":"00:00","kind":"off_peak"},{"days":[5,6],"start":"00:00","end":"00:00","kind":"off_peak"}]',
     "native_schedule_periods": '[{"days":[0,1,2,3,4],"start":"04:00","end":"08:00"},{"days":[0,1,2,3,4],"start":"11:00","end":"17:00"},{"days":[5,6],"start":"06:00","end":"22:00"}]',
     "native_schedule_clock": "local",
     "native_schedule_clock_verified": False,
+    "native_clock_check_date": "",
     "t_comfort_reference_c": 10.0,
 }
 
@@ -100,6 +104,13 @@ def parse_options(options):
         }
     )
     validate_settings(settings)
+    from datetime import date
+
+    checked = values["native_clock_check_date"]
+    if not isinstance(checked, str) or (
+        checked and date.fromisoformat(checked).isoformat() != checked
+    ):
+        raise ValueError("native_clock_date_invalid")
     parse_native(values["native_schedule_periods"])
     if (
         values["native_schedule_clock"] not in {"local", "standard"}

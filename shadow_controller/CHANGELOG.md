@@ -1,5 +1,20 @@
 # Thermann Shadow Planner
 
+## 0.2.0 — confirmed-owner Phase 2A candidate
+
+- Continue the existing planner/PR; retain the read-only boundary and all bridge
+  files at v1.3.8. No deployment or automatic merge.
+- Use confirmed Aurora 93 prices and fixed AEST periods, verified export-positive
+  meter defaults, editable morning 40°C threshold and afternoon 70°C target.
+- Prefer sustained net-export opportunities and latest suitable off-peak backup;
+  reserve full backup independently of optional forecasts. One-minute LOCAL
+  sampling adds no cloud requests; require a ten-minute export hold by default.
+- Add current tariff/price, targets, source, latest-start and device-clock reminders;
+  distinguish summer peak deadlines from nominal comfort and weekend goals.
+- Update control/recovery design for accepted manual outage recovery, document the
+  missing verified stop/resume contract and unestablished factory-reset procedure.
+- Extend offline scenarios, HA settings/reload tests and all bridge regressions.
+
 ## 0.1.0 â€” Phase 2A owner-review candidate
 
 - Separate Home Assistant sensor integration with editable entity mappings and

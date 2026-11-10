@@ -59,7 +59,8 @@ def tariffs():
 
 def plan(now, tariffs, values=None, **changes):
     settings = replace(
-        m.Settings(meter_verified=True, tariff_verified=True, import_positive=False), **changes
+        m.Settings(target_c=65, meter_verified=True, tariff_verified=True, import_positive=False),
+        **changes,
     )
     return m.evaluate(now, now - timedelta(minutes=1), values or readings(now), settings, tariffs)
 
@@ -70,7 +71,7 @@ def test_unconfirmed_owner_settings_show_only_labelled_thermal_estimate(tariffs)
         now,
         now - timedelta(minutes=1),
         readings(now, temperature=63, grid=1501),
-        m.Settings(),
+        m.Settings(target_c=65),
         tariffs,
     )
     assert result.state == "shadow_awaiting_validation"
@@ -83,7 +84,9 @@ def test_unconfirmed_owner_settings_show_only_labelled_thermal_estimate(tariffs)
 def test_solar_first_with_qualified_net_export_forecast(tariffs):
     now = local()
     forecast = (m.Forecast(now + timedelta(hours=1), now + timedelta(hours=4), 4),)
-    settings = m.Settings(meter_verified=True, tariff_verified=True, import_positive=False)
+    settings = m.Settings(
+        target_c=65, meter_verified=True, tariff_verified=True, import_positive=False
+    )
     result = m.evaluate(
         now, now - timedelta(minutes=1), readings(now, grid=0), settings, tariffs, forecast
     )
@@ -105,11 +108,18 @@ def test_cloudy_no_solar_or_inadequate_export_does_not_claim_solar_only(grid, ta
     assert "no_net_surplus_forecast_current_export_not_extrapolated" in result.warnings
 
 
-def test_current_export_is_used_for_one_minute_only_not_a_solar_forecast(tariffs):
+def test_confirmed_export_uses_only_bounded_solar_window(tariffs):
     now = local()
-    result = plan(now, tariffs)
+    result = m.evaluate(
+        now,
+        now - timedelta(minutes=1),
+        readings(now),
+        m.Settings(target_c=65, meter_verified=True, tariff_verified=True, import_positive=False),
+        tariffs,
+        solar_confirmed=True,
+    )
     assert result.state == "shadow_solar_opportunity"
-    assert result.estimated_solar_kwh == pytest.approx(0.05)
+    assert result.estimated_solar_kwh == pytest.approx(0.75)
     assert result.estimated_import_kwh > 6
 
 
@@ -117,7 +127,7 @@ def test_deadline_shortfall_is_not_counted_as_cost_saving(tariffs):
     now = local(hour=6, minute=50)
     result = plan(now, tariffs, readings(now, temperature=17, grid=0))
     assert result.state == "shadow_shortfall"
-    assert result.unmet_model_energy_kwh > 18
+    assert result.unmet_model_energy_kwh > 9
     assert result.estimated_import_kwh == pytest.approx(0.5)
     assert result.comparison_cost_difference_aud == pytest.approx(0)
     assert "comfort_at_risk_native_or_owner_action_required" in result.warnings
@@ -126,13 +136,13 @@ def test_deadline_shortfall_is_not_counted_as_cost_saving(tariffs):
 @pytest.mark.parametrize("temperature", [40, 65, 70])
 def test_temperature_is_not_a_hygiene_or_reserve_measurement(temperature, tariffs):
     result = plan(local(), tariffs, readings(local(), temperature=temperature))
-    assert "morning_usable_water_reserve_not_established" in result.warnings
+    assert "bottom_temperature_used_directly_planning_estimate_only" in result.warnings
     assert "hygiene_and_native_fallback_unverified" in result.warnings
     if temperature == 40:
         assert result.mixed_model_energy_kwh > 9
     else:
         assert result.state == "shadow_no_modelled_topup"
-        assert "not_a_comfort_or_hygiene_guarantee" in result.reasons[0]
+        assert "storage_target_met" in result.reasons[0]
 
 
 @pytest.mark.parametrize(
@@ -303,7 +313,8 @@ def test_bad_settings_rejected(option, value):
 def test_sources_defaults_match_owner_and_validate_only_provisional_sign():
     settings, _ = c.parse_options({})
     assert settings.import_positive is False
-    assert settings.meter_verified is settings.tariff_verified is False
+    assert settings.meter_verified is settings.tariff_verified is True
+    assert settings.tariff_clock == "standard"
     assert c.DEFAULT_SOURCES["heater"] == "water_heater.home_boiler_home"
     assert c.DEFAULT_SOURCES["mode"] == "sensor.home_boiler_home_vendor_mode"
 
@@ -327,7 +338,7 @@ def test_component_has_no_actuation_or_network_imports_and_no_fake_measurement_c
                 }
         assert "_attr_state_class" not in source
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.1.0"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.2.0"
 
 
 @pytest.mark.parametrize(
@@ -410,7 +421,7 @@ def test_mocked_ha_unknown_mode_attributes_native_reference_and_zero_extra_reque
     assert instance.values["pv"] == 2.322 and instance.values["house"] == 0.821
     assert instance.values["t_comfort_reference_c"] == 10
     assert "t_comfort_10C_not_practical_hot_water_reserve" in instance.plan.warnings
-    assert instance.plan.state == "shadow_awaiting_validation"
+    assert instance.plan.state == "shadow_wait_for_window"
     assert instance.details["additional_cloud_requests"] == 0
     assert instance.details["control_capable"] is False
     assert instance.details["observed_refresh_pattern_attempts_per_day"] == 144

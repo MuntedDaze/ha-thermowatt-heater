@@ -30,6 +30,17 @@ SENSORS = {
     "observed_requests_per_hour": ("Observed requests per hour", None),
     "native_schedule_window": ("Reported Schedule window", None),
     "t_comfort_reference_c": ("T Comfort reference", "°C"),
+    "morning_threshold_c": ("Morning comfort threshold", "°C"),
+    "storage_target_c": ("Afternoon storage target", "°C"),
+    "planning_target_c": ("Next decision threshold", "°C"),
+    "latest_start": ("Latest continuous heating start", None),
+    "grid_fallback_start": ("Off peak fallback start", None),
+    "current_tariff": ("Current tariff", None),
+    "current_price_aud": ("Current import price", "AUD/kWh"),
+    "recommended_energy_source": ("Recommended energy source", None),
+    "device_clock_check": ("Device clock check", None),
+    "measured_import_kw": ("Measured grid import", "kW"),
+    "measured_export_kw": ("Measured grid export", "kW"),
 }
 
 
@@ -57,7 +68,14 @@ class ShadowSensor(SensorEntity):
             manufacturer="Community shadow planner",
             model="315 L / 3 kW scenario",
         )
-        if key in {"deadline", "comfort_deadline", "peak_start", "planned_start"}:
+        if key in {
+            "deadline",
+            "comfort_deadline",
+            "peak_start",
+            "planned_start",
+            "latest_start",
+            "grid_fallback_start",
+        }:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     async def async_added_to_hass(self):

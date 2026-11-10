@@ -76,13 +76,13 @@ async def main():
             hass.states.async_set(DEFAULT_SOURCES[key], state, attrs)
         now = dt_util.utcnow()
         runtime.update(now)
-        assert runtime.plan.state == "shadow_awaiting_validation"
+        assert runtime.plan.state not in {"shadow_blocked", "shadow_awaiting_validation"}
         assert runtime.values["temperature"] == 63
         assert runtime.values["target"] == 70
         assert runtime.values["measured_net_export_kw"] == 1.501
         assert runtime.values["pv"] == 2.322
         assert runtime.values["requests_since_start"] == 0
-        assert runtime.plan.estimated_cost_aud is None
+        assert runtime.plan.current_price_aud in {0.170200, 0.361878}
         assert runtime.details["additional_cloud_requests"] == 0
         assert runtime.details["control_capable"] is False
         assert runtime.details["observed_refresh_pattern_attempts_per_day"] == 144
@@ -141,7 +141,7 @@ async def main():
             for state in hass.states.async_all("sensor")
             if state.entity_id.startswith("sensor.thermann_shadow_")
         ]
-        assert len(sensor_ids) == 24, sensor_ids
+        assert len(sensor_ids) == 35, sensor_ids
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
@@ -151,7 +151,7 @@ async def main():
         assert entry.state is config_entries.ConfigEntryState.LOADED
         runtime = hass.data[DOMAIN][entry.entry_id]
         assert runtime is not old_runtime and not old_runtime.listeners
-        assert not runtime.settings.meter_verified and not runtime.settings.tariff_verified
+        assert runtime.settings.meter_verified and runtime.settings.tariff_verified
         assert runtime.plan.state == "shadow_blocked"
         assert entry.options["sources"] == DEFAULT_SOURCES
         assert set(sensor_ids) == {

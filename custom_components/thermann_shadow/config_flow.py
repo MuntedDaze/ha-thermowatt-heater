@@ -30,9 +30,12 @@ def options_schema(values):
             validator = vol.In(["local", "standard"])
         elif key in {"tariff_periods", "native_schedule_periods"}:
             validator = selector.TextSelector(selector.TextSelectorConfig(multiline=True))
+        elif key == "native_clock_check_date":
+            validator = cv.string
         else:
             ranges = {
                 "target_c": (65, 70),
+                "morning_threshold_c": (30, 60),
                 "expected_native_target_c": (20, 75),
                 "margin_minutes": (0, 120),
                 "feed_in_rate": (0, 2),
@@ -40,6 +43,8 @@ def options_schema(values):
                 "status_max_age_minutes": (30, 90),
                 "grid_max_age_seconds": (30, 300),
                 "t_comfort_reference_c": (10, 75),
+                "solar_hold_minutes": (5, 30),
+                "solar_window_minutes": (5, 30),
             }
             low, high = ranges.get(key, (-5, 10))
             validator = vol.All(vol.Coerce(float), vol.Range(min=low, max=high))

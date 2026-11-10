@@ -1,77 +1,96 @@
 title: Thermann Shadow
 views:
-  - title: Shadow hot water
+  - title: Hot water
     path: thermann-shadow
     icon: mdi:water-boiler
     cards:
       - type: markdown
         content: |
-          ## Thermann — SHADOW ONLY
-          Native Schedule remains in control. No heater commands or extra cloud requests.
-          **Measured:** source temperatures and electrical power. **Calculated:** plans, thermal energy, time and cost. **Unverified:** usable reserve, physical element state, hygiene and fallback.
+          ## Hot water — SHADOW ONLY
+          Recommendations only. Native Schedule still controls the heater.
+          **No heater commands or extra cloud requests.** 40°C is a morning decision threshold, never a heater storage setpoint.
       - type: entities
-        title: Controller and cloud (read only)
+        title: Hot water and electricity now
         entities:
-          - sensor.thermann_shadow_controller
-          - sensor.thermann_shadow_cloud_health
-          - sensor.thermann_shadow_status_age
-          - sensor.thermann_shadow_observed_request_attempts
-          - sensor.thermann_shadow_observed_requests_per_hour
-      - type: entities
-        title: Measured sources / explicit sign interpretation
-        entities:
+          - sensor.thermann_shadow_bottom_temperature
+          - sensor.thermann_shadow_morning_comfort_threshold
+          - sensor.thermann_shadow_afternoon_storage_target
           - sensor.thermann_shadow_measured_pv
           - sensor.thermann_shadow_measured_house_load
-          - sensor.thermann_shadow_measured_signed_grid
-          - sensor.thermann_shadow_derived_net_export
-          - sensor.thermann_shadow_bottom_temperature
-          - sensor.thermann_shadow_reported_target
-          - sensor.thermann_shadow_reported_schedule_window
-          - sensor.thermann_shadow_t_comfort_reference
-          - sensor.home_boiler_home_vendor_mode
+          - sensor.thermann_shadow_measured_grid_import
+          - sensor.thermann_shadow_measured_grid_export
+          - sensor.thermann_shadow_current_tariff
+          - sensor.thermann_shadow_current_import_price
       - type: entities
-        title: Hypothetical plan — not a heater schedule
+        title: Next recommendation (not executed)
         entities:
-          - sensor.thermann_shadow_comfort_deadline
-          - sensor.thermann_shadow_configured_afternoon_peak
+          - sensor.thermann_shadow_controller
+          - sensor.thermann_shadow_next_decision_threshold
           - sensor.thermann_shadow_planning_deadline
           - sensor.thermann_shadow_hypothetical_heating_start
-          - sensor.thermann_shadow_mixed_tank_energy_estimate
+          - sensor.thermann_shadow_off_peak_fallback_start
           - sensor.thermann_shadow_heating_time_estimate
-          - sensor.thermann_shadow_modelled_energy_shortfall
-          - sensor.thermann_shadow_plan_import_estimate
-          - sensor.thermann_shadow_plan_solar_estimate
+          - sensor.thermann_shadow_recommended_energy_source
+          - sensor.thermann_shadow_mixed_tank_energy_estimate
           - sensor.thermann_shadow_plan_cost_estimate
-          - sensor.thermann_shadow_scenario_cost_difference
+          - sensor.thermann_shadow_modelled_energy_shortfall
+      - type: entities
+        title: Connection and native reference
+        entities:
+          - sensor.thermann_shadow_cloud_health
+          - sensor.thermann_shadow_status_age
+          - sensor.home_boiler_home_vendor_mode
+          - sensor.thermann_shadow_reported_target
+          - sensor.thermann_shadow_device_clock_check
       - type: markdown
-        title: Reasons, warnings and windows
+        title: Why and what needs attention
         content: |
-          **State:** {{ states('sensor.thermann_shadow_controller') }}
-          **Reasons:**
+          **Goal:** {{ state_attr('sensor.thermann_shadow_controller', 'planning_goal') }}
           {% for item in state_attr('sensor.thermann_shadow_controller', 'reasons') or [] %}
           - {{ item }}
           {% endfor %}
-          **Warnings:**
           {% for item in state_attr('sensor.thermann_shadow_controller', 'warnings') or [] %}
           - {{ item }}
           {% endfor %}
-          **Hypothetical windows (UTC, no actions):**
+          **Heater clock:** compare its clock manually with Hobart **{{ now().strftime('%a %d %b %H:%M') }}** after daylight-saving changes. The API does not report the actual clock. Record your check date in Configure.
+          Tariff 93 stays fixed AEST: weekday peaks 07–10 and 16–21 AEST (08–11 and 17–22 Hobart in summer). Weekends off-peak. Do not adjust tariff times manually for DST.
+          Estimates use bottom temperature directly and 315 L / 3 kW plus margin. They are not measurements of usable hot water or element power. Schedule permission is not proof the element is on.
+      - type: button
+        name: Edit entity mappings, targets and tariffs
+        icon: mdi:cog
+        tap_action:
+          action: navigate
+          navigation_path: /config/integrations/integration/thermann_shadow
+  - title: Diagnostics
+    path: diagnostics
+    icon: mdi:information-outline
+    cards:
+      - type: entities
+        entities:
+          - sensor.thermann_shadow_measured_signed_grid
+          - sensor.thermann_shadow_derived_net_export
+          - sensor.thermann_shadow_comfort_deadline
+          - sensor.thermann_shadow_configured_afternoon_peak
+          - sensor.thermann_shadow_latest_continuous_heating_start
+          - sensor.thermann_shadow_plan_import_estimate
+          - sensor.thermann_shadow_plan_solar_estimate
+          - sensor.thermann_shadow_scenario_cost_difference
+          - sensor.thermann_shadow_reported_schedule_window
+          - sensor.thermann_shadow_t_comfort_reference
+          - sensor.thermann_shadow_observed_request_attempts
+          - sensor.thermann_shadow_observed_requests_per_hour
+      - type: markdown
+        title: Hypothetical windows and assumptions
+        content: |
           {% for item in state_attr('sensor.thermann_shadow_controller', 'windows') or [] %}
-          - {{ item.start }} → {{ item.end }} · {{ item.source }}
+          - {{ item.start }} → {{ item.end }} UTC · {{ item.source }}
           {% endfor %}
-          Cost difference compares the same scheduled model energy at the current rate; it is **not measured savings against the native schedule**. Foregone export revenue is included. Unserved energy is a shortfall, never a saving.
-          Reported Schedule: weekdays ≈04–08 & 11–17; weekends ≈06–22. This permits heating but does not prove the element is on. T-Comfort **10°C is not a usable hot-water reserve**. Reference settings never change the heater.
-          30-minute background ≈48 cycles/day; the observed status→refresh→replay pattern ≈144 HTTP attempts/day, **not a quota or upper bound**. This planner adds **zero** cloud requests.
+          Cost difference compares the same scheduled model energy at the current rate, not measured savings against native Schedule. Foregone export revenue is included. A shortfall is never a saving.
+          Schedule reference: weekdays ≈04–08 & 11–17; weekends ≈06–22, target 70°C. T-Comfort 10°C is not a useful hot-water reserve and is not the optimiser.
+          48 half-hour cycles/day may mean 144 HTTP attempts/day with status→refresh→replay, plus other requests. This is not a quota or upper bound. This planner adds zero requests.
       - type: history-graph
-        title: Local observations (no refresh requests)
         hours_to_show: 24
         entities:
           - sensor.thermann_shadow_measured_pv
           - sensor.thermann_shadow_measured_house_load
           - sensor.thermann_shadow_measured_signed_grid
-      - type: button
-        name: Edit mappings and shadow assumptions
-        icon: mdi:cog
-        tap_action:
-          action: navigate
-          navigation_path: /config/integrations/integration/thermann_shadow

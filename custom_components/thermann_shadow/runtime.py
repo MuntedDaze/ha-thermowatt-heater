@@ -1,10 +1,11 @@
 """Read HA states only, on a fixed local timer. Never call services or a transport."""
 
 from dataclasses import asdict
+from collections import deque
 
 from homeassistant.util import dt as dt_util
 
-from .model import Plan, Reading, evaluate, number
+from .model import Plan, Reading, evaluate, number, _fresh, _power
 from .config import DEFAULT_OPTIONS
 from .native import parse_native, permitted_minutes, scheduled_permission
 
@@ -25,6 +26,7 @@ class ShadowRuntime:
         self.first_count = None
         self.last_count = None
         self.count_started = None
+        self.solar_samples = deque(maxlen=121)
         self.set_native_reference({})
 
     def set_native_reference(self, options):
@@ -75,11 +77,40 @@ class ShadowRuntime:
             if self.last_native is not None and self.last_native != native:
                 self.intervention = True
             self.last_native = native
+        solar_confirmed = False
+        try:
+            grid = readings["grid"]
+            _fresh(grid, now, self.boot, self.settings.grid_max_age_seconds)
+            export = _power(grid) * (-1 if self.settings.import_positive else 1)
+            if not self.settings.meter_verified or export < 3 + self.settings.export_headroom_kw:
+                self.solar_samples.clear()
+            else:
+                if self.solar_samples and (
+                    grid.observed_at < self.solar_samples[-1]
+                    or (grid.observed_at - self.solar_samples[-1]).total_seconds()
+                    > self.settings.grid_max_age_seconds
+                ):
+                    self.solar_samples.clear()
+                if not self.solar_samples or grid.observed_at > self.solar_samples[-1]:
+                    self.solar_samples.append(grid.observed_at)
+                solar_confirmed = (
+                    self.solar_samples[-1] - self.solar_samples[0]
+                ).total_seconds() >= self.settings.solar_hold_minutes * 60
+        except (KeyError, ValueError, TypeError, OverflowError):
+            self.solar_samples.clear()
         self.plan = evaluate(
-            now, self.boot, readings, self.settings, self.tariffs, intervention=self.intervention
+            now,
+            self.boot,
+            readings,
+            self.settings,
+            self.tariffs,
+            intervention=self.intervention,
+            solar_confirmed=solar_confirmed,
         )
         self.values = asdict(self.plan)
         self.values["controller"] = self.plan.state
+        self.values["morning_threshold_c"] = self.settings.morning_threshold_c
+        self.values["storage_target_c"] = self.settings.target_c
         health = readings.get("cloud_health", Reading("unavailable", now)).value
         self.values["cloud_health"] = (
             health
@@ -126,6 +157,9 @@ class ShadowRuntime:
         self.values["measured_net_export_kw"] = (
             None if grid is None else grid * (-1 if self.settings.import_positive else 1)
         )
+        net = self.values["measured_net_export_kw"]
+        self.values["measured_import_kw"] = None if net is None else max(0, -net)
+        self.values["measured_export_kw"] = None if net is None else max(0, net)
         self.values["requests_since_start"] = None
         self.values["observed_requests_per_hour"] = None
         count_reading = self._reading("requests")
@@ -174,6 +208,16 @@ class ShadowRuntime:
         )
         if not self.native_options["native_schedule_clock_verified"]:
             self.plan.warnings.append("native_schedule_times_approximate_clock_unverified")
+        from .native import clock_check_required
+
+        clock_check = clock_check_required(now, self.native_options["native_clock_check_date"])
+        self.values["device_clock_check"] = (
+            "check_required"
+            if clock_check or not self.native_options["native_schedule_clock_verified"]
+            else "checked_this_dst_period"
+        )
+        if self.values["device_clock_check"] == "check_required":
+            self.plan.warnings.append("check_thermann_clock_manual_dst_adjustment_required")
         if self.native_options["t_comfort_reference_c"] == 10:
             self.plan.warnings.append("t_comfort_10C_not_practical_hot_water_reserve")
         else:
@@ -230,7 +274,10 @@ class ShadowRuntime:
             "tariff_contract_verified": self.settings.tariff_verified,
             "tariff_clock": self.settings.tariff_clock,
             "morning_comfort_time": "07:00 Australia/Hobart",
-            "evening_comfort_time": "16:00 Australia/Hobart",
+            "evening_comfort_time": "16:00 nominal; weekday storage deadline follows actual peak",
+            "planning_goal": self.plan.deadline_kind,
+            "morning_threshold_is_not_a_setpoint": True,
+            "manual_recovery_risk_accepted_by_owner": True,
             "estimate_basis": "uniform_315L_3kW_scenario_not_measured_reserve",
             "comparison_basis": "same_modelled_energy_at_current_rate_not_native_schedule_savings",
             "reasons": self.plan.reasons,
@@ -238,6 +285,10 @@ class ShadowRuntime:
             "windows": self.plan.windows,
             "native_schedule_reference": self.native_options["native_schedule_periods"],
             "native_schedule_clock": self.native_options["native_schedule_clock"],
+            "native_clock_reference_date": self.native_options["native_clock_check_date"],
+            "device_clock_not_read_by_api": True,
+            "solar_hold_satisfied": solar_confirmed,
+            "local_evaluation_seconds": 60,
             "t_comfort_setting_is_reference_only": True,
             "native_permitted_minutes_before_comfort_deadline": native_minutes,
             "native_window_capacity_is_not_measured_energy": True,

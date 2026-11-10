@@ -12,7 +12,6 @@ from zoneinfo import ZoneInfo
 HOBART = ZoneInfo("Australia/Hobart")
 STANDARD = timezone(timedelta(hours=10))
 UTC = timezone.utc
-STEP = timedelta(minutes=5)
 TANK_KWH_PER_C = 315 * 4.186 / 3600
 ELEMENT_KW = 3.0
 
@@ -48,13 +47,16 @@ class Settings:
     paused: bool = False
     import_positive: bool = True
     tariff_clock: str = "local"
-    target_c: float = 65.0  # model target only; never a heater setpoint
+    target_c: float = 70.0  # model target only; never a heater setpoint
+    morning_threshold_c: float = 40.0  # comfort decision, NEVER a storage setpoint
     expected_native_target_c: float = 70.0
     margin_minutes: float = 30.0
     feed_in_rate: float = 0.08
     export_headroom_kw: float = 0.3
     status_max_age_minutes: float = 45.0
     grid_max_age_seconds: float = 120.0
+    solar_hold_minutes: float = 10.0
+    solar_window_minutes: float = 15.0
     morning: time = time(7)
     evening: time = time(16)
 
@@ -79,6 +81,12 @@ class Plan:
     peak_start: datetime | None = None
     deadline_kind: str | None = None
     planned_start: datetime | None = None
+    latest_start: datetime | None = None
+    grid_fallback_start: datetime | None = None
+    planning_target_c: float | None = None
+    current_tariff: str | None = None
+    current_price_aud: float | None = None
+    recommended_energy_source: str | None = None
     mixed_model_energy_kwh: float | None = None
     modelled_heating_minutes: float | None = None
     estimated_import_kwh: float | None = None
@@ -183,7 +191,7 @@ def _deadline(
     for day in (local.date(), local.date() + timedelta(days=1)):
         morning = datetime.combine(day, settings.morning, HOBART).astimezone(UTC)
         evening = datetime.combine(day, settings.evening, HOBART).astimezone(UTC)
-        # Earlier afternoon peak start wins over the nominal 16:00 requirement.
+        # Tariff deadline is independent of the household's nominal 16:00 time.
         start = datetime.combine(day, time(12), HOBART).astimezone(UTC)
         peak = None
         for step in range(12 * 60) if settings.tariff_verified else ():
@@ -191,14 +199,14 @@ def _deadline(
             if instant.astimezone(HOBART).date() != day:
                 break
             if tariff_at(instant, tariffs, settings.tariff_clock).kind == "peak":
-                evening = min(evening, instant)
+                evening = instant
                 peak = instant
                 break
         comfort_evening = datetime.combine(day, settings.evening, HOBART).astimezone(UTC)
         candidates.extend(
             [
                 (morning, "morning_0700", morning, None),
-                (evening, "evening_or_peak", comfort_evening, peak),
+                (evening, "afternoon_peak" if peak else "afternoon_comfort", comfort_evening, peak),
             ]
         )
     return min(item for item in candidates if item[0] > now)
@@ -212,12 +220,15 @@ def validate_settings(settings: Settings) -> None:
         )
         or settings.tariff_clock not in {"local", "standard"}
         or not 65 <= settings.target_c <= 70
+        or not 30 <= settings.morning_threshold_c <= 60
         or not 20 <= settings.expected_native_target_c <= 75
         or not 0 <= settings.margin_minutes <= 120
         or not 30 <= settings.status_max_age_minutes <= 90
         or not 30 <= settings.grid_max_age_seconds <= 300
         or not 0 <= settings.export_headroom_kw <= 3
         or not 0 <= settings.feed_in_rate <= 2
+        or not 5 <= settings.solar_hold_minutes <= 30
+        or not 5 <= settings.solar_window_minutes <= 30
         or settings.morning != time(7)
         or settings.evening != time(16)
     ):
@@ -232,8 +243,9 @@ def evaluate(
     tariffs: tuple[Tariff, ...],
     forecast: tuple[Forecast, ...] = (),
     intervention: bool = False,
+    solar_confirmed: bool = False,
 ) -> Plan:
-    """Local five-minute planning only. Tariffs must be validated once on load."""
+    """Local planning only. Never enact a window or request a cloud update."""
     plan = Plan()
     if not aware(now) or not aware(boot):
         plan.reasons.append("clock_invalid")
@@ -281,10 +293,21 @@ def evaluate(
         plan.deadline, plan.deadline_kind, plan.comfort_deadline, plan.peak_start = _deadline(
             now, settings, tariffs
         )
-        energy = max(0.0, settings.target_c - temperature) * TANK_KWH_PER_C
+        plan.planning_target_c = (
+            settings.morning_threshold_c
+            if plan.deadline_kind == "morning_0700"
+            else settings.target_c
+        )
+        active_tariff = tariff_at(now, tariffs, settings.tariff_clock)
+        if settings.tariff_verified:
+            plan.current_tariff, plan.current_price_aud = active_tariff.kind, active_tariff.rate
+        energy = max(0.0, plan.planning_target_c - temperature) * TANK_KWH_PER_C
         required = energy + (ELEMENT_KW * settings.margin_minutes / 60 if energy else 0)
         plan.mixed_model_energy_kwh = round(energy, 3)
         plan.modelled_heating_minutes = round(required / ELEMENT_KW * 60, 1)
+        plan.latest_start = (
+            plan.deadline - timedelta(hours=required / ELEMENT_KW) if required else None
+        )
         if not settings.meter_verified or not settings.tariff_verified:
             plan.state = "shadow_awaiting_validation"
             plan.reasons.append("verify_meter_sign_units_and_tariff")
@@ -306,10 +329,23 @@ def evaluate(
             previous_end = item.end
         if not forecast:
             plan.warnings.append("no_net_surplus_forecast_current_export_not_extrapolated")
-        plan.warnings.append("morning_usable_water_reserve_not_established")
+        plan.warnings.append("bottom_temperature_used_directly_planning_estimate_only")
+        plan.warnings.append("40C_is_comfort_threshold_not_storage_setpoint")
+        if (
+            plan.deadline_kind != "morning_0700"
+            and settings.target_c - 8 < temperature < settings.target_c
+        ):
+            plan.warnings.append("within_thermostat_hysteresis_no_forced_heating_verified")
         if required == 0:
             plan.state = "shadow_no_modelled_topup"
-            plan.reasons.append("model_target_met_not_a_comfort_or_hygiene_guarantee")
+            plan.reasons.append(
+                "morning_threshold_met_no_morning_heat_required"
+                if plan.deadline_kind == "morning_0700"
+                else "storage_target_met_no_topup_required"
+            )
+            plan.recommended_energy_source = "none"
+            plan.estimated_import_kwh = plan.estimated_solar_kwh = plan.unmet_model_energy_kwh = 0
+            plan.estimated_cost_aud = plan.comparison_cost_difference_aud = 0
             return plan
         slots = []
         cursor = now.astimezone(UTC)
@@ -324,11 +360,19 @@ def evaluate(
                 if cursor < item.end < end:
                     end = item.end
             tariff = tariff_at(cursor, tariffs, settings.tariff_clock)
-            surplus = max(0.0, export - settings.export_headroom_kw) if cursor == now else 0.0
+            # Only a bounded recent-export scenario, never a whole-day forecast.
+            surplus = (
+                max(0.0, export - settings.export_headroom_kw)
+                if solar_confirmed
+                and cursor < now + timedelta(minutes=settings.solar_window_minutes)
+                else 0.0
+            )
             for item in forecast:
                 if item.start <= cursor and item.end >= end:
                     surplus = max(0.0, item.export_kw - settings.export_headroom_kw)
                     break
+            # Element is a full 3 kW load; fraction describes its energy source,
+            # never variable element power or a modulated command.
             solar_fraction = min(1.0, surplus / ELEMENT_KW)
             unit_cost = tariff.rate * (1 - solar_fraction) + settings.feed_in_rate * solar_fraction
             capacity = ELEMENT_KW * (end - cursor).total_seconds() / 3600
@@ -336,13 +380,53 @@ def evaluate(
                 (solar_fraction < 1, unit_cost, cursor, end, capacity, solar_fraction, tariff.kind)
             )
             cursor = end
+        # Reserve a full off-peak fallback independently of any future forecast.
+        # Latest-first on equal prices leaves time for solar without missing duty.
+        backup_remaining = required
+        backup_start = now
+        for slot in reversed(slots):
+            if slot[6] != "off_peak":
+                continue
+            amount = min(backup_remaining, slot[4])
+            backup_start = slot[3] - timedelta(hours=amount / ELEMENT_KW)
+            backup_remaining -= amount
+            if backup_remaining <= 1e-8:
+                break
+        plan.grid_fallback_start = (
+            backup_start
+            if backup_remaining <= 1e-8
+            else max(now, plan.deadline - timedelta(hours=required / ELEMENT_KW))
+        )
+        force_now = now >= plan.grid_fallback_start
+        if backup_remaining > 1e-8:
+            plan.warnings.append("insufficient_off_peak_time_comfort_priority")
+        if export >= ELEMENT_KW + settings.export_headroom_kw and not solar_confirmed:
+            plan.warnings.append("solar_export_hold_not_yet_satisfied")
+        if solar_confirmed:
+            plan.warnings.append("recent_export_window_is_assumption_not_forecast")
         remaining, imported_kwh, solar_kwh, cost = required, 0.0, 0.0, 0.0
         selected = []
-        for _, unit_cost, start, end, capacity, fraction, kind in sorted(slots):
+        ordered = (
+            sorted(slots, key=lambda slot: slot[2])
+            if force_now
+            else sorted(
+                slots,
+                key=lambda slot: (
+                    slot[0],
+                    slot[1],
+                    slot[2].timestamp() if not slot[0] else -slot[2].timestamp(),
+                ),
+            )
+        )
+        for _, unit_cost, start, end, capacity, fraction, kind in ordered:
             amount = min(remaining, capacity)
             if amount <= 1e-8:
                 break
-            finish = start + (end - start) * (amount / capacity)
+            if not force_now and fraction < 1:
+                start = end - timedelta(hours=amount / ELEMENT_KW)
+                finish = end
+            else:
+                finish = start + (end - start) * (amount / capacity)
             selected.append((start, finish, fraction, kind))
             solar_kwh += amount * fraction
             imported_kwh += amount * (1 - fraction)
@@ -365,6 +449,9 @@ def evaluate(
         plan.estimated_solar_kwh = round(solar_kwh, 3)
         plan.estimated_cost_aud = round(cost, 3)
         plan.unmet_model_energy_kwh = round(max(0.0, remaining), 3)
+        plan.recommended_energy_source = (
+            "net_solar" if imported_kwh < 1e-8 else "mixed" if solar_kwh > 1e-8 else "grid"
+        )
         # Unserved energy is a shortfall, never a saving.
         plan.comparison_cost_difference_aud = round((required - remaining) * current_rate - cost, 3)
         if remaining > 1e-8:
@@ -377,7 +464,7 @@ def evaluate(
                 if export >= ELEMENT_KW + settings.export_headroom_kw
                 else "shadow_heat_now"
             )
-            plan.reasons.append("modelled_heating_window_now_no_command_sent")
+            plan.reasons.append("full_3kW_heating_window_now_no_command_sent")
         else:
             plan.state = "shadow_wait_for_window"
             plan.reasons.append("solar_first_then_lowest_cost_slots_before_deadline")

@@ -43,14 +43,14 @@
       },
       "settings": {
         "title": "Shadow assumptions and tariff contract",
-        "description": "No setting enables heater control. Leave verification flags OFF until meter sign/units and your actual tariff have been checked. Zero default prices and the flat placeholder period are NOT your contract. Days: Monday=0 to Sunday=6. Periods use off_peak, shoulder or peak; cover every minute of the week exactly once. local follows Tasmania DST; standard is fixed UTC+10. Targets and margins are model assumptions only.",
+        "description": "Shadow planning only; no setting enables heater control. Owner-confirmed Aurora Tariff 93 defaults use fixed AEST (UTC+10); the tariff automatically displays one hour later in Hobart during DST. Meter direction is owner-confirmed export-positive. Explicit saved overrides are preserved. The 40°C morning value is a decision threshold, NEVER a storage setpoint. Weekly periods use Monday=0 to Sunday=6 and cover every minute exactly once.",
         "data": {
           "paused": "Pause shadow planning",
-          "meter_verified": "Meter sign and power units verified by load test",
-          "tariff_verified": "Rates, weekly periods and DST confirmed from contract",
+          "meter_verified": "Owner-confirmed meter sign/units load test",
+          "tariff_verified": "Owner-confirmed contract rates, periods and clock",
           "import_positive": "Positive signed grid means IMPORT (OFF = export-positive)",
           "tariff_clock": "Tariff wall clock (local or fixed standard)",
-          "target_c": "Hypothetical storage target (65â€“70Â°C; no command)",
+          "target_c": "Afternoon storage planning target (65–70°C; no command)",
           "expected_native_target_c": "Expected reported native target (reference only, Â°C)",
           "margin_minutes": "Extra model heating allowance (minutes; uncalibrated)",
           "feed_in_rate": "Export compensation (AUD/kWh)",
@@ -64,7 +64,11 @@
           "native_schedule_periods": "Reported native Schedule (JSON reference only; no writes)",
           "native_schedule_clock": "Native Schedule clock (local or fixed standard)",
           "native_schedule_clock_verified": "Device Schedule clock / DST independently verified",
-          "t_comfort_reference_c": "Reported T-Comfort setting (reference only; never changes heater)"
+          "t_comfort_reference_c": "Reported T-Comfort setting (reference only; never changes heater)",
+          "morning_threshold_c": "Morning bottom-temperature comfort threshold (°C; NOT heater setpoint)",
+          "solar_hold_minutes": "Sustained export observation required (minutes)",
+          "solar_window_minutes": "Bounded recent-export planning window (minutes; not a forecast)",
+          "native_clock_check_date": "Date you last checked/adjusted the Thermann clock (YYYY-MM-DD; blank = unknown)"
         }
       }
     },

@@ -1,9 +1,11 @@
 {
   "domain": "thermann_shadow",
   "name": "Thermann Shadow Planner",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "documentation": "https://github.com/MuntedDaze/ha-thermowatt-heater/tree/main/shadow_controller",
-  "codeowners": ["@MuntedDaze"],
+  "codeowners": [
+    "@MuntedDaze"
+  ],
   "config_flow": true,
   "integration_type": "entity",
   "iot_class": "local_polling",

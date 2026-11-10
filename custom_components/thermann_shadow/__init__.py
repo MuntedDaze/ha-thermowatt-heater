@@ -25,7 +25,7 @@ async def async_setup_entry(hass, entry):
     def update(now):
         runtime.update(now)
 
-    entry.async_on_unload(async_track_time_interval(hass, update, timedelta(minutes=5)))
+    entry.async_on_unload(async_track_time_interval(hass, update, timedelta(minutes=1)))
     entry.async_on_unload(entry.add_update_listener(_reload))
     runtime.update(dt_util.utcnow())
     return True
