@@ -39,7 +39,6 @@ views:
       name: Tank · bottom sensor
       min: 10
       max: 75
-      needle: true
       severity:
         red: 10
         yellow: 40

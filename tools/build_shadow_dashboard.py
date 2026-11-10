@@ -132,7 +132,6 @@ def build():
                     "name": "Tank · bottom sensor",
                     "min": 10,
                     "max": 75,
-                    "needle": True,
                     "severity": {"red": 10, "yellow": 40, "green": 60},
                 },
                 tile("Morning comfort threshold", "mdi:weather-sunset-up"),
