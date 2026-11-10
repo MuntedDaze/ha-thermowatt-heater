@@ -18,6 +18,7 @@ import sys
 import yaml
 
 from homeassistant import bootstrap, config_entries, loader
+from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE
 from homeassistant.core import HomeAssistant, ServiceRegistry
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -97,6 +98,23 @@ async def start_hass(folder, component):
     return hass
 
 
+async def flush_and_close(hass):
+    """Unload entries, then persist storage the way a real shutdown does.
+
+    hass.async_stop() is a no-op for a core that was never started, so fire the
+    final-write event that every delayed Store (config entries, registries)
+    listens for, and wait for the executor writes to finish.
+    """
+    for entry in hass.config_entries.async_entries("thermann_shadow"):
+        if entry.state is config_entries.ConfigEntryState.LOADED:
+            assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_FINAL_WRITE)
+    await hass.async_block_till_done()
+    storage = Path(hass.config.config_dir) / ".storage"
+    return {path.name for path in storage.iterdir()} if storage.exists() else set()
+
+
 def report_inputs(hass, sources, temperature=55, grid=1501, pv=2322, house=821):
     now = dt_util.utcnow()
     values = {
@@ -162,7 +180,8 @@ async def upgrade_from_0_2_0(folder):
     assert "sensor.hot_water_shadow_controller" in before.values()
     saved_options = dict(entry.options)
     entry_id = entry.entry_id
-    await hass.async_stop()  # final write of config entries and entity registry
+    stored = await flush_and_close(hass)
+    assert {"core.config_entries", "core.entity_registry"} <= stored, stored
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
@@ -191,7 +210,7 @@ async def upgrade_from_0_2_0(folder):
     controller = hass.states.get("sensor.hot_water_shadow_controller")
     assert controller.attributes["control_capable"] is False
     json.dumps(dict(controller.attributes), allow_nan=False)
-    await hass.async_stop()
+    await flush_and_close(hass)
     return {"legacy_entities": len(before), "entities_after_upgrade": len(after)}
 
 
