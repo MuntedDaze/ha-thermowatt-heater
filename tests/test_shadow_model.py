@@ -511,19 +511,34 @@ def test_custom_settings_and_dashboard_have_no_control_actions():
     content = json.dumps(dashboard)
     for forbidden in ("call-service", "water_heater.", "/CMD/", "/refresh"):
         assert forbidden not in content
-    # The sole dashboard action restores LOCAL preferences, with confirmation.
-    actions = [
-        card["tap_action"]
-        for view in dashboard["views"]
-        for card in view["cards"]
-        if card.get("tap_action", {}).get("action") == "perform-action"
-    ]
-    assert len(actions) == 1 and actions[0]["perform_action"] == "button.press"
-    assert (
-        actions[0]["target"]["entity_id"]
-        == "button.thermann_shadow_restore_recommended_preferences"
-    )
-    assert actions[0]["confirmation"]["text"]
+    # The only dashboard actions restore/undo LOCAL preferences, with confirmation.
+    # Walk nested sections/grids so no action can hide inside a container card.
+    actions = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key in ("tap_action", "hold_action", "double_tap_action"):
+                if isinstance(node.get(key), dict) and node[key].get("action") not in {
+                    None,
+                    "navigate",
+                    "more-info",
+                    "none",
+                }:
+                    actions.append(node[key])
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(dashboard)
+    assert {action["target"]["entity_id"] for action in actions} == {
+        "button.thermann_shadow_restore_recommended_preferences",
+        "button.thermann_shadow_undo_last_restore",
+    }
+    for action in actions:
+        assert action["action"] == "perform-action" and action["perform_action"] == "button.press"
+        assert action["confirmation"]["text"]
 
 
 def test_synthetic_replay_of_owner_observations_outages_and_shortage():
