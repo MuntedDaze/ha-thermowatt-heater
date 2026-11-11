@@ -69,6 +69,7 @@ SENSORS = {
     "decision_confidence": ("Decision confidence", None),
     "native_predicted_cost_aud": ("Native Schedule predicted cost", "AUD"),
     "native_vs_best_plan_aud": ("Native Schedule extra cost vs best plan", "AUD"),
+    "schedule_advisor_suggestion": ("Schedule advisor today", None),
 }
 # Retired in 0.4.0 (described a non-existent executor). HA keeps their registry
 # entries as unavailable until the owner removes them; see UPGRADING_0_4_0.md.

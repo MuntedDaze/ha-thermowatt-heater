@@ -548,6 +548,7 @@ async def check_unchanged_mqtt_payload_freshness(hass, entry):
     hass.states.async_set(DEFAULT_SOURCES["last_poll"], (now - timedelta(minutes=5)).isoformat())
     for key, value in {"grid": 1501, "pv": 2322, "house": 821}.items():
         hass.states.async_set(DEFAULT_SOURCES[key], value, {"unit_of_measurement": "W"})
+    now = dt_util.utcnow()  # after the meter writes, so they are not "from the future"
     runtime.update(now)
     assert runtime.plan.state == "shadow_advising", runtime.plan.reasons
     assert runtime.values["temperature"] == 55

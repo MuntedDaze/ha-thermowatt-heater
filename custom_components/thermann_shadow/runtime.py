@@ -218,6 +218,8 @@ class ShadowRuntime:
             )
             == "within_reported_window",
             heater_power_kw=heater_power,
+            native_periods=self.native_periods,
+            native_clock=self.native_options["native_schedule_clock"],
             pv_series=self.forecast.pv_series,
             load_series=self.forecast.load_series,
             forecast_available=bool(self.forecast.pv_series),
@@ -582,6 +584,9 @@ class ShadowRuntime:
                 "waiting_saving_aud": saving,
                 "decision_confidence": advice.confidence,
                 "native_predicted_cost_aud": native.get("predicted_cost_aud"),
+                "schedule_advisor_suggestion": (advice.schedule or {}).get(
+                    "cheapest_meeting_goals"
+                ),
                 "native_vs_best_plan_aud": round(
                     native["predicted_cost_aud"] - result.best_cost_aud, 3
                 )
@@ -647,6 +652,7 @@ class ShadowRuntime:
             else {},
             "strategy_warnings": result.warnings if result else [],
             "native_outlook": advice.native,
+            "schedule_advisor": advice.schedule,
         }
 
     def subscribe(self, listener):

@@ -3,6 +3,7 @@ incremental economics, native awareness. Offline; no HA, cloud or heater."""
 
 from datetime import date, datetime, time, timedelta
 import importlib
+import importlib.util
 import json
 from types import SimpleNamespace
 
@@ -515,3 +516,37 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
     assert run({"morning_threshold_c": 45.0})["options"]["morning_threshold_c"] == 45.0
     assert run({})["minor_version"] == 2
     assert run({"morning_threshold_c": 40.0}, minor=2) == {}
+
+
+def test_schedule_advisor_compares_native_windows_without_changing_them():
+    now = local(hour=3)
+    slots, settings = build(now, 14, lambda k: 0.0 if k < 28 else 4.0)
+    goals = [
+        goals_mod.Goal("morning", local(hour=8), 42, "x", None),
+        afternoon_goal(local(hour=17)),
+    ]
+    current = (((0, 1, 2, 3, 4), 240, 480), ((0, 1, 2, 3, 4), 660, 1020), ((5, 6), 360, 1320))
+    advice = strategy.schedule_advice(now, 50, goals, slots, settings, current, "local", False)
+    names = [item["name"] for item in advice["candidates"]]
+    assert names[0] == "current reference" and len(names) == 4
+    assert advice["cheapest_meeting_goals"] in names
+    assert "not a recommendation" in advice["basis"]
+
+
+def test_version_comparison_report_reproduces():
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "compare_versions_test", Path(__file__).parents[1] / "tools/compare_versions.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    saved = module.OUT.read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert saved == module.markdown(module.run())
+    rows = {row["case"]: row for row in module.run()}
+    observed = rows["Observed 11 Nov 11:42, element ON"]
+    assert observed["before"]["label"] == "WAIT FOR SOLAR"
+    assert observed["after"]["label"] == "HEATING NOW (NATIVE)"
+    assert rows["Unchanged MQTT payload (written 50 min ago, poll 5 min ago)"]["before"][
+        "label"
+    ] == ("DATA UNAVAILABLE")

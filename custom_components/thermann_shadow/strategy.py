@@ -579,13 +579,16 @@ def native_outlook(
     hysteresis band); this is a comparison, not a forecast of the device."""
     feed_in = settings.feed_in_rate
     target = settings.expected_native_target_c
-    hours = 0.0
     need = TANK_KWH_PER_C * max(0.0, target - temperature)
+    reqs = requirements(now, temperature, goals, settings)
+    # The thermostat keeps reheating after draws, so cover the draw-inclusive
+    # requirement too (whichever is larger).
+    floor = max((kwh for _, kwh in reqs), default=0.0)
     delivered, cost, solar = 0.0, 0.0, 0.0
     chosen = []
     for k, slot in enumerate(slots):
         hours = (slot.end - now).total_seconds() / 3600
-        need_now = need + TANK_KWH_PER_C * settings.standing_loss_c_per_hour * hours
+        need_now = max(floor, need + TANK_KWH_PER_C * settings.standing_loss_c_per_hour * hours)
         allowed = in_window(slot.start) or (k == 0 and element_on)
         if allowed and delivered < need_now - 1e-9:
             fraction = min(1.0, (need_now - delivered) / slot.capacity)
@@ -593,7 +596,6 @@ def native_outlook(
             cost += slot.cost(feed_in) * fraction
             solar += slot.solar() * slot.hours * fraction
             chosen.append((slot.start, slot.start + (slot.end - slot.start) * fraction))
-    reqs = requirements(now, temperature, goals, settings)
     readiness = {}
     for goal, kwh in reqs:
         by = sum(
@@ -614,4 +616,62 @@ def native_outlook(
         "first_heating": chosen[0][0].isoformat() if chosen else None,
         "readiness": readiness,
         "assumption": "native heats in permitted windows until its own target; thermostat hysteresis may delay it",
+    }
+
+
+# Candidate native Schedule window sets for the read-only Schedule advisor.
+# (days, start minute, end minute) in the native clock. Weekends keep 06-22.
+WEEKEND = ((5, 6), 6 * 60, 22 * 60)
+SCHEDULE_CANDIDATES = {
+    "morning 04-07, solar 10-16": (
+        ((0, 1, 2, 3, 4), 240, 420),
+        ((0, 1, 2, 3, 4), 600, 960),
+        WEEKEND,
+    ),
+    "morning 05-08, solar 11-16": (
+        ((0, 1, 2, 3, 4), 300, 480),
+        ((0, 1, 2, 3, 4), 660, 960),
+        WEEKEND,
+    ),
+    "morning 03-06, solar 09-15": (
+        ((0, 1, 2, 3, 4), 180, 360),
+        ((0, 1, 2, 3, 4), 540, 900),
+        WEEKEND,
+    ),
+}
+
+
+def schedule_advice(now, temperature, goals, slots, settings, current_periods, clock, element_on):
+    """Read-only: today's predicted cost/readiness for the current native windows
+    and a few alternatives. A single-day estimate; Stage 3c backtesting must
+    confirm any change before the owner edits the real Schedule."""
+    from .native import scheduled_permission
+
+    options = {"current reference": tuple(current_periods), **SCHEDULE_CANDIDATES}
+    results = []
+    for name, periods in options.items():
+        outlook = native_outlook(
+            now,
+            temperature,
+            goals,
+            slots,
+            settings,
+            lambda at, periods=periods: scheduled_permission(at, periods, clock)
+            == "within_reported_window",
+            element_on,
+        )
+        results.append(
+            {
+                "name": name,
+                "predicted_cost_aud": outlook["predicted_cost_aud"],
+                "predicted_solar_kwh": outlook["predicted_solar_kwh"],
+                "all_goals_met": all(item["met"] for item in outlook["readiness"].values()),
+            }
+        )
+    meeting = [item for item in results if item["all_goals_met"]]
+    best = min(meeting, key=lambda item: item["predicted_cost_aud"]) if meeting else None
+    return {
+        "candidates": results,
+        "cheapest_meeting_goals": best["name"] if best else None,
+        "basis": "today's forecast only; not a recommendation to change the Schedule",
     }

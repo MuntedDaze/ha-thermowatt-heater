@@ -13,7 +13,7 @@ import statistics
 from .goals import upcoming_goals
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Plan, Settings, Tariff
-from .strategy import Assessment, assess, build_slots, native_outlook
+from .strategy import Assessment, assess, build_slots, native_outlook, schedule_advice
 
 BASE_WINDOW = timedelta(minutes=60)
 METER_SUSPECT_AFTER = timedelta(minutes=10)
@@ -53,6 +53,8 @@ class TickInputs:
     status_raw: object
     status_at: datetime | None
     in_window: object  # callable(datetime) -> bool
+    native_periods: tuple = ()
+    native_clock: str = "local"
     heater_power_kw: float | None = None
     pv_series: tuple = ()
     load_series: tuple = ()
@@ -76,6 +78,7 @@ class Advice:
     pending_code: str | None = None
     readiness: dict = field(default_factory=dict)
     goals: list = field(default_factory=list)
+    schedule: dict | None = None
 
 
 class Advisor:
@@ -209,6 +212,17 @@ class Advisor:
             storage_satisfied=self.satisfied is not None,
         )
         advice.assessment, advice.native = result, native
+        if inputs.native_periods:
+            advice.schedule = schedule_advice(
+                now,
+                inputs.temperature,
+                goals,
+                slots,
+                settings,
+                inputs.native_periods,
+                inputs.native_clock,
+                heater.state == "on",
+            )
         best = result.plans.get("best_overall")
         for goal, kwh in result.requirements:
             if kwh <= 1e-9:
