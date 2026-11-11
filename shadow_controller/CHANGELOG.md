@@ -1,5 +1,31 @@
 # Thermann Shadow Planner
 
+## 0.6.0 — control architecture corrected: Manual 70 °C permit / software OFF park
+
+- **Why the change.** The owner's app testing showed that an empty native
+  Schedule made the app's setpoint revert to 40 °C, so it cannot be the parked
+  state. Software OFF keeps 70 °C, and the owner's guide confirms antibacterial
+  and frost protection stay active in OFF.
+- **New method:**
+  - the controller now parks with `off` and resumes with the guarded
+    `Manual:70`;
+  - OFF's reported setpoint is never used to classify, permit or confirm;
+  - a resume is confirmed only at Manual **70 °C**;
+  - Schedule, Eco and Holiday are owner control.
+- **Protective heating** while OFF is never interrupted, and no command is sent
+  while it runs.
+- **Commissioning:** the empty-Schedule confirmation and stage are removed. No
+  native Schedule configuration is required. Clock and native-fallback warnings
+  apply only while the programme is in use.
+- **Bridge:** requires **bridge 1.3.9** (PR #12). It handles an OFF status with
+  an out-of-range setpoint, which 1.3.8 rejects, and accepts the guarded resume
+  from OFF.
+- **Tests:** 879, including 90 controller tests (17 new OFF tests and closed
+  loops with an antibacterial cycle during OFF). The real-HA check now resumes
+  from OFF.
+- **Documentation:** version-neutral CONTROLLER, COMMISSIONING and
+  PRODUCTION_READINESS, plus UPGRADE_0_5_0_TO_0_6_0.
+
 ## 0.5.0 — production controller candidate (not deployed; control off by default)
 
 - **Control method.** Manual 70 °C permits heating, and the empty weekly
@@ -41,8 +67,8 @@
 
   A real-HA wiring check captures the MQTT message without sending it, and the
   replay tool gains `--controller-dry-run`.
-- **Documentation:** CONTROLLER_0_5_0, COMMISSIONING_0_5_0 (Stages A–E),
-  PRODUCTION_READINESS_0_5_0, LOCAL_CONTROL_FEASIBILITY.
+- **Documentation:** CONTROLLER, COMMISSIONING (Stages A–E),
+  PRODUCTION_READINESS, LOCAL_CONTROL_FEASIBILITY.
 
 ## 0.4.0 — Stage 3a read-only candidate
 

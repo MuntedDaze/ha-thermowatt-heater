@@ -1,5 +1,9 @@
 # Stage A — install Controller 0.5.0 over Shadow Planner 0.3.0 (control disabled)
 
+> **Historical (completed).** 0.5.0 is installed and disabled. Its empty-Schedule
+> park was withdrawn in 0.6.0. To upgrade, use
+> [UPGRADE_0_5_0_TO_0_6_0.md](UPGRADE_0_5_0_TO_0_6_0.md).
+
 **Read-only installation, not activation.** Stage A replaces one custom
 integration folder and restarts Home Assistant once. It does **not**:
 - send any heater command or MQTT heater message;

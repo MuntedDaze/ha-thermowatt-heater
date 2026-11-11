@@ -45,7 +45,6 @@ def controller_config(options: dict, poll_minutes: float = 30.0) -> ControllerCo
     values = {**DEFAULT_OPTIONS, **options}
     return ControllerConfig(
         command_topic=str(values["controller_command_topic"]).strip(),
-        park_empty_schedule_confirmed=values["controller_empty_schedule_confirmed"] is True,
         bridge_commands_qualified=values["controller_bridge_qualified"] is True,
         min_heating_minutes=float(values["controller_min_heating_minutes"]),
         min_rest_minutes=float(values["controller_min_rest_minutes"]),
@@ -156,6 +155,8 @@ class Executor:
             obs.auth_mode = attrs.get("auth_guard_mode")
             obs.consecutive_failures = _int(attrs.get("consecutive_failures"))
             obs.cooldown_seconds = _int(attrs.get("cooldown_remaining_seconds"))
+        if heater is not None and heater.state == "off":
+            obs.target_c = None  # OFF's setpoint is not an operating target
             flag = attrs.get("commands_enabled")
             obs.bridge_commands_enabled = flag if isinstance(flag, bool) else None
             last = attrs.get("last_command")
@@ -304,7 +305,7 @@ class Executor:
             "commissioning_missing": self.cfg.missing_commissioning(),
             "command_topic_configured": bool(self.cfg.command_topic),
             "permit_payload": "Manual:70 (bridge >= 1.3.9 guarded Manual)",
-            "park_payload": "Auto (Schedule; the weekly programme must be empty)",
+            "park_payload": "off (Thermann software OFF; antibacterial and frost protection stay active)",
             "execution_latency_reserved_minutes": self.latency_minutes,
             "command_timing": "poll_aligned_single_message_no_retry",
             "planning_temperature": self.session.summary(),
@@ -320,7 +321,7 @@ class Executor:
                 "bridge_commands_enabled": obs.bridge_commands_enabled if obs else None,
                 "bridge_last_command": obs.last_command if obs else None,
             },
-            "recovery_manual": "Official Thermann app: select Manual (hot water now, 70 °C) or Schedule (parked). "
+            "recovery_manual": "Official Thermann app: select Manual at 70 °C (hot water now), or turn the heater OFF (parked). "
             "Never reset authentication locks automatically; see the add-on documentation.",
         }
 

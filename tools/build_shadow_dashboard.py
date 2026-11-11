@@ -36,7 +36,7 @@ CONTROLLER_BUTTONS = {
         "Resume control",
         "mdi:play-circle",
         "Resume automatic control? It first re-reads the heater from a NEW bridge status and "
-        "only continues if the heater is in Schedule or Manual at 70 °C.",
+        "only continues if the heater is OFF or in Manual at 70 °C.",
     ),
     "button.thermann_shadow_acknowledge_controller_fault": (
         "Acknowledge fault",
@@ -105,8 +105,9 @@ def recommendation_card():
             "or 'Waiting for fresh heater and meter readings.' }}"
             "</ha-alert>\n\n"
             "{% if is_state('" + MASTER + "', 'on') %}**Automatic control is ON.** The "
-            "controller follows this plan: Manual 70 °C permits heating, the empty Schedule "
-            "parks it; the Thermann thermostat decides when the element runs."
+            "controller follows this plan: Manual 70 °C permits heating, Thermann OFF "
+            "parks it (antibacterial and frost protection stay active); the Thermann "
+            "thermostat decides when the element runs."
             "{% else %}**Planner only.** Automatic control is off, so no heater command is "
             "sent.{% endif %}"
         ),
@@ -516,10 +517,10 @@ def build():
                 "- {{ item }}\n{% endfor %}"
                 "{% for item in state_attr('" + CONTROLLER + "','strategy_warnings') or [] %}"
                 "- {{ item }}\n{% endfor %}\n"
-                "{% if states('" + sensor("Device clock check") + "') != "
-                "'not_applicable_empty_schedule' %}Native clock: compare manually with Hobart "
+                "{% if 'not_applicable' not in states('" + sensor("Device clock check") + "') %}"
+                "Native clock: compare manually with Hobart "
                 "{{ now().strftime('%a %d %b %H:%M') }} after DST changes. {% else %}"
-                "Native Schedule is empty: the heater clock does not affect heating. "
+                "The native Schedule is not in use: the heater clock does not affect heating. "
                 "{% endif %}Tariff 93 stays fixed AEST. The planner adds zero cloud requests."
             ),
         },

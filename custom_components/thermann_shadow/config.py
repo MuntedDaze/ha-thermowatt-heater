@@ -76,11 +76,10 @@ DEFAULT_OPTIONS = {
     "native_schedule_clock_verified": False,
     "native_clock_check_date": "",
     "t_comfort_reference_c": 10.0,
-    # 0.5.0 production controller. A fresh install CANNOT command: no topic,
-    # no commissioning confirmations, and the master switch (stored with the
-    # controller state, not here) defaults to OFF.
+    # Production controller. A fresh install CANNOT command: no topic, no T3
+    # qualification, and the master switch (stored with the controller state,
+    # not here) defaults to OFF. (0.6.0 removed the empty-Schedule confirmation.)
     "controller_command_topic": "",
-    "controller_empty_schedule_confirmed": False,
     "controller_bridge_qualified": False,
     "controller_min_heating_minutes": 30.0,
     "controller_min_rest_minutes": 30.0,
@@ -151,7 +150,6 @@ def parse_options(options):
         "forecast_enabled",
         "weekend_peak",
         "shower_time_enabled",
-        "controller_empty_schedule_confirmed",
         "controller_bridge_qualified",
     ):
         if type(values[key]) is not bool:

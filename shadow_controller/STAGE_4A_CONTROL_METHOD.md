@@ -11,6 +11,21 @@ has `commands_enabled: false` and `on_demand_refresh_enabled: false`.
 The owner accepts manual recovery if Home Assistant or the cloud fails, so a fully
 automatic fallback is not a prerequisite. Manufacturer safety stays first.
 
+## Revision (owner, 12 Nov 2026) — parked state changed to software OFF
+
+App testing found that a completely **empty** native Schedule made the app's
+setpoint revert to 40 °C after it was reopened. Manual 70 °C and app OFF/ON both
+kept 70 °C. The owner's guide confirms OFF keeps antibacterial and frost
+protection while mains stays connected.
+
+**Final method:** Manual 70 °C = heating permitted; Thermann software **OFF** =
+parked. The empty-Schedule park described below is **superseded**, and no native
+Schedule configuration is required.
+
+The bridge's OFF behaviour (`off` and `Manual:70` from OFF) is qualified in T3;
+see [COMMISSIONING.md](COMMISSIONING.md). Bridge 1.3.9 is required, because 1.3.8
+rejects an OFF status whose setpoint is outside 20–75 °C.
+
 ## 0. Owner decision (11 Nov 2026)
 
 - HA should control normal heating completely. The Thermann thermostat and all
@@ -315,4 +330,4 @@ Never force this.
 2. **No** backstop or morning fallback windows; manual recovery after a failure
    is accepted.
 3. T0 and T1 done (T1 passed). **T2 optional.** T3 onward are separately
-   approved commissioning stages (see `COMMISSIONING_0_5_0.md` in PR #13).
+   approved commissioning stages (see `COMMISSIONING.md` in PR #13).

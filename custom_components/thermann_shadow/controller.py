@@ -5,10 +5,14 @@ Pure logic: no Home Assistant imports, no I/O. ``executor.py`` builds the
 observations, persists the returned state BEFORE publishing, and performs the
 returned effects. Every rule here errs towards "do nothing and tell the owner".
 
-Control method (owner decision, 11 Nov 2026, T1 passed in the official app):
+Control method (owner decision, revised 12 Nov 2026 after app testing):
   * heating PERMITTED = Manual at 70 °C (the Thermann thermostat decides power);
-  * heating PARKED    = Schedule with an EMPTY weekly programme.
-No /off, no setpoint writes, no Schedule writes, no fallback heating windows.
+  * heating PARKED    = Thermann software OFF (mains stays connected, so the
+    manufacturer's antibacterial and frost protection remain active).
+The empty-Schedule park was withdrawn: with an empty programme the app's
+setpoint reverted to 40 °C. No setpoint writes, no Schedule writes, no mains
+switching, no fallback heating windows. The native Schedule is not used and
+needs no particular configuration.
 """
 
 from __future__ import annotations
@@ -18,9 +22,12 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 
 APPROVED_TARGET_C = 70.0
-PERMIT_PAYLOAD = "Manual:70"  # bridge >= 1.3.9: refused unless the observed target is 70
-PARK_PAYLOAD = "Auto"  # bridge: POST /auto -> Schedule (Cmd 17)
-EXPECTED_MODE = {"permit": "Manual", "park": "Schedule"}
+# Bridge >= 1.3.9: sends 70 °C explicitly; accepted from OFF (whatever OFF
+# reports as its setpoint) or when the observed target is already 70.
+PERMIT_PAYLOAD = "Manual:70"
+PARK_PAYLOAD = "off"  # bridge: POST /off -> software OFF (Cmd 16)
+EXPECTED_MODE = {"permit": "Manual", "park": "Off"}
+PARK_MODE = "Off"
 TOPIC_PREFIX, TOPIC_SUFFIX = "P/", "/CMD/MODE"
 
 DISABLED = "disabled"
@@ -65,7 +72,7 @@ RECOVERY = {
     "intent_unresolved_after_restart": "Home Assistant restarted while a command was unconfirmed and no later status resolved it. Check the Thermann app, then Acknowledge fault.",
     "unexpected_mode_during_confirmation": "The heater reported a mode that was neither the previous nor the requested one. Check the Thermann app. Resume automatic control when you are satisfied.",
     "mode_or_target_changed_outside_controller": "The Thermann mode or target changed without a controller command (for example in the app). Automatic control stays paused until you press Resume automatic control.",
-    "unexpected_mode_or_target": "The heater is not in Schedule or Manual at 70 °C. Automatic control will not touch it. Set the mode you want in the Thermann app and press Resume automatic control.",
+    "unexpected_mode_or_target": "The heater is not OFF or in Manual at 70 °C (for example it is in Schedule or Eco). Automatic control will not touch it. In the Thermann app choose Manual at 70 °C or turn it OFF, then press Resume automatic control.",
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
 }
 
@@ -73,7 +80,6 @@ RECOVERY = {
 @dataclass(frozen=True)
 class ControllerConfig:
     command_topic: str = ""
-    park_empty_schedule_confirmed: bool = False
     bridge_commands_qualified: bool = False
     hysteresis_c: float = 8.0
     min_heating_minutes: float = 30.0
@@ -90,8 +96,6 @@ class ControllerConfig:
         missing = []
         if not valid_topic(self.command_topic):
             missing.append("command_topic_not_configured")
-        if not self.park_empty_schedule_confirmed:
-            missing.append("empty_schedule_park_not_confirmed")
         if not self.bridge_commands_qualified:
             missing.append("bridge_commands_not_qualified_t3")
         return missing
@@ -318,9 +322,9 @@ class Controller:
             return
         parked = self.state in {PARKED, HEATING_REQUESTED, OBSERVING}
         confident = obs.element_confidence in {"verified", "high"}
-        if parked and obs.mode == "Schedule" and obs.element == "on" and confident:
+        if parked and obs.mode == PARK_MODE and obs.element == "on" and confident:
             self.unexplained_since = self.unexplained_since or _iso(obs.now)
-        elif obs.element == "off" or obs.mode != "Schedule":
+        elif obs.element == "off" or obs.mode != PARK_MODE:
             self.unexplained_since = None
 
     def _ingest_poll(self, obs: Observation) -> bool:
@@ -357,8 +361,10 @@ class Controller:
 
     def _classify(self, obs: Observation, effects: list[Effect]) -> None:
         self.inspect_after = None
-        if obs.mode == "Schedule" and self._known_target(obs):
-            self.state, self.reason = PARKED, "inspected_parked_schedule_70"
+        if obs.mode == PARK_MODE:
+            # OFF's reported setpoint is not an operating target (it may be
+            # anything, or flagged invalid); Manual:70 sets 70 explicitly.
+            self.state, self.reason = PARKED, "inspected_parked_off"
         elif obs.mode == "Manual" and self._known_target(obs):
             self.state, self.reason = HEATING_PERMITTED, "inspected_manual_70"
         else:
@@ -367,8 +373,9 @@ class Controller:
             # an inspected state of unknown age imposes none.
 
     def _check_external_change(self, obs: Observation, effects: list[Effect]) -> None:
-        expected = "Manual" if self.state in {HEATING_PERMITTED, PARK_REQUESTED} else "Schedule"
-        if obs.mode != expected or not self._known_target(obs):
+        permitted = self.state in {HEATING_PERMITTED, PARK_REQUESTED}
+        expected = "Manual" if permitted else PARK_MODE
+        if obs.mode != expected or (permitted and not self._known_target(obs)):
             self._override("mode_or_target_changed_outside_controller", obs, effects)
 
     def _override(self, reason: str, obs: Observation, effects: list[Effect]) -> None:
@@ -417,7 +424,8 @@ class Controller:
             and published is not None
             and obs.poll_at > published
         )
-        if after_publish and obs.mode == expected and self._known_target(obs):
+        target_ok = intent["action"] == "park" or self._known_target(obs)
+        if after_publish and obs.mode == expected and target_ok:
             self._resolve("confirmed", obs, effects)
             self.state = HEATING_PERMITTED if intent["action"] == "permit" else PARKED
             self.reason = f"{intent['action']}_confirmed"
@@ -497,10 +505,10 @@ class Controller:
             # Poll-aligned: the bridge drops commands whose status is >60 s old,
             # so publish only in the slot just after a background poll.
             failures.append("waiting_for_next_bridge_poll")
-        expected_now = "Schedule" if action == "permit" else "Manual"
+        expected_now = PARK_MODE if action == "permit" else "Manual"
         if obs.mode != expected_now:
-            failures.append(f"heater_not_in_{expected_now.lower()}")
-        if not self._known_target(obs):
+            failures.append(f"heater_not_{expected_now.lower()}")
+        if action == "park" and not self._known_target(obs):
             failures.append("target_not_70")
         since = _dt(self.last_transition_at)
         if since is not None:
@@ -596,7 +604,7 @@ class Controller:
         now = obs.now
         if not self.enabled:
             # A disabled controller is silent: no alerts while the native
-            # Schedule and the planner run on their own (installation Stage A).
+            # programme and the planner run on their own (installation Stage A).
             for key in list(self.alerts):
                 del self.alerts[key]
                 effects.append(Effect("resolve", key=key))
@@ -608,10 +616,10 @@ class Controller:
             alerts.append(
                 (
                     "unexplained_heating",
-                    "Hot water: heating while parked",
-                    "The element is on although the heater is parked in Schedule. This may be the "
-                    "antibacterial cycle, frost protection or a Schedule that is not empty. It will "
-                    "not be interrupted; automatic commands wait until it ends.",
+                    "Hot water: protective heating while OFF",
+                    "The element is on although the heater is parked OFF. This is expected to be "
+                    "the manufacturer's antibacterial cycle or frost protection. It will not be "
+                    "interrupted; automatic commands wait until it ends.",
                 )
             )
         if (

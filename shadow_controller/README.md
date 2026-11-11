@@ -1,9 +1,9 @@
 # Thermann Shadow Planner 0.4.0 (candidate)
 
-> **0.5.0 production controller candidate:** see [CONTROLLER_0_5_0.md](CONTROLLER_0_5_0.md),
-> [COMMISSIONING_0_5_0.md](COMMISSIONING_0_5_0.md) and
-> [PRODUCTION_READINESS_0_5_0.md](PRODUCTION_READINESS_0_5_0.md). Automatic control is
-> **off** and impossible until commissioning (Stages B and C) is complete; everything
+> **0.6.0 production controller candidate (Manual 70 °C permit / Thermann OFF park):** see [CONTROLLER.md](CONTROLLER.md),
+> [COMMISSIONING.md](COMMISSIONING.md) and
+> [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Automatic control is
+> **off** and impossible until commissioning (Stage B, T3) is complete; everything
 > below describes the planner, which the controller follows.
 
 

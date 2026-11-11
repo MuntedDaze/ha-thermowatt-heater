@@ -71,7 +71,7 @@ views:
           entity_id: button.thermann_shadow_resume_automatic_control
         confirmation:
           text: Resume automatic control? It first re-reads the heater from a NEW bridge status and only
-            continues if the heater is in Schedule or Manual at 70 °C.
+            continues if the heater is OFF or in Manual at 70 °C.
     - type: button
       entity: button.thermann_shadow_acknowledge_controller_fault
       name: Acknowledge fault
@@ -110,9 +110,10 @@ views:
 
 
         {% if is_state(''switch.thermann_shadow_automatic_heater_control'', ''on'') %}**Automatic control
-        is ON.** The controller follows this plan: Manual 70 °C permits heating, the empty Schedule parks
-        it; the Thermann thermostat decides when the element runs.{% else %}**Planner only.** Automatic
-        control is off, so no heater command is sent.{% endif %}'
+        is ON.** The controller follows this plan: Manual 70 °C permits heating, Thermann OFF parks it
+        (antibacterial and frost protection stay active); the Thermann thermostat decides when the element
+        runs.{% else %}**Planner only.** Automatic control is off, so no heater command is sent.{% endif
+        %}'
     - type: gauge
       entity: sensor.thermann_shadow_bottom_temperature
       name: Tank reading (T_Avg)
@@ -352,7 +353,6 @@ views:
     state_color: true
     entities:
     - text.thermann_shadow_controller_command_topic
-    - switch.thermann_shadow_empty_schedule_park_confirmed
     - switch.thermann_shadow_bridge_commands_qualified_t3
     - number.thermann_shadow_minimum_heating_period
     - number.thermann_shadow_minimum_rest_period
@@ -366,20 +366,17 @@ views:
       \ — current **{{ states('text.thermann_shadow_controller_command_topic') }}** · recommended & original\
       \ **blank / unknown** · *kept by Restore*  \nCommissioning: the Thermowatt MQTT mode command topic\
       \ for your heater, exactly as written in the commissioning runbook (Stage B). Blank = the controller\
-      \ can never command.\n\n**Empty Schedule park confirmed** — current **{{ states('switch.thermann_shadow_empty_schedule_park_confirmed')\
-      \ }}** · recommended & original **Off** · *kept by Restore*  \nCommissioning Stage C: ON only after\
-      \ you have saved an EMPTY weekly programme in the Thermann app (all days, no heating times) and\
-      \ recorded the old one. Schedule is then the parked state.\n\n**Bridge commands qualified (T3)**\
-      \ — current **{{ states('switch.thermann_shadow_bridge_commands_qualified_t3') }}** · recommended\
-      \ & original **Off** · *kept by Restore*  \nCommissioning Stage B: ON only after the supervised\
-      \ T3 test showed the bridge's Manual:70 and Auto reproduce the app results. Requires Thermowatt\
-      \ add-on 1.3.9 or later.\n\n**Minimum heating period** — current **{{ states('number.thermann_shadow_minimum_heating_period')\
-      \ }} min** · recommended & original **30 min** · *restored by Restore*  \nShortest time Manual (heating\
-      \ permitted) is kept before parking, unless the thermostat has already stopped the element.\n\n\
-      **Minimum rest period** — current **{{ states('number.thermann_shadow_minimum_rest_period') }} min**\
-      \ · recommended & original **30 min** · *restored by Restore*  \nShortest time parked before heating\
-      \ is permitted again.\n\n**Maximum commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day')\
-      \ }}** · recommended & original **6** · *restored by Restore*  \nRolling 24 h limit on mode commands.\
+      \ can never command.\n\n**Bridge commands qualified (T3)** — current **{{ states('switch.thermann_shadow_bridge_commands_qualified_t3')\
+      \ }}** · recommended & original **Off** · *kept by Restore*  \nCommissioning Stage B: ON only after\
+      \ the supervised T3 test showed the bridge's Manual:70 (from OFF) and off (from Manual 70) reproduce\
+      \ the app results. Requires Thermowatt add-on 1.3.9 or later.\n\n**Minimum heating period** — current\
+      \ **{{ states('number.thermann_shadow_minimum_heating_period') }} min** · recommended & original\
+      \ **30 min** · *restored by Restore*  \nShortest time Manual (heating permitted) is kept before\
+      \ parking, unless the thermostat has already stopped the element.\n\n**Minimum rest period** — current\
+      \ **{{ states('number.thermann_shadow_minimum_rest_period') }} min** · recommended & original **30\
+      \ min** · *restored by Restore*  \nShortest time parked before heating is permitted again.\n\n**Maximum\
+      \ commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day') }}**\
+      \ · recommended & original **6** · *restored by Restore*  \nRolling 24 h limit on mode commands.\
       \ A typical day needs 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved\
       \ for a comfort start and its park.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
       \ }} min** · recommended & original **65 min** · *restored by Restore*  \nIf no status confirms\
@@ -636,7 +633,7 @@ views:
 
       {% endfor %}
 
-      {% if states(''sensor.thermann_shadow_device_clock_check'') != ''not_applicable_empty_schedule''
-      %}Native clock: compare manually with Hobart {{ now().strftime(''%a %d %b %H:%M'') }} after DST
-      changes. {% else %}Native Schedule is empty: the heater clock does not affect heating. {% endif
-      %}Tariff 93 stays fixed AEST. The planner adds zero cloud requests.'
+      {% if ''not_applicable'' not in states(''sensor.thermann_shadow_device_clock_check'') %}Native clock:
+      compare manually with Hobart {{ now().strftime(''%a %d %b %H:%M'') }} after DST changes. {% else
+      %}The native Schedule is not in use: the heater clock does not affect heating. {% endif %}Tariff
+      93 stays fixed AEST. The planner adds zero cloud requests.'

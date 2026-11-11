@@ -5,7 +5,7 @@ container with --network none. Never import this on the owner's Home Assistant.
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
 - forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
-- genuine 0.2.0 -> 0.5.0 and 0.3.0 -> 0.5.0 upgrades over persisted HA storage;
+- genuine 0.2.0 -> 0.6.0 and 0.3.0 -> 0.6.0 upgrades over persisted HA storage;
 - unchanged MQTT payloads (no state write) stay fresh while polls succeed.
 """
 
@@ -192,7 +192,7 @@ async def upgrade_from(folder, fixture, version, customise):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.5.0"
+    assert integration["thermann_shadow"].version.__str__() == "0.6.0"
     (entry,) = hass.config_entries.async_entries("thermann_shadow")
     assert entry.entry_id == entry_id and dict(entry.options) == saved_options
     assert await async_setup_component(hass, "thermann_shadow", {})
@@ -562,7 +562,7 @@ async def check_unchanged_mqtt_payload_freshness(hass, entry):
 
 
 async def check_controller(hass, entry, entity_for):
-    """0.5.0 production controller on REAL HA Core.
+    """Production controller (0.6.0: Manual 70 permit / software OFF park) on REAL HA Core.
 
     Fresh install refuses to enable; after commissioning, one poll produces
     exactly one guarded MQTT message (captured here, never sent: the network is
@@ -585,12 +585,12 @@ async def check_controller(hass, entry, entity_for):
     async def record(_hass, topic, payload, qos=0, retain=False, *args, **kwargs):
         captured.append((topic, payload, qos, retain))
 
-    def bridge(mode, poll, temperature=50, total=200):
-        cmd = {"Schedule": 17, "Manual": 9}[mode]
+    def bridge(mode, poll, temperature=50, total=200, setpoint=70):
+        cmd = {"Off": 16, "Manual": 9}[mode]
         hass.states.async_set(
             DEFAULT_SOURCES["heater"],
-            "unknown" if mode == "Schedule" else "performance",
-            {"current_temperature": temperature, "temperature": 70},
+            "off" if mode == "Off" else "performance",
+            {"current_temperature": temperature, "temperature": setpoint},
         )
         hass.states.async_set(DEFAULT_SOURCES["mode"], mode, {"Cmd": cmd, "WaterHeaterSts": 32})
         hass.states.async_set(
@@ -616,7 +616,7 @@ async def check_controller(hass, entry, entity_for):
     try:
         state = hass.states.get(master)
         assert state.state == "off", state
-        assert len(state.attributes["commissioning_missing"]) == 3
+        assert len(state.attributes["commissioning_missing"]) == 2
         # Stage A (disabled): repeated evaluations neither publish, notify nor
         # rewrite the controller's storage file when nothing changed.
         idle = hass.data["thermann_shadow"][entry.entry_id].executor
@@ -644,7 +644,6 @@ async def check_controller(hass, entry, entity_for):
         assert hass.states.get(master).state == "off"
         for key, value in (
             ("controller_command_topic", "P/TEST123/CMD/MODE"),
-            ("controller_empty_schedule_confirmed", True),
             ("controller_bridge_qualified", True),
         ):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
@@ -653,7 +652,8 @@ async def check_controller(hass, entry, entity_for):
         executor = hass.data["thermann_shadow"][entry.entry_id].executor
         executor.desire = lambda now: ctl.Desire("permit", "real_ha_wiring_check")
         hass.config.components.add("mqtt")
-        bridge("Schedule", dt_util.utcnow())
+        # Parked OFF reporting an unusual setpoint: the guarded resume still goes.
+        bridge("Off", dt_util.utcnow(), setpoint=40)
         await hass.async_block_till_done()
         assert captured == [("P/TEST123/CMD/MODE", "Manual:70", 1, False)], captured
         assert hass.states.get(status).state == "confirming"
@@ -672,12 +672,11 @@ async def check_controller(hass, entry, entity_for):
         assert len(captured) == 1
         await drive(hass, "switch", "turn_off", master)
         assert hass.states.get(status).state == "disabled"
-        bridge("Schedule", dt_util.utcnow(), total=204)
+        bridge("Off", dt_util.utcnow(), total=204)
         await hass.async_block_till_done()
         assert len(captured) == 1, "a disabled controller published"
         for key, value in (
             ("controller_command_topic", ""),
-            ("controller_empty_schedule_confirmed", False),
             ("controller_bridge_qualified", False),
         ):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)

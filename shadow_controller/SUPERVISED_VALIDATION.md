@@ -2,7 +2,7 @@
 
 **Superseded in detail by [Stage 4A](STAGE_4A_CONTROL_METHOD.md)**, which compares
 Off/On with Manual ↔ Schedule and records the decision: Manual 70 °C permit, empty
-Schedule park, Off/On optional. Commissioning steps are in `COMMISSIONING_0_5_0.md`.
+Schedule park, Off/On optional. Commissioning steps are in `COMMISSIONING.md`.
 
 Phase 2A has no command path. The owner accepts occasional manual recovery after
 serious outages; universal automatic Schedule handback is not required. This does

@@ -25,7 +25,6 @@ TOPIC = "P/TEST123/CMD/MODE"
 def cfg(**overrides):
     values = {
         "command_topic": TOPIC,
-        "park_empty_schedule_confirmed": True,
         "bridge_commands_qualified": True,
     }
     values.update(overrides)
@@ -35,8 +34,8 @@ def cfg(**overrides):
 def obs(now, **kw):
     values = {
         "poll_at": now - timedelta(seconds=10),
-        "mode": "Schedule",
-        "target_c": 70.0,
+        "mode": "Off",
+        "target_c": None,  # OFF's setpoint is not an operating target
         "temperature_c": 50.0,
         "element": "off",
         "element_confidence": "high",
@@ -50,6 +49,8 @@ def obs(now, **kw):
         "mqtt_ready": True,
     }
     values.update(kw)
+    if values["mode"] == "Manual" and "target_c" not in kw:
+        values["target_c"] = 70.0
     return ctl.Observation(now=now, **values)
 
 
@@ -67,7 +68,7 @@ def notices(effects):
 
 
 def parked_controller(now, **kw):
-    """Enabled controller that has inspected a parked heater (Schedule 70)."""
+    """Enabled controller that has inspected a parked heater (software OFF)."""
     controller = ctl.Controller()
     controller.set_enabled(True, now - timedelta(hours=2))
     controller.step(
@@ -113,7 +114,6 @@ def test_fresh_installation_cannot_command_anything():
     default = ctl.ControllerConfig()
     assert set(default.missing_commissioning()) == {
         "command_topic_not_configured",
-        "empty_schedule_park_not_confirmed",
         "bridge_commands_not_qualified_t3",
     }
     now = local(hour=12)
@@ -132,7 +132,7 @@ def test_fresh_installation_cannot_command_anything():
     # Options defaults agree: blank topic, both confirmations false.
     options = c.DEFAULT_OPTIONS
     assert options["controller_command_topic"] == ""
-    assert options["controller_empty_schedule_confirmed"] is False
+    assert "controller_empty_schedule_confirmed" not in options  # removed in 0.6.0
     assert options["controller_bridge_qualified"] is False
 
 
@@ -187,7 +187,7 @@ def test_successful_manual_start_and_schedule_park_each_one_command():
     assert (message.topic, message.payload) == (TOPIC, "Manual:70")
     assert controller.state == ctl.CONFIRMING
     intent = controller.intent
-    assert intent["action"] == "permit" and intent["prior_mode"] == "Schedule"
+    assert intent["action"] == "permit" and intent["prior_mode"] == "Off"
     # Planner keeps asking every minute: nothing is re-sent.
     for second in (20, 40, 60, 90):
         assert not publishes(
@@ -209,7 +209,7 @@ def test_successful_manual_start_and_schedule_park_each_one_command():
     later = now + timedelta(minutes=31)
     effects = controller.step(obs(later, mode="Manual", element="on"), PARK, cfg())
     [message] = publishes(effects)
-    assert message.payload == "Auto"
+    assert message.payload == "off"
     controller.step(
         obs(later + timedelta(minutes=1), poll_at=later + timedelta(seconds=25)), PARK, cfg()
     )
@@ -369,16 +369,30 @@ def test_wrong_target_refusal_and_unexpected_target_both_stop_control():
     report = {"payload": "Manual:70", "result": "refused_target_mismatch", "at": now.isoformat()}
     controller.step(obs(now + timedelta(seconds=20), last_command=report), PERMIT, cfg())
     assert controller.state == ctl.FAULT_LOCKED
-    other = parked_controller(now)
-    other.step(
-        obs(now + timedelta(minutes=1), poll_at=now + timedelta(seconds=50), target_c=65),
-        PERMIT,
-        cfg(),
+    # While OFF the reported setpoint is not an operating target: 65 (or 40,
+    # or an invalid value) neither counts as an owner change nor blocks the
+    # guarded resume, which sends 70 explicitly.
+    for reported in (65, 40, 0, None):
+        parked = parked_controller(now)
+        effects = parked.step(
+            obs(now + timedelta(seconds=5), poll_at=now, target_c=reported), PERMIT, cfg()
+        )
+        assert [e.payload for e in publishes(effects)] == ["Manual:70"], reported
+    # In Manual a target other than 70 is an owner change: control pauses.
+    permitted = permitted_controller(local(hour=13))
+    at = local(hour=13, minute=2)
+    permitted.step(
+        obs(at, poll_at=at - timedelta(seconds=5), mode="Manual", target_c=65), HOLD, cfg()
     )
-    assert (
-        other.state == ctl.OWNER_OVERRIDE
-        and other.reason == "mode_or_target_changed_outside_controller"
+    assert permitted.state == ctl.OWNER_OVERRIDE
+    assert permitted.reason == "mode_or_target_changed_outside_controller"
+    # Confirmation of a resume requires Manual AT 70, not merely Manual.
+    resumed = started(now)
+    poll = now + timedelta(minutes=30)
+    resumed.step(
+        obs(poll + timedelta(seconds=5), poll_at=poll, mode="Manual", target_c=65), PERMIT, cfg()
     )
+    assert resumed.state != ctl.HEATING_PERMITTED
 
 
 def test_immediate_read_before_cloud_applies_waits_for_next_poll_then_confirms():
@@ -493,7 +507,7 @@ def test_ha_restart_in_steady_state_reinspects_instead_of_assuming():
     restored = ctl.Controller.from_dict(controller.to_dict())
     restored.restored(now)
     assert restored.state == ctl.OBSERVING
-    # Heater was changed while HA was down (owner set Schedule): adopted as parked.
+    # Heater was turned OFF while HA was down (owner, in the app): adopted as parked.
     restored.step(obs(now + timedelta(minutes=1), poll_at=now + timedelta(seconds=40)), HOLD, cfg())
     assert restored.state == ctl.PARKED
     assert ctl.Controller.from_dict({"state": "nonsense"}).state == ctl.OBSERVING
@@ -763,7 +777,6 @@ def test_controller_options_are_bounded_and_commissioning_preserved_on_restore()
     settings_mod = importlib.import_module(f"{m.__package__}.settings")
     for key in (
         "controller_command_topic",
-        "controller_empty_schedule_confirmed",
         "controller_bridge_qualified",
         "controller_notify_service",
     ):
@@ -815,7 +828,7 @@ def test_park_payload_is_the_existing_auto_contract_on_the_real_bridge(factory, 
     ]
     bridge.process_command((clock(), "TEST123", "MODE", ctl.PARK_PAYLOAD))
     write, read = bridge.session.request.call_args_list
-    assert write.args[1].endswith("/auto") and read.args[1].endswith("/status")
+    assert write.args[1].endswith("/off") and read.args[1].endswith("/status")
 
 
 class SimBridge:
@@ -827,7 +840,8 @@ class SimBridge:
     read; the cloud may apply late (``apply_delay``) or never (``lose``)."""
 
     def __init__(self, start, temperature=45.0, apply_delay=timedelta(0), lose=False):
-        self.mode, self.target, self.temperature = "Schedule", 70.0, temperature
+        self.mode, self.target, self.temperature = "Off", 70.0, temperature
+        self.off_setpoint = 0.0  # what the cloud reports while OFF (unknown in reality)
         self.element = False
         self.poll_at = start
         self.requests = 1000
@@ -853,14 +867,14 @@ class SimBridge:
                     "at": processed.isoformat(),
                 }
                 continue
-            if payload == "Manual:70" and self.target != 70:
+            if payload == "Manual:70" and self.mode != "Off" and self.target != 70:
                 self.last_command = {
                     "payload": payload,
                     "result": "refused_target_mismatch",
                     "at": processed.isoformat(),
                 }
                 continue
-            wanted = {"Manual:70": "Manual", "Auto": "Schedule"}[payload]
+            wanted = {"Manual:70": "Manual", "off": "Off"}[payload]
             self.posts.append((processed, payload))
             self.requests += 2
             if not self.lose:
@@ -872,7 +886,7 @@ class SimBridge:
             )
             self.last_command = {"payload": payload, "result": result, "at": processed.isoformat()}
         self._apply(now)
-        # Thermostat: 8 °C hysteresis, Manual only (empty Schedule never heats).
+        # Thermostat: 8 °C hysteresis, Manual only (OFF never heats ordinarily).
         if self.mode == "Manual" and self.temperature <= self.target - 8:
             self.element = True
         if self.element and (self.mode != "Manual" or self.temperature >= self.target):
@@ -894,6 +908,7 @@ class SimBridge:
             now,
             poll_at=self.poll_at,
             mode=self.mode,
+            target_c=self.target if self.mode == "Manual" else None,
             temperature_c=round(self.temperature),
             element="on" if self.element else "off",
             requests_total=self.requests,
@@ -931,9 +946,9 @@ def test_end_to_end_solar_window_with_hot_water_draw_uses_two_commands():
         return PARK
 
     run_day(sim, controller, desire, start, 300, draws={90: 6.0})  # a shower at ~12:20
-    assert [payload for _, payload in sim.posts] == ["Manual:70", "Auto"]
+    assert [payload for _, payload in sim.posts] == ["Manual:70", "off"]
     assert controller.state == ctl.PARKED and controller.fault is None
-    assert sim.temperature > 60 and sim.mode == "Schedule"
+    assert sim.temperature > 60 and sim.mode == "Off"
     assert all(item["status"] == "confirmed" for item in controller.history)
     assert len(controller.commands) == 2
 
@@ -1056,12 +1071,12 @@ def test_closed_loop_sunny_weekday_heats_on_solar_and_is_ready_before_the_peak()
     sim, controller, trace = closed_loop(start, 13 * 60, 50, draws={210: 10.0})  # shower 08:30
     posts = [(at.astimezone(m.HOBART).strftime("%H:%M"), payload) for at, payload in sim.posts]
     assert controller.fault is None, (controller.reason, posts)
-    assert [payload for _, payload in posts] == ["Manual:70", "Auto"], posts
+    assert [payload for _, payload in posts] == ["Manual:70", "off"], posts
     assert "09:00" <= posts[0][0] <= "14:00", posts  # solar, not the 04:00 off-peak grid
     by_time = {at.astimezone(m.HOBART).strftime("%H:%M"): row for at, *row in trace}
     assert by_time["08:00"][2] >= 42  # morning ready without any heating
     assert by_time["17:00"][2] >= 65, by_time["17:00"]  # ready before the evening peak
-    assert sim.mode == "Schedule" and posts[1][0] <= "17:00"
+    assert sim.mode == "Off" and posts[1][0] <= "17:00"
     settings, tariffs = c.parse_options({})
     assert peak_grid_minutes(trace, tariffs, settings) == 0
     assert all(item["status"] == "confirmed" for item in controller.history)
@@ -1188,7 +1203,7 @@ def test_disabled_controller_is_silent_while_the_native_schedule_heats():
     for minute in range(0, 180):
         at = now + timedelta(minutes=minute)
         effects = controller.step(
-            obs(at, poll_at=now - timedelta(minutes=90), element="on", mode="Schedule"),
+            obs(at, poll_at=now - timedelta(minutes=90), element="on", mode="Off"),
             ctl.Desire("hold", "data_unavailable", planner_ok=False, comfort_risk="afternoon"),
             ctl.ControllerConfig(),
         )
@@ -1279,3 +1294,199 @@ def test_tariff_93_boundaries_stay_fixed_aest_across_dst(at, expected_local):
     change = goals_mod.next_tariff_change(at, tariffs, settings.tariff_clock)
     assert change[1].kind == "peak"
     assert change[0].astimezone(m.HOBART).strftime("%H:%M") == expected_local
+
+
+# --- 0.6.0: software OFF as the parked state ---------------------------------------------
+
+
+def test_off_manual_off_cycle_ignores_off_setpoint_and_requires_70_in_manual():
+    now = local(hour=11)
+    controller = parked_controller(now)
+    # Parked OFF reports a setpoint of 40 (as the app showed with an empty Schedule).
+    [start] = publishes(controller.step(obs(now, target_c=40), PERMIT, cfg()))
+    assert start.payload == "Manual:70" and controller.intent["prior_mode"] == "Off"
+    confirm = now + timedelta(seconds=20)
+    controller.step(
+        obs(confirm + timedelta(seconds=5), poll_at=confirm, mode="Manual", element="on"),
+        PERMIT,
+        cfg(),
+    )
+    assert controller.state == ctl.HEATING_PERMITTED
+    later = now + timedelta(minutes=45)
+    [park] = publishes(controller.step(obs(later, mode="Manual", element="on"), PARK, cfg()))
+    assert park.payload == "off"
+    done = later + timedelta(seconds=20)
+    # OFF confirmation does not depend on what OFF reports as its setpoint.
+    controller.step(obs(done + timedelta(seconds=5), poll_at=done, target_c=None), PARK, cfg())
+    assert controller.state == ctl.PARKED
+    assert [item["status"] for item in controller.history] == ["confirmed", "confirmed"]
+
+
+def test_park_gate_requires_manual_at_70_and_permit_gate_requires_off():
+    now = local(hour=12)
+    permitted = permitted_controller(now)
+    assert "target_not_70" in permitted.gates(
+        obs(now, mode="Manual", target_c=65), "park", cfg(), True
+    )
+    parked = parked_controller(now)
+    failures = parked.gates(obs(now, mode="Manual"), "permit", cfg(), True)
+    assert "heater_not_off" in failures
+    assert parked.gates(obs(now, target_c=None), "permit", cfg(), True) == []
+
+
+@pytest.mark.parametrize("mode", ["Schedule", "Eco", "Holiday", "Unknown"])
+def test_any_mode_other_than_off_or_manual_70_is_owner_control(mode):
+    now = local(hour=12)
+    controller = ctl.Controller()
+    controller.set_enabled(True, now - timedelta(minutes=5))
+    controller.step(obs(now, mode=mode, target_c=70), PERMIT, cfg())
+    assert controller.state == ctl.OWNER_OVERRIDE
+    assert "OFF or in Manual at 70" in controller.guidance()
+
+
+@pytest.mark.parametrize(
+    "start_mode,app_mode", [("Off", "Manual"), ("Manual", "Off"), ("Off", "Schedule")]
+)
+def test_app_changes_in_either_direction_take_precedence(start_mode, app_mode):
+    now = local(hour=12)
+    controller = parked_controller(now) if start_mode == "Off" else permitted_controller(now)
+    at = now + timedelta(minutes=5)
+    effects = controller.step(
+        obs(at, poll_at=at - timedelta(seconds=5), mode=app_mode), PERMIT, cfg()
+    )
+    assert controller.state == ctl.OWNER_OVERRIDE and not publishes(effects)
+    for minute in range(1, 120):
+        t = at + timedelta(minutes=minute)
+        desire = PARK if app_mode == "Manual" else PERMIT
+        assert not publishes(
+            controller.step(obs(t, poll_at=t - timedelta(seconds=5), mode=app_mode), desire, cfg())
+        )
+
+
+def test_protective_heating_while_off_is_never_interrupted():
+    now = local(day=12, hour=2)
+    controller = parked_controller(now)
+    effects = controller.step(obs(now, element="on", temperature_c=55), PERMIT, cfg())
+    assert not publishes(effects)
+    keys = notices(effects)
+    assert "unexplained_heating" in keys
+    notice = next(e for e in effects if e.key == "unexplained_heating")
+    assert "antibacterial" in notice.message and "OFF" in notice.title
+    # During it, neither a comfort start nor anything else is sent.
+    comfort = ctl.Desire("permit", "comfort_fallback_latest_start", comfort=True)
+    for minute in range(1, 40):
+        t = now + timedelta(minutes=minute)
+        assert not publishes(
+            controller.step(obs(t, poll_at=t - timedelta(seconds=5), element="on"), comfort, cfg())
+        )
+    t = now + timedelta(minutes=41)
+    assert publishes(
+        controller.step(obs(t, poll_at=t - timedelta(seconds=5), element="off"), comfort, cfg())
+    )
+
+
+def test_cloud_failure_while_off_sends_nothing_and_alerts_once():
+    now = local(hour=12)
+    controller = parked_controller(now)
+    keys = []
+    for minute in range(0, 90):
+        t = now + timedelta(minutes=minute)
+        effects = controller.step(
+            obs(t, cloud_health="backoff", consecutive_failures=2), PERMIT, cfg()
+        )
+        assert not publishes(effects)
+        keys += notices(effects)
+    assert keys.count("cloud_fault") == 1
+    assert controller.state == ctl.HEATING_REQUESTED  # wanted, but gated
+
+
+def test_restart_while_off_or_resuming_never_resends():
+    now = local(hour=11)
+    steady = ctl.Controller.from_dict(parked_controller(now).to_dict())
+    steady.restored(now)
+    assert steady.state == ctl.OBSERVING
+    steady.step(
+        obs(now + timedelta(minutes=1), poll_at=now + timedelta(seconds=30), target_c=None),
+        HOLD,
+        cfg(),
+    )
+    assert steady.state == ctl.PARKED
+    pending = ctl.Controller.from_dict(started(now).to_dict())
+    pending.restored(now + timedelta(minutes=1))
+    assert pending.state == ctl.CONFIRMING
+    for minute in range(2, 30):
+        t = now + timedelta(minutes=minute)
+        assert not publishes(
+            pending.step(obs(t, poll_at=now - timedelta(seconds=10)), PERMIT, cfg())
+        )
+    poll = now + timedelta(minutes=30)
+    pending.step(obs(poll + timedelta(seconds=5), poll_at=poll, mode="Manual"), PERMIT, cfg())
+    assert pending.state == ctl.HEATING_PERMITTED
+
+
+def test_bridge_1_3_8_cannot_poll_off_with_an_out_of_range_setpoint(factory, module):
+    """Why bridge 1.3.9 is required for OFF parking: 1.3.8 rejects an OFF status
+    whose setpoint is outside 20-75 °C, which would back the bridge off while the
+    heater stays OFF. (What OFF really reports is a T3 observation.)"""
+    bridge = factory()
+    ready(bridge)
+    body = {"result": {**STATUS["result"], "Cmd": "16", "T_SetPoint": "0"}}
+    bridge.session.request.side_effect = [response(body=body)]
+    with pytest.raises(module.CloudError):
+        bridge.poll_status("TEST123")
+
+
+def test_off_path_on_the_real_bridge_posts_off_and_confirms_cmd_16(factory, clock):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=9)
+    bridge.session.request.side_effect = [
+        response(204),
+        response(body={"result": {**STATUS["result"], "Cmd": "16", "T_SetPoint": "70"}}),
+    ]
+    bridge.process_command((clock(), "TEST123", "MODE", ctl.PARK_PAYLOAD))
+    write, read = bridge.session.request.call_args_list
+    assert write.args[1].endswith("/off") and write.kwargs["data"] == ""
+    assert bridge.confirmed["TEST123"][1]["Cmd"] == 16
+
+
+class ProtectiveSimBridge(SimBridge):
+    """OFF heater that runs an antibacterial cycle (element on while OFF)."""
+
+    def __init__(self, *args, protective=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.protective = protective  # (start, end)
+
+    def tick(self, now, draw_c=0.0):
+        super().tick(now, draw_c)
+        if (
+            self.protective
+            and self.mode == "Off"
+            and self.protective[0] <= now < self.protective[1]
+        ):
+            self.element = True
+            self.temperature += 3.0 / 60 / m.TANK_KWH_PER_C
+
+
+@pytest.mark.parametrize("off_setpoint", [0.0, 40.0, 70.0])
+def test_closed_loop_off_park_with_antibacterial_cycle_and_any_off_setpoint(off_setpoint):
+    start = local(hour=10, minute=50)
+    cycle = (local(hour=12, minute=30), local(hour=13, minute=10))
+    sim = ProtectiveSimBridge(start - timedelta(minutes=29), temperature=45, protective=cycle)
+    sim.off_setpoint = off_setpoint
+    controller = enabled(start)
+    window = (local(hour=11), local(hour=12))
+
+    def desire(now):
+        if window[0] - timedelta(minutes=15) <= now < window[1] - timedelta(minutes=15):
+            return PERMIT
+        return PERMIT if now >= local(hour=12, minute=40) else PARK
+
+    run_day(sim, controller, desire, start, 240)
+    payloads = [payload for at, payload in sim.posts]
+    assert payloads[:2] == ["Manual:70", "off"], sim.posts
+    # No command while the protective cycle ran (12:30-13:10), even though the
+    # planner asked to heat from 12:40.
+    during = [at for at, _ in sim.posts if cycle[0] <= at < cycle[1] + timedelta(seconds=20)]
+    assert during == []
+    assert controller.fault is None

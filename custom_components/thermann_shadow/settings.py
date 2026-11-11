@@ -344,16 +344,10 @@ CATALOG = {
         "Commissioning: the Thermowatt MQTT mode command topic for your heater, exactly as written in the commissioning runbook (Stage B). Blank = the controller can never command.",
         kind="text",
     ),
-    "controller_empty_schedule_confirmed": Setting(
-        "Empty Schedule park confirmed",
-        "Controller",
-        "Commissioning Stage C: ON only after you have saved an EMPTY weekly programme in the Thermann app (all days, no heating times) and recorded the old one. Schedule is then the parked state.",
-        kind="switch",
-    ),
     "controller_bridge_qualified": Setting(
         "Bridge commands qualified (T3)",
         "Controller",
-        "Commissioning Stage B: ON only after the supervised T3 test showed the bridge's Manual:70 and Auto reproduce the app results. Requires Thermowatt add-on 1.3.9 or later.",
+        "Commissioning Stage B: ON only after the supervised T3 test showed the bridge's Manual:70 (from OFF) and off (from Manual 70) reproduce the app results. Requires Thermowatt add-on 1.3.9 or later.",
         kind="switch",
     ),
     "controller_min_heating_minutes": Setting(
@@ -461,7 +455,6 @@ PRESERVE_ON_RESTORE = frozenset(
         "peak_evening_end",
         # Commissioning facts are never "preferences".
         "controller_command_topic",
-        "controller_empty_schedule_confirmed",
         "controller_bridge_qualified",
         "controller_notify_service",
     }

@@ -94,7 +94,6 @@
           "tariff_periods": "Custom weekly tariff periods",
           "native_schedule_periods": "Native schedule reference",
           "controller_command_topic": "Controller command topic",
-          "controller_empty_schedule_confirmed": "Empty Schedule park confirmed",
           "controller_bridge_qualified": "Bridge commands qualified (T3)",
           "controller_min_heating_minutes": "Minimum heating period",
           "controller_min_rest_minutes": "Minimum rest period",

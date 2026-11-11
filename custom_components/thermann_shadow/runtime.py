@@ -365,23 +365,31 @@ class ShadowRuntime:
         # native comfort fallback; Home Assistant time (Australia/Hobart) and
         # the fixed-AEST tariff decide everything.
         empty_programme = not self.native_periods
+        observed_mode = readings["mode"].value if readings.get("mode") else None
+        # While the controller owns the heater it is in Manual or OFF, where the
+        # weekly programme has no effect (only Schedule mode uses it).
+        native_unused = empty_programme or (self.controller_active and observed_mode != "Schedule")
         self.plan.warnings.extend(
             [
                 "schedule_permission_is_not_element_power",
                 "t_comfort_not_assumed_in_manual_or_off",
             ]
         )
-        if empty_programme:
+        if native_unused:
             # Never hide that the manufacturer's protective functions can still
             # heat while parked, or that nothing else heats with control off.
             self.plan.warnings.append(
                 "manufacturer_antibacterial_and_frost_protection_may_heat_while_parked"
             )
-            if not self.controller_active:
+            if empty_programme and not self.controller_active:
                 self.plan.warnings.append(
                     "empty_native_schedule_and_automatic_control_off_no_normal_heating"
                 )
-            self.values["device_clock_check"] = "not_applicable_empty_schedule"
+            self.values["device_clock_check"] = (
+                "not_applicable_empty_schedule"
+                if empty_programme
+                else "not_applicable_native_schedule_unused"
+            )
         else:
             self.plan.warnings.append("native_programme_is_primary_comfort_fallback")
             if not self.native_options["native_schedule_clock_verified"]:
@@ -401,7 +409,7 @@ class ShadowRuntime:
         else:
             self.plan.warnings.append("higher_t_comfort_can_heat_outside_schedule_including_peak")
         native_minutes = None
-        if self.plan.comfort_deadline is not None and not empty_programme:
+        if self.plan.comfort_deadline is not None and not native_unused:
             native_minutes = permitted_minutes(
                 now,
                 self.plan.comfort_deadline,
