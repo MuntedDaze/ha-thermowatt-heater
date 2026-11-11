@@ -6,7 +6,7 @@ native Schedule is treated as the real controller and modelled separately.
 """
 
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 import statistics
 
@@ -77,6 +77,11 @@ class TickInputs:
     pv_series: tuple = ()
     load_series: tuple = ()
     forecast_available: bool = False
+    # 0.5.0: True while the production controller owns heating permission.
+    # Comfort deadlines are then planned ``latency_minutes`` earlier, because a
+    # poll-aligned command may take up to one poll interval to reach the heater.
+    controlled: bool = False
+    latency_minutes: float = 0.0
 
 
 @dataclass
@@ -218,6 +223,12 @@ class Advisor:
             advice.code, advice.label, advice.explanation, advice.confidence = shown
             advice.economic_code, advice.pending_code = shown[0], pending
             return advice
+        plan_goals = goals
+        if inputs.controlled and inputs.latency_minutes > 0:
+            shift = timedelta(minutes=inputs.latency_minutes)
+            plan_goals = [replace(goal, deadline=max(now, goal.deadline - shift)) for goal in goals]
+        display = {goal.kind: goal for goal in goals}
+        goals = plan_goals
         horizon = max(goal.deadline for goal in goals)
         slots = build_slots(
             now,
@@ -288,13 +299,18 @@ class Advisor:
                 status = "met"
             elif not result.plan_feasible:
                 status = "unachievable"
+            elif inputs.controlled:
+                # The controller executes the plan; readiness is the plan's
+                # (latency-reserved) feasibility, not the parked native Schedule.
+                status = "planned_by_controller"
             elif native_meets:
                 status = "native_predicted_ready"
             else:
                 status = "at_risk_with_native_schedule"
             advice.readiness[goal.kind] = {
                 "status": status,
-                "deadline": goal.deadline,
+                "deadline": display.get(goal.kind, goal).deadline,
+                "planning_deadline": goal.deadline,
                 "required_kwh": round(kwh, 3),
                 "basis": goal.basis,
                 "target_c": goal.target_c,

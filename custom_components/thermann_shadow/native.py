@@ -11,7 +11,8 @@ def parse_native(raw):
     if not isinstance(raw, str) or len(raw) > 8192:
         raise ValueError("native_reference_invalid")
     data = json.loads(raw)
-    if not isinstance(data, list) or not 1 <= len(data) <= 32:
+    # [] is the owner-approved EMPTY weekly programme (the controller's park).
+    if not isinstance(data, list) or not 0 <= len(data) <= 32:
         raise ValueError("native_reference_invalid")
     periods = []
     for item in data:

@@ -10,7 +10,21 @@ from .settings_entity import save
 
 async def async_setup_entry(hass, entry, async_add_entities):
     runtime = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([RestoreRecommendations(entry, runtime), UndoRestore(entry, runtime)])
+    async_add_entities(
+        [
+            RestoreRecommendations(entry, runtime),
+            UndoRestore(entry, runtime),
+            ControllerAction(
+                entry, runtime, "hold", "Hold heater (owner override)", "mdi:hand-back-left"
+            ),
+            ControllerAction(
+                entry, runtime, "resume", "Resume automatic control", "mdi:play-circle"
+            ),
+            ControllerAction(
+                entry, runtime, "acknowledge", "Acknowledge controller fault", "mdi:check-decagram"
+            ),
+        ]
+    )
 
 
 class _LocalButton(ButtonEntity):
@@ -68,3 +82,24 @@ class UndoRestore(_LocalButton):
 
     async def async_press(self):
         await save(self.hass, self.entry, undo=True)
+
+
+class ControllerAction(_LocalButton):
+    """Owner override, resume and fault acknowledgement. None of these sends a
+    heater command: resume/acknowledge only let the controller RE-INSPECT the
+    heater from a new status before it may act again."""
+
+    _attr_entity_category = None
+
+    def __init__(self, entry, runtime, action, name, icon):
+        super().__init__(entry, runtime)
+        self.action = action
+        self._attr_name = name
+        self._attr_icon = icon
+        self._attr_unique_id = f"{entry.entry_id}_controller_{action}"
+
+    async def async_press(self):
+        from homeassistant.exceptions import HomeAssistantError
+
+        if not await self.runtime.executor.async_owner_action(self.action):
+            raise HomeAssistantError(f"Nothing to {self.action} in the current controller state.")

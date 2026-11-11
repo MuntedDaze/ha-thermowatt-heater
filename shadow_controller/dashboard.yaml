@@ -9,6 +9,85 @@ views:
   - type: grid
     cards:
     - type: heading
+      heading: Automatic control
+      icon: mdi:robot
+    - type: markdown
+      text_only: true
+      content: '{% set s = states(''sensor.thermann_shadow_automatic_control_state'') %}{% set kind =
+        {''fault_locked'':''error'',''owner_override'':''warning'',''confirming'':''info'',''disabled'':''info''}.get(s,
+        ''success'') %}<ha-alert alert-type="{{ kind }}"><b>{{ s | replace(''_'', '' '') | upper }}</b>
+        — {{ states(''sensor.thermann_shadow_automatic_control_reason'') | replace(''_'', '' '') }}</ha-alert>
+
+        {{ state_attr(''sensor.thermann_shadow_automatic_control_state'', ''recovery_guidance'') or ''''
+        }}
+
+
+        {% set missing = state_attr(''switch.thermann_shadow_automatic_heater_control'', ''commissioning_missing'')
+        %}{% if missing %}Commissioning still needed: {{ missing | join('', '') | replace(''_'', '' '')
+        }}. The controller cannot send any command until these are done.{% endif %}'
+    - type: tile
+      entity: switch.thermann_shadow_automatic_heater_control
+      icon: mdi:robot
+      name: Automatic heater control
+    - type: entities
+      title: Controller status
+      show_header_toggle: false
+      entities:
+      - sensor.thermann_shadow_automatic_control_state
+      - sensor.thermann_shadow_automatic_control_reason
+      - sensor.thermann_shadow_thermann_mode
+      - sensor.thermann_shadow_thermann_target
+      - sensor.thermann_shadow_next_intended_action
+      - sensor.thermann_shadow_next_heating_start
+      - sensor.thermann_shadow_next_heating_stop
+      - sensor.thermann_shadow_last_command
+      - sensor.thermann_shadow_last_command_result
+      - sensor.thermann_shadow_last_command_time
+      - sensor.thermann_shadow_commands_in_last_24_hours
+      - sensor.thermann_shadow_cloud_requests_in_last_24_hours
+      - sensor.thermann_shadow_controller_fault
+    - type: button
+      entity: button.thermann_shadow_hold_heater_owner_override
+      name: Hold heater
+      icon: mdi:hand-back-left
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: button.press
+        target:
+          entity_id: button.thermann_shadow_hold_heater_owner_override
+        confirmation:
+          text: 'Hold: automatic control will send NO further commands until you press Resume. The heater
+            stays in its current mode; change it yourself in the Thermann app.'
+    - type: button
+      entity: button.thermann_shadow_resume_automatic_control
+      name: Resume control
+      icon: mdi:play-circle
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: button.press
+        target:
+          entity_id: button.thermann_shadow_resume_automatic_control
+        confirmation:
+          text: Resume automatic control? It first re-reads the heater from a NEW bridge status and only
+            continues if the heater is in Schedule or Manual at 70 °C.
+    - type: button
+      entity: button.thermann_shadow_acknowledge_controller_fault
+      name: Acknowledge fault
+      icon: mdi:check-decagram
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: button.press
+        target:
+          entity_id: button.thermann_shadow_acknowledge_controller_fault
+        confirmation:
+          text: Acknowledge the fault? Check the Thermann app first. The controller re-inspects the heater
+            from a new status; nothing is re-sent.
+  - type: grid
+    cards:
+    - type: heading
       heading: Right now
       icon: mdi:water-boiler
     - type: markdown
@@ -30,8 +109,10 @@ views:
         for fresh heater and meter readings.'' }}</ha-alert>
 
 
-        **Shadow recommendation only.** No heater command is sent; the native Schedule still controls
-        the real heater.'
+        {% if is_state(''switch.thermann_shadow_automatic_heater_control'', ''on'') %}**Automatic control
+        is ON.** The controller follows this plan: Manual 70 °C permits heating, the empty Schedule parks
+        it; the Thermann thermostat decides when the element runs.{% else %}**Planner only.** Automatic
+        control is off, so no heater command is sent.{% endif %}'
     - type: gauge
       entity: sensor.thermann_shadow_bottom_temperature
       name: Tank reading (T_Avg)
@@ -264,6 +345,54 @@ views:
       \ recommended if it saves at least this much per kWh that would otherwise be heated now (first minimum\
       \ cycle; 0.05 = 7.5 c for 30 min) and the comfort fallback stays viable. Solar later vs off-peak\
       \ grid now is 7.7 c/kWh."
+  - type: entities
+    title: Controller
+    icon: mdi:robot
+    show_header_toggle: false
+    state_color: true
+    entities:
+    - text.thermann_shadow_controller_command_topic
+    - switch.thermann_shadow_empty_schedule_park_confirmed
+    - switch.thermann_shadow_bridge_commands_qualified_t3
+    - number.thermann_shadow_minimum_heating_period
+    - number.thermann_shadow_minimum_rest_period
+    - number.thermann_shadow_maximum_commands_per_day
+    - number.thermann_shadow_command_confirmation_timeout
+    - number.thermann_shadow_cloud_request_budget_per_day
+    - number.thermann_shadow_execution_latency_reserve
+    - text.thermann_shadow_notification_service
+  - type: markdown
+    content: "### Controller — current, recommended and original values\n\n**Controller command topic**\
+      \ — current **{{ states('text.thermann_shadow_controller_command_topic') }}** · recommended & original\
+      \ **blank / unknown** · *kept by Restore*  \nCommissioning: the Thermowatt MQTT mode command topic\
+      \ for your heater, exactly as written in the commissioning runbook (Stage B). Blank = the controller\
+      \ can never command.\n\n**Empty Schedule park confirmed** — current **{{ states('switch.thermann_shadow_empty_schedule_park_confirmed')\
+      \ }}** · recommended & original **Off** · *kept by Restore*  \nCommissioning Stage C: ON only after\
+      \ you have saved an EMPTY weekly programme in the Thermann app (all days, no heating times) and\
+      \ recorded the old one. Schedule is then the parked state.\n\n**Bridge commands qualified (T3)**\
+      \ — current **{{ states('switch.thermann_shadow_bridge_commands_qualified_t3') }}** · recommended\
+      \ & original **Off** · *kept by Restore*  \nCommissioning Stage B: ON only after the supervised\
+      \ T3 test showed the bridge's Manual:70 and Auto reproduce the app results. Requires Thermowatt\
+      \ add-on 1.3.9 or later.\n\n**Minimum heating period** — current **{{ states('number.thermann_shadow_minimum_heating_period')\
+      \ }} min** · recommended & original **30 min** · *restored by Restore*  \nShortest time Manual (heating\
+      \ permitted) is kept before parking, unless the thermostat has already stopped the element.\n\n\
+      **Minimum rest period** — current **{{ states('number.thermann_shadow_minimum_rest_period') }} min**\
+      \ · recommended & original **30 min** · *restored by Restore*  \nShortest time parked before heating\
+      \ is permitted again.\n\n**Maximum commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day')\
+      \ }}** · recommended & original **4** · *restored by Restore*  \nRolling 24 h limit on mode commands.\
+      \ A typical day needs 2 (one heating period) or 4 (morning and afternoon).\n\n**Command confirmation\
+      \ timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout') }} min**\
+      \ · recommended & original **65 min** · *restored by Restore*  \nIf no status confirms a command\
+      \ within this time, automatic control locks until you acknowledge. At least one poll interval plus\
+      \ margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
+      \ }}** · recommended & original **220** · *restored by Restore*  \nNo command is sent once the bridge's\
+      \ local request count over 24 h reaches this. Normal 30-minute polling uses about 150/day.\n\n**Execution\
+      \ latency reserve** — current **{{ states('number.thermann_shadow_execution_latency_reserve') }}\
+      \ min** · recommended & original **30 min** · *restored by Restore*  \nCommands are sent only right\
+      \ after a bridge poll. Comfort deadlines are planned this much earlier so a 30-minute command delay\
+      \ cannot cause a miss.\n\n**Notification service** — current **{{ states('text.thermann_shadow_notification_service')\
+      \ }}** · recommended & original **blank / unknown** · *kept by Restore*  \nOptional notify service\
+      \ name, e.g. mobile_app_phone (without notify.). Blank = Home Assistant notifications only."
   - type: entities
     title: Advanced
     icon: mdi:tune

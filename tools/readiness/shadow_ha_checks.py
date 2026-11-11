@@ -559,3 +559,119 @@ async def check_unchanged_mqtt_payload_freshness(hass, entry):
     hass.states.async_set(DEFAULT_SOURCES["last_poll"], (now - timedelta(minutes=5)).isoformat())
     runtime.update(now)
     return {"cloud_entities_last_written_minutes_ago": 50, "planner_available": True}
+
+
+async def check_controller(hass, entry, entity_for):
+    """0.5.0 production controller on REAL HA Core.
+
+    Fresh install refuses to enable; after commissioning, one poll produces
+    exactly one guarded MQTT message (captured here, never sent: the network is
+    off and the MQTT helper is replaced by a recorder); repeated evaluations do
+    not duplicate it; observed Manual confirms it; state survives a reload;
+    disabling sends nothing. The heater-command count in the summary stays 0.
+    """
+    from homeassistant.components import mqtt
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.thermann_shadow import controller as ctl
+    from custom_components.thermann_shadow.config import DEFAULT_SOURCES
+    from custom_components.thermann_shadow.settings import CATALOG
+
+    master = "switch.thermann_shadow_automatic_heater_control"
+    status = "sensor.thermann_shadow_automatic_control_state"
+    captured = []
+    original = getattr(mqtt, "async_publish", None)
+
+    async def record(_hass, topic, payload, qos=0, retain=False, *args, **kwargs):
+        captured.append((topic, payload, qos, retain))
+
+    def bridge(mode, poll, temperature=50, total=200):
+        cmd = {"Schedule": 17, "Manual": 9}[mode]
+        hass.states.async_set(
+            DEFAULT_SOURCES["heater"],
+            "unknown" if mode == "Schedule" else "performance",
+            {"current_temperature": temperature, "temperature": 70},
+        )
+        hass.states.async_set(DEFAULT_SOURCES["mode"], mode, {"Cmd": cmd, "WaterHeaterSts": 32})
+        hass.states.async_set(
+            DEFAULT_SOURCES["cloud_health"],
+            "ok",
+            {
+                "auth_guard_mode": "authorized",
+                "consecutive_failures": 0,
+                "cooldown_remaining_seconds": 0,
+                "commands_enabled": True,
+                "last_command": None,
+                "poll_interval_seconds": 1800,
+            },
+        )
+        hass.states.async_set(
+            DEFAULT_SOURCES["requests"],
+            total,
+            {"accounting_complete": True, "accounting_persistent": True},
+        )
+        hass.states.async_set(DEFAULT_SOURCES["last_poll"], poll.isoformat())
+
+    mqtt.async_publish = record
+    try:
+        state = hass.states.get(master)
+        assert state.state == "off", state
+        assert len(state.attributes["commissioning_missing"]) == 3
+        try:
+            await drive(hass, "switch", "turn_on", master)
+        except HomeAssistantError:
+            pass
+        else:
+            raise AssertionError("an uncommissioned controller was enabled")
+        assert hass.states.get(master).state == "off"
+        for key, value in (
+            ("controller_command_topic", "P/TEST123/CMD/MODE"),
+            ("controller_empty_schedule_confirmed", True),
+            ("controller_bridge_qualified", True),
+        ):
+            await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
+        await drive(hass, "switch", "turn_on", master)
+        assert hass.states.get(master).state == "on"
+        executor = hass.data["thermann_shadow"][entry.entry_id].executor
+        executor.desire = lambda now: ctl.Desire("permit", "real_ha_wiring_check")
+        hass.config.components.add("mqtt")
+        bridge("Schedule", dt_util.utcnow())
+        await hass.async_block_till_done()
+        assert captured == [("P/TEST123/CMD/MODE", "Manual:70", 1, False)], captured
+        assert hass.states.get(status).state == "confirming"
+        for _ in range(5):
+            await executor.async_step()
+        assert len(captured) == 1, "duplicate command"
+        bridge("Manual", dt_util.utcnow(), total=202)
+        await hass.async_block_till_done()
+        assert hass.states.get(status).state == "heating_permitted"
+        assert hass.states.get("sensor.thermann_shadow_last_command_result").state == "confirmed"
+        assert hass.states.get("sensor.thermann_shadow_commands_in_last_24_hours").state == "1"
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert hass.states.get(master).state == "on"  # persisted with controller state
+        assert hass.states.get(status).state == "observing"  # never assumed after restart
+        assert len(captured) == 1
+        await drive(hass, "switch", "turn_off", master)
+        assert hass.states.get(status).state == "disabled"
+        bridge("Schedule", dt_util.utcnow(), total=204)
+        await hass.async_block_till_done()
+        assert len(captured) == 1, "a disabled controller published"
+        for key, value in (
+            ("controller_command_topic", ""),
+            ("controller_empty_schedule_confirmed", False),
+            ("controller_bridge_qualified", False),
+        ):
+            await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
+    finally:
+        hass.config.components.discard("mqtt")
+        if original is not None:
+            mqtt.async_publish = original
+    return {
+        "fresh_install_refused_enable": True,
+        "guarded_messages_captured_not_sent": len(captured),
+        "duplicates": 0,
+        "confirmed_from_observed_manual": True,
+        "reinspects_after_reload": True,
+        "disabled_sends_nothing": True,
+    }

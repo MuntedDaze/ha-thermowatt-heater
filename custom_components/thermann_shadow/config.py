@@ -76,6 +76,27 @@ DEFAULT_OPTIONS = {
     "native_schedule_clock_verified": False,
     "native_clock_check_date": "",
     "t_comfort_reference_c": 10.0,
+    # 0.5.0 production controller. A fresh install CANNOT command: no topic,
+    # no commissioning confirmations, and the master switch (stored with the
+    # controller state, not here) defaults to OFF.
+    "controller_command_topic": "",
+    "controller_empty_schedule_confirmed": False,
+    "controller_bridge_qualified": False,
+    "controller_min_heating_minutes": 30.0,
+    "controller_min_rest_minutes": 30.0,
+    "controller_max_commands_per_day": 4.0,
+    "controller_confirmation_timeout_minutes": 65.0,
+    "controller_max_requests_per_day": 220.0,
+    "controller_execution_latency_minutes": 30.0,
+    "controller_notify_service": "",
+}
+CONTROLLER_BOUNDS = {
+    "controller_min_heating_minutes": (30, 180),
+    "controller_min_rest_minutes": (30, 240),
+    "controller_max_commands_per_day": (2, 8),
+    "controller_confirmation_timeout_minutes": (35, 120),
+    "controller_max_requests_per_day": (160, 400),
+    "controller_execution_latency_minutes": (0, 60),
 }
 
 
@@ -130,9 +151,17 @@ def parse_options(options):
         "forecast_enabled",
         "weekend_peak",
         "shower_time_enabled",
+        "controller_empty_schedule_confirmed",
+        "controller_bridge_qualified",
     ):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
+    for key, (low, high) in CONTROLLER_BOUNDS.items():
+        if not low <= number(values[key]) <= high:
+            raise ValueError("controller_setting_out_of_range")
+    for key in ("controller_command_topic", "controller_notify_service"):
+        if not isinstance(values[key], str) or len(values[key]) > 64:
+            raise ValueError("controller_setting_invalid")
     rates = {kind: number(values[f"{kind}_rate"]) for kind in ("off_peak", "shoulder", "peak")}
     if any(not -5 <= rate <= 10 for rate in rates.values()):
         raise ValueError("tariff_invalid")

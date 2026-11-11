@@ -23,6 +23,7 @@ from sqlalchemy import create_engine, select
 
 from shadow_ha_checks import (
     DRIVER,
+    check_controller,
     check_forecasts,
     check_unchanged_mqtt_payload_freshness,
     check_settings_services,
@@ -307,6 +308,7 @@ async def main():
         }
         freshness = await check_unchanged_mqtt_payload_freshness(hass, entry)
         forecast_paths = await check_forecasts(hass, entry, entity_for)
+        controller = await check_controller(hass, entry, entity_for)
         runtime = hass.data[DOMAIN][entry.entry_id]
         assert_entity_serialization(hass, runtime.sources)
         assert await hass.config_entries.async_unload(entry.entry_id)
@@ -333,6 +335,7 @@ async def main():
                     "upgrade_0_2_0_to_0_4_0": upgrade,
                     "upgrade_0_3_0_to_0_4_0": upgrade_030,
                     "unchanged_mqtt_payload_freshness": freshness,
+                    "controller_0_5_0": controller,
                     "add_integration_hub_listing": "PASS",
                     "websocket_states_and_events_json": "PASS",
                     "recorder_attributes_and_sqlite_roundtrip": "PASS",

@@ -9,7 +9,14 @@ advances when the recorder stored a state write, so unchanged MQTT payloads
 look exactly as they did live (Stage 1 finding F1).
 
     python tools/replay_history.py --db COPY.db --start 2026-11-10T14:25 \
-        --end 2026-11-11T12:20 [--json out.json]
+        --end 2026-11-11T12:20 [--json out.json] [--controller-dry-run]
+
+--controller-dry-run (0.5.0) also feeds every minute's advice through the real
+planner->controller boundary (control_plan.desire_from_advice) and the
+controller's poll alignment and hysteresis rule, assuming each command is
+confirmed at its poll. It is OPEN LOOP: the recorded heater followed its native
+Schedule, so this estimates command counts and timing on real data; it is not
+a prediction of temperatures under control. Nothing is ever published.
 """
 
 import argparse
@@ -87,8 +94,14 @@ class History:
         )
 
 
-def replay(db_path, start, end, detail_at=()):
+def replay(db_path, start, end, detail_at=(), dry_run=False):
     config, model, runtime_module = load_runtime()
+    control_plan = goals = None
+    if dry_run:
+        package = sys.modules[runtime_module.__name__.rsplit(".", 1)[0]]
+        control_plan = importlib.import_module(f"{package.__name__}.control_plan")
+        goals = importlib.import_module(f"{package.__name__}.goals")
+    dry = {"permitted": False, "poll": None, "commands": [], "skipped_hysteresis": 0}
     saved = json.loads(SNAPSHOT.read_text(encoding="utf-8"))["options"]
     sources = dict(saved["sources"])
     sources["pv_ac"] = config.DEFAULT_PV_AC
@@ -176,7 +189,34 @@ def replay(db_path, start, end, detail_at=()):
                     "decision_explanation",
                 )
             }
+        if dry_run:
+            change = goals.next_tariff_change(now, tariffs, settings.tariff_clock)
+            peak = change[0] if change and change[1].kind == "peak" else None
+            desire = control_plan.desire_from_advice(
+                now,
+                instance.advice,
+                dry["permitted"],
+                30,
+                peak,
+                instance.advice.heater.state if instance.advice else "unknown",
+            )
+            rows[-1]["desire"] = desire.action
+            poll = states.get(sources["last_poll"])
+            poll = poll.state if poll is not None else None
+            new_poll, dry["poll"] = poll != dry["poll"] and poll is not None, poll
+            want = {"permit": True, "park": False}.get(desire.action, dry["permitted"])
+            if new_poll and want != dry["permitted"]:
+                reading = values.get("temperature")
+                if want and (reading is None or reading > 62):
+                    dry["skipped_hysteresis"] += 1
+                else:
+                    dry["permitted"] = want
+                    dry["commands"].append(
+                        (rows[-1]["at"], "Manual:70" if want else "Auto", desire.reason)
+                    )
         now += timedelta(minutes=1)
+    if dry_run:
+        rows.append({"controller_dry_run": dry})
     return rows
 
 
@@ -195,6 +235,9 @@ def _ranges(stamps):
 
 
 def summarise(rows):
+    dry = rows[-1].get("controller_dry_run") if rows else None
+    if dry is not None:
+        rows = rows[:-1]
     total = len(rows)
     blocked = sum(1 for row in rows if row["state"].startswith("shadow_blocked"))
     decisions = []
@@ -225,6 +268,7 @@ def summarise(rows):
         ),
         "heater_state_minutes": heater,
         "decision_changes": decisions,
+        **({"controller_dry_run": dry} if dry is not None else {}),
     }
 
 
@@ -235,14 +279,20 @@ def main():
     parser.add_argument("--end", required=True)
     parser.add_argument("--json")
     parser.add_argument("--at", action="append", default=[], help="Hobart 'DD HH:MM' rows to print")
+    parser.add_argument("--controller-dry-run", action="store_true")
     args = parser.parse_args()
     _, model, _ = load_runtime()
 
     def parse(text):
         return datetime.fromisoformat(text).replace(tzinfo=model.HOBART).astimezone(model.UTC)
 
-    rows = replay(args.db, parse(args.start), parse(args.end), set(args.at))
-    result = {"summary": summarise(rows), "rows_at": [row for row in rows if row["at"] in args.at]}
+    rows = replay(
+        args.db, parse(args.start), parse(args.end), set(args.at), args.controller_dry_run
+    )
+    result = {
+        "summary": summarise(rows),
+        "rows_at": [row for row in rows if row.get("at") in args.at],
+    }
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=1, default=str), encoding="utf-8")
     print(json.dumps(result, indent=1, default=str))

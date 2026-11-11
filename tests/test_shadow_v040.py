@@ -499,6 +499,9 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
         "homeassistant.helpers.config_validation"
     ]
     sys.modules["homeassistant.helpers.event"].async_track_time_interval = None
+    sys.modules["homeassistant.helpers.event"].async_track_state_change_event = None
+    monkeypatch.setitem(sys.modules, f"{m.__package__}.executor", ModuleType("ex"))
+    sys.modules[f"{m.__package__}.executor"].Executor = object
     sys.modules["homeassistant.util"].dt = SimpleNamespace(utcnow=lambda: local())
     spec = importlib.util.spec_from_file_location(
         f"{m.__package__}.__init__", c.__file__.replace("config.py", "__init__.py")

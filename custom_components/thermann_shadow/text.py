@@ -11,6 +11,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class ShadowText(SettingEntity, TextEntity):
     _attr_native_max = 10
 
+    def __init__(self, entry, runtime, key):
+        super().__init__(entry, runtime, key)
+        if key.startswith("controller_"):
+            self._attr_native_max = 64
+
     @property
     def native_value(self):
         return self.current

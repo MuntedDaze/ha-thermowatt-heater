@@ -81,11 +81,34 @@ RETIRED = (
 )
 
 
+CONTROLLER_SENSORS = {
+    "controller_state": ("Automatic control state", None),
+    "controller_reason": ("Automatic control reason", None),
+    "thermann_mode": ("Thermann mode", None),
+    "thermann_target": ("Thermann target", "°C"),
+    "next_action": ("Next intended action", None),
+    "next_heating_start": ("Next heating start", None),
+    "next_heating_stop": ("Next heating stop", None),
+    "last_command": ("Last command", None),
+    "last_command_result": ("Last command result", None),
+    "last_command_time": ("Last command time", None),
+    "commands_last_24h": ("Commands in last 24 hours", None),
+    "requests_last_24h": ("Cloud requests in last 24 hours", None),
+    "fault": ("Controller fault", None),
+}
+CONTROLLER_TIMESTAMPS = {"next_heating_start", "next_heating_stop", "last_command_time"}
+
+
 async def async_setup_entry(hass, entry, async_add_entities):
     runtime = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [ShadowSensor(runtime, entry, key, name, unit) for key, (name, unit) in SENSORS.items()]
-    )
+    entities = [
+        ShadowSensor(runtime, entry, key, name, unit) for key, (name, unit) in SENSORS.items()
+    ]
+    entities += [
+        ControllerSensor(runtime, entry, key, name, unit)
+        for key, (name, unit) in CONTROLLER_SENSORS.items()
+    ]
+    async_add_entities(entities)
 
 
 class ShadowSensor(SensorEntity):
@@ -129,3 +152,27 @@ class ShadowSensor(SensorEntity):
     @property
     def extra_state_attributes(self):
         return self.runtime.details if self.key == "controller" else None
+
+
+class ControllerSensor(ShadowSensor):
+    """Production controller status (read-only; no entity here commands anything)."""
+
+    _attr_icon = "mdi:robot-outline"
+
+    def __init__(self, runtime, entry, key, name, unit):
+        super().__init__(runtime, entry, key, name, unit)
+        self._attr_device_class = (
+            SensorDeviceClass.TIMESTAMP if key in CONTROLLER_TIMESTAMPS else None
+        )
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        self.async_on_remove(self.runtime.executor.subscribe(self.async_write_ha_state))
+
+    @property
+    def native_value(self):
+        return self.runtime.executor.values().get(self.key)
+
+    @property
+    def extra_state_attributes(self):
+        return self.runtime.executor.details() if self.key == "controller_state" else None

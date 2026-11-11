@@ -60,8 +60,8 @@ class SettingEntity:
             **describe(self.key, self.current),
             "explanation": self.meta.explanation,
             "group": self.meta.group,
-            "shadow_only": True,
-            "execution_enabled": False,
+            "shadow_only": not getattr(self.runtime, "controller_active", False),
+            "execution_enabled": bool(getattr(self.runtime, "controller_active", False)),
             "bounds_are_planning_validation_not_manufacturer_command_limits": True,
         }
 

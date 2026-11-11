@@ -330,8 +330,13 @@ def test_sources_defaults_match_owner_and_validate_only_provisional_sign():
     assert c.DEFAULT_SOURCES["mode"] == "sensor.home_boiler_home_vendor_mode"
 
 
-def test_component_has_no_actuation_or_network_imports_and_no_fake_measurement_classes():
+def test_only_the_executor_can_actuate_and_no_network_imports():
+    """0.5.0: exactly ONE module (executor.py) may publish a heater command or
+    call a service, and it may only publish through HA's MQTT helper and call
+    notify services. The planner, controller logic and entities cannot."""
     forbidden = {"requests", "socket", "aiohttp", "paho", "httpx", "subprocess"}
+    actuation = {"async_call", "publish", "async_publish", "async_register", "open_connection"}
+    seen = {}
     for path in PACKAGE.glob("*.py"):
         source = path.read_text()
         tree = ast.parse(source)
@@ -340,17 +345,17 @@ def test_component_has_no_actuation_or_network_imports_and_no_fake_measurement_c
                 assert not any(n.name.split(".")[0] in forbidden for n in node.names)
             if isinstance(node, ast.ImportFrom):
                 assert (node.module or "").split(".")[0] not in forbidden
-            if isinstance(node, ast.Attribute):
-                assert node.attr not in {
-                    "async_call",
-                    "publish",
-                    "async_register",
-                    "open_connection",
-                }
+            if isinstance(node, ast.Attribute) and node.attr in actuation:
+                seen.setdefault(path.name, set()).add(node.attr)
         assert "_attr_state_class" not in source
+    assert seen == {"executor.py": {"async_publish", "async_call"}}
+    executor = (PACKAGE / "executor.py").read_text()
+    assert executor.count("mqtt.async_publish(") == 1
+    assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.4.0"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.5.0"
     assert manifest["integration_type"] == "hub"
+    assert "mqtt" not in manifest.get("dependencies", [])  # loads without MQTT
 
 
 @pytest.mark.parametrize(
@@ -544,9 +549,14 @@ def test_custom_settings_and_dashboard_have_no_control_actions():
                 walk(value)
 
     walk(dashboard)
+    # Restore/undo local preferences, plus the controller's owner buttons
+    # (hold / resume / acknowledge), each with a confirmation. None commands the heater.
     assert {action["target"]["entity_id"] for action in actions} == {
         "button.thermann_shadow_restore_recommended_preferences",
         "button.thermann_shadow_undo_last_restore",
+        "button.thermann_shadow_hold_heater_owner_override",
+        "button.thermann_shadow_resume_automatic_control",
+        "button.thermann_shadow_acknowledge_controller_fault",
     }
     for action in actions:
         assert action["action"] == "perform-action" and action["perform_action"] == "button.press"

@@ -338,6 +338,76 @@ CATALOG = {
         "Reported approximate times in JSON, for comparison only; NEVER changes the heater programme.",
         kind="form",
     ),
+    "controller_command_topic": Setting(
+        "Controller command topic",
+        "Controller",
+        "Commissioning: the Thermowatt MQTT mode command topic for your heater, exactly as written in the commissioning runbook (Stage B). Blank = the controller can never command.",
+        kind="text",
+    ),
+    "controller_empty_schedule_confirmed": Setting(
+        "Empty Schedule park confirmed",
+        "Controller",
+        "Commissioning Stage C: ON only after you have saved an EMPTY weekly programme in the Thermann app (all days, no heating times) and recorded the old one. Schedule is then the parked state.",
+        kind="switch",
+    ),
+    "controller_bridge_qualified": Setting(
+        "Bridge commands qualified (T3)",
+        "Controller",
+        "Commissioning Stage B: ON only after the supervised T3 test showed the bridge's Manual:70 and Auto reproduce the app results. Requires Thermowatt add-on 1.3.9 or later.",
+        kind="switch",
+    ),
+    "controller_min_heating_minutes": Setting(
+        "Minimum heating period",
+        "Controller",
+        "Shortest time Manual (heating permitted) is kept before parking, unless the thermostat has already stopped the element.",
+        30,
+        180,
+        "min",
+    ),
+    "controller_min_rest_minutes": Setting(
+        "Minimum rest period",
+        "Controller",
+        "Shortest time parked before heating is permitted again.",
+        30,
+        240,
+        "min",
+    ),
+    "controller_max_commands_per_day": Setting(
+        "Maximum commands per day",
+        "Controller",
+        "Rolling 24 h limit on mode commands. A typical day needs 2 (one heating period) or 4 (morning and afternoon).",
+        2,
+        8,
+    ),
+    "controller_confirmation_timeout_minutes": Setting(
+        "Command confirmation timeout",
+        "Controller",
+        "If no status confirms a command within this time, automatic control locks until you acknowledge. At least one poll interval plus margin.",
+        35,
+        120,
+        "min",
+    ),
+    "controller_max_requests_per_day": Setting(
+        "Cloud request budget per day",
+        "Controller",
+        "No command is sent once the bridge's local request count over 24 h reaches this. Normal 30-minute polling uses about 150/day.",
+        160,
+        400,
+    ),
+    "controller_execution_latency_minutes": Setting(
+        "Execution latency reserve",
+        "Controller",
+        "Commands are sent only right after a bridge poll. Comfort deadlines are planned this much earlier so a 30-minute command delay cannot cause a miss.",
+        0,
+        60,
+        "min",
+    ),
+    "controller_notify_service": Setting(
+        "Notification service",
+        "Controller",
+        "Optional notify service name, e.g. mobile_app_phone (without notify.). Blank = Home Assistant notifications only.",
+        kind="text",
+    ),
 }
 for key in ("peak_morning_start", "peak_morning_end", "peak_evening_start", "peak_evening_end"):
     CATALOG[key] = Setting(
@@ -389,6 +459,11 @@ PRESERVE_ON_RESTORE = frozenset(
         "peak_morning_end",
         "peak_evening_start",
         "peak_evening_end",
+        # Commissioning facts are never "preferences".
+        "controller_command_topic",
+        "controller_empty_schedule_confirmed",
+        "controller_bridge_qualified",
+        "controller_notify_service",
     }
 )
 RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)

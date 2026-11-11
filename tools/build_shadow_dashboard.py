@@ -24,6 +24,27 @@ settings = importlib.import_module(f"{package.__name__}.settings")
 
 CONTROLLER = "sensor.thermann_shadow_controller"
 RESTORE = "button.thermann_shadow_restore_recommended_preferences"
+MASTER = "switch.thermann_shadow_automatic_heater_control"
+CONTROLLER_BUTTONS = {
+    "button.thermann_shadow_hold_heater_owner_override": (
+        "Hold heater",
+        "mdi:hand-back-left",
+        "Hold: automatic control will send NO further commands until you press Resume. "
+        "The heater stays in its current mode; change it yourself in the Thermann app.",
+    ),
+    "button.thermann_shadow_resume_automatic_control": (
+        "Resume control",
+        "mdi:play-circle",
+        "Resume automatic control? It first re-reads the heater from a NEW bridge status and "
+        "only continues if the heater is in Schedule or Manual at 70 °C.",
+    ),
+    "button.thermann_shadow_acknowledge_controller_fault": (
+        "Acknowledge fault",
+        "mdi:check-decagram",
+        "Acknowledge the fault? Check the Thermann app first. The controller re-inspects the "
+        "heater from a new status; nothing is re-sent.",
+    ),
+}
 UNDO = "button.thermann_shadow_undo_last_restore"
 # decision code -> (ha-alert type, icon)
 DECISION_STYLE = {
@@ -83,10 +104,85 @@ def recommendation_card():
             "{{ state_attr('" + CONTROLLER + "','decision_explanation') "
             "or 'Waiting for fresh heater and meter readings.' }}"
             "</ha-alert>\n\n"
-            "**Shadow recommendation only.** No heater command is sent; the native "
-            "Schedule still controls the real heater."
+            "{% if is_state('" + MASTER + "', 'on') %}**Automatic control is ON.** The "
+            "controller follows this plan: Manual 70 °C permits heating, the empty Schedule "
+            "parks it; the Thermann thermostat decides when the element runs."
+            "{% else %}**Planner only.** Automatic control is off, so no heater command is "
+            "sent.{% endif %}"
         ),
     }
+
+
+def controller_card():
+    rows = [
+        sensor("Automatic control state"),
+        sensor("Automatic control reason"),
+        sensor("Thermann mode"),
+        sensor("Thermann target"),
+        sensor("Next intended action"),
+        sensor("Next heating start"),
+        sensor("Next heating stop"),
+        sensor("Last command"),
+        sensor("Last command result"),
+        sensor("Last command time"),
+        sensor("Commands in last 24 hours"),
+        sensor("Cloud requests in last 24 hours"),
+        sensor("Controller fault"),
+    ]
+    status = sensor("Automatic control state")
+    return section(
+        "Automatic control",
+        "mdi:robot",
+        [
+            {
+                "type": "markdown",
+                "text_only": True,
+                "content": (
+                    "{% set s = states('" + status + "') %}"
+                    "{% set kind = {'fault_locked':'error','owner_override':'warning',"
+                    "'confirming':'info','disabled':'info'}.get(s, 'success') %}"
+                    "<ha-alert alert-type=\"{{ kind }}\"><b>{{ s | replace('_', ' ') | upper }}</b>"
+                    " — {{ states('"
+                    + sensor("Automatic control reason")
+                    + "') | replace('_', ' ') }}"
+                    "</ha-alert>\n"
+                    "{{ state_attr('" + status + "', 'recovery_guidance') or '' }}\n\n"
+                    "{% set missing = state_attr('" + MASTER + "', 'commissioning_missing') %}"
+                    "{% if missing %}Commissioning still needed: "
+                    "{{ missing | join(', ') | replace('_', ' ') }}. The controller cannot send any "
+                    "command until these are done.{% endif %}"
+                ),
+            },
+            {
+                "type": "tile",
+                "entity": MASTER,
+                "icon": "mdi:robot",
+                "name": "Automatic heater control",
+            },
+            {
+                "type": "entities",
+                "title": "Controller status",
+                "show_header_toggle": False,
+                "entities": rows,
+            },
+            *[
+                {
+                    "type": "button",
+                    "entity": entity_id,
+                    "name": name,
+                    "icon": icon,
+                    "show_state": False,
+                    "tap_action": {
+                        "action": "perform-action",
+                        "perform_action": "button.press",
+                        "target": {"entity_id": entity_id},
+                        "confirmation": {"text": text},
+                    },
+                }
+                for entity_id, (name, icon, text) in CONTROLLER_BUTTONS.items()
+            ],
+        ],
+    )
 
 
 def guidance(group, keys):
@@ -120,6 +216,7 @@ def guidance(group, keys):
 
 def build():
     hot_water = [
+        controller_card(),
         section(
             "Right now",
             "mdi:water-boiler",
@@ -219,8 +316,8 @@ def build():
             ),
         }
     ]
-    groups = ("Comfort", "Solar & Forecasting", "Heating Cycles", "Advanced")
-    icons = ("mdi:home-thermometer", "mdi:solar-power", "mdi:sync", "mdi:tune")
+    groups = ("Comfort", "Solar & Forecasting", "Heating Cycles", "Controller", "Advanced")
+    icons = ("mdi:home-thermometer", "mdi:solar-power", "mdi:sync", "mdi:robot", "mdi:tune")
     for group, icon in zip(groups, icons, strict=True):
         keys = [
             key

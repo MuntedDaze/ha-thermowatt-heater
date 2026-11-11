@@ -47,6 +47,12 @@ class ShadowRuntime:
         self.advisor = Advisor()
         self.advice = None
         self._status_ok = False
+        # 0.5.0: set by the Executor. While the production controller is enabled
+        # it supervises mode changes itself (own commands are expected; foreign
+        # ones put it in OWNER_OVERRIDE), so the shadow latch is not used.
+        self.controller_active = False
+        self.executor = None
+        self.planning_temperature = None
         self.set_native_reference({})
 
     def set_native_reference(self, options):
@@ -110,7 +116,11 @@ class ShadowRuntime:
         except (ValueError, TypeError, OverflowError):
             native = (None, None)
         if all(item is not None for item in native):
-            if self.last_native is not None and self.last_native != native:
+            if (
+                self.last_native is not None
+                and self.last_native != native
+                and not self.controller_active
+            ):
                 self.intervention = True
             self.last_native = native
         solar_confirmed = False
@@ -205,6 +215,23 @@ class ShadowRuntime:
             house_kw = max(0.0, pv_ac_now - export_kw)
         mode_state = self.hass.states.get(self.sources.get("mode", ""))
         status_raw = mode_state.attributes.get("WaterHeaterSts") if mode_state else None
+        executor = self.executor
+        controlled = bool(executor is not None and self.controller_active)
+        if executor is not None and self.advisor.estimator is not None:
+            previous = self.advice.heater.state if self.advice else "unknown"
+            temperature = executor.session.update(now, temperature, previous)
+        self.planning_temperature = temperature
+
+        def in_window(at):
+            if controlled:
+                return executor.permitted()
+            return (
+                scheduled_permission(
+                    at, self.native_periods, self.native_options["native_schedule_clock"]
+                )
+                == "within_reported_window"
+            )
+
         heater_power = self._kw("heater_power", now) if self.sources.get("heater_power") else None
         inputs = TickInputs(
             temperature=temperature,
@@ -213,16 +240,15 @@ class ShadowRuntime:
             export_kw=export_kw,
             status_raw=status_raw,
             status_at=poll_at if status_ok else None,
-            in_window=lambda at: scheduled_permission(
-                at, self.native_periods, self.native_options["native_schedule_clock"]
-            )
-            == "within_reported_window",
+            in_window=in_window,
             heater_power_kw=heater_power,
             native_periods=self.native_periods,
             native_clock=self.native_options["native_schedule_clock"],
             pv_series=self.forecast.pv_series,
             load_series=self.forecast.load_series,
             forecast_available=bool(self.forecast.pv_series),
+            controlled=controlled,
+            latency_minutes=executor.latency_minutes if controlled else 0.0,
         )
         advice = self.advisor.tick(now, self.plan, self.settings, self.tariffs, inputs)
         self.advice = advice
@@ -394,8 +420,10 @@ class ShadowRuntime:
             ):
                 self.plan.warnings.append("request_accounting_incomplete_or_unverified")
         self.details = {
-            "shadow_mode": True,
-            "control_capable": False,
+            "shadow_mode": not self.controller_active,
+            "control_capable": self.controller_active,
+            "controller_active": self.controller_active,
+            "planning_temperature_c": self.planning_temperature,
             "additional_cloud_requests": 0,
             "nominal_status_cycles_per_day": 48,
             "observed_refresh_pattern_attempts_per_day": 144,
@@ -647,7 +675,11 @@ class ShadowRuntime:
                 for goal in advice.goals
             ],
             "readiness": {
-                kind: {**item, "deadline": item["deadline"].isoformat()}
+                kind: {
+                    **item,
+                    "deadline": item["deadline"].isoformat(),
+                    "planning_deadline": item["planning_deadline"].isoformat(),
+                }
                 for kind, item in advice.readiness.items()
             },
             "strategies": {name: plan.summary() for name, plan in result.plans.items()}

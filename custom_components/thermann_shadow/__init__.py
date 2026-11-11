@@ -1,14 +1,23 @@
-"""Thermann shadow planning only; no services, network clients or heater writes."""
+"""Thermann planner (0.4.0) plus the 0.5.0 production controller.
+
+The planner never commands anything. The controller (executor.py/controller.py)
+is the only component that may publish a Thermann mode command, and it cannot
+do so until the owner completes commissioning and enables automatic control.
+"""
 
 from datetime import timedelta
 
 from homeassistant.const import Platform
 from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 from homeassistant.util import dt as dt_util
 
 from .config import DOMAIN, LEGACY_MORNING_THRESHOLD_C, parse_options
+from .executor import Executor
 from .runtime import ShadowRuntime
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -27,16 +36,29 @@ async def async_setup_entry(hass, entry):
     settings, tariffs = parse_options(entry.options)
     runtime = ShadowRuntime(hass, entry.options.get("sources", entry.data), settings, tariffs)
     runtime.set_native_reference(entry.options)
+    executor = Executor(hass, entry, runtime)
+    await executor.async_load()
+    runtime.executor = executor
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     @callback
     def update(now):
         runtime.update(now)
+        hass.async_create_task(executor.async_step(now))
+
+    @callback
+    def new_poll(event):
+        # Commands are poll-aligned: evaluate immediately when a bridge status
+        # lands, so a command reaches the bridge while its status is <60 s old.
+        update(dt_util.utcnow())
 
     entry.async_on_unload(async_track_time_interval(hass, update, timedelta(minutes=1)))
+    poll_entity = runtime.sources.get("last_poll")
+    if isinstance(poll_entity, str) and poll_entity:
+        entry.async_on_unload(async_track_state_change_event(hass, [poll_entity], new_poll))
     entry.async_on_unload(entry.add_update_listener(_reload))
-    runtime.update(dt_util.utcnow())
+    update(dt_util.utcnow())
     return True
 
 
@@ -55,9 +77,10 @@ async def async_migrate_entry(hass, entry):
 
 
 async def _reload(hass, entry):
-    hass.data[DOMAIN][entry.entry_id].apply_options(
-        entry.options, entry.options.get("sources", entry.data)
-    )
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    runtime.apply_options(entry.options, entry.options.get("sources", entry.data))
+    if runtime.executor is not None:
+        runtime.executor.configure(entry.options)
 
 
 async def async_unload_entry(hass, entry):

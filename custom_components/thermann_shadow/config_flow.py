@@ -44,7 +44,7 @@ def options_schema(values):
             validator = vol.In(["local", "standard"])
         elif key in {"tariff_periods", "native_schedule_periods"}:
             validator = selector.TextSelector(selector.TextSelectorConfig(multiline=True))
-        elif key == "native_clock_check_date":
+        elif key == "native_clock_check_date" or CATALOG[key].kind == "text":
             validator = cv.string
         elif CATALOG[key].kind == "select":
             validator = selector.SelectSelector(
