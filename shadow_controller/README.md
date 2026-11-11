@@ -1,5 +1,12 @@
 # Thermann Shadow Planner 0.4.0 (candidate)
 
+> **0.5.0 production controller candidate:** see [CONTROLLER_0_5_0.md](CONTROLLER_0_5_0.md),
+> [COMMISSIONING_0_5_0.md](COMMISSIONING_0_5_0.md) and
+> [PRODUCTION_READINESS_0_5_0.md](PRODUCTION_READINESS_0_5_0.md). Automatic control is
+> **off** and impossible until commissioning (Stages B and C) is complete; everything
+> below describes the planner, which the controller follows.
+
+
 A **shadow-only** hot-water planner for the Thermann 315 L / 3 kW heater. It reads
 existing Home Assistant entities, decides when heating *would* be best, and
 explains why on a dashboard. **It never operates the heater.** The native

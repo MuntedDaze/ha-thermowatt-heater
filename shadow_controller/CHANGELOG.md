@@ -1,5 +1,43 @@
 # Thermann Shadow Planner
 
+## 0.5.0 — production controller candidate (not deployed; control off by default)
+
+- **Control method.** Manual 70 °C permits heating, and the empty weekly
+  Schedule parks it (owner decision; T1 passed in the official app).
+- **Controller.** A new controller (`controller.py`, `control_plan.py`,
+  `executor.py`) provides:
+  - an explicit state machine;
+  - persisted unique intents;
+  - one poll-aligned guarded command (`Manual:70` via bridge 1.3.9, or
+    `Auto`), never retried;
+  - confirmation from observed status and the bridge's `last_command`;
+  - restart reconciliation without re-sending;
+  - owner precedence, with Hold, Resume and Acknowledge;
+  - dwell, daily-command (with a comfort reserve) and cloud-request budgets;
+  - the hysteresis gate;
+  - unexplained heating never interrupted;
+  - notifications with cooldown and a restoration notice.
+- **Planner:** in controlled mode, comfort deadlines are planned 30 minutes
+  early (the execution latency reserve), and readiness reports
+  `planned_by_controller`.
+- **Bottom-sensor overshoot cap:** start reading plus delivered energy, for
+  90 minutes after heating.
+- **Peak guard:** parks at the last slot before a peak unless the element is
+  heating for comfort. This was found by replaying the 10 Nov history.
+- **Empty native Schedule** (`[]`) is accepted.
+- **Fresh installs cannot command:** the master switch refuses to turn on until
+  the command topic and both commissioning confirmations are set.
+- **Tests:** 62 new controller tests, including:
+  - the real 1.3.8 bridge;
+  - a model of the 1.3.9 contract;
+  - closed-loop days through the real advisor;
+  - winter, weekend, DST and forecast-error cases.
+
+  A real-HA wiring check captures the MQTT message without sending it, and the
+  replay tool gains `--controller-dry-run`.
+- **Documentation:** CONTROLLER_0_5_0, COMMISSIONING_0_5_0 (Stages A–E),
+  PRODUCTION_READINESS_0_5_0, LOCAL_CONTROL_FEASIBILITY.
+
 ## 0.4.0 — Stage 3a read-only candidate
 
 - Fix the false-stale defect: cloud readings are fresh by the bridge poll
