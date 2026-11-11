@@ -1,5 +1,9 @@
 # Thermann control and recovery — source/public-document review only
 
+> **Superseded for the control method** by [STAGE_4A_CONTROL_METHOD.md](STAGE_4A_CONTROL_METHOD.md):
+> Manual 70 °C permits heating, an empty weekly Schedule parks it, no fallback
+> windows, Off/On optional. The recovery and safety findings below still apply.
+
 No live API, authentication, command, reset or hardware test was performed.
 This updates the earlier Phase 2A design: the owner accepts occasional manual
 recovery during serious outages. Automatic Schedule restoration in every failure
@@ -81,7 +85,7 @@ Off behaviour is authorised. Preserve the current native Schedule, 70°C target,
    bridge as sole cloud client. Use bottom temperature directly, with plausible
    units/ranges; no additional physical sensor or stratification model is required.
 2. **Planning:** this pure local model emits a goal, opportunity and latest
-   off-peak backstop. 40°C is readiness logic, never a storage target. Recompute
+   off-peak start (planner logic, not a native heating window). 40°C is readiness logic, never a storage target. Recompute
    from new temperature observations and do not indefinitely wait for forecasts.
 3. **Execution:** a later small adapter checks enabled permissions, ownership,
    fresh observed state and cloud status, then sends one verified intent via the
