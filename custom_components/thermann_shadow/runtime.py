@@ -606,6 +606,18 @@ class ShadowRuntime:
             "decision_explanation": advice.explanation,
             "decision_confidence": advice.confidence,
             "decision_pending_change_to": advice.pending_code,
+            "economic_decision": advice.economic_code,
+            "physical_state_applied_without_stabiliser_delay": True,
+            "hypothetical_surplus_kw": {
+                "value": advice.surplus_now_kw,
+                "bounds": list(advice.surplus_bounds_kw) if advice.surplus_bounds_kw else None,
+                "basis": advice.surplus_basis,
+                "meaning": "PV AC minus base load: what the heater could use if it were off; not measured export",
+            },
+            "native_thermostat_satisfied": advice.satisfied,
+            "heat_now_cost_range_aud": list(result.heat_now_cost_range_aud)
+            if result and result.heat_now_cost_range_aud
+            else None,
             "heater_state": {
                 "state": heater.state,
                 "confidence": heater.confidence,

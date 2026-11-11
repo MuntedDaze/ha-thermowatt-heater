@@ -88,15 +88,17 @@ Recommendations shown in large type:
 | Label | Meaning |
 |---|---|
 | HEAT NOW | heating now is the cheapest plan, solar is available and waiting saves too little, or the comfort fallback is due |
-| HEATING NOW (NATIVE) | the native Schedule is heating; the text says whether that matches the cheapest plan |
+| HEATING NOW / HEATING LIKELY (NATIVE) | the native Schedule is heating (LIKELY = medium confidence); the text says whether that matches the cheapest plan |
 | WAIT – CHEAPER LATER | a later plan saves at least the threshold; saving, start and latest safe start shown |
 | NO HURRY | no meaningful cost difference; heat before the stated latest start |
 | NO HEATING NEEDED | both goals met (or storage satisfied by the native thermostat) |
 | INSUFFICIENT TIME | even continuous heating cannot meet the goal; shortfall shown |
 | DATA UNAVAILABLE / OWNER REVIEW / PAUSED | gates; nothing is recommended |
 
-Optional changes must persist 10 minutes before the shown recommendation changes;
-comfort and data gates apply immediately.
+Only changes between optional economic choices must persist 10 minutes. The physical
+heater state, comfort, data gates and "no heating needed" apply immediately.
+Readiness describes what the native Schedule is predicted to achieve, never a
+hypothetical plan.
 
 ## Tariff (owner-confirmed Aurora 93)
 

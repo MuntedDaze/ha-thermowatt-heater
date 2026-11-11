@@ -50,7 +50,8 @@ re-authenticates the heater, and it adds no Thermann requests.
 3. **Heater element state** shows ON during native Schedule heating (e.g. after
    11:00 on a weekday) with the basis `WaterHeaterSts_bit0_set` /
    `house_load_consistent_with_element`, and OFF otherwise. **Base household load**
-   should be about 0.6–1 kW, not 3–4 kW, while the element runs.
+   should be about 0.6–1 kW, not 3–4 kW, while the element runs. *Hypothetical solar
+   surplus if heater off* is an estimate, not the measured export.
 4. **Morning/afternoon ready deadline** show 08:00 / 17:00 on summer weekdays
    (07:00 / 16:00 in winter) and your household times on weekends.
 5. **Next tariff change** and its period match your Aurora bill.

@@ -171,7 +171,7 @@ def build():
             [
                 tile("Measured PV AC output", "mdi:solar-power"),
                 tile("Base household load excluding hot water", "mdi:home-lightning-bolt"),
-                tile("Solar surplus available to heater", "mdi:solar-panel"),
+                tile("Hypothetical solar surplus if heater off", "mdi:solar-panel"),
                 tile("Measured grid export", "mdi:transmission-tower-export"),
                 tile("Measured grid import", "mdi:transmission-tower-import"),
                 tile("Current tariff", "mdi:tag-outline"),

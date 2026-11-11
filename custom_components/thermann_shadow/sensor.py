@@ -57,7 +57,7 @@ SENSORS = {
     "heater_state_confidence": ("Heater state confidence", None),
     "base_load_kw": ("Base household load excluding hot water", "kW"),
     "measured_pv_ac_kw": ("Measured PV AC output", "kW"),
-    "current_solar_surplus_kw": ("Solar surplus available to heater", "kW"),
+    "current_solar_surplus_kw": ("Hypothetical solar surplus if heater off", "kW"),
     "next_tariff_change": ("Next tariff change", None),
     "next_tariff_kind": ("Next tariff period", None),
     "current_tariff_rate_aud": ("Current tariff rate", "AUD/kWh"),

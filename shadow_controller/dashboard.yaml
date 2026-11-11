@@ -105,7 +105,7 @@ views:
       entity: sensor.thermann_shadow_base_household_load_excluding_hot_water
       icon: mdi:home-lightning-bolt
     - type: tile
-      entity: sensor.thermann_shadow_solar_surplus_available_to_heater
+      entity: sensor.thermann_shadow_hypothetical_solar_surplus_if_heater_off
       icon: mdi:solar-panel
     - type: tile
       entity: sensor.thermann_shadow_measured_grid_export

@@ -30,8 +30,8 @@ deployment.
 | Waiting rule | AUD 0.10 per decision (unreachable without forecasts) | wait only if it saves ≥ **5 c per kWh** that would be heated now, and the fallback stays viable |
 | Solar | DC PV, downward-only correction, no clipping | **AC PV**, combined **5 kW AC clipping**, two-way bounded correction; clipped readings are a lower bound |
 | Native Schedule | warning string only | native outlook (predicted readiness/cost), thermostat-satisfied detection, read-only **Schedule advisor** |
-| Labels | WAIT FOR SOLAR even when not worthwhile | HEAT NOW · HEATING NOW (NATIVE) · WAIT – CHEAPER LATER · NO HURRY · NO HEATING NEEDED · INSUFFICIENT TIME · DATA UNAVAILABLE · OWNER REVIEW · PAUSED, each with saving, confidence and reason |
-| Stability | per-minute flips | optional changes must persist 10 min; comfort/gates are immediate |
+| Labels | WAIT FOR SOLAR even when not worthwhile | HEAT NOW · HEATING NOW / HEATING LIKELY (NATIVE) · WAIT – CHEAPER LATER · NO HURRY · NO HEATING NEEDED · INSUFFICIENT TIME · DATA UNAVAILABLE · OWNER REVIEW · PAUSED, each with saving, confidence and reason |
+| Stability | per-minute flips | only changes between optional economic choices wait 10 min; physical heater state, comfort, gates and "no heating needed" apply immediately |
 
 New sensors (unique IDs `<entry>_<key>`):
 - heater element state, heater state confidence;
@@ -122,3 +122,37 @@ persisted storage, and an unchanged-MQTT-payload freshness check without
   de-embedded measured base load (`base_load_source: measured_only`).
 - One day of clean post-commissioning history. Nothing is fitted to it; the
   bounds and defaults are not tuned to that day.
+
+## Review corrections (ChatGPT review of `ac38eaf`)
+
+1. **Thermostat-satisfied lifetime.** The event is scoped to the **same local
+   day's afternoon goal**: it expires at that deadline, resets on a 3 °C reading
+   fall (was 5 °C) or new heating, and a switch-off after today's deadline never
+   satisfies tomorrow's goal. Readiness reports `satisfied_by_native_thermostat`,
+   and the explanation says the reported target was **not necessarily reached**
+   (10 Nov: 63 °C reading against a 70 °C target).
+2. **Block rules for every strategy.** The optimiser enforces the minimum cycle
+   (30 min), minimum gap (30 min) and ≤3 blocks for every plan: best, heat-now,
+   single block, single block later. A partial first slot under 7.5 min does not
+   count towards a block, and only a job smaller than one cycle may be shorter.
+   `constraint_violations()` checks every plan independently; all plans deliver
+   the same energy.
+3. **Presentation.**
+   - *Hypothetical solar surplus if heater off* (renamed) is kept separate from
+     measured export. With the element UNKNOWN it shows the conservative lower
+     bound with both bounds in diagnostics, and the heat-now cost is a **range**
+     (observed case: $0.71–1.14) with confidence capped.
+   - Readiness now describes what the **native Schedule** is predicted to achieve
+     (`native_predicted_ready` / `at_risk_with_native_schedule` / `unachievable`);
+     a hypothetical plan is never shown as guaranteed readiness.
+   - The physical heater state is applied **after** the economic stabiliser on
+     every tick, so "HEATING NOW (NATIVE)" disappears on the tick the element
+     stops. Medium confidence says "HEATING LIKELY (NATIVE)".
+4. **Bug found while fixing (2):** the waiting threshold had used the whole first
+   block of the heat-now plan. It now uses one minimum cycle from now, so the
+   "partial now, full solar later" case correctly waits again ($0.10 saving).
+
+Replay after the corrections: still **98.6 %** availability. 10 Nov 16:47 → NO
+HEATING NEEDED (satisfied by the thermostat), and at **17:00 exactly** it moves to
+WAIT – CHEAPER LATER (event expired, evening peak). Native heating shows "LIKELY"
+until the next poll confirms it (e.g. 11 Nov 11:05 likely → 11:18 now).

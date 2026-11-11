@@ -18,6 +18,13 @@ advisor_mod = importlib.import_module(f"{m.__package__}.advisor")
 settings_mod = importlib.import_module(f"{m.__package__}.settings")
 
 FEED, OFF, PEAK = 0.09276, 0.1702, 0.361878
+READINESS = {
+    "met",
+    "satisfied_by_native_thermostat",
+    "native_predicted_ready",
+    "at_risk_with_native_schedule",
+    "unachievable",
+}
 
 
 def owner(**options):
@@ -284,9 +291,11 @@ def test_storage_satisfied_by_native_thermostat_means_no_afternoon_heat():
         settings,
         "off",
         True,
-        storage_satisfied=True,
+        satisfied_deadline=local(hour=17),
     )
     assert result.code == "no_heating_needed"
+    assert result.native_satisfied_goal == "afternoon"
+    assert "63 °C" in result.explanation and "not necessarily reached" in result.explanation
 
 
 def test_native_outlook_reports_readiness_and_cost():
@@ -426,7 +435,7 @@ def test_runtime_exposes_state_basis_tariff_and_readiness(runtime):  # noqa: F81
     assert values["base_load_kw"] == pytest.approx(0.9)
     assert details["heater_state"]["status_semantics"].startswith("empirical")
     assert values["next_tariff_change"] is not None and values["next_tariff_kind"]
-    assert values["afternoon_readiness"] in {"met", "on_track", "at_risk", "shortfall"}
+    assert values["afternoon_readiness"] in READINESS
     assert values["decision"] and values["decision_confidence"]
     assert "strategies" in details and details["native_outlook"] is not None
     json.dumps(details, allow_nan=False, default=str)
@@ -550,3 +559,250 @@ def test_version_comparison_report_reproduces():
     assert rows["Unchanged MQTT payload (written 50 min ago, poll 5 min ago)"]["before"][
         "label"
     ] == ("DATA UNAVAILABLE")
+
+
+# --- Review of ac38eaf (ChatGPT): satisfied lifetime, block rules, presentation ----
+
+
+def satisfied_run(adv, events, settings=None, tariffs=None):
+    """Drive _track_satisfaction with (time, state, reading, in_window) tuples."""
+    settings_, tariffs_ = owner()
+    settings, tariffs = settings or settings_, tariffs or tariffs_
+    for at, state, reading, window in events:
+        heater = hs.HeaterState(state=state, confidence="high")
+        inputs = advisor_mod.TickInputs(
+            temperature=reading,
+            house_kw=None,
+            pv_ac_kw=None,
+            export_kw=None,
+            status_raw=None,
+            status_at=None,
+            in_window=lambda t, w=window: w,
+        )
+        goals = goals_mod.upcoming_goals(at, settings, tariffs)[:2]
+        adv._track_satisfaction(at, heater, inputs, goals)
+    return adv.satisfied
+
+
+def heated_then_off(start, reading=63, window=True):
+    return [(start, "on", reading, window), (start + timedelta(minutes=15), "off", reading, window)]
+
+
+def test_satisfied_event_is_scoped_to_todays_afternoon_goal_and_expires():
+    adv = advisor_mod.Advisor()
+    event = satisfied_run(adv, heated_then_off(local(hour=15)))
+    assert event is not None and event["deadline"] == local(hour=17)  # 16:00 AEST = 17:00 AEDT
+    # Still before the deadline with a small loss: kept.
+    assert satisfied_run(adv, [(local(hour=16, minute=30), "off", 61, True)]) is not None
+    # At the deadline it expires; tomorrow's goal is never treated as met.
+    assert satisfied_run(adv, [(local(hour=17), "off", 61, False)]) is None
+    assert satisfied_run(adv, [(local(day=11, hour=0, minute=5), "off", 60, False)]) is None
+
+
+def test_satisfied_event_resets_on_three_degree_loss_and_new_heating():
+    adv = advisor_mod.Advisor()
+    satisfied_run(adv, heated_then_off(local(hour=13)))
+    assert satisfied_run(adv, [(local(hour=14), "off", 60.5, True)]) is not None
+    assert satisfied_run(adv, [(local(hour=14, minute=10), "off", 59.5, True)]) is None
+    satisfied_run(adv, heated_then_off(local(hour=15)))
+    assert satisfied_run(adv, [(local(hour=15, minute=20), "on", 63, True)]) is None
+
+
+def test_switch_off_after_todays_deadline_never_satisfies_tomorrow():
+    # Saturday: native window 06:00-22:00, household afternoon time 16:00.
+    adv = advisor_mod.Advisor()
+    assert satisfied_run(adv, heated_then_off(local(day=14, hour=18))) is None
+    # Window-end switch-offs and short blips are not thermostat decisions either.
+    assert (
+        satisfied_run(advisor_mod.Advisor(), heated_then_off(local(hour=15), window=False)) is None
+    )
+    short = [(local(hour=15), "on", 63, True), (local(hour=15, minute=5), "off", 63, True)]
+    assert satisfied_run(advisor_mod.Advisor(), short) is None
+
+
+def test_satisfied_only_zeroes_the_matching_goal_and_says_target_not_reached():
+    now = local(hour=15, minute=30)
+    slots, settings = build(now, 17.5, lambda k: 0.0)
+    morning = goals_mod.Goal("morning", local(day=11, hour=8), 42, "x", None)
+    today = afternoon_goal(local(hour=17))
+    result = strategy.assess(
+        now, 63, [today, morning], slots, settings, "off", True, satisfied_deadline=local(hour=17)
+    )
+    reqs = {goal.kind: kwh for goal, kwh in result.requirements}
+    assert reqs["afternoon"] == 0 and result.native_satisfied_goal == "afternoon"
+    # A different (tomorrow's) deadline is untouched by today's event.
+    tomorrow = afternoon_goal(local(day=11, hour=17))
+    result = strategy.assess(
+        now,
+        63,
+        [tomorrow],
+        *build(now, 26, lambda k: 0.0),
+        "off",
+        True,
+        satisfied_deadline=local(hour=17),
+    )
+    assert result.native_satisfied_goal is None and result.requirements[0][1] > 0
+
+
+def alternating_slots(now, count, cheap=0.0, dear=0.5):
+    """Alternating cheap/dear 15-min slots would invite 15-minute blocks."""
+    return [
+        strategy.Slot(
+            now + timedelta(minutes=15 * k),
+            now + timedelta(minutes=15 * (k + 1)),
+            0.25,
+            cheap if k % 2 == 0 else dear,
+            0.0,
+            0.0,
+            0.5,
+            0.5,
+            False,
+        )
+        for k in range(count)
+    ]
+
+
+def test_block_rules_prevent_short_and_adjacent_blocks():
+    now = local(hour=10)
+    slots = alternating_slots(now, 24)
+    needs = [(24, 3.0)]  # 4 slots of energy
+    free = strategy.optimise(slots, needs, FEED, min_run=1, min_gap=1)
+    # Without rules the optimiser happily schedules a 15-minute block.
+    assert any(b - a < timedelta(minutes=30) for a, b in free.blocks)
+    ruled = strategy.optimise(slots, needs, FEED, min_run=2, min_gap=2)
+    settings, _ = owner()
+    assert strategy.constraint_violations(ruled, settings, now) == []
+    assert all((b - a) >= timedelta(minutes=30) for a, b in ruled.blocks[:-1])
+    for previous, current in zip(ruled.blocks, ruled.blocks[1:], strict=False):
+        assert current[0] - previous[1] >= timedelta(minutes=30)
+    assert ruled.energy_kwh == pytest.approx(free.energy_kwh) == pytest.approx(3.0)
+    assert ruled.cost_aud >= free.cost_aud  # rules can only cost more, never less
+    single = strategy.optimise(slots, needs, FEED, max_blocks=1, min_run=2, min_gap=2)
+    assert len(single.blocks) == 1
+
+
+def test_small_job_may_be_shorter_than_one_cycle_and_deadline_boundary_is_exact():
+    now = local(hour=10)
+    slots = alternating_slots(now, 8, cheap=0.1, dear=0.1)
+    small = strategy.optimise(slots, [(8, 0.5)], FEED, min_run=2, min_gap=2)
+    assert small.feasible and len(small.blocks) == 1 and small.energy_kwh == pytest.approx(0.5)
+    exact = strategy.optimise(slots, [(4, 3.0)], FEED, min_run=2, min_gap=2)
+    assert exact.blocks == [(now, now + timedelta(hours=1))]  # fills the window exactly
+    assert strategy.optimise(slots, [(4, 3.1)], FEED, min_run=2, min_gap=2) is None
+
+
+def test_forced_start_with_short_partial_slot_still_runs_a_full_cycle():
+    now = local(hour=10, minute=55)  # 5-minute first slot
+    settings, tariffs = owner()
+    slots = strategy.build_slots(now, local(hour=14), settings, tariffs, 0.0, (0.5, 0.5), 0.5)
+    plan = strategy.optimise(
+        slots, [(len(slots), 4.0)], FEED, force_first=True, min_run=2, min_gap=2
+    )
+    first = plan.blocks[0]
+    assert first[0] == now and first[1] - first[0] >= timedelta(minutes=35)
+    assert strategy.constraint_violations(plan, settings, now) == []
+
+
+def test_every_assessed_strategy_obeys_block_rules_and_equal_energy():
+    now = local(hour=9)
+    slots, settings = build(now, 8, lambda k: 3.5 if k % 3 else 0.5)
+    result = strategy.assess(
+        now, 50, [afternoon_goal(local(hour=17))], slots, settings, "off", True
+    )
+    energies = set()
+    for name, plan in result.plans.items():
+        assert strategy.constraint_violations(plan, settings, now) == [], name
+        energies.add(round(plan.energy_kwh, 6))
+    assert len(energies) == 1  # all strategies deliver the same required energy
+
+
+def test_unknown_state_bounds_surplus_and_cost_with_qualified_confidence():
+    adv = advisor_mod.Advisor()
+    now = local(day=11, hour=11, minute=42)
+    settings, tariffs = owner(forecast_enabled=True)
+    plan = m.Plan(state="shadow_wait_for_window")
+    inputs = advisor_mod.TickInputs(
+        temperature=52,
+        house_kw=3.9,
+        pv_ac_kw=4.97,
+        export_kw=1.07,
+        status_raw=None,
+        status_at=None,
+        in_window=lambda at: True,
+        forecast_available=True,
+        pv_series=((now, now + timedelta(hours=8), 3.43),),
+    )
+    advice = adv.tick(now, plan, settings, tariffs, inputs)
+    assert advice.heater.state == "unknown"
+    low, high = advice.surplus_bounds_kw
+    assert advice.surplus_now_kw == low == pytest.approx(1.07) and high == pytest.approx(4.07)
+    assert advice.surplus_basis == "element_unknown_lower_bound"
+    lo_cost, hi_cost = advice.assessment.heat_now_cost_range_aud
+    assert hi_cost - lo_cost > 0.3
+    assert advice.confidence in {"low", "medium"}
+    assert "between" in advice.explanation
+
+
+def test_physical_state_overrides_stabilised_economics_immediately():
+    adv = advisor_mod.Advisor()
+    now = local(day=11, hour=11, minute=30)
+    settings, tariffs = owner(forecast_enabled=True)
+    plan = m.Plan(state="shadow_wait_for_window")
+
+    def tick(minute, house, status):
+        inputs = advisor_mod.TickInputs(
+            temperature=52,
+            house_kw=house,
+            pv_ac_kw=4.97,
+            export_kw=4.97 - house,
+            status_raw=status,
+            status_at=now,
+            in_window=lambda at: True,
+            forecast_available=True,
+            pv_series=((now, now + timedelta(hours=8), 4.5),),
+        )
+        return adv.tick(now + timedelta(minutes=minute), plan, settings, tariffs, inputs)
+
+    on = tick(0, 3.9, 33)
+    assert on.label == "HEATING NOW (NATIVE)" and on.heater.state == "on"
+    off = tick(1, 0.9, 33)  # element stops; house load falls below 2.6 kW
+    assert off.heater.state == "off"
+    assert off.label != "HEATING NOW (NATIVE)"  # same tick, no 10-minute lag
+    assert off.economic_code == on.economic_code  # economics may still be held
+
+
+def test_readiness_comes_from_native_outlook_not_hypothetical_plan():
+    adv = advisor_mod.Advisor()
+    now = local(hour=12)
+    settings, tariffs = owner()
+    plan = m.Plan(state="shadow_wait_for_window")
+    inputs = advisor_mod.TickInputs(
+        temperature=55,
+        house_kw=0.9,
+        pv_ac_kw=0.5,
+        export_kw=-0.4,
+        status_raw=32,
+        status_at=now,
+        in_window=lambda at: False,  # native windows closed all afternoon
+    )
+    advice = adv.tick(now, plan, settings, tariffs, inputs)
+    afternoon = advice.readiness["afternoon"]
+    assert afternoon["hypothetical_plan_feasible"] is True
+    assert afternoon["native_predicted_ready"] is False
+    assert afternoon["status"] == "at_risk_with_native_schedule"
+
+
+def test_medium_confidence_on_says_likely_and_state_claims_change_immediately():
+    decision = ("heat_now_cheapest", "HEAT NOW", "x", "high")
+    assert (
+        strategy.compose_with_heater(decision, "on", None, "medium")[1] == "HEATING LIKELY (NATIVE)"
+    )
+    assert strategy.compose_with_heater(decision, "on", None, "high")[1] == "HEATING NOW (NATIVE)"
+    assert strategy.compose_with_heater(decision, "off", None, "high")[1] == "HEAT NOW"
+    adv = advisor_mod.Advisor()
+    now = local(hour=16, minute=50)
+    adv._stabilise(now, ("no_heating_needed", "NO HEATING NEEDED", "", "high"), 10)
+    shown, pending = adv._stabilise(
+        now + timedelta(minutes=10), ("wait_cheaper_later", "WAIT", "", "high"), 10
+    )
+    assert shown[0] == "wait_cheaper_later" and pending is None  # not held
