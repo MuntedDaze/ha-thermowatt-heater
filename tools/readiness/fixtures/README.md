@@ -6,6 +6,9 @@
   Planner 0.3.0, the version the owner has installed; the installed files were
   hash-verified against this commit in `audit/thermann_shadow/installed_component_match.json`).
 
+- `thermann_shadow_0_5_0/` — byte-for-byte copy at commit `8cc4a4d` (Controller
+  0.5.0, the version the owner installed in Stage A, disabled).
+
 `shadow_ha_checks.upgrade_from_*` loads each in a network-less HA Core container,
 saves options and an entity rename to real HA storage, stops HA, then starts the
 current component over the same storage. It proves that entity IDs, unique IDs and

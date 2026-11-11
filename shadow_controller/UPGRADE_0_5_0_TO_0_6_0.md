@@ -13,14 +13,22 @@ on-demand refresh disabled. *Automatic heater control* stays **off**.
 - dashboard texts describe Manual 70 / OFF;
 - clock warnings appear only while the native programme is actually in use.
 
-Entity IDs, options, history and the controller state file carry over
-unchanged.
+**Preserved (CI checks this on real HA Core, 0.5.0 → 0.6.0 over persisted
+storage):**
+- every saved option, unchanged; the removed key is simply ignored;
+- all entity IDs and renames;
+- recorder history, since the config entry is never removed;
+- the persisted controller state, which stays **disabled**;
+- nothing is published.
+
+No backup preparation is required. Rollback uses the 0.5.0 package below.
 
 ## Steps, one action at a time
 
 1. **Verify the package.** Check `thermann_shadow-0.6.0-<commit>.zip` against the
    SHA-256 in the PR #14 comment (`Get-FileHash <zip> -Algorithm SHA256`), then
-   unzip it.
+   unzip it. The Thermowatt add-on is **not** touched in this step; it stays at
+   1.3.8 until the separate 1.3.9 update (`UPGRADING_1_3_9.md`, PR #12).
    - *Check:* `manifest.json` says `"version": "0.6.0"`; there is no
      `__pycache__`.
 2. **Delete the old folder.** Delete `\\<your-HA-host>\config\custom_components\thermann_shadow`.

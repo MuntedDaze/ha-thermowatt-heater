@@ -693,3 +693,110 @@ async def check_controller(hass, entry, entity_for):
         "reinspects_after_reload": True,
         "disabled_sends_nothing": True,
     }
+
+
+async def upgrade_from_0_5_0(folder):
+    """The owner's INSTALLED version (0.5.0, disabled) -> current over real storage.
+
+    Saved options (including the removed 0.5.0 empty-Schedule key), an entity
+    rename, every entity ID and the persisted DISABLED controller state survive;
+    the removed setting's entity is only orphaned; nothing is published."""
+    from homeassistant.components import mqtt
+
+    hass = await start_hass(folder, ROOT / "tools/readiness/fixtures/thermann_shadow_0_5_0")
+    integration = await loader.async_get_custom_components(hass)
+    assert integration["thermann_shadow"].version.__str__() == "0.5.0"
+    from custom_components.thermann_shadow.config import DEFAULT_OPTIONS, DEFAULT_SOURCES
+
+    result = await hass.config_entries.flow.async_init(
+        "thermann_shadow", context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], DEFAULT_SOURCES)
+    entry = result["result"]
+    await hass.async_block_till_done()
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_SOURCES)
+    customise = {"target_c": 68.0, "controller_max_commands_per_day": 5.0}
+    saved = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {**DEFAULT_OPTIONS, **customise}
+    )
+    assert saved["type"] == "create_entry", saved
+    await hass.async_block_till_done()
+    assert "controller_empty_schedule_confirmed" in entry.options  # 0.5.0 key saved
+    runtime = hass.data["thermann_shadow"][entry.entry_id]
+    await runtime.executor.async_step()  # writes the 0.5.0 controller state file
+    assert runtime.executor.controller.state == "disabled"
+    registry = er.async_get(hass)
+    registry.async_update_entity(
+        "sensor.thermann_shadow_controller", new_entity_id="sensor.hot_water_shadow_controller"
+    )
+    before = {
+        item.unique_id: item.entity_id
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    removed = f"{entry.entry_id}_setting_controller_empty_schedule_confirmed"
+    assert removed in before
+    saved_options, entry_id = dict(entry.options), entry.entry_id
+    stored = await flush_and_close(hass)
+    assert f"thermann_shadow.{entry_id}.controller" in stored, stored
+
+    hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
+    integration = await loader.async_get_custom_components(hass)
+    assert integration["thermann_shadow"].version.__str__() == "0.6.0"
+    captured = []
+
+    async def record(*args, **kwargs):
+        captured.append(args)
+
+    original = getattr(mqtt, "async_publish", None)
+    mqtt.async_publish = record
+    try:
+        (entry,) = hass.config_entries.async_entries("thermann_shadow")
+        assert await async_setup_component(hass, "thermann_shadow", {})
+        await hass.async_block_till_done()
+        assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
+        assert dict(entry.options) == saved_options  # nothing rewritten, no migration
+        runtime = hass.data["thermann_shadow"][entry.entry_id]
+        assert runtime.settings.target_c == 68.0
+        assert runtime.executor.cfg.max_commands_per_day == 5
+        assert runtime.executor.controller.enabled is False
+        after = {
+            item.unique_id: item.entity_id
+            for item in er.async_entries_for_config_entry(registry_of(hass), entry.entry_id)
+        }
+        assert {key: after[key] for key in before} == before  # identities and renames kept
+        assert hass.states.get(before[removed]) is None  # orphaned, not provided
+        for unique_id, entity_id in after.items():
+            if unique_id != removed and unique_id in before:
+                if not unique_id.endswith(RETIRED_SUFFIXES):
+                    assert hass.states.get(entity_id) is not None, entity_id
+        report_inputs(hass, DEFAULT_SOURCES)
+        runtime.update(dt_util.utcnow())
+        await runtime.executor.async_step()
+        await hass.async_block_till_done()
+        assert hass.states.get("switch.thermann_shadow_automatic_heater_control").state == "off"
+        assert hass.states.get("sensor.thermann_shadow_automatic_control_state").state == "disabled"
+        missing = hass.states.get("switch.thermann_shadow_automatic_heater_control").attributes[
+            "commissioning_missing"
+        ]
+        assert missing == ["command_topic_not_configured", "bridge_commands_not_qualified_t3"]
+        assert captured == []
+    finally:
+        if original is not None:
+            mqtt.async_publish = original
+    await flush_and_close(hass)
+    return {
+        "from": "0.5.0",
+        "options_unchanged": True,
+        "entities_kept": len(before) - 1,
+        "removed_setting_orphaned": True,
+        "controller_state_kept_disabled": True,
+        "published": 0,
+    }
+
+
+def registry_of(hass):
+    return er.async_get(hass)
+
+
+RETIRED_SUFFIXES = tuple(f"_{key}" for key in RETIRED_IN_0_4_0)
