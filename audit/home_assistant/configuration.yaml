@@ -1,0 +1,69 @@
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+# EMHASS local forecast and optimization commands (no heater control).
+# Requires the EMHASS add-on's TCP port 5000 exposed to the Home Assistant host.
+rest_command:
+  emhass_dayahead_optim:
+    url: "http://127.0.0.1:5000/action/dayahead-optim"
+    method: POST
+    content_type: "application/json"
+    payload: "{}"
+    timeout: 120
+
+  emhass_publish_data:
+    url: "http://127.0.0.1:5000/action/publish-data"
+    method: POST
+    content_type: "application/json"
+    payload: "{}"
+    timeout: 60
+
+# Read-only forecast inputs for Thermann Shadow Planner.
+# These do NOT send commands to the hot-water service.
+template:
+  - sensor:
+      - name: Hot water PV forecast input
+        unique_id: hot_water_pv_forecast_input
+        device_class: power
+        unit_of_measurement: W
+        state: "{{ states('sensor.p_pv_forecast') | float(0) }}"
+        availability: >-
+          {{ is_number(states('sensor.p_pv_forecast'))
+             and (state_attr('sensor.p_pv_forecast', 'forecasts') or []) | count > 0
+             and is_number(state_attr('input_datetime.emhass_forecast_generated', 'timestamp')) }}
+        attributes:
+          forecasts: "{{ state_attr('sensor.p_pv_forecast', 'forecasts') or [] }}"
+          forecast_generated_at: >-
+            {{ state_attr('input_datetime.emhass_forecast_generated', 'timestamp')
+               | timestamp_local(default='') }}
+
+      - name: Hot water load forecast input
+        unique_id: hot_water_load_forecast_input
+        device_class: power
+        unit_of_measurement: W
+        state: "{{ states('sensor.p_load_forecast') | float(0) }}"
+        availability: >-
+          {{ is_number(states('sensor.p_load_forecast'))
+             and (state_attr('sensor.p_load_forecast', 'forecasts') or []) | count > 0
+             and is_number(state_attr('input_datetime.emhass_forecast_generated', 'timestamp')) }}
+        attributes:
+          forecasts: "{{ state_attr('sensor.p_load_forecast', 'forecasts') or [] }}"
+          forecast_generated_at: >-
+            {{ state_attr('input_datetime.emhass_forecast_generated', 'timestamp')
+               | timestamp_local(default='') }}
+
+# Do not store the large forecast arrays in Home Assistant's history database.
+recorder:
+  exclude:
+    entities:
+      - sensor.hot_water_pv_forecast_input
+      - sensor.hot_water_load_forecast_input

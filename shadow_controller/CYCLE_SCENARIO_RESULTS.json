@@ -1,0 +1,403 @@
+{
+  "synthetic_only": true,
+  "physical_heater_operations": 0,
+  "cloud_requests": 0,
+  "rows": [
+    {
+      "scenario": "off_peak",
+      "cloud_minutes": 2,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.5643,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0077
+    },
+    {
+      "scenario": "off_peak",
+      "cloud_minutes": 5,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.5759,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0193
+    },
+    {
+      "scenario": "off_peak",
+      "cloud_minutes": 10,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.5953,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0387
+    },
+    {
+      "scenario": "off_peak",
+      "cloud_minutes": 20,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.634,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 2,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0774
+    },
+    {
+      "scenario": "off_peak",
+      "cloud_minutes": 30,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.6727,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 2
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 2,
+      "cost_difference_aud_stateful_minus_benchmark": 0.1161
+    },
+    {
+      "scenario": "off_peak",
+      "cloud_minutes": 60,
+      "stateful": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.634,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 3
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 0,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0774
+    },
+    {
+      "scenario": "peak_transition",
+      "cloud_minutes": 2,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.5835,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 2
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0269
+    },
+    {
+      "scenario": "peak_transition",
+      "cloud_minutes": 5,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.6238,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 2
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0672
+    },
+    {
+      "scenario": "peak_transition",
+      "cloud_minutes": 10,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.6911,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 2
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.1345
+    },
+    {
+      "scenario": "peak_transition",
+      "cloud_minutes": 20,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.8257,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 3
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 2,
+      "cost_difference_aud_stateful_minus_benchmark": 0.2691
+    },
+    {
+      "scenario": "peak_transition",
+      "cloud_minutes": 30,
+      "stateful": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.7315,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 3
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 0,
+      "cost_difference_aud_stateful_minus_benchmark": 0.1749
+    },
+    {
+      "scenario": "peak_transition",
+      "cloud_minutes": 60,
+      "stateful": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.7315,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 3
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 0,
+      "cost_difference_aud_stateful_minus_benchmark": 0.1749
+    },
+    {
+      "scenario": "approaching_deadline",
+      "cloud_minutes": 2,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.5643,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0077
+    },
+    {
+      "scenario": "approaching_deadline",
+      "cloud_minutes": 5,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.5759,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0193
+    },
+    {
+      "scenario": "approaching_deadline",
+      "cloud_minutes": 10,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.5953,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 3,
+        "stops": 3,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 4,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0387
+    },
+    {
+      "scenario": "approaching_deadline",
+      "cloud_minutes": 20,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.634,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.5566,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 2,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0774
+    },
+    {
+      "scenario": "approaching_deadline",
+      "cloud_minutes": 30,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.6727,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.5953,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 2,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0774
+    },
+    {
+      "scenario": "approaching_deadline",
+      "cloud_minutes": 60,
+      "stateful": {
+        "cycles": 1,
+        "stops": 1,
+        "cost_aud": 0.7889,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 1
+      },
+      "instantaneous_benchmark": {
+        "cycles": 2,
+        "stops": 2,
+        "cost_aud": 0.7114,
+        "delivered_kwh": 6.0,
+        "shortfall_kwh": 0.0,
+        "suppressed_episodes": 0
+      },
+      "switch_events_avoided": 2,
+      "cost_difference_aud_stateful_minus_benchmark": 0.0775
+    }
+  ]
+}

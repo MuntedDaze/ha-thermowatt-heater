@@ -1,0 +1,104 @@
+{
+  "_snapshot": "Selected, sanitised records from the running Home Assistant on 2026-11-11, read-only. Whole .storage files were NOT copied. Location, API keys, account data and unrelated integrations are excluded.",
+  "deployed_versions": {
+    "source": "backup.json metadata of the latest automatic backup (2026-11-11 05:06 Hobart, 2026-11-10T18:06:50Z). Backup contents were not extracted. Add-ons could have changed after that time.",
+    "home_assistant_core": "2026.11.1",
+    "home_assistant_core_also_confirmed_by": "/config/.HA_VERSION read at snapshot time",
+    "supervisor": "2026.10.5",
+    "addons": [
+      {"slug": "0e14509f_thermowatt_boiler", "name": "Thermowatt Smart Boiler", "version": "1.3.8"},
+      {"slug": "5b918bf2_emhass", "name": "EMHASS", "version": "v0.18.8"},
+      {"slug": "core_mosquitto", "name": "Mosquitto broker", "version": "7.1.3"},
+      {"slug": "core_samba", "name": "Samba share", "version": "12.10.0"}
+    ],
+    "custom_integration": {"thermann_shadow": "0.3.0 (files identical to commit bd95f04; see ../thermann_shadow/installed_component_match.json)"}
+  },
+  "ha_core_config_selected": {
+    "time_zone": "Australia/Hobart",
+    "unit_system": "metric",
+    "currency": "AUD",
+    "country": "AU",
+    "location": "<excluded: latitude/longitude/elevation are private>"
+  },
+  "input_datetime_helper": {
+    "id": "emhass_forecast_generated",
+    "name": "EMHASS forecast generated",
+    "has_date": true,
+    "has_time": true,
+    "defined_in": "UI helper (.storage/input_datetime), not YAML"
+  },
+  "forecast_solar_integration": {
+    "note": "Configured in HA but NOT mapped into the Shadow Planner (planner uses the EMHASS template sensors). latitude/longitude and api_key values excluded; keys are present.",
+    "entries": [
+      {
+        "entry": "<forecast_solar_entry_0>",
+        "options": {"damping_morning": 0.0, "damping_evening": 0.0, "inverter_size": 5000, "api_key": "<present, value excluded>"},
+        "plane": {"declination": 25, "azimuth": 90, "modules_power": 4400, "title": "25° / 90° / 4400W"}
+      },
+      {
+        "entry": "<forecast_solar_entry_1>",
+        "options": {"damping_morning": 0.0, "damping_evening": 0.0, "inverter_size": 5000, "api_key": "<present, value excluded>"},
+        "plane": {"declination": 25, "azimuth": 0, "modules_power": 2200, "title": "25° / 0° / 2200W"}
+      }
+    ]
+  },
+  "other_related_config_entries_present": [
+    {"domain": "goodwe", "title": "GoodWe", "data": "<excluded: contains inverter network address>"},
+    {"domain": "mqtt", "title": "Mosquitto Mqtt Broker", "data": "<excluded>"}
+  ],
+  "entity_registry_summary": {
+    "thermann_shadow_entities": {"total": 91, "sensor": 50, "number": 22, "switch": 7, "time": 6, "select": 3, "button": 2, "text": 1,
+      "name_overrides_disabled_or_hidden": 0,
+      "unique_id_pattern": "<entry_id>_<sensor key>, <entry_id>_setting_<option key>, <entry_id>_restore_recommended, <entry_id>_undo_restore"},
+    "planner_source_entities_registered": [
+      {"entity_id": "water_heater.home_boiler_home", "platform": "mqtt", "original_name": "Boiler Home"},
+      {"entity_id": "sensor.home_boiler_home_vendor_mode", "platform": "mqtt", "original_name": "Boiler Home Vendor mode"},
+      {"entity_id": "sensor.home_cloud_health", "platform": "mqtt", "original_name": "Cloud health"},
+      {"entity_id": "sensor.home_cloud_request_attempts_local_lifetime", "platform": "mqtt", "original_name": "Cloud request attempts (local lifetime)"},
+      {"entity_id": "sensor.home_last_cloud_error", "platform": "mqtt", "original_name": "Last cloud error"},
+      {"entity_id": "sensor.home_last_successful_poll", "platform": "mqtt", "original_name": "Last successful poll"},
+      {"entity_id": "sensor.home_status_age", "platform": "mqtt", "original_name": "Status age"},
+      {"entity_id": "sensor.goodwe_inverter_meter_active_power", "platform": "goodwe", "original_name": "Meter Active Power"},
+      {"entity_id": "sensor.goodwe_inverter_pv_power", "platform": "goodwe", "original_name": "PV Power"},
+      {"entity_id": "sensor.goodwe_inverter_house_consumption", "platform": "goodwe", "original_name": "House Consumption"},
+      {"entity_id": "sensor.goodwe_inverter_meter_total_energy_import", "platform": "goodwe", "original_name": "Meter Total Energy (import)"},
+      {"entity_id": "sensor.goodwe_inverter_meter_total_energy_export", "platform": "goodwe", "original_name": "Meter Total Energy (export)"},
+      {"entity_id": "sensor.hot_water_pv_forecast_input", "platform": "template", "original_name": "Hot water PV forecast input"},
+      {"entity_id": "sensor.hot_water_load_forecast_input", "platform": "template", "original_name": "Hot water load forecast input"},
+      {"entity_id": "input_datetime.emhass_forecast_generated", "platform": "input_datetime", "original_name": "EMHASS forecast generated"}
+    ],
+    "not_in_registry": "sensor.p_pv_forecast and sensor.p_load_forecast are published by EMHASS via the REST API without unique IDs, so they have no registry entries."
+  },
+  "last_saved_states": {
+    "source": "HA core.restore_state, saved 2026-11-11T00:39:43Z (11:39 Hobart). These are the last periodically saved states, not a live read. Forecast lists truncated to the first 3 of 48 items.",
+    "input_datetime.emhass_forecast_generated": {"state": "2026-11-11 11:30:04", "timestamp": 1794357004.0, "last_changed": "2026-11-11T00:30:04.317146+00:00"},
+    "sensor.hot_water_pv_forecast_input": {
+      "state": "3425.11", "unit_of_measurement": "W", "forecast_generated_at": "2026-11-11T11:30:04+11:00",
+      "forecasts_count": 48,
+      "forecasts_first_items": [
+        {"date": "2026-11-11T11:30:00+11:00", "p_pv_forecast": "3425.11"},
+        {"date": "2026-11-11T12:00:00+11:00", "p_pv_forecast": "3502.55"},
+        {"date": "2026-11-11T12:30:00+11:00", "p_pv_forecast": "3567.71"}
+      ]
+    },
+    "sensor.hot_water_load_forecast_input": {
+      "state": "4484.06", "unit_of_measurement": "W", "forecast_generated_at": "2026-11-11T11:30:04+11:00",
+      "forecasts_count": 48,
+      "forecasts_first_items": [
+        {"date": "2026-11-11T11:30:00+11:00", "p_load_forecast": "4484.06"},
+        {"date": "2026-11-11T12:00:00+11:00", "p_load_forecast": "5025.25"},
+        {"date": "2026-11-11T12:30:00+11:00", "p_load_forecast": "3055.02"}
+      ]
+    },
+    "button.thermann_shadow_restore_recommended_preferences": {"state": "unknown", "undo_available": false},
+    "button.thermann_shadow_undo_last_restore": {"state": "unavailable"},
+    "not_available": "Thermann Shadow sensors (decision, recommendation, controller diagnostics) are not RestoreEntity sensors, so no saved state exists; a live read needs HA API access, which was not used."
+  },
+  "dashboard": {
+    "lovelace_dashboards": [
+      {"id": "hot_water", "title": "Hot Water", "url_path": "hot-water", "mode": "storage", "require_admin": false, "show_in_sidebar": true},
+      {"id": "map", "title": "Map", "url_path": "map", "mode": "storage"}
+    ],
+    "hot_water_dashboard_config": "Parsed .storage/lovelace.hot_water config is EXACTLY EQUAL to shadow_controller/dashboard.yaml at commit bd95f04 (dict comparison), so it is not duplicated here."
+  }
+}

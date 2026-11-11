@@ -1,0 +1,36 @@
+{
+  "_method": "Each file under the live /config/custom_components/thermann_shadow (excluding __pycache__) was SHA-256 hashed after CRLF->LF normalisation and compared with git blobs of recent commits on codex/phase2a-shadow-controller. Read-only.",
+  "installed_manifest_version": "0.3.0",
+  "installed_file_count": 22,
+  "result": {
+    "bd95f04504fb77ac1e7e45ac64dd7291b9d3999c": "22/22 identical, no extra or missing files",
+    "4dbf84ec1e508796c8c9458c387fac4c4a0b5d2d": "22/22 identical (component unchanged in later commits)",
+    "9f09a31c4040d5928e75f141268f732556b5218b": "22/22 identical (component unchanged in later commits)",
+    "c7f9a3e44bbeca6e386e356df284a4f692789518": "17/22 identical; cycles.py, decision.py, economics.py, model.py, runtime.py differ"
+  },
+  "conclusion": "The running HA installation has the component as of commit 9f09a31 or later, i.e. identical to bd95f04.",
+  "installed_files_sha256_lf": {
+    "__init__.py": "da20703e0597245ffae1c26a3c92bece9c7d9b5823826f47f045652bb65a3edd",
+    "button.py": "32f7e5df56d8da08d689330dc8f06c77f3487c7c2dcb17c1504000ed24a45cd2",
+    "config.py": "bda3a2b4445db554dda57b554d596b8071411f7cef681a5b9e5bfd0b27b893d4",
+    "config_flow.py": "4cdc1420ec0c53900fd9a1bc145bf6ea050e272957900a6e99761f850c253fee",
+    "cycles.py": "26249c0d25ee8c0203f1e03156c34bdac565bb5f2a63d1e9d65e525c39838701",
+    "decision.py": "87d6341294950cee9748e5ac02cdc4a39cad83b08834aebb5d224ea274a0a03c",
+    "economics.py": "50a7c1db70432285907fe0e268407faee9415ec1ffc2611c98f66a8a7f66de25",
+    "forecast.py": "387fc342e2537c02d361c45ce2620bccb18fb08700b4ff29626a38e8255f221a",
+    "manifest.json": "be4b806625fd45504d49ca32ba1cdd589547a9fea5584e32928d1ba79f9d8175",
+    "model.py": "36b5b6d0c36b70c148ebd37385b64176eaca8ef71f4b9379cbeb496db4c33d53",
+    "native.py": "40257b0714ace8e8b84bb63eeca7cdc578368b68ecd61a1edd12662b51ccde2d",
+    "number.py": "1da99ea1229638028c36a0baed7f02522b41328cc9f5440744ff1c0f9d05975f",
+    "runtime.py": "2f7d9f4fde7880190ecc457b9cdd9d6c2a9da6534fb948c1ed0b08bcd61a2633",
+    "select.py": "63180b05ed1894cb6f632fe218d44d698e138a28245f72e2907963658e438d11",
+    "sensor.py": "fe2da1a57d1633d4f5f5d727ce6fff4cbb78d8c9143ae9403007710168ad5161",
+    "settings.py": "cead99f0f0bb49115b90bd8b73ecbdade731c50b16a70313ffe00ac735f70712",
+    "settings_entity.py": "52eb9df316c2b7ec208c01f23401ba904a2393e5f5f9068f1448fe963db6df43",
+    "strings.json": "bbbb44a3f821c54914d6d2d91902df4c4a32cf4bc6ec077fa82409a2a5db74b6",
+    "switch.py": "cf46281e60b6bddf8538f19b3ff7039725f2473786d27feded936cfca9fff23a",
+    "text.py": "a2b4163d5f0c4fd8ec2bf26837bccf215b50e66676824eb30be2d69b5a13f4f4",
+    "time.py": "0b97b346d2a873f2930b5006d9f5ed0241838ef3f63d76bf5f9b3d49e2e911b4",
+    "translations/en.json": "bbbb44a3f821c54914d6d2d91902df4c4a32cf4bc6ec077fa82409a2a5db74b6"
+  }
+}

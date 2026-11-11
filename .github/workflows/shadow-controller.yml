@@ -1,0 +1,28 @@
+name: Shadow controller (isolated Home Assistant)
+
+on:
+  pull_request:
+  push:
+    branches: [main, "codex/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  actual-home-assistant:
+    name: HA Core ${{ matrix.version }} (shadow only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["2026.10.4", "2026.11.1"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load the actual component and config flows without external networking
+        run: |
+          docker pull ghcr.io/home-assistant/home-assistant:${{ matrix.version }}
+          docker run --rm --network none --entrypoint python3 \
+            --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+            ghcr.io/home-assistant/home-assistant:${{ matrix.version }} \
+            /workspace/tools/readiness/shadow_ha_smoke.py

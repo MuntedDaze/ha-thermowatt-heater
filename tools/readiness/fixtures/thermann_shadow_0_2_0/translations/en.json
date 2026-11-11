@@ -1,0 +1,79 @@
+{
+  "title": "Thermann Shadow Planner",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Read-only entity mapping",
+        "description": "Shadow analysis only. No heater commands, service calls, MQTT writes or cloud requests. Defaults are owner-reported entity IDs; select your local entities. Schedule comes from the vendor-mode sensor, not the water-heater state.",
+        "data": {
+          "heater": "Water heater (temperature attributes only)",
+          "mode": "Native vendor mode",
+          "last_poll": "Last successful cloud poll (timestamp)",
+          "cloud_health": "Cloud health",
+          "requests": "Bridge local lifetime request attempts",
+          "grid": "Signed NET grid power (W or kW)",
+          "pv": "PV production (display only)",
+          "house": "House consumption (display only)",
+          "import_energy": "Cumulative grid import (reference only)",
+          "export_energy": "Cumulative grid export (reference only)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This shadow planner is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Edit read-only sources",
+        "description": "Mappings take effect after the settings step. Reload waits for a new normal cloud poll; it never requests one.",
+        "data": {
+          "heater": "Water heater (temperature attributes only)",
+          "mode": "Native vendor mode",
+          "last_poll": "Last successful cloud poll",
+          "cloud_health": "Cloud health",
+          "requests": "Bridge local lifetime request attempts",
+          "grid": "Signed NET grid power",
+          "pv": "PV production (display only)",
+          "house": "House consumption (display only)",
+          "import_energy": "Cumulative grid import (reference only)",
+          "export_energy": "Cumulative grid export (reference only)"
+        }
+      },
+      "settings": {
+        "title": "Shadow assumptions and tariff contract",
+        "description": "Shadow planning only; no setting enables heater control. Owner-confirmed Aurora Tariff 93 defaults use fixed AEST (UTC+10); the tariff automatically displays one hour later in Hobart during DST. Meter direction is owner-confirmed export-positive. Explicit saved overrides are preserved. The 40°C morning value is a decision threshold, NEVER a storage setpoint. Weekly periods use Monday=0 to Sunday=6 and cover every minute exactly once.",
+        "data": {
+          "paused": "Pause shadow planning",
+          "meter_verified": "Owner-confirmed meter sign/units load test",
+          "tariff_verified": "Owner-confirmed contract rates, periods and clock",
+          "import_positive": "Positive signed grid means IMPORT (OFF = export-positive)",
+          "tariff_clock": "Tariff wall clock (local or fixed standard)",
+          "target_c": "Afternoon storage planning target (65–70°C; no command)",
+          "expected_native_target_c": "Expected reported native target (reference only, Â°C)",
+          "margin_minutes": "Extra model heating allowance (minutes; uncalibrated)",
+          "feed_in_rate": "Export compensation (AUD/kWh)",
+          "off_peak_rate": "Off-peak import (AUD/kWh)",
+          "shoulder_rate": "Shoulder import (AUD/kWh)",
+          "peak_rate": "Peak import (AUD/kWh)",
+          "export_headroom_kw": "Surplus headroom (kW; not a cloud trigger)",
+          "status_max_age_minutes": "Maximum client poll age for shadow planning (minutes)",
+          "grid_max_age_seconds": "Maximum grid reading age (seconds)",
+          "tariff_periods": "Weekly tariff periods (JSON; see shadow documentation)",
+          "native_schedule_periods": "Reported native Schedule (JSON reference only; no writes)",
+          "native_schedule_clock": "Native Schedule clock (local or fixed standard)",
+          "native_schedule_clock_verified": "Device Schedule clock / DST independently verified",
+          "t_comfort_reference_c": "Reported T-Comfort setting (reference only; never changes heater)",
+          "morning_threshold_c": "Morning bottom-temperature comfort threshold (°C; NOT heater setpoint)",
+          "solar_hold_minutes": "Sustained export observation required (minutes)",
+          "solar_window_minutes": "Bounded recent-export planning window (minutes; not a forecast)",
+          "native_clock_check_date": "Date you last checked/adjusted the Thermann clock (YYYY-MM-DD; blank = unknown)"
+        }
+      }
+    },
+    "error": {
+      "invalid_settings": "Invalid settings or tariff coverage. Check finite numbers, ranges, days, HH:MM times, gaps and overlaps. No plan was enabled."
+    }
+  }
+}

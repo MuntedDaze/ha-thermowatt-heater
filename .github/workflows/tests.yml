@@ -24,5 +24,6 @@ jobs:
       - run: python -m ruff check .
       - run: python -m ruff format --check .
       - run: python -m mypy --strict thermowatt-heater/thermowatt_read_only.py
-      - run: python -m compileall -q thermowatt-heater tests
+      - run: python -m mypy --strict --follow-imports=skip custom_components/thermann_shadow/model.py
+      - run: python -m compileall -q thermowatt-heater custom_components tests tools/readiness
       - run: bash -n thermowatt-heater/run.sh

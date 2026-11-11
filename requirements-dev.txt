@@ -4,3 +4,4 @@ ruff==0.14.4
 PyYAML==6.0.3
 Jinja2==3.1.6
 mypy==1.18.2
+tzdata==2026.6; sys_platform == "win32"
