@@ -1,0 +1,90 @@
+"""Only sensors: estimates deliberately have no energy-measurement state class."""
+
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.helpers.device_registry import DeviceInfo
+
+from .config import DOMAIN
+
+SENSORS = {
+    "controller": ("Controller", None),
+    "temperature": ("Bottom temperature", "°C"),
+    "target": ("Reported target", "°C"),
+    "pv": ("Measured PV", "kW"),
+    "house": ("Measured house load", "kW"),
+    "grid": ("Measured signed grid", "kW"),
+    "measured_net_export_kw": ("Derived net export", "kW"),
+    "cloud_health": ("Cloud health", None),
+    "status_age_minutes": ("Status age", "min"),
+    "deadline": ("Planning deadline", None),
+    "comfort_deadline": ("Comfort deadline", None),
+    "peak_start": ("Configured afternoon peak", None),
+    "planned_start": ("Hypothetical heating start", None),
+    "mixed_model_energy_kwh": ("Mixed tank energy estimate", "kWh"),
+    "modelled_heating_minutes": ("Heating time estimate", "min"),
+    "estimated_import_kwh": ("Plan import estimate", "kWh"),
+    "estimated_solar_kwh": ("Plan solar estimate", "kWh"),
+    "unmet_model_energy_kwh": ("Modelled energy shortfall", "kWh"),
+    "estimated_cost_aud": ("Plan cost estimate", "AUD"),
+    "comparison_cost_difference_aud": ("Scenario cost difference", "AUD"),
+    "requests_since_start": ("Observed request attempts", None),
+    "observed_requests_per_hour": ("Observed requests per hour", None),
+    "native_schedule_window": ("Reported Schedule window", None),
+    "t_comfort_reference_c": ("T Comfort reference", "°C"),
+    "morning_threshold_c": ("Morning comfort threshold", "°C"),
+    "storage_target_c": ("Afternoon storage target", "°C"),
+    "planning_target_c": ("Next decision threshold", "°C"),
+    "latest_start": ("Latest continuous heating start", None),
+    "grid_fallback_start": ("Off peak fallback start", None),
+    "current_tariff": ("Current tariff", None),
+    "current_price_aud": ("Current import price", "AUD/kWh"),
+    "recommended_energy_source": ("Recommended energy source", None),
+    "device_clock_check": ("Device clock check", None),
+    "measured_import_kw": ("Measured grid import", "kW"),
+    "measured_export_kw": ("Measured grid export", "kW"),
+}
+
+
+async def async_setup_entry(hass, entry, async_add_entities):
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(
+        [ShadowSensor(runtime, entry, key, name, unit) for key, (name, unit) in SENSORS.items()]
+    )
+
+
+class ShadowSensor(SensorEntity):
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:water-boiler"
+
+    def __init__(self, runtime, entry, key, name, unit):
+        self.runtime = runtime
+        self.key = key
+        self._attr_name = name
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Thermann Shadow",
+            manufacturer="Community shadow planner",
+            model="315 L / 3 kW scenario",
+        )
+        if key in {
+            "deadline",
+            "comfort_deadline",
+            "peak_start",
+            "planned_start",
+            "latest_start",
+            "grid_fallback_start",
+        }:
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(self.runtime.subscribe(self.async_write_ha_state))
+
+    @property
+    def native_value(self):
+        return self.runtime.values.get(self.key)
+
+    @property
+    def extra_state_attributes(self):
+        return self.runtime.details if self.key == "controller" else None

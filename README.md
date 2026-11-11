@@ -1,13 +1,22 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
-> **1.3.11 candidate:** a command whose new mode the cloud reports late is no
-> longer ended as unconfirmed by the first read: at most two follow-up reads
-> (60 s, 300 s) decide it, the POST is never repeated, and no other command is
-> accepted meanwhile. See [1.3.11 update and validation](UPGRADING_1_3_11.md).
-> 1.3.10 (deployed): [notes](UPGRADING_1_3_10.md).
+> **Current state (13 Nov 2026).** Bridge **1.3.11** is merged and installed:
+> automation allowlist (`Manual:70` and `off` only), software OFF read as
+> `Cmd` 8, at most one bounded status read before a command, and bounded
+> confirmation for the cloud's late readback (the POST is never repeated).
+> Heater commands stay **disabled by default**. See
+> [1.3.11 update and validation](UPGRADING_1_3_11.md) and the earlier
+> [1.3.10](UPGRADING_1_3_10.md) and [1.3.9](UPGRADING_1_3_9.md) notes.
+>
+> **[Thermann Hot Water Controller 0.6.2](shadow_controller/CONTROLLER.md)**
+> (`custom_components/thermann_shadow`) plans heating from tariffs, solar and
+> comfort goals and permits heating with Manual 70 °C or parks it with
+> Thermann OFF, through the bridge only. Automatic control is **off by default**
+> and every commissioning stage needs the owner's approval
+> ([COMMISSIONING.md](shadow_controller/COMMISSIONING.md)). Supervised bridge
+> tests T3, T3b and T3c have been run with the owner present.
 
-The **1.3.7 foundation and dependent 1.3.8 demand-refresh PRs are review
-candidates**, not deployed updates. The dependent
+The **1.3.7 and 1.3.8 PRs have been owner-approved and merged**. The
 [1.3.8 notes](UPGRADING_1_3_8.md) document the optional read-only interface,
 disabled by default. Both retain a 30-minute background default.
 The foundation adds a clear seconds/minutes polling selector, exact confirmed quota-error
@@ -15,8 +24,8 @@ classification, private persistent attempt accounting and five read-only
 diagnostic sensors. Existing credentials, guard records, commands-disabled
 defaults and MQTT IDs remain. See [upgrade notes](UPGRADING_1_3_7.md),
 [fork comparison](PHASE1_FORK_REVIEW.md) and the
-[design-only HA/EMHASS plan](PHASE2_CONTROL_DESIGN.md). Owner review is required;
-no automatic merge or live heater/cloud testing is authorised.
+[HA/EMHASS plan](PHASE2_CONTROL_DESIGN.md). GitHub merges do not authorise live
+heater/cloud testing or deployment by the agent.
 
 Baseline **1.3.6** added `poll_interval_minutes`, default **30 minutes**, for the
 owner-approved slow-polling trial (5–120 minutes). `min_cloud_retry_minutes`
