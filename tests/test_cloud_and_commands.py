@@ -416,27 +416,15 @@ def test_only_the_exact_guarded_payload_is_accepted(factory, clock, payload):
     assert last_command(bridge)["payload"] == "other"  # unknown payload text is never echoed
 
 
-@pytest.mark.parametrize(
-    "setup,reason",
-    [
-        (lambda b, c: None, "dropped_command_older_than_30s"),
-        (
-            lambda b, c: b.confirmed.__setitem__(
-                "TEST123", (b.monotonic() - 61, b.confirmed["TEST123"][1])
-            ),
-            "dropped_status_older_than_60s",
-        ),
-    ],
-)
-def test_stale_command_or_status_is_dropped_and_reported(factory, clock, setup, reason):
+def test_stale_command_is_dropped_and_reported(factory, clock):
+    # 1.3.10: stale STATUS no longer drops the command; it triggers at most one
+    # bounded pre-command read (tests/test_command_refresh_1_3_10.py).
     bridge = factory(commands_enabled=True)
     ready(bridge)
     bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
-    setup(bridge, clock)
-    issued = clock() - 31 if reason == "dropped_command_older_than_30s" else clock()
-    bridge.process_command((issued, "TEST123", "MODE", "Manual:70"))
+    bridge.process_command((clock() - 31, "TEST123", "MODE", "Manual:70"))
     bridge.session.request.assert_not_called()
-    assert last_command(bridge)["result"] == reason
+    assert last_command(bridge)["result"] == "dropped_command_older_than_30s"
 
 
 def test_guarded_manual_remains_disabled_by_default_and_reports_nothing(factory, clock):

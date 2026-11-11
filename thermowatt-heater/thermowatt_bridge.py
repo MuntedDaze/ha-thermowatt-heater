@@ -266,6 +266,17 @@ PLAIN_PAYLOADS = {"off", "Off", "Eco", "Auto", "Manual"}
 # chosen explicitly. Read-only monitoring is identical under both.
 COMMAND_POLICIES = ("automation", "legacy")
 AUTOMATION_COMMANDS = {("MODE", "Manual:70"), ("MODE", "off")}
+# Software OFF. Cmd 8 is what the owner's heater actually reports when switched
+# OFF from Manual (observed in T3, 1.3.10). Cmd 16 was the original assumption
+# and is retained for compatibility; it may be OFF entered from another mode but
+# has not been observed. Any other code is never treated as OFF.
+OFF_CODES = frozenset({8, 16})
+# Freshness of the confirmed status required to authorise a heater command.
+STATUS_MAX_AGE = 60
+# A queued command must be at most this old when it is taken from the queue...
+COMMAND_MAX_AGE = 30
+# ...and at most this old after a pre-command status refresh, just before POST.
+COMMAND_MAX_AGE_AFTER_REFRESH = 75
 
 
 class MyThermowattBridge:
@@ -277,7 +288,12 @@ class MyThermowattBridge:
     MAX_CLOUD_BACKOFF = 86400
     DEMAND_MIN_SPACING = 300
     STATUS_FIELDS = ("T_Avg", "T_SetPoint", "Cmd", "WaterHeaterSts")
-    MODES = {9: "Manual", 3: "Eco", 17: "Schedule", 65: "Holiday", 16: "Off"}
+    MODES = {9: "Manual", 3: "Eco", 17: "Schedule", 65: "Holiday", 8: "Off", 16: "Off"}
+    # Pre-command status refresh bounds (1.3.10). At most one refresh per
+    # command, never sooner than this after any earlier status read of the
+    # heater, and at most this many per rolling 24 hours.
+    COMMAND_REFRESH_MIN_SPACING = 60
+    COMMAND_REFRESH_DAILY_LIMIT = 24
 
     def __init__(
         self,
@@ -299,7 +315,8 @@ class MyThermowattBridge:
         self.monotonic = monotonic
         self.data_dir = Path(data_dir)
         self.usage = RequestUsage(self.data_dir / "request_usage.json", clock, atomic_json)
-        self.confirmation_read = False
+        self.read_category = "status"
+        self.command_refreshes = []  # monotonic times of pre-command refreshes
         # Outcome of the most recent MQTT command (fixed codes only, no payload
         # bodies). Lets a local executor see refusals without another cloud read.
         self.last_command = None
@@ -350,6 +367,7 @@ class MyThermowattBridge:
         self.last_status_attempt = {}
         self.refresh_requested = set()
         self.refresh_lock = threading.Lock()
+        self.read_this_tick = set()  # serials whose status was read in this tick
         self.failures = self.usage.failures
         if self.usage.cooldown_until > self.clock():
             self.next_cloud = self.next_poll = self.usage.cooldown_until
@@ -387,7 +405,7 @@ class MyThermowattBridge:
             "/status": "status",
         }.get(endpoint, "command")
         self.request_counts[kind] += 1
-        usage_category = "confirmation" if kind == "status" and self.confirmation_read else kind
+        usage_category = self.read_category if kind == "status" else kind
         self.usage.record(usage_category)
         LOG.info(
             "Cloud request attempt: kind=%s count_since_start=%s total_since_start=%s. "
@@ -609,7 +627,7 @@ class MyThermowattBridge:
             "temperature_state_template": "{{ value_json.result.T_SetPoint | float }}",
             "temperature_command_topic": f"P/{serial}/CMD/TEMP",
             "mode_state_topic": f"P/{serial}/STATUS",
-            "mode_state_template": "{{ {'9':'performance','3':'eco','16':'off'}.get(value_json.result.Cmd | int | string, none) }}",
+            "mode_state_template": "{{ {'9':'performance','3':'eco','8':'off','16':'off'}.get(value_json.result.Cmd | int | string, none) }}",
             "mode_command_topic": f"P/{serial}/CMD/MODE",
             "mode_command_template": "{{ {'performance':'Manual','eco':'Eco','off':'off'}[value] }}",
             "modes": ["off", "eco", "performance"],
@@ -721,6 +739,8 @@ class MyThermowattBridge:
                 "commands_enabled": bool(self.options.get("commands_enabled", False)),
                 "command_policy": self.options.get("command_policy", "automation"),
                 "last_command": dict(self.last_command) if self.last_command else None,
+                "command_status_refreshes_24h": self._recent_command_refreshes(),
+                "command_status_refresh_limit_24h": self.COMMAND_REFRESH_DAILY_LIMIT,
             }
             self._publish_read_only(f"P/{serial}/DIAGNOSTICS", payload)
 
@@ -830,14 +850,18 @@ class MyThermowattBridge:
         atomic_json(self.config_path, self.config)
         self.discovered = True
 
-    def poll_status(self, serial):
+    def poll_status(self, serial, category=None):
         self.last_status_attempt[serial] = self.monotonic()
-        self.confirmation_read = self.operation == "heater_command"
-        self.operation = "status_poll"
+        if category is None:
+            category = "confirmation" if self.operation == "heater_command" else "status"
+        self.read_category = category
+        self.operation = (
+            "command_status_refresh" if category == "command_refresh" else "status_poll"
+        )
         try:
             result = self._result(self.request("GET", "/status", serial))
         finally:
-            self.confirmation_read = False
+            self.read_category = "status"
         if any(key not in result for key in self.STATUS_FIELDS):
             raise CloudError("status_fields_missing")
         try:
@@ -848,13 +872,14 @@ class MyThermowattBridge:
             raise CloudError("status_values_non_finite")
         if values["Cmd"] < 0 or values["Cmd"] != int(values["Cmd"]):
             raise CloudError("status_mode_invalid")
-        # While the heater is software OFF (Cmd 16) the cloud's setpoint is not an
-        # operating target, and it has never been observed. An out-of-range value
-        # then must not fail every poll (that would back the bridge off for hours
-        # while the heater stays off). It is published but flagged invalid, and
-        # no command may reuse it (see process_command).
+        # While the heater is software OFF (Cmd 8 observed, 16 retained) the
+        # cloud's setpoint is not necessarily an operating target (T3 saw 70
+        # retained). An out-of-range value then must not fail every poll (that
+        # would back the bridge off for hours while the heater stays off). It is
+        # published but flagged invalid, and no command may reuse it.
         setpoint_valid = 20 <= values["T_SetPoint"] <= 75
-        if not 0 <= values["T_Avg"] <= 100 or (not setpoint_valid and values["Cmd"] != 16):
+        is_off = int(values["Cmd"]) in OFF_CODES
+        if not 0 <= values["T_Avg"] <= 100 or (not setpoint_valid and not is_off):
             raise CloudError("status_temperature_out_of_range")
         if values["WaterHeaterSts"] < 0 or values["WaterHeaterSts"] != int(
             values["WaterHeaterSts"]
@@ -866,6 +891,7 @@ class MyThermowattBridge:
         # WaterHeaterSts is an opaque diagnostic value, not proven element feedback.
         safe["heating"] = None
         self.confirmed[serial] = (self.monotonic(), values)
+        self.read_this_tick.add(serial)
         self.mqtt_client.publish(f"P/{serial}/STATUS", json.dumps({"result": safe}), retain=True)
         self._availability(serial, True)
         self.last_success[serial] = self.clock()
@@ -873,30 +899,100 @@ class MyThermowattBridge:
         self.publish_diagnostics(force=True)
         return values
 
-    def _command_result(self, kind, payload, result):
+    def _command_result(self, kind, payload, result, refresh=None, error=None):
         safe = payload if payload in GUARDED_PAYLOADS or payload in PLAIN_PAYLOADS else "other"
         self.last_command = {
             "kind": kind if kind in {"MODE", "TEMP"} else "other",
             "payload": safe if kind == "MODE" else "temperature",
             "result": result,
+            # Pre-command status read (1.3.10): not_needed (status was fresh),
+            # refreshed, failed, or refused (no read attempted). None when the
+            # command was dropped or refused before status was considered.
+            "status_refresh": refresh,
             "at": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(),
         }
+        if error is not None:
+            self.last_command["error"] = safe_diagnostic(error)
         self.publish_diagnostics(force=True)
 
-    def process_command(self, command):
-        issued, serial, kind, payload = command
+    def _recent_command_refreshes(self):
+        horizon = self.monotonic() - 86400
+        self.command_refreshes = [moment for moment in self.command_refreshes if moment > horizon]
+        return len(self.command_refreshes)
+
+    def _status_is_fresh(self, serial):
         confirmed = self.confirmed.get(serial)
+        return confirmed is not None and self.monotonic() - confirmed[0] <= STATUS_MAX_AGE
+
+    def _refresh_refusal(self, serial):
+        """Why a pre-command status read may NOT be attempted, or None."""
+        if self.guard.failed_storage or self.guard.state["mode"] != "authorized":
+            return "refused_auth_not_ready"
+        if self.cloud_health == "quota_limited":
+            return "refused_cloud_quota_limited"
+        if self.clock() < self.usage.cooldown_until:
+            return "refused_cloud_backoff"
+        if (
+            self.monotonic() - self.last_status_attempt.get(serial, float("-inf"))
+            < self.COMMAND_REFRESH_MIN_SPACING
+        ):
+            return "refused_status_refresh_too_soon"
+        if self._recent_command_refreshes() >= self.COMMAND_REFRESH_DAILY_LIMIT:
+            return "refused_status_refresh_limit"
+        return None
+
+    @staticmethod
+    def _static_command(kind, payload):
+        """Validate the command text alone, before any cloud request.
+
+        Returns (endpoint, temperature) or a refusal code string. ``None`` means
+        silently ignore (the historic handling of malformed temperatures)."""
+        if kind == "TEMP":
+            try:
+                temperature = float(payload)
+            except ValueError:
+                return None
+            if (
+                not math.isfinite(temperature)
+                or not temperature.is_integer()
+                or not 20 <= temperature <= 75
+            ):
+                return None
+            return ("/manual", temperature)
+        if kind == "MODE" and payload in GUARDED_PAYLOADS:
+            return ("/manual", GUARDED_PAYLOADS[payload])
+        endpoint = {
+            "off": "/off",
+            "Off": "/off",
+            "Eco": "/eco",
+            "Auto": "/auto",
+            "Manual": "/manual",
+        }.get(payload)
+        # Holiday used to invent a 30-day end date. Never invent schedule writes.
+        if kind != "MODE" or not endpoint:
+            return "refused_invalid_command"
+        return (endpoint, None)
+
+    def process_command(self, command):
+        """Authorise and execute ONE queued command, never more than once.
+
+        Order: configuration, MQTT, queue age, device identity, command policy
+        and command text (no cloud request for any of these); then a fresh
+        status (<= 60 s) is required. If the confirmed status is older, at most
+        ONE bounded status read is made for this command, only when the cloud
+        health, authentication guard and refresh budget allow it. Every target
+        and owner-override rule is then evaluated against that fresh status.
+        Nothing is ever retried, and a failed or refused read never executes."""
+        issued, serial, kind, payload = command
         if not self.options.get("commands_enabled", False):
             return
         reason = None
         if not self.mqtt_connected.is_set():
             reason = "dropped_mqtt_disconnected"
-        elif self.monotonic() - issued > 30:
+        elif self.monotonic() - issued > COMMAND_MAX_AGE:
             reason = "dropped_command_older_than_30s"
         elif serial not in self.active_devices:
             reason = "dropped_unknown_device"
-        elif not confirmed or self.monotonic() - confirmed[0] > 60:
-            reason = "dropped_status_older_than_60s"
         if reason:
             self._command_result(kind, payload, reason)
             return
@@ -905,66 +1001,99 @@ class MyThermowattBridge:
             LOG.warning("Command refused by the automation command policy. No request sent.")
             self._command_result(kind, payload, "refused_by_policy")
             return
-        endpoint, arguments, expected = None, {}, None
-        if kind == "TEMP":
+        static = self._static_command(kind, payload)
+        if static is None:
+            return
+        if isinstance(static, str):
+            self._command_result(kind, payload, static)
+            return
+        endpoint, temperature = static
+
+        refresh = "not_needed"
+        if not self._status_is_fresh(serial):
+            reason = self._refresh_refusal(serial)
+            if reason:
+                LOG.warning(
+                    "Command refused: status older than %ss and no refresh permitted "
+                    "(code=%s). No request sent.",
+                    STATUS_MAX_AGE,
+                    reason,
+                )
+                self._command_result(kind, payload, reason, refresh="refused")
+                return
+            self.command_refreshes.append(self.monotonic())
+            LOG.info("Command needs fresh status: one pre-command status read.")
             try:
-                temperature = float(payload)
-            except ValueError:
+                self.poll_status(serial, category="command_refresh")
+            except CloudError as error:
+                code = self.quota_signal or (error.args[0] if error.args else None)
+                LOG.warning("Pre-command status read failed. Command not sent. No retry.")
+                self._command_result(
+                    kind, payload, "refused_status_refresh_failed", refresh="failed", error=code
+                )
+                raise
+            refresh = "refreshed"
+            if self.monotonic() - issued > COMMAND_MAX_AGE_AFTER_REFRESH:
+                self._command_result(
+                    kind, payload, "dropped_command_expired_during_refresh", refresh=refresh
+                )
                 return
-            if (
-                not math.isfinite(temperature)
-                or not temperature.is_integer()
-                or not 20 <= temperature <= 75
-            ):
+            if not self._status_is_fresh(serial):  # Defensive: never act on old state.
+                self._command_result(kind, payload, "refused_status_not_fresh", refresh=refresh)
                 return
+        status = self.confirmed[serial][1]
+        mode, observed = int(status["Cmd"]), status["T_SetPoint"]
+
+        arguments, expected = {}, None
+        if kind == "TEMP":
             # /manual changes mode too: never change temperature from other modes.
-            if confirmed[1]["Cmd"] != 9:
+            if mode != 9:
                 return
-            endpoint = "/manual"
             arguments = {"json": {"T_SetPoint": int(temperature)}}
-            expected = ("T_SetPoint", temperature)
-        elif kind == "MODE" and payload in GUARDED_PAYLOADS:
+            expected = ("T_SetPoint", {temperature})
+        elif payload in GUARDED_PAYLOADS:
             # Guarded Manual: enter Manual ONLY at the stated target, sent
             # explicitly. Accepted when the fresh observed target already equals
-            # it, or when the heater is software OFF (Cmd 16) and reports NO
-            # usable target (outside 20-75 °C). A usable target other than 70
-            # (in any mode, OFF included) may be a deliberate owner setting: it
-            # is refused, never silently "corrected" to 70.
-            wanted = GUARDED_PAYLOADS[payload]
-            observed = confirmed[1]["T_SetPoint"]
-            off_without_target = confirmed[1]["Cmd"] == 16 and not 20 <= observed <= 75
-            if observed != wanted and not off_without_target:
+            # it, or when the heater is software OFF and reports NO usable
+            # target (outside 20-75 °C). A usable target other than 70 (in any
+            # mode, OFF included) may be a deliberate owner setting: it is
+            # refused, never silently "corrected" to 70.
+            off_without_target = mode in OFF_CODES and not 20 <= observed <= 75
+            if observed != temperature and not off_without_target:
                 LOG.warning("Guarded Manual refused: observed target differs. No request sent.")
-                self._command_result(kind, payload, "refused_target_mismatch")
+                self._command_result(kind, payload, "refused_target_mismatch", refresh=refresh)
                 return
-            endpoint = "/manual"
-            arguments = {"json": {"T_SetPoint": wanted}}
-            expected = ("Cmd", 9)
-        elif kind == "MODE":
-            endpoint = {
-                "off": "/off",
-                "Off": "/off",
-                "Eco": "/eco",
-                "Auto": "/auto",
-                "Manual": "/manual",
-            }.get(payload)
-            # Holiday used to invent a 30-day end date. Never invent schedule writes.
-            if not endpoint:
-                self._command_result(kind, payload, "refused_invalid_command")
+            if mode == 9 and observed == temperature:
+                self._command_result(kind, payload, "already_in_requested_state", refresh=refresh)
                 return
-            expected = ("Cmd", {"off": 16, "Off": 16, "Eco": 3, "Auto": 17, "Manual": 9}[payload])
+            arguments = {"json": {"T_SetPoint": int(temperature)}}
+            expected = ("Cmd", {9})
+        else:
+            if payload == "off" and mode in OFF_CODES:
+                # Already OFF: a second write would only cost a request.
+                self._command_result(kind, payload, "already_in_requested_state", refresh=refresh)
+                return
+            expected = (
+                "Cmd",
+                {
+                    "off": OFF_CODES,
+                    "Off": OFF_CODES,
+                    "Eco": {3},
+                    "Auto": {17},
+                    "Manual": {9},
+                }[payload],
+            )
             if payload == "Manual":
-                if not 20 <= confirmed[1]["T_SetPoint"] <= 75:
+                if not 20 <= observed <= 75:
                     # Plain Manual reuses the observed setpoint; never send an
                     # invalid one (possible only while OFF). Use Manual:70.
-                    self._command_result(kind, payload, "refused_setpoint_unavailable")
+                    self._command_result(
+                        kind, payload, "refused_setpoint_unavailable", refresh=refresh
+                    )
                     return
-                arguments = {"json": {"T_SetPoint": int(confirmed[1]["T_SetPoint"])}}
+                arguments = {"json": {"T_SetPoint": int(observed)}}
             else:
                 arguments = {"data": ""}
-        if not endpoint:
-            self._command_result(kind, payload, "refused_invalid_command")
-            return
         self.operation = "heater_command"
         self._availability(serial, False)
         response = self.request("POST", endpoint, serial, **arguments)
@@ -975,17 +1104,17 @@ class MyThermowattBridge:
         if isinstance(acknowledgement, dict) and (
             acknowledgement.get("success") is False or acknowledgement.get("error")
         ):
-            self._command_result(kind, payload, "rejected_by_cloud")
+            self._command_result(kind, payload, "rejected_by_cloud", refresh=refresh)
             raise CloudError("command_rejected")
         LOG.info("Command submitted; waiting for observed cloud state.")
-        self._command_result(kind, payload, "submitted_awaiting_status")
-        observed = self.poll_status(serial)
-        if observed[expected[0]] == expected[1]:
+        self._command_result(kind, payload, "submitted_awaiting_status", refresh=refresh)
+        observed_status = self.poll_status(serial)
+        if observed_status[expected[0]] in expected[1]:
             LOG.info("Requested value observed in cloud status.")
-            self._command_result(kind, payload, "observed_in_status")
+            self._command_result(kind, payload, "observed_in_status", refresh=refresh)
         else:
             LOG.warning("Command not confirmed; published observed state. No retry.")
-            self._command_result(kind, payload, "not_observed_in_immediate_status")
+            self._command_result(kind, payload, "not_observed_in_immediate_status", refresh=refresh)
 
     def tick(self):
         """One bounded iteration; authentication failure idles instead of exiting."""
@@ -998,6 +1127,7 @@ class MyThermowattBridge:
             self._offline()
             return
         polling = False
+        self.read_this_tick = set()
         try:
             self.operation = "authentication_guard"
             self.guard.check()
@@ -1025,7 +1155,11 @@ class MyThermowattBridge:
             if poll_due or targets:
                 polling = True
                 for serial in sorted(targets):
-                    self.poll_status(serial)
+                    # A command in this tick has just read this heater's status
+                    # (pre-command refresh or confirmation): that read counts as
+                    # the due poll, so no duplicate request is made.
+                    if command is None or serial not in self.read_this_tick:
+                        self.poll_status(serial)
                     self.next_background[serial] = self.clock() + self.poll_interval
                 self.next_poll = min(
                     (self.next_background.get(serial, 0) for serial in self.active_devices),
@@ -1043,7 +1177,9 @@ class MyThermowattBridge:
             self._offline()
             self.failures = min(self.failures + 1, 5)
             delay = min(self.MAX_BACKOFF, 20 * 2**self.failures)
-            if polling:
+            # A failed pre-command status read is a failed status read: it gets
+            # the ordinary poll backoff, so commands cannot hammer the cloud.
+            if polling or self.operation == "command_status_refresh":
                 base = max(self.poll_interval, self.min_cloud_retry)
                 if self.operation in {"password_login", "token_refresh"}:
                     # Auth retries keep their old timing; ordinary reads still wait.

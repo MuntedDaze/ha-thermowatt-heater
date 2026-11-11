@@ -133,7 +133,7 @@ def test_authentication_retry_timing_is_not_replaced_by_poll_interval(factory, c
     restart.session.request.assert_not_called()
 
 
-def test_fresh_command_keeps_existing_cadence_and_stale_command_still_rejected(factory, clock):
+def test_fresh_command_keeps_cadence_and_stale_status_gets_one_bounded_refresh(factory, clock):
     bridge = factory(
         commands_enabled=True, command_policy="legacy"
     )  # Mocked instance, never a live heater.
@@ -149,8 +149,17 @@ def test_fresh_command_keeps_existing_cadence_and_stale_command_still_rejected(f
     assert bridge.next_poll == poll_deadline
     clock.advance(80)
     bridge.commands.put((clock(), "TEST123", "MODE", "Manual"))
+    bridge.session.request.side_effect = [
+        response(body=STATUS),
+        response(204),
+        response(body=STATUS),
+    ]
     bridge.tick()
-    assert bridge.session.request.call_count == 3  # Existing 60-second state-freshness guard.
+    # 1.3.10: status older than 60 s is refreshed ONCE before the command; the
+    # 60-second freshness rule itself is unchanged and the poll cadence is kept.
+    assert [c.args[0] for c in bridge.session.request.call_args_list[3:]] == ["GET", "POST", "GET"]
+    assert bridge.next_poll == poll_deadline
+    assert bridge.usage.counts["command_refresh"] == 1
 
 
 @pytest.mark.parametrize(
