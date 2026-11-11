@@ -1,0 +1,17 @@
+{
+  "_compared": "Live config entry (2026-11-11) vs DEFAULT_OPTIONS / DEFAULT_SOURCES / OPTIONAL_SOURCES in custom_components/thermann_shadow/config.py at commit bd95f04.",
+  "options_differing_from_repo_defaults": {
+    "forecast_enabled": {"live": true, "repo_default": false},
+    "native_clock_check_date": {"live": "2026-11-11", "repo_default": ""}
+  },
+  "source_mapping_differences": {
+    "forecast_pv": {"live": "sensor.hot_water_pv_forecast_input", "repo_default": ""},
+    "forecast_load": {"live": "sensor.hot_water_load_forecast_input", "repo_default": ""}
+  },
+  "option_keys_absent_in_live": [],
+  "extra_live_option_keys": [],
+  "restore_backup_present": false,
+  "entry_data_equals_repo_default_sources": true,
+  "live_options_parse_and_validate_with_repo_bd95f04": true,
+  "all_other_options_equal_repo_defaults": true
+}

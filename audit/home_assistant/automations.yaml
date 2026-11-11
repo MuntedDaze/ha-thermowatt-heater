@@ -1,0 +1,45 @@
+- id: '1794354394384'
+  alias: EMHASS - Update solar and household forecasts
+  description: Recalculate and publish EMHASS forecasts every 30 minutes. Only stamp
+    the forecast time when both REST commands return HTTP 200 and both forecast sensors
+    have reported after this run began. Does not control the heater.
+  triggers:
+  - trigger: time_pattern
+    minutes: /30
+  conditions: []
+  actions:
+  - variables:
+      forecast_run_started: '{{ now().isoformat() }}'
+  - action: rest_command.emhass_dayahead_optim
+    response_variable: emhass_optim_response
+  - condition: template
+    value_template: '{{ emhass_optim_response.status | int(0) == 200 }}'
+  - action: rest_command.emhass_publish_data
+    response_variable: emhass_publish_response
+  - condition: template
+    value_template: '{{ emhass_publish_response.status | int(0) == 200 }}'
+  - repeat:
+      sequence:
+      - delay: 00:00:02
+      until:
+      - condition: template
+        value_template: "{{ (\n     is_number(states('sensor.p_pv_forecast'))\n     and
+          is_number(states('sensor.p_load_forecast'))\n     and ((state_attr('sensor.p_pv_forecast',
+          'forecasts') or []) | count > 10)\n     and ((state_attr('sensor.p_load_forecast',
+          'forecasts') or []) | count > 10)\n     and as_timestamp(states.sensor.p_pv_forecast.last_reported,
+          0) > as_timestamp(forecast_run_started, 0)\n     and as_timestamp(states.sensor.p_load_forecast.last_reported,
+          0) > as_timestamp(forecast_run_started, 0)\n   ) or repeat.index >= 15 }}"
+  - condition: template
+    value_template: "{{ is_number(states('sensor.p_pv_forecast'))\n   and is_number(states('sensor.p_load_forecast'))\n
+      \  and ((state_attr('sensor.p_pv_forecast', 'forecasts') or []) | count > 10)\n
+      \  and ((state_attr('sensor.p_load_forecast', 'forecasts') or []) | count >
+      10)\n   and as_timestamp(states.sensor.p_pv_forecast.last_reported, 0) > as_timestamp(forecast_run_started,
+      0)\n   and as_timestamp(states.sensor.p_load_forecast.last_reported, 0) > as_timestamp(forecast_run_started,
+      0) }}"
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.emhass_forecast_generated
+    data:
+      datetime: '{{ now().strftime(''%Y-%m-%d %H:%M:%S'') }}'
+  mode: single
+  max_exceeded: silent
