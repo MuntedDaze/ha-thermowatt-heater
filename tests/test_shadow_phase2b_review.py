@@ -193,7 +193,7 @@ def test_emhass_string_values_and_custom_entity_keys_are_read():
     assert not bad.slots and "forecast_series_invalid" in bad.warnings
 
 
-def test_measured_pv_correction_fades_and_never_increases():
+def test_measured_pv_correction_fades_and_is_bounded():
     now = local(hour=11)
     settings, _ = c.parse_options(
         {"forecast_enabled": True, "forecast_uncertainty": 0, "forecast_house_margin_kw": 0}
@@ -207,6 +207,12 @@ def test_measured_pv_correction_fades_and_never_increases():
     assert by_start[now + timedelta(hours=1.5)] == pytest.approx(4 * (1 - 0.5 * 0.75))
     assert by_start[now + timedelta(hours=3)] == pytest.approx(4)  # faded out
     assert max(by_start.values()) <= 4
+    # Upward correction exists but is bounded and never exceeds the AC limit.
+    up = forecast.build_forecast(
+        now, now - timedelta(minutes=1), settings, series(now, value=2), load, 3
+    )
+    assert up.correction == 1.3 and not up.clipped_now
+    assert max(item[2] for item in up.pv_series) <= settings.pv_ac_limit_kw
 
 
 def test_flat_statistics_household_baseline_and_its_freshness():
@@ -312,15 +318,15 @@ def test_runtime_pv_average_damps_a_single_cloudy_sample(runtime):  # noqa: F811
     instance.boot = start - timedelta(minutes=1)
     for minute, watts in enumerate([4000, 4000, 4000, 400], start=1):
         clock[0] = start + timedelta(minutes=minute)
-        for key, value in {"grid": 3000, "pv": watts, "house": 500}.items():
+        for key, value in {"grid": 3000, "pv_ac": watts, "house": 500}.items():
             report(key, value, {"unit_of_measurement": "W"})
         report("last_poll", clock[0].isoformat())
         instance.update(clock[0])
     # Rolling mean of fresh distinct reports (2.322 from setup, then 4, 4, 4, 0.4):
     assert instance.forecast.measured_pv_average_kw == pytest.approx(14.722 / 5, abs=1e-3)
     assert instance.forecast.correction == pytest.approx(14.722 / 5 / 4, abs=1e-3)
-    assert instance.values["decision"] in decision.LABELS
-    assert instance.values["recommendation"] == decision.LABELS[instance.values["decision"]]
+    assert isinstance(instance.values["decision"], str)
+    assert instance.details["decision_explanation"]
     assert instance.details["decision_explanation"]
     json.dumps(instance.details, allow_nan=False)
 
@@ -338,34 +344,3 @@ def test_runtime_warns_when_native_window_may_already_include_element_load(runti
     assert instance.values["native_schedule_window"] == "within_reported_window"
     assert "measured_grid_may_already_include_native_element_load" in instance.plan.warnings
     assert instance.values["measured_net_export_kw"] == 1.0  # never de-embedded
-
-
-def test_usable_forecast_solar_is_capped_at_element_power(runtime):  # noqa: F811
-    instance, _, clock = runtime
-    module = importlib.import_module(type(instance).__module__)
-    settings, _ = c.parse_options({"export_headroom_kw": 0.3})
-    now = clock[0]
-    slots = (
-        m.Forecast(now, now + timedelta(hours=1), 5),
-        m.Forecast(now + timedelta(hours=1), now + timedelta(hours=2), 1.3),
-    )
-    # Forecast surplus is already net of its own margins: no extra headroom deduction.
-    assert module._usable_solar(slots, now, now + timedelta(hours=1.5), settings) == 3.65
-    assert module._usable_solar((), now, now, settings) is None
-
-
-def test_measured_only_benefit_cap_is_reported_not_hidden(runtime):  # noqa: F811
-    """Default AUD 0.10 vs 15 measured minutes: (0.1702-0.09276)*0.75 ~= 0.058."""
-    instance, report, clock = runtime
-    clock[0] = local(hour=12)
-    report("heater", "unknown", {"current_temperature": 55, "temperature": 70})
-    for key, value in {"grid": 4000, "pv": 4800, "house": 800}.items():
-        report(key, value, {"unit_of_measurement": "W"})
-    for key, value in {"mode": "Schedule", "cloud_health": "ok"}.items():
-        report(key, value)
-    report("last_poll", clock[0].isoformat())
-    instance.update(clock[0])
-    benefit = instance.details["cycle"]["benefit_vs_grid_alternative_aud"]
-    assert benefit == pytest.approx((0.1702 - 0.09276) * 0.75, abs=0.002)
-    assert "measured_only_solar_benefit_below_switching_threshold" in instance.plan.warnings
-    assert instance.settings.switching_benefit_aud == 0.10  # never silently lowered

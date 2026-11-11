@@ -22,7 +22,7 @@ CATALOG = {
     "morning_threshold_c": Setting(
         "Morning comfort threshold",
         "Comfort",
-        "Bottom-sensor decision threshold; NEVER a heater setpoint or hygiene temperature.",
+        "Required reading (T_Avg) before the morning peak starts: 07:00 standard time, 08:00 daylight time on weekdays. A planning threshold, NEVER a heater setpoint or hygiene temperature.",
         30,
         60,
         "°C",
@@ -30,8 +30,36 @@ CATALOG = {
     "morning_time": Setting(
         "Morning deadline",
         "Comfort",
-        "Hobart local time, independent of tariff boundaries; before noon.",
+        "Weekend (no-peak) morning ready time, Hobart local, before noon. Weekdays use the actual morning peak start automatically.",
         kind="time",
+    ),
+    "shower_time_enabled": Setting(
+        "Use earlier weekday shower time",
+        "Comfort",
+        "ON makes weekday mornings ready by the shower time below if it is earlier than the peak start. Never later.",
+        kind="switch",
+    ),
+    "shower_time": Setting(
+        "Weekday shower-ready time",
+        "Comfort",
+        "Hobart local, before noon. Only used when the switch above is ON.",
+        kind="time",
+    ),
+    "expected_morning_draw_c": Setting(
+        "Expected morning hot-water use",
+        "Comfort",
+        "Reading drop assumed for morning showers when planning the afternoon target. An assumption (about 11 °C was seen on 11 Nov), not a measurement.",
+        0,
+        40,
+        "°C",
+    ),
+    "standing_loss_c_per_hour": Setting(
+        "Assumed standing heat loss",
+        "Advanced",
+        "Reading drop per hour with no use or heating. Not yet measured for this tank.",
+        0,
+        2,
+        "°C/h",
     ),
     "target_c": Setting(
         "Afternoon storage target",
@@ -44,7 +72,7 @@ CATALOG = {
     "evening_time": Setting(
         "Afternoon comfort preference",
         "Comfort",
-        "Hobart local. Weekday storage deadline follows actual evening tariff peak; this preference remains visible separately.",
+        "Weekend (no-peak) afternoon ready time, Hobart local, after noon. Weekdays use the evening peak start automatically: 16:00 standard time, 17:00 daylight time.",
         kind="time",
     ),
     "margin_minutes": Setting(
@@ -127,10 +155,18 @@ CATALOG = {
     "switching_benefit_aud": Setting(
         "Minimum economic switching benefit",
         "Heating Cycles",
-        "Whole remaining-cycle AUD advantage, not cents/kWh. Experimental $0.10 may deliberately suppress small savings.",
+        "FUTURE CONTROL ONLY: minimum benefit per heater switch. The 0.4.0 advisor uses the per-kWh waiting threshold instead.",
         0,
         5,
         "AUD",
+    ),
+    "wait_benefit_aud_per_kwh": Setting(
+        "Minimum saving to recommend waiting",
+        "Heating Cycles",
+        "Waiting is only recommended if it saves at least this much per kWh that would otherwise be heated now (first minimum cycle; 0.05 = 7.5 c for 30 min) and the comfort fallback stays viable. Solar later vs off-peak grid now is 7.7 c/kWh.",
+        0,
+        0.5,
+        "AUD/kWh",
     ),
     "paused": Setting(
         "Pause shadow planning",
@@ -207,6 +243,21 @@ CATALOG = {
         0,
         2,
         "AUD/kWh",
+    ),
+    "pv_ac_limit_kw": Setting(
+        "Inverter AC output limit",
+        "Solar & Forecasting",
+        "Combined AC limit of the single GoodWe inverter for BOTH arrays; forecasts above it are clipped.",
+        1,
+        30,
+        "kW",
+    ),
+    "base_load_source": Setting(
+        "Household load basis",
+        "Solar & Forecasting",
+        "measured_only: de-embedded measured base load (heater removed). measured_then_published also uses the published load forecast after 2 h; today's EMHASS load includes heater cycles.",
+        choices=("measured_only", "measured_then_published"),
+        kind="select",
     ),
     "forecast_max_age_minutes": Setting(
         "Maximum forecast generation age",
@@ -301,7 +352,14 @@ assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # (0.2.0 for shared keys, 0.3.0 for new keys; identical today). RECOMMENDED is
 # DEFAULT_OPTIONS. A future release that changes a recommendation must change
 # DEFAULT_OPTIONS only and keep this mapping, so the dashboard stays honest.
-ORIGINAL_DEFAULTS = MappingProxyType(dict(DEFAULT_OPTIONS))
+ORIGINAL_DEFAULTS = MappingProxyType(
+    {
+        **DEFAULT_OPTIONS,
+        # Recommendations changed in 0.4.0 by owner requirement; what shipped first:
+        "morning_threshold_c": 40.0,
+        "morning_time": "07:00",
+    }
+)
 
 # Owner facts, verifications, contract data and references are never
 # "preferences": restoring recommendations must not rewrite them.

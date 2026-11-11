@@ -8,7 +8,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .config import DOMAIN, parse_options
+from .config import DOMAIN, LEGACY_MORNING_THRESHOLD_C, parse_options
 from .runtime import ShadowRuntime
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -37,6 +37,20 @@ async def async_setup_entry(hass, entry):
     entry.async_on_unload(async_track_time_interval(hass, update, timedelta(minutes=1)))
     entry.async_on_unload(entry.add_update_listener(_reload))
     runtime.update(dt_util.utcnow())
+    return True
+
+
+async def async_migrate_entry(hass, entry):
+    """1.1 -> 1.2 (0.4.0): an untouched old 40 °C morning threshold becomes 42 °C.
+
+    Only the exact old default is moved; any value the owner chose is kept.
+    Major version stays 1, so a 0.3.0 rollback can still load the entry.
+    """
+    if entry.version == 1 and entry.minor_version < 2:
+        options = dict(entry.options)
+        if options.get("morning_threshold_c") == LEGACY_MORNING_THRESHOLD_C:
+            options["morning_threshold_c"] = 42.0
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
     return True
 
 

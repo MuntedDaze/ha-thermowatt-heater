@@ -43,10 +43,6 @@ SENSORS = {
     "measured_export_kw": ("Measured grid export", "kW"),
     "recommendation": ("Recommendation", None),
     "simulated_cycle_state": ("Simulated cycle state", None),
-    "simulated_cycle_count": ("Simulated cycle count", None),
-    "simulated_stop_count": ("Simulated stop count", None),
-    "suppressed_switching_episodes": ("Suppressed switching episodes", None),
-    "simulated_cost_aud": ("Simulated session cost", "AUD"),
     "benefit_of_now_aud": ("Benefit of heating now", "AUD"),
     "continuing_cost_aud": ("Continuous cycle cost now", "AUD"),
     "later_cost_aud": ("Continuous cycle cost later", "AUD"),
@@ -56,7 +52,32 @@ SENSORS = {
     "completion_time": ("Simulated completion", None),
     "decision": ("Decision code", None),
     "forecast_usable_solar_kwh": ("Forecast usable solar before deadline", "kWh"),
+    # 0.4.0: actual-versus-hypothetical heating, de-embedded load, tariff, readiness.
+    "heater_element_state": ("Heater element state", None),
+    "heater_state_confidence": ("Heater state confidence", None),
+    "base_load_kw": ("Base household load excluding hot water", "kW"),
+    "measured_pv_ac_kw": ("Measured PV AC output", "kW"),
+    "current_solar_surplus_kw": ("Solar surplus available to heater", "kW"),
+    "next_tariff_change": ("Next tariff change", None),
+    "next_tariff_kind": ("Next tariff period", None),
+    "current_tariff_rate_aud": ("Current tariff rate", "AUD/kWh"),
+    "morning_ready_deadline": ("Morning ready deadline", None),
+    "afternoon_ready_deadline": ("Afternoon ready deadline", None),
+    "morning_readiness": ("Morning readiness", None),
+    "afternoon_readiness": ("Afternoon readiness", None),
+    "waiting_saving_aud": ("Saving by waiting", "AUD"),
+    "decision_confidence": ("Decision confidence", None),
+    "native_predicted_cost_aud": ("Native Schedule predicted cost", "AUD"),
+    "native_vs_best_plan_aud": ("Native Schedule extra cost vs best plan", "AUD"),
 }
+# Retired in 0.4.0 (described a non-existent executor). HA keeps their registry
+# entries as unavailable until the owner removes them; see UPGRADING_0_4_0.md.
+RETIRED = (
+    "simulated_cycle_count",
+    "simulated_stop_count",
+    "suppressed_switching_episodes",
+    "simulated_cost_aud",
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -91,6 +112,9 @@ class ShadowSensor(SensorEntity):
             "latest_start",
             "grid_fallback_start",
             "completion_time",
+            "next_tariff_change",
+            "morning_ready_deadline",
+            "afternoon_ready_deadline",
         }:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
 

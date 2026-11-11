@@ -48,7 +48,7 @@ class Settings:
     import_positive: bool = True
     tariff_clock: str = "local"
     target_c: float = 70.0  # model target only; never a heater setpoint
-    morning_threshold_c: float = 40.0  # comfort decision, NEVER a storage setpoint
+    morning_threshold_c: float = 42.0  # comfort decision, NEVER a storage setpoint
     expected_native_target_c: float = 70.0
     margin_minutes: float = 30.0
     feed_in_rate: float = 0.08
@@ -66,8 +66,17 @@ class Settings:
     forecast_uncertainty: float = 0.25
     forecast_max_age_minutes: float = 120.0
     forecast_house_margin_kw: float = 0.3
-    morning: time = time(7)
+    expected_morning_draw_c: float = 10.0  # owner assumption, not a measurement
+    standing_loss_c_per_hour: float = 0.2  # owner assumption, not a measurement
+    wait_benefit_aud_per_kwh: float = 0.05
+    pv_ac_limit_kw: float = 5.0  # one GoodWe GW5000 inverter, shared by both arrays
+    base_load_source: str = "measured_only"
+    shower_time_enabled: bool = False
+    # Household times used when a day has no peak (weekends); the weekday
+    # deadlines follow the tariff's actual peak starts (fixed AEST).
+    morning: time = time(8)
     evening: time = time(16)
+    shower_time: time = time(7)
 
 
 @dataclass
@@ -200,6 +209,11 @@ def _fresh(reading: Reading, now: datetime, boot: datetime, seconds: float) -> N
         raise ValueError("input_stale_or_restored")
 
 
+def _present(reading: Reading) -> None:
+    if reading.restored or not aware(reading.observed_at):
+        raise ValueError("input_stale_or_restored")
+
+
 def _power(reading: Reading) -> float:
     if reading.unit not in {"W", "kW"}:
         raise ValueError("grid_power_unit_invalid")
@@ -248,9 +262,18 @@ def validate_settings(settings: Settings) -> None:
                 "tariff_verified",
                 "import_positive",
                 "forecast_enabled",
+                "shower_time_enabled",
             )
         )
         or settings.tariff_clock not in {"local", "standard"}
+        or settings.base_load_source not in {"measured_only", "measured_then_published"}
+        or not 0 <= settings.expected_morning_draw_c <= 40
+        or not 0 <= settings.standing_loss_c_per_hour <= 2
+        or not 0 <= settings.wait_benefit_aud_per_kwh <= 0.5
+        or not 1 <= settings.pv_ac_limit_kw <= 30
+        or not isinstance(settings.shower_time, time)
+        or settings.shower_time.tzinfo is not None
+        or not time(0) <= settings.shower_time <= time(11, 59)
         or not 65 <= settings.target_c <= 70
         or not 30 <= settings.morning_threshold_c <= 60
         or not 20 <= settings.expected_native_target_c <= 75
@@ -300,11 +323,17 @@ def evaluate(
         return plan
     try:
         validate_settings(settings)
+        # Cloud-derived readings come from ONE bridge STATUS publish. HA's MQTT
+        # entities do not rewrite state for identical payloads, so entity report
+        # times say nothing about freshness (Stage 1 F1). The bridge's poll
+        # timestamp is the evidence: readings are valid while that poll is fresh.
+        # A retained status re-delivered after an HA restart keeps its real poll
+        # time, so it is neither rejected nor made to look newer than it is.
         for key in ("temperature", "target", "mode", "cloud_health", "last_poll"):
-            _fresh(readings[key], now, boot, settings.status_max_age_minutes * 60)
+            _present(readings[key])
         poll_at = timestamp(readings["last_poll"].value)
         plan.status_age_minutes = (now - poll_at).total_seconds() / 60
-        if poll_at < boot or not 0 <= plan.status_age_minutes <= settings.status_max_age_minutes:
+        if not 0 <= plan.status_age_minutes <= settings.status_max_age_minutes:
             raise ValueError("status_stale_or_pre_restart")
         if readings["cloud_health"].value != "ok":
             raise ValueError("cloud_not_healthy")
@@ -334,14 +363,18 @@ def evaluate(
                     raise ValueError("split_grid_power_negative")
             export = _power(exported) - _power(imported)
         plan.net_export_kw = round(export, 3)
-        plan.deadline, plan.deadline_kind, plan.comfort_deadline, plan.peak_start = _deadline(
-            now, settings, tariffs
+        from .goals import upcoming_goals
+
+        goal = upcoming_goals(now, settings, tariffs)[0]
+        plan.deadline = goal.deadline
+        plan.deadline_kind = (
+            "morning"
+            if goal.kind == "morning"
+            else ("afternoon_peak" if goal.peak_start else "afternoon_comfort")
         )
-        plan.planning_target_c = (
-            settings.morning_threshold_c
-            if plan.deadline_kind == "morning_0700"
-            else settings.target_c
-        )
+        plan.comfort_deadline = goal.deadline
+        plan.peak_start = goal.peak_start
+        plan.planning_target_c = goal.target_c
         active_tariff = tariff_at(now, tariffs, settings.tariff_clock)
         if settings.tariff_verified:
             plan.current_tariff, plan.current_price_aud = active_tariff.kind, active_tariff.rate
@@ -374,9 +407,9 @@ def evaluate(
         if not forecast:
             plan.warnings.append("no_net_surplus_forecast_current_export_not_extrapolated")
         plan.warnings.append("bottom_temperature_used_directly_planning_estimate_only")
-        plan.warnings.append("40C_is_comfort_threshold_not_storage_setpoint")
+        plan.warnings.append("morning_threshold_is_comfort_criterion_not_storage_setpoint")
         if (
-            plan.deadline_kind != "morning_0700"
+            plan.deadline_kind != "morning"
             and settings.target_c - 8 < temperature < settings.target_c
         ):
             plan.warnings.append("within_thermostat_hysteresis_no_forced_heating_verified")
@@ -384,7 +417,7 @@ def evaluate(
             plan.state = "shadow_no_modelled_topup"
             plan.reasons.append(
                 "morning_threshold_met_no_morning_heat_required"
-                if plan.deadline_kind == "morning_0700"
+                if plan.deadline_kind == "morning"
                 else "storage_target_met_no_topup_required"
             )
             plan.recommended_energy_source = "none"

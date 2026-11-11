@@ -18,7 +18,13 @@ DEFAULT_SOURCES = {
     "import_energy": "sensor.goodwe_inverter_meter_total_energy_import",
     "export_energy": "sensor.goodwe_inverter_meter_total_energy_export",
 }
-OPTIONAL_SOURCES = {"forecast_pv": "", "forecast_load": ""}
+OPTIONAL_SOURCES = {"forecast_pv": "", "forecast_load": "", "pv_ac": "", "heater_power": ""}
+# AC-side inverter output, consistent with the AC meter and house load. Used
+# when no explicit pv_ac mapping is saved (existing 0.3.0 entries).
+DEFAULT_PV_AC = "sensor.goodwe_inverter_total_power"
+# Old default morning threshold. A saved value equal to it was never chosen by
+# the owner, so the 0.4.0 entry migration moves it to the new 42 °C requirement.
+LEGACY_MORNING_THRESHOLD_C = 40.0
 DEFAULT_OPTIONS = {
     "paused": False,
     "meter_verified": True,  # owner-reported HK1000 load test; direction preserved
@@ -26,7 +32,7 @@ DEFAULT_OPTIONS = {
     "import_positive": False,
     "tariff_clock": "standard",
     "target_c": 70.0,
-    "morning_threshold_c": 40.0,
+    "morning_threshold_c": 42.0,
     "expected_native_target_c": 70.0,
     "margin_minutes": 30.0,
     "feed_in_rate": 0.092760,
@@ -47,8 +53,17 @@ DEFAULT_OPTIONS = {
     "forecast_uncertainty": 0.25,
     "forecast_max_age_minutes": 120.0,
     "forecast_house_margin_kw": 0.3,
-    "morning_time": "07:00",
+    # Weekday deadlines follow the tariff's actual peak starts. These household
+    # times apply when a day has no peak (weekends) or the tariff is unverified.
+    "morning_time": "08:00",
     "evening_time": "16:00",
+    "shower_time_enabled": False,
+    "shower_time": "07:00",
+    "expected_morning_draw_c": 10.0,
+    "standing_loss_c_per_hour": 0.2,
+    "wait_benefit_aud_per_kwh": 0.05,
+    "pv_ac_limit_kw": 5.0,
+    "base_load_source": "measured_only",
     "tariff_profile": "aurora_93",
     "peak_morning_start": "07:00",
     "peak_morning_end": "10:00",
@@ -114,6 +129,7 @@ def parse_options(options):
         "native_schedule_clock_verified",
         "forecast_enabled",
         "weekend_peak",
+        "shower_time_enabled",
     ):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
@@ -178,13 +194,16 @@ def parse_options(options):
                 "import_positive",
                 "tariff_clock",
                 "forecast_enabled",
+                "shower_time_enabled",
+                "base_load_source",
             }
             else number(values[key])
             for key in Settings.__dataclass_fields__
-            if key not in {"morning", "evening"}
+            if key not in {"morning", "evening", "shower_time"}
         },
         morning=time(*divmod(_minute(values["morning_time"]), 60)),
         evening=time(*divmod(_minute(values["evening_time"]), 60)),
+        shower_time=time(*divmod(_minute(values["shower_time"]), 60)),
     )
     validate_settings(settings)
     from datetime import date

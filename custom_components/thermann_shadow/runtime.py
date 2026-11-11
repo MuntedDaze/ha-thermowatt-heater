@@ -2,21 +2,28 @@
 
 from dataclasses import asdict
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from homeassistant.util import dt as dt_util
 
-from .model import Plan, Reading, evaluate, number, _fresh, _power
-from .config import DEFAULT_OPTIONS
+from .model import Plan, Reading, evaluate, number, timestamp, _fresh, _power
+from .config import DEFAULT_OPTIONS, DEFAULT_PV_AC
 from .native import parse_native, permitted_minutes, scheduled_permission
 from .forecast import build_forecast
-from .cycles import CyclePolicy
-from .decision import decide
+from .advisor import Advisor, TickInputs
+from .goals import next_tariff_change
+from .model import TANK_KWH_PER_C, tariff_at
 from .settings import BACKUP_KEY, describe
 
 # Measured-vs-forecast PV correction uses a short rolling mean, so one passing
 # cloud sample cannot discard the whole horizon. Window is deliberately fixed.
 PV_AVERAGE_MINUTES = 15
+GATED = {
+    "shadow_blocked",
+    "shadow_paused",
+    "shadow_native_intervention",
+    "shadow_awaiting_validation",
+}
 
 
 class ShadowRuntime:
@@ -37,7 +44,9 @@ class ShadowRuntime:
         self.count_started = None
         self.solar_samples = deque(maxlen=121)
         self.pv_samples = deque(maxlen=64)  # (observed_at, kW), fresh distinct reports
-        self.cycle = CyclePolicy()
+        self.advisor = Advisor()
+        self.advice = None
+        self._status_ok = False
         self.set_native_reference({})
 
     def set_native_reference(self, options):
@@ -50,7 +59,7 @@ class ShadowRuntime:
         settings, tariffs = parse_options(options)
         changed_mapping = dict(sources) != dict(self.sources)
         if changed_mapping or settings != self.settings or tariffs != self.tariffs:
-            self.cycle = CyclePolicy()
+            self.advisor.reset()
             self.solar_samples.clear()
             self.pv_samples.clear()
         if changed_mapping:
@@ -60,9 +69,9 @@ class ShadowRuntime:
         self.set_native_reference(options)
         self.update(dt_util.utcnow())
 
-    def _reading(self, key, attribute=None):
-        entity_id = self.sources.get(key)
-        if not isinstance(entity_id, str):
+    def _reading(self, key, attribute=None, entity_id=None):
+        entity_id = entity_id or self.sources.get(key)
+        if not isinstance(entity_id, str) or not entity_id:
             return None
         state = self.hass.states.get(entity_id)
         # Schedule is deliberately Unknown on the water_heater entity. Its
@@ -128,14 +137,18 @@ class ShadowRuntime:
                 ).total_seconds() >= self.settings.solar_hold_minutes * 60
         except (KeyError, ValueError, TypeError, OverflowError):
             self.solar_samples.clear()
-        measured_pv = None
+        # AC-side inverter output: consistent with the AC meter and GoodWe house
+        # load. The DC "pv" mapping stays display-only (Stage 1 F6).
+        measured_pv = pv_ac_now = None
+        pv_ac_entity = self.sources.get("pv_ac") or DEFAULT_PV_AC
         try:
-            pv = self._reading("pv")
+            pv = self._reading("pv_ac", entity_id=pv_ac_entity)
             if pv:
                 _fresh(pv, now, self.boot, self.settings.grid_max_age_seconds)
                 value = _power(pv)
                 if value < 0:
                     raise ValueError("pv_negative")
+                pv_ac_now = value
                 if not self.pv_samples or pv.observed_at > self.pv_samples[-1][0]:
                     self.pv_samples.append((pv.observed_at, value))
         except (ValueError, TypeError, OverflowError):
@@ -170,64 +183,48 @@ class ShadowRuntime:
             solar_confirmed=solar_confirmed,
         )
         self.plan.warnings.extend(self.forecast.warnings)
-        cycle = self.cycle.step(
-            now,
-            self.plan,
-            self.settings,
-            self.tariffs,
-            self.forecast.slots,
-            readings["grid"].observed_at if "grid" in readings else None,
+        poll_at = None
+        try:
+            poll_at = timestamp(readings["last_poll"].value)
+        except (KeyError, ValueError, TypeError):
+            pass
+        status_ok = (
+            poll_at is not None
+            and 0 <= (now - poll_at).total_seconds() <= self.settings.status_max_age_minutes * 60
         )
-        solar_benefit = cycle["benefit_vs_grid_alternative_aud"]
-        if (
-            not self.forecast.slots
-            and solar_benefit is not None
-            and 0 < solar_benefit < self.settings.switching_benefit_aud
-            and (self.plan.net_export_kw or 0) - self.settings.export_headroom_kw
-            >= self.settings.min_solar_kw
-        ):
-            # Honest limitation, not a silent default change: without a forecast,
-            # only solar_window_minutes of measured surplus is credited, which can
-            # cap the benefit below the owner's switching threshold.
-            self.plan.warnings.append("measured_only_solar_benefit_below_switching_threshold")
-        code, label, explanation = decide(
-            self.plan,
-            cycle,
-            self.cycle.active,
-            self.settings.forecast_enabled,
-            self.forecast.source,
-            self.settings,
+        self._status_ok = status_ok
+        temperature = None
+        if status_ok and "temperature" in readings:
+            try:
+                temperature = number(readings["temperature"].value)
+            except (ValueError, TypeError):
+                temperature = None
+        export_kw = self.plan.net_export_kw
+        house_kw = self._kw("house", now)
+        if house_kw is None and pv_ac_now is not None and export_kw is not None:
+            house_kw = max(0.0, pv_ac_now - export_kw)
+        mode_state = self.hass.states.get(self.sources.get("mode", ""))
+        status_raw = mode_state.attributes.get("WaterHeaterSts") if mode_state else None
+        heater_power = self._kw("heater_power", now) if self.sources.get("heater_power") else None
+        inputs = TickInputs(
+            temperature=temperature,
+            house_kw=house_kw,
+            pv_ac_kw=pv_ac_now,
+            export_kw=export_kw,
+            status_raw=status_raw,
+            status_at=poll_at if status_ok else None,
+            in_window=lambda at: scheduled_permission(
+                at, self.native_periods, self.native_options["native_schedule_clock"]
+            )
+            == "within_reported_window",
+            heater_power_kw=heater_power,
+            pv_series=self.forecast.pv_series,
+            load_series=self.forecast.load_series,
+            forecast_available=bool(self.forecast.pv_series),
         )
-        self.values = asdict(self.plan)
-        self.values.update(
-            {
-                "recommendation": label,
-                "decision": code,
-                "simulated_cycle_state": cycle["state"],
-                "simulated_cycle_count": self.cycle.starts,
-                "simulated_stop_count": self.cycle.stops,
-                "suppressed_switching_episodes": self.cycle.suppressed_edges,
-                "simulated_cost_aud": cycle["simulated_cost_aud_session"],
-                "benefit_of_now_aud": cycle["benefit_of_now_aud"],
-                "continuing_cost_aud": cycle["continuing_cost_aud"],
-                "later_cost_aud": cycle["later_cost_aud"],
-                "forecast_net_surplus_kw": self.forecast.slots[0].export_kw
-                if self.forecast.slots
-                else None,
-                "forecast_age_minutes": self.forecast.age_minutes,
-                "forecast_usable_solar_kwh": _usable_solar(
-                    self.forecast.slots, now, self.plan.deadline, self.settings
-                ),
-                "deadline_countdown_minutes": max(
-                    0, round((self.plan.deadline - now).total_seconds() / 60)
-                )
-                if self.plan.deadline
-                else None,
-                "completion_time": datetime.fromisoformat(cycle["estimated_completion"])
-                if cycle["estimated_completion"]
-                else None,
-            }
-        )
+        advice = self.advisor.tick(now, self.plan, self.settings, self.tariffs, inputs)
+        self.advice = advice
+        self._apply_advice(now, advice, pv_ac_now)
         self.values["controller"] = self.plan.state
         self.values["morning_threshold_c"] = self.settings.morning_threshold_c
         self.values["storage_target_c"] = self.settings.target_c
@@ -251,11 +248,16 @@ class ShadowRuntime:
                     if key in {"temperature", "target"}
                     else self.settings.grid_max_age_seconds
                 )
+                cloud = key in {"temperature", "target"}
                 if (
                     reading
                     and not reading.restored
-                    and reading.observed_at >= self.boot
-                    and 0 <= (now - reading.observed_at).total_seconds() <= max_age
+                    and (
+                        self._status_ok
+                        if cloud
+                        else reading.observed_at >= self.boot
+                        and 0 <= (now - reading.observed_at).total_seconds() <= max_age
+                    )
                 ):
                     value = number(reading.value)
                     if key in {"pv", "house", "grid"}:
@@ -403,14 +405,17 @@ class ShadowRuntime:
             "meter_sign_load_test_verified": self.settings.meter_verified,
             "tariff_contract_verified": self.settings.tariff_verified,
             "tariff_clock": self.settings.tariff_clock,
-            "morning_comfort_time": self.settings.morning.isoformat() + " Australia/Hobart",
-            "evening_comfort_time": self.settings.evening.isoformat()
-            + " nominal; weekday storage deadline follows actual peak",
+            "weekend_morning_time": self.settings.morning.isoformat() + " Australia/Hobart",
+            "weekend_afternoon_time": self.settings.evening.isoformat() + " Australia/Hobart",
+            "weekday_deadlines": "start of the actual morning/evening peak (fixed AEST tariff)",
+            "shower_time": self.settings.shower_time.isoformat()
+            if self.settings.shower_time_enabled
+            else None,
             "planning_goal": self.plan.deadline_kind,
             "morning_threshold_is_not_a_setpoint": True,
             "manual_recovery_risk_accepted_by_owner": True,
             "estimate_basis": "uniform_315L_3kW_scenario_not_measured_reserve",
-            "comparison_basis": "same_modelled_energy_at_current_rate_not_native_schedule_savings",
+            "comparison_basis": "incremental_cost_vs_not_heating_same_energy_all_plans",
             "reasons": self.plan.reasons,
             "warnings": self.plan.warnings,
             "windows": self.plan.windows,
@@ -424,9 +429,7 @@ class ShadowRuntime:
             "native_permitted_minutes_before_comfort_deadline": native_minutes,
             "native_window_capacity_is_not_measured_energy": True,
             "sources": dict(self.sources),
-            "cycle": cycle,
-            "decision": code,
-            "decision_explanation": explanation,
+            **self._advice_details(),
             "forecast": {
                 "source": self.forecast.source,
                 "age_minutes": self.forecast.age_minutes,
@@ -446,19 +449,206 @@ class ShadowRuntime:
         for listener in tuple(self.listeners):
             listener()
 
+    def _kw(self, key, now):
+        reading = self._reading(key)
+        try:
+            if reading:
+                _fresh(reading, now, self.boot, self.settings.grid_max_age_seconds)
+                value = _power(reading)
+                return value if value >= 0 else None
+        except (ValueError, TypeError, OverflowError):
+            pass
+        return None
+
+    def _apply_advice(self, now, advice, pv_ac_now):
+        """Map the advice onto existing sensor keys (stable unique IDs) and new ones."""
+        result = advice.assessment
+        best = result.plans.get("best_overall") if result else None
+        plan = self.plan
+        if (
+            plan.state not in GATED
+            and not advice.meter_suspect
+            and advice.code not in {"data_unavailable"}
+        ):
+            plan.state = "shadow_advising"
+            plan.reasons = [advice.code]
+            plan.windows = []
+            if result:
+                first = result.requirements[0] if result.requirements else None
+                plan.mixed_model_energy_kwh = round(first[1], 3) if first else None
+                plan.modelled_heating_minutes = (
+                    round(first[1] / 3 * 60 + self.settings.margin_minutes, 1)
+                    if first and first[1] > 0
+                    else 0.0
+                )
+                fallback = result.fallback
+                plan.grid_fallback_start = min(fallback.values()) if fallback else None
+                plan.latest_start = fallback.get(first[0].kind) if first else None
+                target = best or result.plans.get("heat_now_continuous")
+                plan.planned_start = target.start if target else None
+                plan.estimated_cost_aud = round(target.cost_aud, 3) if target else 0
+                plan.estimated_solar_kwh = round(target.solar_kwh, 3) if target else 0
+                plan.estimated_import_kwh = round(target.import_kwh, 3) if target else 0
+                now_plan = result.plans.get("heat_now_continuous")
+                plan.unmet_model_energy_kwh = round(now_plan.shortfall_kwh, 3) if now_plan else 0
+                if target and target.energy_kwh:
+                    share = target.solar_kwh / target.energy_kwh
+                    plan.recommended_energy_source = (
+                        "net_solar" if share > 0.99 else "mixed" if share > 0.01 else "grid"
+                    )
+                    plan.comparison_cost_difference_aud = round(
+                        target.energy_kwh * min(item.rate for item in self.tariffs)
+                        - target.cost_aud,
+                        3,
+                    )
+                else:
+                    plan.recommended_energy_source = "none"
+                    plan.comparison_cost_difference_aud = 0
+                plan.windows = [
+                    {"start": a.isoformat(), "end": b.isoformat(), "source": "hypothetical_plan"}
+                    for a, b in (target.blocks if target else [])
+                ]
+        elif plan.state not in GATED:
+            plan.state = "shadow_blocked"
+            plan.reasons = [
+                "meter_reading_suspect" if advice.meter_suspect else "heater_status_unavailable"
+            ]
+        self.values = asdict(plan)
+        readiness = advice.readiness
+        change = current = None
+        try:
+            change = next_tariff_change(now, self.tariffs, self.settings.tariff_clock)
+            current = tariff_at(now, self.tariffs, self.settings.tariff_clock)
+        except ValueError:
+            pass
+        goals = {goal.kind: goal for goal in reversed(advice.goals)}
+        pv_forecast_now = None
+        for start, end, value in self.forecast.pv_series:
+            if start <= now < end:
+                pv_forecast_now = value
+        forecast_surplus = (
+            max(0.0, pv_forecast_now - advice.base_p50_kw)
+            if pv_forecast_now is not None and advice.base_p50_kw is not None
+            else None
+        )
+        if best is not None and best.start is not None:
+            state = "hypothetical_heating_now" if best.start <= now else "hypothetical_waiting"
+        elif result is not None:
+            state = (
+                "not_needed"
+                if advice.code in {"no_heating_needed", "native_heating_economical"}
+                and not result.plans
+                else "hypothetical_heating_now"
+            )
+        else:
+            state = "suspended"
+        native = advice.native or {}
+        saving = result.saving_by_waiting_aud if result else None
+        self.values.update(
+            {
+                "recommendation": advice.label,
+                "decision": advice.code,
+                "simulated_cycle_state": state,
+                "benefit_of_now_aud": -saving if saving is not None else None,
+                "continuing_cost_aud": result.heat_now_cost_aud if result else None,
+                "later_cost_aud": result.best_cost_aud if result else None,
+                "forecast_net_surplus_kw": round(forecast_surplus, 3)
+                if forecast_surplus is not None
+                else None,
+                "forecast_age_minutes": self.forecast.age_minutes,
+                "forecast_usable_solar_kwh": round(best.solar_kwh, 3) if best else None,
+                "deadline_countdown_minutes": max(
+                    0, round((plan.deadline - now).total_seconds() / 60)
+                )
+                if plan.deadline
+                else None,
+                "completion_time": best.end if best else None,
+                "heater_element_state": advice.heater.state,
+                "heater_state_confidence": advice.heater.confidence,
+                "base_load_kw": round(advice.base_p50_kw, 3)
+                if advice.base_p50_kw is not None
+                else None,
+                "measured_pv_ac_kw": round(pv_ac_now, 3) if pv_ac_now is not None else None,
+                "current_solar_surplus_kw": advice.surplus_now_kw,
+                "next_tariff_change": change[0] if change else None,
+                "next_tariff_kind": change[1].kind if change else None,
+                "current_tariff_rate_aud": current.rate if current else None,
+                "morning_ready_deadline": goals["morning"].deadline if "morning" in goals else None,
+                "afternoon_ready_deadline": goals["afternoon"].deadline
+                if "afternoon" in goals
+                else None,
+                "morning_readiness": readiness.get("morning", {}).get("status"),
+                "afternoon_readiness": readiness.get("afternoon", {}).get("status"),
+                "waiting_saving_aud": saving,
+                "decision_confidence": advice.confidence,
+                "native_predicted_cost_aud": native.get("predicted_cost_aud"),
+                "native_vs_best_plan_aud": round(
+                    native["predicted_cost_aud"] - result.best_cost_aud, 3
+                )
+                if native and result and result.best_cost_aud is not None
+                else None,
+            }
+        )
+
+    def _advice_details(self):
+        advice = self.advice
+        if advice is None:
+            return {}
+        result = advice.assessment
+        heater = advice.heater
+        return {
+            "decision": advice.code,
+            "decision_explanation": advice.explanation,
+            "decision_confidence": advice.confidence,
+            "decision_pending_change_to": advice.pending_code,
+            "heater_state": {
+                "state": heater.state,
+                "confidence": heater.confidence,
+                "basis": heater.basis,
+                "status_bit0": heater.status_bit,
+                "status_raw": heater.status_raw,
+                "status_semantics": "empirical_32_33_correlation_not_manufacturer_contract",
+                "last_load_step": heater.last_step,
+                "last_load_step_at": heater.last_step_at.isoformat()
+                if heater.last_step_at
+                else None,
+            },
+            "load": {
+                "base_low_kw": advice.base_low_kw,
+                "base_high_kw": advice.base_high_kw,
+                "base_p50_kw": advice.base_p50_kw,
+                "meter_suspect_pre_commissioning_signature": advice.meter_suspect,
+                "basis": "house_load_minus_3kW_when_element_on",
+            },
+            "goals": [
+                {
+                    "kind": goal.kind,
+                    "deadline": goal.deadline.isoformat(),
+                    "target_c": goal.target_c,
+                    "basis": goal.basis,
+                }
+                for goal in advice.goals
+            ],
+            "readiness": {
+                kind: {**item, "deadline": item["deadline"].isoformat()}
+                for kind, item in advice.readiness.items()
+            },
+            "strategies": {name: plan.summary() for name, plan in result.plans.items()}
+            if result
+            else {},
+            "requirements_kwh": [
+                {"goal": goal.kind, "kwh": round(kwh, 3), "deg_c": round(kwh / TANK_KWH_PER_C, 1)}
+                for goal, kwh in result.requirements
+            ]
+            if result
+            else [],
+            "fallback_starts": {kind: at.isoformat() for kind, at in result.fallback.items()}
+            if result
+            else {},
+            "strategy_warnings": result.warnings if result else [],
+            "native_outlook": advice.native,
+        }
+
     def subscribe(self, listener):
         self.listeners.add(listener)
         return lambda: self.listeners.discard(listener)
-
-
-def _usable_solar(slots, now, deadline, settings):
-    """Forecast surplus the full 3 kW element could absorb before the deadline (kWh)."""
-    if not slots or deadline is None:
-        return None
-    total = 0.0
-    for item in slots:
-        start, end = max(item.start, now), min(item.end, deadline)
-        if end > start:
-            usable = min(3.0, max(0.0, item.export_kw))  # already net of margins
-            total += usable * (end - start).total_seconds() / 3600
-    return round(total, 3)

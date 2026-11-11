@@ -13,19 +13,17 @@ views:
       icon: mdi:water-boiler
     - type: markdown
       text_only: true
-      content: '{% set code = states(''sensor.thermann_shadow_decision_code'') %}{% set kind = {"heat_now_solar":
-        "success", "heat_now_partial_solar": "success", "heat_now_grace_period": "success", "begin_grid_fallback":
-        "warning", "insufficient_time": "error", "qualifying_solar": "info", "wait_for_forecast_solar":
-        "info", "wait_for_cheaper_window": "info", "forecast_unavailable_conservative_fallback": "warning",
-        "no_topup_required": "success", "data_unavailable": "error", "owner_review_required": "warning",
-        "paused": "info"}.get(code, ''info'') %}{% set icon = {"heat_now_solar": "mdi:solar-power-variant",
-        "heat_now_partial_solar": "mdi:solar-power", "heat_now_grace_period": "mdi:weather-partly-cloudy",
-        "begin_grid_fallback": "mdi:transmission-tower", "insufficient_time": "mdi:clock-alert-outline",
-        "qualifying_solar": "mdi:timer-sand", "wait_for_forecast_solar": "mdi:weather-sunny", "wait_for_cheaper_window":
-        "mdi:clock-outline", "forecast_unavailable_conservative_fallback": "mdi:weather-cloudy-alert",
-        "no_topup_required": "mdi:check-circle-outline", "data_unavailable": "mdi:lan-disconnect", "owner_review_required":
-        "mdi:account-alert-outline", "paused": "mdi:pause-circle-outline"}.get(code, ''mdi:water-boiler'')
-        %}
+      content: '{% set code = states(''sensor.thermann_shadow_decision_code'') %}{% set kind = {"heat_now_cheapest":
+        "success", "heat_now_saving_too_small": "success", "heat_now_comfort_fallback": "warning", "native_heating_economical":
+        "success", "native_heating_costlier_than_waiting": "warning", "wait_cheaper_later": "info", "flexible_no_cost_difference":
+        "info", "no_heating_needed": "success", "insufficient_time": "error", "data_unavailable": "error",
+        "owner_review_required": "warning", "paused": "info"}.get(code, ''info'') %}{% set icon = {"heat_now_cheapest":
+        "mdi:solar-power-variant", "heat_now_saving_too_small": "mdi:solar-power", "heat_now_comfort_fallback":
+        "mdi:transmission-tower", "native_heating_economical": "mdi:water-boiler", "native_heating_costlier_than_waiting":
+        "mdi:water-boiler-alert", "wait_cheaper_later": "mdi:weather-sunny", "flexible_no_cost_difference":
+        "mdi:clock-outline", "no_heating_needed": "mdi:check-circle-outline", "insufficient_time": "mdi:clock-alert-outline",
+        "data_unavailable": "mdi:lan-disconnect", "owner_review_required": "mdi:account-alert-outline",
+        "paused": "mdi:pause-circle-outline"}.get(code, ''mdi:water-boiler'') %}
 
         <ha-alert alert-type="{{ kind }}"><h1><ha-icon icon="{{ icon }}"></ha-icon> {{ states(''sensor.thermann_shadow_recommendation'')
         }}</h1>{{ state_attr(''sensor.thermann_shadow_controller'',''decision_explanation'') or ''Waiting
@@ -36,30 +34,48 @@ views:
         the real heater.'
     - type: gauge
       entity: sensor.thermann_shadow_bottom_temperature
-      name: Tank · bottom sensor
+      name: Tank reading (T_Avg)
       min: 10
       max: 75
       severity:
         red: 10
-        yellow: 40
+        yellow: 42
         green: 60
     - type: tile
-      entity: sensor.thermann_shadow_morning_comfort_threshold
+      entity: sensor.thermann_shadow_heater_element_state
+      icon: mdi:heat-wave
+    - type: tile
+      entity: sensor.thermann_shadow_heater_state_confidence
+      icon: mdi:help-circle-outline
+    - type: tile
+      entity: sensor.thermann_shadow_morning_readiness
       icon: mdi:weather-sunset-up
     - type: tile
-      entity: sensor.thermann_shadow_afternoon_storage_target
+      entity: sensor.thermann_shadow_afternoon_readiness
       icon: mdi:water-thermometer
     - type: tile
-      entity: sensor.thermann_shadow_comfort_countdown
-      icon: mdi:timer-sand
+      entity: sensor.thermann_shadow_morning_ready_deadline
+      icon: mdi:alarm
     - type: tile
-      entity: sensor.thermann_shadow_next_decision_threshold
-      icon: mdi:target
+      entity: sensor.thermann_shadow_afternoon_ready_deadline
+      icon: mdi:alarm
   - type: grid
     cards:
     - type: heading
-      heading: Next heating (hypothetical)
-      icon: mdi:calendar-clock
+      heading: Heat now or later?
+      icon: mdi:scale-balance
+    - type: tile
+      entity: sensor.thermann_shadow_continuous_cycle_cost_now
+      icon: mdi:cash-fast
+    - type: tile
+      entity: sensor.thermann_shadow_continuous_cycle_cost_later
+      icon: mdi:cash-check
+    - type: tile
+      entity: sensor.thermann_shadow_saving_by_waiting
+      icon: mdi:piggy-bank-outline
+    - type: tile
+      entity: sensor.thermann_shadow_decision_confidence
+      icon: mdi:shield-check-outline
     - type: tile
       entity: sensor.thermann_shadow_hypothetical_heating_start
       icon: mdi:play-circle-outline
@@ -67,34 +83,30 @@ views:
       entity: sensor.thermann_shadow_simulated_completion
       icon: mdi:clock-check-outline
     - type: tile
-      entity: sensor.thermann_shadow_planning_deadline
-      icon: mdi:flag-checkered
+      entity: sensor.thermann_shadow_native_schedule_predicted_cost
+      icon: mdi:calendar-clock
     - type: tile
-      entity: sensor.thermann_shadow_off_peak_fallback_start
-      icon: mdi:transmission-tower
-    - type: tile
-      entity: sensor.thermann_shadow_heating_time_estimate
-      icon: mdi:timer-outline
-    - type: tile
-      entity: sensor.thermann_shadow_mixed_tank_energy_estimate
-      icon: mdi:lightning-bolt
-    - type: tile
-      entity: sensor.thermann_shadow_plan_cost_estimate
-      icon: mdi:cash
-    - type: tile
-      entity: sensor.thermann_shadow_recommended_energy_source
-      icon: mdi:solar-power
+      entity: sensor.thermann_shadow_native_schedule_extra_cost_vs_best_plan
+      icon: mdi:calendar-alert
+    - type: markdown
+      content: 'Costs are the **extra** electricity cost of heating, including **foregone feed-in**, for
+        the same required energy. The 3 kW element is never treated as variable power; the real heater''s
+        load is removed from household demand once. *Start and completion are hypothetical: the native
+        Schedule controls the heater.*'
   - type: grid
     cards:
     - type: heading
-      heading: Energy & prices
+      heading: Energy & tariff
       icon: mdi:home-lightning-bolt
     - type: tile
-      entity: sensor.thermann_shadow_measured_pv
+      entity: sensor.thermann_shadow_measured_pv_ac_output
       icon: mdi:solar-power
     - type: tile
-      entity: sensor.thermann_shadow_measured_house_load
+      entity: sensor.thermann_shadow_base_household_load_excluding_hot_water
       icon: mdi:home-lightning-bolt
+    - type: tile
+      entity: sensor.thermann_shadow_solar_surplus_available_to_heater
+      icon: mdi:solar-panel
     - type: tile
       entity: sensor.thermann_shadow_measured_grid_export
       icon: mdi:transmission-tower-export
@@ -105,42 +117,35 @@ views:
       entity: sensor.thermann_shadow_current_tariff
       icon: mdi:tag-outline
     - type: tile
-      entity: sensor.thermann_shadow_current_import_price
+      entity: sensor.thermann_shadow_current_tariff_rate
       icon: mdi:currency-usd
+    - type: tile
+      entity: sensor.thermann_shadow_next_tariff_change
+      icon: mdi:timer-outline
     - type: tile
       entity: sensor.thermann_shadow_forecast_net_surplus
       icon: mdi:weather-sunny
     - type: tile
-      entity: sensor.thermann_shadow_forecast_usable_solar_before_deadline
-      icon: mdi:solar-panel
-    - type: markdown
-      content: '### Heat now or later?
-
-        Whole remaining cycle at full 3 kW: **now {{ states(''sensor.thermann_shadow_continuous_cycle_cost_now'')
-        }} AUD** · best later **{{ states(''sensor.thermann_shadow_continuous_cycle_cost_later'') }} AUD**
-        · benefit of now **{{ states(''sensor.thermann_shadow_benefit_of_heating_now'') }} AUD**.
-
-
-        Costs include imported electricity **and foregone solar feed-in**. Partial solar counts: 2 kW
-        surplus + 1 kW import is cheaper than 3 kW off-peak grid. Forecasts are uncertain; comfort wins
-        over small savings.'
+      entity: sensor.thermann_shadow_forecast_age
+      icon: mdi:update
   - type: grid
     cards:
     - type: heading
       heading: History
       icon: mdi:chart-line
     - type: history-graph
-      title: Bottom temperature · 24 h
+      title: Tank reading and heater state · 24 h
       hours_to_show: 24
       entities:
       - sensor.thermann_shadow_bottom_temperature
-      - sensor.thermann_shadow_reported_target
+      - sensor.thermann_shadow_heater_element_state
     - type: history-graph
       title: Solar, house and grid · 12 h (kW)
       hours_to_show: 12
       entities:
-      - sensor.thermann_shadow_measured_pv
+      - sensor.thermann_shadow_measured_pv_ac_output
       - sensor.thermann_shadow_measured_house_load
+      - sensor.thermann_shadow_base_household_load_excluding_hot_water
       - sensor.thermann_shadow_measured_signed_grid
 - title: Settings
   path: settings
@@ -161,24 +166,37 @@ views:
     entities:
     - number.thermann_shadow_morning_comfort_threshold
     - time.thermann_shadow_morning_deadline
+    - switch.thermann_shadow_use_earlier_weekday_shower_time
+    - time.thermann_shadow_weekday_shower_ready_time
+    - number.thermann_shadow_expected_morning_hot_water_use
     - number.thermann_shadow_afternoon_storage_target
     - time.thermann_shadow_afternoon_comfort_preference
     - number.thermann_shadow_heating_time_allowance
   - type: markdown
     content: "### Comfort — current, recommended and original values\n\n**Morning comfort threshold**\
       \ — current **{{ states('number.thermann_shadow_morning_comfort_threshold') }} °C** · recommended\
-      \ & original **40 °C** · *restored by Restore*  \nBottom-sensor decision threshold; NEVER a heater\
-      \ setpoint or hygiene temperature.\n\n**Morning deadline** — current **{{ states('time.thermann_shadow_morning_deadline')\
-      \ }}** · recommended & original **07:00** · *restored by Restore*  \nHobart local time, independent\
-      \ of tariff boundaries; before noon.\n\n**Afternoon storage target** — current **{{ states('number.thermann_shadow_afternoon_storage_target')\
+      \ **42 °C** · original **40 °C** · *restored by Restore*  \nRequired reading (T_Avg) before the\
+      \ morning peak starts: 07:00 standard time, 08:00 daylight time on weekdays. A planning threshold,\
+      \ NEVER a heater setpoint or hygiene temperature.\n\n**Morning deadline** — current **{{ states('time.thermann_shadow_morning_deadline')\
+      \ }}** · recommended **08:00** · original **07:00** · *restored by Restore*  \nWeekend (no-peak)\
+      \ morning ready time, Hobart local, before noon. Weekdays use the actual morning peak start automatically.\n\
+      \n**Use earlier weekday shower time** — current **{{ states('switch.thermann_shadow_use_earlier_weekday_shower_time')\
+      \ }}** · recommended & original **Off** · *restored by Restore*  \nON makes weekday mornings ready\
+      \ by the shower time below if it is earlier than the peak start. Never later.\n\n**Weekday shower-ready\
+      \ time** — current **{{ states('time.thermann_shadow_weekday_shower_ready_time') }}** · recommended\
+      \ & original **07:00** · *restored by Restore*  \nHobart local, before noon. Only used when the\
+      \ switch above is ON.\n\n**Expected morning hot-water use** — current **{{ states('number.thermann_shadow_expected_morning_hot_water_use')\
+      \ }} °C** · recommended & original **10 °C** · *restored by Restore*  \nReading drop assumed for\
+      \ morning showers when planning the afternoon target. An assumption (about 11 °C was seen on 11\
+      \ Nov), not a measurement.\n\n**Afternoon storage target** — current **{{ states('number.thermann_shadow_afternoon_storage_target')\
       \ }} °C** · recommended & original **70 °C** · *restored by Restore*  \nSelected model target is\
       \ never silently reduced. 65–70°C is a planning range, not a newly qualified command limit.\n\n\
       **Afternoon comfort preference** — current **{{ states('time.thermann_shadow_afternoon_comfort_preference')\
-      \ }}** · recommended & original **16:00** · *restored by Restore*  \nHobart local. Weekday storage\
-      \ deadline follows actual evening tariff peak; this preference remains visible separately.\n\n**Heating\
-      \ time allowance** — current **{{ states('number.thermann_shadow_heating_time_allowance') }} min**\
-      \ · recommended & original **30 min** · *restored by Restore*  \nExtra full-power model minutes\
-      \ when heat is required. Uncalibrated; comfort overrides optional dwell."
+      \ }}** · recommended & original **16:00** · *restored by Restore*  \nWeekend (no-peak) afternoon\
+      \ ready time, Hobart local, after noon. Weekdays use the evening peak start automatically: 16:00\
+      \ standard time, 17:00 daylight time.\n\n**Heating time allowance** — current **{{ states('number.thermann_shadow_heating_time_allowance')\
+      \ }} min** · recommended & original **30 min** · *restored by Restore*  \nExtra full-power model\
+      \ minutes when heat is required. Uncalibrated; comfort overrides optional dwell."
   - type: entities
     title: Solar & Forecasting
     icon: mdi:solar-power
@@ -190,6 +208,8 @@ views:
     - switch.thermann_shadow_use_published_forecasts
     - number.thermann_shadow_forecast_uncertainty_margin
     - number.thermann_shadow_extra_forecast_household_load
+    - number.thermann_shadow_inverter_ac_output_limit
+    - select.thermann_shadow_household_load_basis
   - type: markdown
     content: "### Solar & Forecasting — current, recommended and original values\n\n**Minimum useful net\
       \ surplus** — current **{{ states('number.thermann_shadow_minimum_useful_net_surplus') }} kW** ·\
@@ -205,7 +225,13 @@ views:
       \ 0.25 means 25%; never guaranteed surplus.\n\n**Extra forecast household load** — current **{{\
       \ states('number.thermann_shadow_extra_forecast_household_load') }} kW** · recommended & original\
       \ **0.3 kW** · *restored by Restore*  \nAdditional allowance for competing appliances, beyond forecast\
-      \ demand."
+      \ demand.\n\n**Inverter AC output limit** — current **{{ states('number.thermann_shadow_inverter_ac_output_limit')\
+      \ }} kW** · recommended & original **5 kW** · *restored by Restore*  \nCombined AC limit of the\
+      \ single GoodWe inverter for BOTH arrays; forecasts above it are clipped.\n\n**Household load basis**\
+      \ — current **{{ states('select.thermann_shadow_household_load_basis') }}** · recommended & original\
+      \ **measured_only** · *restored by Restore*  \nmeasured_only: de-embedded measured base load (heater\
+      \ removed). measured_then_published also uses the published load forecast after 2 h; today's EMHASS\
+      \ load includes heater cycles."
   - type: entities
     title: Heating Cycles
     icon: mdi:sync
@@ -217,6 +243,7 @@ views:
     - number.thermann_shadow_minimum_optional_cycle
     - number.thermann_shadow_minimum_optional_cycle_gap
     - number.thermann_shadow_minimum_economic_switching_benefit
+    - number.thermann_shadow_minimum_saving_to_recommend_waiting
   - type: markdown
     content: "### Heating Cycles — current, recommended and original values\n\n**Solar start qualification**\
       \ — current **{{ states('number.thermann_shadow_solar_start_qualification') }} min** · recommended\
@@ -230,14 +257,20 @@ views:
       \ }} min** · recommended & original **30 min** · *restored by Restore*  \nSIMULATION ONLY. Comfort\
       \ can start sooner. No physical On/resume contract is qualified.\n\n**Minimum economic switching\
       \ benefit** — current **{{ states('number.thermann_shadow_minimum_economic_switching_benefit') }}\
-      \ AUD** · recommended & original **0.1 AUD** · *restored by Restore*  \nWhole remaining-cycle AUD\
-      \ advantage, not cents/kWh. Experimental $0.10 may deliberately suppress small savings."
+      \ AUD** · recommended & original **0.1 AUD** · *restored by Restore*  \nFUTURE CONTROL ONLY: minimum\
+      \ benefit per heater switch. The 0.4.0 advisor uses the per-kWh waiting threshold instead.\n\n**Minimum\
+      \ saving to recommend waiting** — current **{{ states('number.thermann_shadow_minimum_saving_to_recommend_waiting')\
+      \ }} AUD/kWh** · recommended & original **0.05 AUD/kWh** · *restored by Restore*  \nWaiting is only\
+      \ recommended if it saves at least this much per kWh that would otherwise be heated now (first minimum\
+      \ cycle; 0.05 = 7.5 c for 30 min) and the comfort fallback stays viable. Solar later vs off-peak\
+      \ grid now is 7.7 c/kWh."
   - type: entities
     title: Advanced
     icon: mdi:tune
     show_header_toggle: false
     state_color: true
     entities:
+    - number.thermann_shadow_assumed_standing_heat_loss
     - switch.thermann_shadow_pause_shadow_planning
     - switch.thermann_shadow_meter_sign_and_units_verified
     - switch.thermann_shadow_tariff_contract_verified
@@ -263,10 +296,12 @@ views:
     - time.thermann_shadow_peak_evening_start
     - time.thermann_shadow_peak_evening_end
   - type: markdown
-    content: "### Advanced — current, recommended and original values\n\n**Pause shadow planning** — current\
-      \ **{{ states('switch.thermann_shadow_pause_shadow_planning') }}** · recommended & original **Off**\
-      \ · *kept by Restore*  \nPauses only hypothetical decisions; native Schedule continues.\n\n**Meter\
-      \ sign and units verified** — current **{{ states('switch.thermann_shadow_meter_sign_and_units_verified')\
+    content: "### Advanced — current, recommended and original values\n\n**Assumed standing heat loss**\
+      \ — current **{{ states('number.thermann_shadow_assumed_standing_heat_loss') }} °C/h** · recommended\
+      \ & original **0.2 °C/h** · *restored by Restore*  \nReading drop per hour with no use or heating.\
+      \ Not yet measured for this tank.\n\n**Pause shadow planning** — current **{{ states('switch.thermann_shadow_pause_shadow_planning')\
+      \ }}** · recommended & original **Off** · *kept by Restore*  \nPauses only hypothetical decisions;\
+      \ native Schedule continues.\n\n**Meter sign and units verified** — current **{{ states('switch.thermann_shadow_meter_sign_and_units_verified')\
       \ }}** · recommended & original **On** · *kept by Restore*  \nOwner verification, not an optimisation\
       \ preference. Restore recommendations preserves this flag.\n\n**Tariff contract verified** — current\
       \ **{{ states('switch.thermann_shadow_tariff_contract_verified') }}** · recommended & original **On**\
@@ -379,7 +414,36 @@ views:
 
       **Commands disabled · control capable: {{ state_attr(''sensor.thermann_shadow_controller'',''control_capable'')
       }} · extra cloud requests: {{ state_attr(''sensor.thermann_shadow_controller'',''additional_cloud_requests'')
-      }}**. Physical heating is **unverified**; simulated cycles never prove element power.'
+      }}**. Physical heating is estimated, never commanded.'
+  - type: markdown
+    content: '### Heater state evidence
+
+      {% set h = state_attr(''sensor.thermann_shadow_controller'',''heater_state'') or {} %}- State **{{
+      h.state }}** ({{ h.confidence }}) · basis: {{ (h.basis or []) | join('', '') }}
+
+      - WaterHeaterSts raw {{ h.status_raw }} (bit 0 = {{ h.status_bit0 }}; {{ h.status_semantics }})
+
+      - Last 3 kW load step: {{ h.last_load_step }} at {{ h.last_load_step_at }}
+
+      {% set l = state_attr(''sensor.thermann_shadow_controller'',''load'') or {} %}- Base load {{ l.base_low_kw
+      }}–{{ l.base_high_kw }} kW (median {{ l.base_p50_kw }}); meter suspect: {{ l.meter_suspect_pre_commissioning_signature
+      }}'
+  - type: markdown
+    content: '### Goals and strategies
+
+      {% for g in state_attr(''sensor.thermann_shadow_controller'',''goals'') or [] %}- {{ g.kind }}:
+      {{ g.target_c }} °C by {{ as_timestamp(g.deadline) | timestamp_custom(''%a %H:%M'') }} ({{ g.basis
+      }})
+
+      {% endfor %}| Strategy | Start | Cost | Solar |
+
+      |---|---|---:|---:|
+
+      {% for name, p in (state_attr(''sensor.thermann_shadow_controller'',''strategies'') or {}).items()
+      %}| {{ name }} | {{ as_timestamp(p.start) | timestamp_custom(''%H:%M'') if p.start else ''—'' }}
+      | ${{ p.cost_aud }} | {{ (p.solar_share * 100) | round(0) }}% |
+
+      {% endfor %}'
   - type: entities
     title: Measured inputs (actual)
     entities:
@@ -388,24 +452,24 @@ views:
     - sensor.thermann_shadow_measured_signed_grid
     - sensor.thermann_shadow_derived_net_export
     - sensor.thermann_shadow_measured_pv
+    - sensor.thermann_shadow_measured_pv_ac_output
     - sensor.thermann_shadow_measured_house_load
     - sensor.thermann_shadow_cloud_health
     - sensor.thermann_shadow_status_age
     - sensor.thermann_shadow_observed_request_attempts
     - sensor.thermann_shadow_observed_requests_per_hour
   - type: entities
-    title: Forecast and simulation (estimates)
+    title: Estimates and plan (not measurements)
     entities:
-    - sensor.thermann_shadow_forecast_age
-    - sensor.thermann_shadow_forecast_net_surplus
+    - sensor.thermann_shadow_decision_code
     - sensor.thermann_shadow_simulated_cycle_state
-    - sensor.thermann_shadow_simulated_cycle_count
-    - sensor.thermann_shadow_simulated_stop_count
-    - sensor.thermann_shadow_suppressed_switching_episodes
-    - sensor.thermann_shadow_simulated_session_cost
+    - sensor.thermann_shadow_next_tariff_period
+    - sensor.thermann_shadow_forecast_usable_solar_before_deadline
     - sensor.thermann_shadow_scenario_cost_difference
     - sensor.thermann_shadow_modelled_energy_shortfall
     - sensor.thermann_shadow_latest_continuous_heating_start
+    - sensor.thermann_shadow_off_peak_fallback_start
+    - sensor.thermann_shadow_planning_deadline
     - sensor.thermann_shadow_comfort_deadline
     - sensor.thermann_shadow_configured_afternoon_peak
     - sensor.thermann_shadow_controller
@@ -423,20 +487,13 @@ views:
 
       - Age: {{ f.age_minutes }} min · intervals: {{ f.intervals }}
 
-      - Measured PV (15-min mean): {{ f.measured_pv_average_kw }} kW · error vs forecast: {{ f.pv_error_kw
+      - Measured AC PV (15-min mean): {{ f.measured_pv_average_kw }} kW · error vs forecast: {{ f.pv_error_kw
       }} kW
 
-      - Correction now: {{ f.pv_correction_now }} (fades to none after {{ f.pv_correction_fades_to_none_after_hours
-      }} h; never increases PV)
+      - Correction now: {{ f.pv_correction_now }} (two-way, bounded; fades after {{ f.pv_correction_fades_to_none_after_hours
+      }} h)
 
-      ### Simulated cycle
-
-      {% set c = state_attr(''sensor.thermann_shadow_controller'',''cycle'') or {} %}{% for key, value
-      in c.items() %}- {{ key }}: {{ value }}
-
-      {% endfor %}'
-  - type: markdown
-    content: '### Reasons
+      ### Reasons
 
       {% for item in state_attr(''sensor.thermann_shadow_controller'',''reasons'') or [] %}- {{ item }}
 
@@ -445,14 +502,10 @@ views:
       {% for item in state_attr(''sensor.thermann_shadow_controller'',''warnings'') or [] %}- {{ item
       }}
 
-      {% endfor %}### Hypothetical windows (local time)
-
-      {% for item in state_attr(''sensor.thermann_shadow_controller'',''windows'') or [] %}- {{ as_timestamp(item.start)
-      | timestamp_custom(''%a %H:%M'') }} → {{ as_timestamp(item.end) | timestamp_custom(''%H:%M'') }}
-      · {{ item.source }}
+      {% endfor %}{% for item in state_attr(''sensor.thermann_shadow_controller'',''strategy_warnings'')
+      or [] %}- {{ item }}
 
       {% endfor %}
 
       Native clock: compare manually with Hobart {{ now().strftime(''%a %d %b %H:%M'') }} after DST changes.
-      Tariff 93 stays fixed AEST. 30-minute cloud polls can include status→refresh→replay (3 attempts);
-      the planner adds zero requests.'
+      Tariff 93 stays fixed AEST. The planner adds zero cloud requests.'

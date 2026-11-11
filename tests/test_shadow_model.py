@@ -1,7 +1,7 @@
 """Offline model/contract/scenario checks; pure modules need no HA installation."""
 
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 import importlib
 from pathlib import Path
 import sys
@@ -175,6 +175,12 @@ def test_missing_stale_restored_future_sources_fail_closed(key, failure, tariffs
     else:
         values[key] = replace(values[key], restored=True)
     result = plan(now, tariffs, values)
+    if key != "grid" and failure in {"stale", "future"}:
+        # 0.4.0 (Stage 1 F1): HA MQTT entities keep their old report time when a
+        # poll repeats the same value. Cloud readings are proven fresh by the
+        # bridge's poll timestamp, so an old/odd entity report time is NOT stale.
+        assert result.state != "shadow_blocked", result.reasons
+        return
     assert result.state == "shadow_blocked" and result.windows == []
 
 
@@ -255,7 +261,9 @@ def test_meter_sign_units_and_split_inputs_are_explicit(tariffs):
 @pytest.mark.parametrize("month,day,hours", [(4, 5, 7.5), (10, 4, 5.5)])
 def test_tasmania_dst_deadlines_follow_local_calendar(month, day, hours, tariffs):
     now = local(month=month, day=day, hour=0, minute=30)
-    result = plan(now, tariffs)
+    # Both DST change days are Sundays (no peak): the household morning time
+    # applies. Pin it to 07:00 so this test still checks the 23 h/25 h arithmetic.
+    result = plan(now, tariffs, morning=time(7))
     assert result.deadline.astimezone(m.HOBART).hour == 7
     assert (result.deadline - now).total_seconds() / 3600 == hours
 
@@ -278,7 +286,9 @@ def test_actual_peak_is_separate_from_household_comfort_deadline():
     result = plan(now, tariffs)
     assert result.deadline == local(hour=15, minute=58)
     assert result.peak_start == result.deadline
-    assert result.comfort_deadline == local(hour=16)
+    # 0.4.0: weekday comfort deadlines ARE the actual peak start (owner rule);
+    # the household 16:00 time applies only on days without a peak.
+    assert result.comfort_deadline == result.deadline
 
 
 @pytest.mark.parametrize(
@@ -339,7 +349,7 @@ def test_component_has_no_actuation_or_network_imports_and_no_fake_measurement_c
                 }
         assert "_attr_state_class" not in source
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.3.0"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.4.0"
     assert manifest["integration_type"] == "hub"
 
 
@@ -397,9 +407,11 @@ def runtime(monkeypatch):
     settings, tariffs = c.parse_options({})
     instance = module.ShadowRuntime(hass, c.DEFAULT_SOURCES, settings, tariffs)
 
-    def report(key, value, attrs=None):
-        states[c.DEFAULT_SOURCES[key]] = SimpleNamespace(
-            state=str(value), attributes=attrs or {}, last_reported=clock[0]
+    def report(key, value, attrs=None, at=None):
+        entity = c.DEFAULT_PV_AC if key == "pv_ac" else c.DEFAULT_SOURCES[key]
+        when = at or clock[0]
+        states[entity] = SimpleNamespace(
+            state=str(value), attributes=attrs or {}, last_reported=when, last_updated=when
         )
 
     report("heater", "unknown", {"current_temperature": 63, "temperature": 70})
@@ -410,7 +422,7 @@ def runtime(monkeypatch):
         "requests": 4,
     }.items():
         report(key, value)
-    for key, value in {"grid": 1501, "pv": 2322, "house": 821}.items():
+    for key, value in {"grid": 1501, "pv": 2322, "pv_ac": 2322, "house": 821}.items():
         report(key, value, {"unit_of_measurement": "W"})
     return instance, report, clock
 
@@ -423,7 +435,7 @@ def test_mocked_ha_unknown_mode_attributes_native_reference_and_zero_extra_reque
     assert instance.values["pv"] == 2.322 and instance.values["house"] == 0.821
     assert instance.values["t_comfort_reference_c"] == 10
     assert "t_comfort_10C_not_practical_hot_water_reserve" in instance.plan.warnings
-    assert instance.plan.state == "shadow_wait_for_window"
+    assert instance.plan.state == "shadow_advising"
     assert instance.details["additional_cloud_requests"] == 0
     assert instance.details["control_capable"] is False
     assert instance.details["observed_refresh_pattern_attempts_per_day"] == 144

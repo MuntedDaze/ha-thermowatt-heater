@@ -14,28 +14,27 @@ def owner_plan(now, temperature=50, export=0, **options):
     )
 
 
-@pytest.mark.parametrize("temperature", [40, 41, 63, 70])
+@pytest.mark.parametrize("temperature", [42, 43, 63, 70])
 def test_morning_ready_does_not_heat_just_because_native_schedule_permits_it(temperature):
     result = owner_plan(local(hour=5), temperature)
-    assert result.planning_target_c == 40
+    assert result.planning_target_c == 42  # 0.4.0 owner requirement (was 40)
     assert result.state == "shadow_no_modelled_topup"
     assert result.reasons == ["morning_threshold_met_no_morning_heat_required"]
     assert result.mixed_model_energy_kwh == result.modelled_heating_minutes == 0
     assert result.windows == [] and result.grid_fallback_start is None
 
 
-def test_morning_shortage_uses_40_threshold_and_full_margin():
-    now = local(hour=3)
+def test_morning_shortage_uses_42_threshold_and_dst_peak_deadline():
+    now = local(hour=3)  # Tue 10 Nov 2026, Hobart daylight time
     result = owner_plan(now, 35)
-    assert result.mixed_model_energy_kwh == pytest.approx(1.831, abs=0.001)
-    assert result.modelled_heating_minutes == pytest.approx(66.6, abs=0.1)
-    assert result.deadline == local(hour=7)
-    assert result.grid_fallback_start == pytest.approx(
-        result.deadline - timedelta(minutes=66.6275), abs=timedelta(seconds=1)
-    )
+    assert result.mixed_model_energy_kwh == pytest.approx(2.564, abs=0.001)  # 35 -> 42
+    assert result.modelled_heating_minutes == pytest.approx(81.3, abs=0.1)
+    assert result.deadline == local(hour=8)  # 07:00 AEST morning peak = 08:00 AEDT
+    expected = result.deadline - timedelta(hours=(2.5641 + 1.5) / 3)
+    assert abs((result.grid_fallback_start - expected).total_seconds()) < 1
     assert result.state == "shadow_wait_for_window"
     assert all(w["source"] == "off_peak" for w in result.windows)
-    assert "40C_is_comfort_threshold_not_storage_setpoint" in result.warnings
+    assert "morning_threshold_is_comfort_criterion_not_storage_setpoint" in result.warnings
 
 
 def test_editable_morning_threshold_is_independent_of_storage_target():
@@ -51,7 +50,7 @@ def test_summer_winter_full_storage_deadline_uses_fixed_aest_peak(month, day, pe
     result = owner_plan(now, 63)
     assert result.planning_target_c == 70
     assert result.peak_start == result.deadline == local(month=month, day=day, hour=peak_hour)
-    assert result.comfort_deadline == local(month=month, day=day, hour=16)
+    assert result.comfort_deadline == result.peak_start  # dynamic, not fixed 16:00
     assert result.mixed_model_energy_kwh == pytest.approx(2.564, abs=0.001)
     assert result.modelled_heating_minutes == pytest.approx(81.3, abs=0.1)
     assert result.current_price_aud == 0.170200
@@ -152,18 +151,16 @@ def test_short_export_spike_does_not_start_solar_opportunity(runtime):  # noqa: 
     report("grid", 4000, {"unit_of_measurement": "W"})
     instance.update(clock[0])
     assert not instance.details["solar_hold_satisfied"]
-    assert instance.plan.state == "shadow_wait_for_window"
+    assert instance.plan.state == "shadow_advising"
     for minute in range(1, 11):
         clock[0] += timedelta(minutes=1)
         report("grid", 4000, {"unit_of_measurement": "W"})
         instance.update(clock[0])
         assert instance.details["solar_hold_satisfied"] == (minute == 10)
-    assert instance.plan.state == "shadow_solar_opportunity"
-    assert instance.plan.estimated_solar_kwh == pytest.approx(0.75)
     report("grid", 1501, {"unit_of_measurement": "W"})
     instance.update(clock[0])
     assert instance.details["solar_hold_satisfied"]  # partial surplus remains useful
-    assert not instance.cycle.active  # separate economic benefit/qualification gate
+    assert instance.values["recommendation"]  # a decision, never a command
     assert instance.details["additional_cloud_requests"] == 0
 
 

@@ -13,6 +13,11 @@ CORRECTION_HOURS = 3.0
 # Points further apart than this are a GAP (e.g. Forecast.Solar overnight), not
 # a held prediction. A gap produces no forecast interval, i.e. zero solar.
 MAX_POINT_GAP_SECONDS = 7200
+# Two-way bound on the measured-vs-forecast PV factor. Downward is unbounded
+# (heavy cloud is real); upward is capped so one bright reading cannot inflate
+# the afternoon. While the inverter clips, measured AC is only a LOWER bound.
+MAX_UPWARD_CORRECTION = 1.3
+CLIPPING_MARGIN_KW = 0.15
 
 
 @dataclass
@@ -25,6 +30,9 @@ class ForecastResult:
     correction_hours: float = CORRECTION_HOURS
     measured_pv_average_kw: float | None = None
     load_basis: str | None = None
+    pv_series: tuple = ()  # ((start, end, AC kW corrected and clipped), ...)
+    load_series: tuple = ()  # ((start, end, published household kW), ...)
+    clipped_now: bool = False
     warnings: list[str] = field(default_factory=list)
 
 
@@ -131,10 +139,17 @@ def build_forecast(now, boot, settings, pv_state, load_state, measured_pv=None):
             result.load_basis = "published_household_load_forecast"
         result.age_minutes = round(max(pv_age, load_age), 1)
         result.source = "published_pv_and_house_load"
+        limit = settings.pv_ac_limit_kw
         expected = _value_at(pv, now)
         if expected is not None and measured_pv is not None and expected > 0.1:
-            result.pv_error_kw = round(measured_pv - expected, 3)
-            result.correction = round(min(1.0, max(0.0, measured_pv / expected)), 4)
+            achievable = min(expected, limit)
+            result.pv_error_kw = round(measured_pv - achievable, 3)
+            ratio = measured_pv / achievable
+            result.clipped_now = measured_pv >= limit - CLIPPING_MARGIN_KW
+            if result.clipped_now:
+                # Clipped output hides the true potential: never correct downward.
+                ratio = max(1.0, ratio)
+            result.correction = round(min(MAX_UPWARD_CORRECTION, max(0.0, ratio)), 4)
         boundaries = sorted(
             {
                 now,
@@ -147,20 +162,26 @@ def build_forecast(now, boot, settings, pv_state, load_state, measured_pv=None):
             }
         )
         slots = []
+        pv_series, load_series = [], []
         for start, end in zip(boundaries, boundaries[1:], strict=False):
             generation, demand = _value_at(pv, start), _value_at(load, start)
-            if generation is None or demand is None:
-                continue  # gaps never become free solar
             fade = max(0.0, 1 - (start - now).total_seconds() / 3600 / CORRECTION_HOURS)
             factor = 1 - fade * (1 - result.correction)
+            if generation is not None:
+                pv_series.append((start, end, round(min(limit, generation * factor), 4)))
+            if demand is not None:
+                load_series.append((start, end, round(demand, 4)))
+            if generation is None or demand is None:
+                continue  # gaps never become free solar
             surplus = max(
                 0.0,
-                generation * factor * (1 - settings.forecast_uncertainty)
+                min(limit, generation * factor) * (1 - settings.forecast_uncertainty)
                 - demand * (1 + settings.forecast_uncertainty)
                 - settings.forecast_house_margin_kw,
             )
             slots.append(Forecast(start, end, round(surplus, 4)))
         result.slots = tuple(slots)
+        result.pv_series, result.load_series = tuple(pv_series), tuple(load_series)
         if not slots:
             raise ValueError("forecast_horizon_unavailable")
         if len(slots) > 576:
@@ -182,6 +203,7 @@ def build_forecast(now, boot, settings, pv_state, load_state, measured_pv=None):
             else "forecast_series_invalid"
         )
         result.slots = ()
+        result.pv_series = result.load_series = ()
         result.source = "unavailable"
         result.load_basis = None
         result.pv_error_kw = None

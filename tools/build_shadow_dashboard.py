@@ -27,16 +27,15 @@ RESTORE = "button.thermann_shadow_restore_recommended_preferences"
 UNDO = "button.thermann_shadow_undo_last_restore"
 # decision code -> (ha-alert type, icon)
 DECISION_STYLE = {
-    "heat_now_solar": ("success", "mdi:solar-power-variant"),
-    "heat_now_partial_solar": ("success", "mdi:solar-power"),
-    "heat_now_grace_period": ("success", "mdi:weather-partly-cloudy"),
-    "begin_grid_fallback": ("warning", "mdi:transmission-tower"),
+    "heat_now_cheapest": ("success", "mdi:solar-power-variant"),
+    "heat_now_saving_too_small": ("success", "mdi:solar-power"),
+    "heat_now_comfort_fallback": ("warning", "mdi:transmission-tower"),
+    "native_heating_economical": ("success", "mdi:water-boiler"),
+    "native_heating_costlier_than_waiting": ("warning", "mdi:water-boiler-alert"),
+    "wait_cheaper_later": ("info", "mdi:weather-sunny"),
+    "flexible_no_cost_difference": ("info", "mdi:clock-outline"),
+    "no_heating_needed": ("success", "mdi:check-circle-outline"),
     "insufficient_time": ("error", "mdi:clock-alert-outline"),
-    "qualifying_solar": ("info", "mdi:timer-sand"),
-    "wait_for_forecast_solar": ("info", "mdi:weather-sunny"),
-    "wait_for_cheaper_window": ("info", "mdi:clock-outline"),
-    "forecast_unavailable_conservative_fallback": ("warning", "mdi:weather-cloudy-alert"),
-    "no_topup_required": ("success", "mdi:check-circle-outline"),
     "data_unavailable": ("error", "mdi:lan-disconnect"),
     "owner_review_required": ("warning", "mdi:account-alert-outline"),
     "paused": ("info", "mdi:pause-circle-outline"),
@@ -129,60 +128,57 @@ def build():
                 {
                     "type": "gauge",
                     "entity": sensor("Bottom temperature"),
-                    "name": "Tank · bottom sensor",
+                    "name": "Tank reading (T_Avg)",
                     "min": 10,
                     "max": 75,
-                    "severity": {"red": 10, "yellow": 40, "green": 60},
+                    "severity": {"red": 10, "yellow": 42, "green": 60},
                 },
-                tile("Morning comfort threshold", "mdi:weather-sunset-up"),
-                tile("Afternoon storage target", "mdi:water-thermometer"),
-                tile("Comfort countdown", "mdi:timer-sand"),
-                tile("Next decision threshold", "mdi:target"),
+                tile("Heater element state", "mdi:heat-wave"),
+                tile("Heater state confidence", "mdi:help-circle-outline"),
+                tile("Morning readiness", "mdi:weather-sunset-up"),
+                tile("Afternoon readiness", "mdi:water-thermometer"),
+                tile("Morning ready deadline", "mdi:alarm"),
+                tile("Afternoon ready deadline", "mdi:alarm"),
             ],
         ),
         section(
-            "Next heating (hypothetical)",
-            "mdi:calendar-clock",
+            "Heat now or later?",
+            "mdi:scale-balance",
             [
+                tile("Continuous cycle cost now", "mdi:cash-fast"),
+                tile("Continuous cycle cost later", "mdi:cash-check"),
+                tile("Saving by waiting", "mdi:piggy-bank-outline"),
+                tile("Decision confidence", "mdi:shield-check-outline"),
                 tile("Hypothetical heating start", "mdi:play-circle-outline"),
                 tile("Simulated completion", "mdi:clock-check-outline"),
-                tile("Planning deadline", "mdi:flag-checkered"),
-                tile("Off peak fallback start", "mdi:transmission-tower"),
-                tile("Heating time estimate", "mdi:timer-outline"),
-                tile("Mixed tank energy estimate", "mdi:lightning-bolt"),
-                tile("Plan cost estimate", "mdi:cash"),
-                tile("Recommended energy source", "mdi:solar-power"),
-            ],
-        ),
-        section(
-            "Energy & prices",
-            "mdi:home-lightning-bolt",
-            [
-                tile("Measured PV", "mdi:solar-power"),
-                tile("Measured house load", "mdi:home-lightning-bolt"),
-                tile("Measured grid export", "mdi:transmission-tower-export"),
-                tile("Measured grid import", "mdi:transmission-tower-import"),
-                tile("Current tariff", "mdi:tag-outline"),
-                tile("Current import price", "mdi:currency-usd"),
-                tile("Forecast net surplus", "mdi:weather-sunny"),
-                tile("Forecast usable solar before deadline", "mdi:solar-panel"),
+                tile("Native Schedule predicted cost", "mdi:calendar-clock"),
+                tile("Native Schedule extra cost vs best plan", "mdi:calendar-alert"),
                 {
                     "type": "markdown",
                     "content": (
-                        "### Heat now or later?\n"
-                        "Whole remaining cycle at full 3 kW: **now "
-                        "{{ states('" + sensor("Continuous cycle cost now") + "') }} AUD** · "
-                        "best later **{{ states('"
-                        + sensor("Continuous cycle cost later")
-                        + "') }} AUD** · "
-                        "benefit of now **{{ states('"
-                        + sensor("Benefit of heating now")
-                        + "') }} AUD**.\n\n"
-                        "Costs include imported electricity **and foregone solar feed-in**. "
-                        "Partial solar counts: 2 kW surplus + 1 kW import is cheaper than "
-                        "3 kW off-peak grid. Forecasts are uncertain; comfort wins over small savings."
+                        "Costs are the **extra** electricity cost of heating, including "
+                        "**foregone feed-in**, for the same required energy. The 3 kW element "
+                        "is never treated as variable power; the real heater's load is removed "
+                        "from household demand once. *Start and completion are hypothetical: the "
+                        "native Schedule controls the heater.*"
                     ),
                 },
+            ],
+        ),
+        section(
+            "Energy & tariff",
+            "mdi:home-lightning-bolt",
+            [
+                tile("Measured PV AC output", "mdi:solar-power"),
+                tile("Base household load excluding hot water", "mdi:home-lightning-bolt"),
+                tile("Solar surplus available to heater", "mdi:solar-panel"),
+                tile("Measured grid export", "mdi:transmission-tower-export"),
+                tile("Measured grid import", "mdi:transmission-tower-import"),
+                tile("Current tariff", "mdi:tag-outline"),
+                tile("Current tariff rate", "mdi:currency-usd"),
+                tile("Next tariff change", "mdi:timer-outline"),
+                tile("Forecast net surplus", "mdi:weather-sunny"),
+                tile("Forecast age", "mdi:update"),
             ],
         ),
         section(
@@ -191,17 +187,18 @@ def build():
             [
                 {
                     "type": "history-graph",
-                    "title": "Bottom temperature · 24 h",
+                    "title": "Tank reading and heater state · 24 h",
                     "hours_to_show": 24,
-                    "entities": [sensor("Bottom temperature"), sensor("Reported target")],
+                    "entities": [sensor("Bottom temperature"), sensor("Heater element state")],
                 },
                 {
                     "type": "history-graph",
                     "title": "Solar, house and grid · 12 h (kW)",
                     "hours_to_show": 12,
                     "entities": [
-                        sensor("Measured PV"),
+                        sensor("Measured PV AC output"),
                         sensor("Measured house load"),
+                        sensor("Base household load excluding hot water"),
                         sensor("Measured signed grid"),
                     ],
                 },
@@ -316,7 +313,38 @@ def build():
                 "## Shadow mode\n**Commands disabled · control capable: "
                 "{{ state_attr('" + CONTROLLER + "','control_capable') }} · extra cloud "
                 "requests: {{ state_attr('" + CONTROLLER + "','additional_cloud_requests') }}**. "
-                "Physical heating is **unverified**; simulated cycles never prove element power."
+                "Physical heating is estimated, never commanded."
+            ),
+        },
+        {
+            "type": "markdown",
+            "content": (
+                "### Heater state evidence\n"
+                "{% set h = state_attr('" + CONTROLLER + "','heater_state') or {} %}"
+                "- State **{{ h.state }}** ({{ h.confidence }}) · basis: "
+                "{{ (h.basis or []) | join(', ') }}\n"
+                "- WaterHeaterSts raw {{ h.status_raw }} (bit 0 = {{ h.status_bit0 }}; "
+                "{{ h.status_semantics }})\n"
+                "- Last 3 kW load step: {{ h.last_load_step }} at {{ h.last_load_step_at }}\n"
+                "{% set l = state_attr('" + CONTROLLER + "','load') or {} %}"
+                "- Base load {{ l.base_low_kw }}–{{ l.base_high_kw }} kW "
+                "(median {{ l.base_p50_kw }}); meter suspect: "
+                "{{ l.meter_suspect_pre_commissioning_signature }}"
+            ),
+        },
+        {
+            "type": "markdown",
+            "content": (
+                "### Goals and strategies\n"
+                "{% for g in state_attr('" + CONTROLLER + "','goals') or [] %}"
+                "- {{ g.kind }}: {{ g.target_c }} °C by "
+                "{{ as_timestamp(g.deadline) | timestamp_custom('%a %H:%M') }} ({{ g.basis }})\n"
+                "{% endfor %}"
+                "| Strategy | Start | Cost | Solar |\n|---|---|---:|---:|\n"
+                "{% for name, p in (state_attr('" + CONTROLLER + "','strategies') or {}).items() %}"
+                "| {{ name }} | {{ as_timestamp(p.start) | timestamp_custom('%H:%M') "
+                "if p.start else '—' }} | ${{ p.cost_aud }} | {{ (p.solar_share * 100) | round(0) }}% |\n"
+                "{% endfor %}"
             ),
         },
         {
@@ -330,6 +358,7 @@ def build():
                     "Measured signed grid",
                     "Derived net export",
                     "Measured PV",
+                    "Measured PV AC output",
                     "Measured house load",
                     "Cloud health",
                     "Status age",
@@ -340,20 +369,19 @@ def build():
         },
         {
             "type": "entities",
-            "title": "Forecast and simulation (estimates)",
+            "title": "Estimates and plan (not measurements)",
             "entities": [
                 sensor(name)
                 for name in (
-                    "Forecast age",
-                    "Forecast net surplus",
+                    "Decision code",
                     "Simulated cycle state",
-                    "Simulated cycle count",
-                    "Simulated stop count",
-                    "Suppressed switching episodes",
-                    "Simulated session cost",
+                    "Next tariff period",
+                    "Forecast usable solar before deadline",
                     "Scenario cost difference",
                     "Modelled energy shortfall",
                     "Latest continuous heating start",
+                    "Off peak fallback start",
+                    "Planning deadline",
                     "Comfort deadline",
                     "Configured afternoon peak",
                     "Controller",
@@ -379,33 +407,21 @@ def build():
                 "{% set f = state_attr('" + CONTROLLER + "','forecast') or {} %}"
                 "- Source: **{{ f.source }}** · load basis: {{ f.load_basis }}\n"
                 "- Age: {{ f.age_minutes }} min · intervals: {{ f.intervals }}\n"
-                "- Measured PV (15-min mean): {{ f.measured_pv_average_kw }} kW · "
+                "- Measured AC PV (15-min mean): {{ f.measured_pv_average_kw }} kW · "
                 "error vs forecast: {{ f.pv_error_kw }} kW\n"
-                "- Correction now: {{ f.pv_correction_now }} (fades to none after "
-                "{{ f.pv_correction_fades_to_none_after_hours }} h; never increases PV)\n"
-                "### Simulated cycle\n"
-                "{% set c = state_attr('" + CONTROLLER + "','cycle') or {} %}"
-                "{% for key, value in c.items() %}- {{ key }}: {{ value }}\n{% endfor %}"
-            ),
-        },
-        {
-            "type": "markdown",
-            "content": (
+                "- Correction now: {{ f.pv_correction_now }} (two-way, bounded; fades after "
+                "{{ f.pv_correction_fades_to_none_after_hours }} h)\n"
                 "### Reasons\n"
                 "{% for item in state_attr('" + CONTROLLER + "','reasons') or [] %}"
                 "- {{ item }}\n{% endfor %}"
                 "### Warnings and assumptions\n"
                 "{% for item in state_attr('" + CONTROLLER + "','warnings') or [] %}"
                 "- {{ item }}\n{% endfor %}"
-                "### Hypothetical windows (local time)\n"
-                "{% for item in state_attr('" + CONTROLLER + "','windows') or [] %}"
-                "- {{ as_timestamp(item.start) | timestamp_custom('%a %H:%M') }} → "
-                "{{ as_timestamp(item.end) | timestamp_custom('%H:%M') }} · {{ item.source }}\n"
-                "{% endfor %}\n"
+                "{% for item in state_attr('" + CONTROLLER + "','strategy_warnings') or [] %}"
+                "- {{ item }}\n{% endfor %}\n"
                 "Native clock: compare manually with Hobart "
                 "{{ now().strftime('%a %d %b %H:%M') }} after DST changes. Tariff 93 stays "
-                "fixed AEST. 30-minute cloud polls can include status→refresh→replay "
-                "(3 attempts); the planner adds zero requests."
+                "fixed AEST. The planner adds zero cloud requests."
             ),
         },
     ]

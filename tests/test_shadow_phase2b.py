@@ -75,8 +75,10 @@ def test_forecasts_use_household_load_uncertainty_and_downward_actual_error():
     bright = forecast.build_forecast(
         now, now - timedelta(minutes=1), settings, series(now), series(now, "load", 1), 6
     )
-    assert bright.correction == 1  # no upward extrapolation
-    assert bright.slots[0].export_kw == pytest.approx(1.45)
+    # 0.4.0: correction is two-way but bounded (x1.3); 6 kW measured is clipped
+    # output (>= 4.85 kW of the 5 kW AC limit), a LOWER bound on potential.
+    assert bright.correction == 1.3 and bright.clipped_now
+    assert bright.slots[0].export_kw == pytest.approx(min(5.0, 4 * 1.3) * 0.75 - 1.25 - 0.3)
     assert bright.slots[-1].end == now + timedelta(hours=6)
 
 
