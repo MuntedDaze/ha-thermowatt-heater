@@ -72,7 +72,18 @@ OWNER_CHANGE_RESULTS = {
 }
 # The bridge is still working on the command (1.3.10 publishes the status of its
 # pre-command read, and of its confirmation read, BEFORE the final outcome).
-BRIDGE_IN_PROGRESS_RESULTS = {"refreshing_status", "submitted_awaiting_status"}
+# 1.3.11 adds "submitting" (recorded before the POST) and
+# "awaiting_confirmation" (a read after the POST still shows the old mode; the
+# cloud may report the change late, so the bridge makes bounded follow-ups).
+BRIDGE_IN_PROGRESS_RESULTS = {
+    "refreshing_status",
+    "submitting",
+    "submitted_awaiting_status",
+    "awaiting_confirmation",
+}
+# 1.3.11 terminal outcomes that are not refusals.
+BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
+BRIDGE_UNEXPECTED_STATE = "unexpected_state_after_command"
 
 
 def bridge_failure(result: object) -> bool:
@@ -80,6 +91,7 @@ def bridge_failure(result: object) -> bool:
 
 
 RECOVERY = {
+    "command_not_confirmed": "The bridge sent the command once but no status within its confirmation window (about 6 minutes) showed the requested mode. It was not repeated. Check the Thermann app: if it shows the requested mode, the cloud is slow to report it; otherwise the command did not take effect. Set the mode you want in the app, then press Acknowledge fault; automatic control re-inspects the heater first.",
     "command_not_applied": "The heater did not change mode. Check the Thermann app: it should show the mode you expect. Then press Acknowledge fault; automatic control re-inspects the heater before doing anything.",
     "confirmation_timeout": "No status arrived to confirm the last command. Check the Thermowatt add-on log and cloud health, then the Thermann app. Press Acknowledge fault when the heater state is known.",
     "bridge_refused_or_dropped": "The Thermowatt bridge did not send the command (see last command result). Nothing was changed on the heater. Fix the cause, then Acknowledge fault.",
@@ -146,6 +158,9 @@ class Observation:
     # Bridge >= 1.3.10: bounded pre-command status refresh (None = older bridge).
     bridge_refresh_limit: int | None = None
     bridge_refreshes_24h: int | None = None
+    # Bridge >= 1.3.11: bounded confirmation (follow-up schedule; None = older).
+    bridge_confirmation_followups: list | None = None
+    bridge_confirmation_pending: bool | None = None
     requests_total: int | None = None
     mqtt_ready: bool = False
 
@@ -453,6 +468,23 @@ class Controller:
             self._resolve("external_change", obs, effects)
             self._override("mode_or_target_changed_outside_controller", obs, effects)
             return
+        if bridge_fresh and result == BRIDGE_UNEXPECTED_STATE:
+            # A fresh read after the POST showed neither the old nor the
+            # requested state (for example an app change): owner control.
+            self._resolve("ambiguous", obs, effects)
+            self._override("unexpected_mode_during_confirmation", obs, effects)
+            return
+        if bridge_fresh and result == BRIDGE_NOT_CONFIRMED:
+            # Sent once, never repeated; no read within the bridge's bounded
+            # window confirmed it. Owner action.
+            self._resolve("not_confirmed", obs, effects)
+            self._lock(
+                "command_not_confirmed",
+                f"{intent['payload']} was sent once; the heater still reported "
+                f"{(obs.last_command or {}).get('observed_mode') or obs.mode}.",
+                effects,
+            )
+            return
         if bridge_fresh and bridge_failure(result):
             self._resolve("not_applied", obs, effects)
             self._lock(
@@ -470,12 +502,16 @@ class Controller:
             and obs.poll_at > published
         )
         # While the bridge reports this command in progress, a new status is
-        # not conclusive: it may be the pre-command read, whose outcome (for
-        # example "already in the requested state", i.e. an owner change)
-        # follows a moment later. A later background poll (>= 5 min) always is.
-        late_poll = after_publish and obs.poll_at - published >= timedelta(minutes=5)
+        # NOT conclusive: it may be the pre-command read (whose outcome, e.g.
+        # "already in the requested state", follows a moment later) or a read
+        # the cloud has not yet caught up with (1.3.11 awaiting_confirmation).
+        # The bridge always ends its bounded window with an outcome; the
+        # controller's own timeout is the outer bound.
         in_progress = bridge_fresh and result in BRIDGE_IN_PROGRESS_RESULTS
-        conclusive = after_publish and (not in_progress or late_poll)
+        late_poll = (
+            after_publish and not in_progress and obs.poll_at - published >= timedelta(minutes=5)
+        )
+        conclusive = after_publish and not in_progress
         target_ok = intent["action"] == "park" or self._known_target(obs)
         if conclusive and obs.mode == expected and target_ok:
             self._resolve("confirmed", obs, effects)
@@ -539,9 +575,15 @@ class Controller:
             failures.append("bridge_auth_not_authorized")
         if obs.consecutive_failures not in (0, None) or (obs.cooldown_seconds or 0) > 0:
             failures.append("bridge_in_backoff")
-        if obs.bridge_refresh_limit is None:
-            # 1.3.9 reports OFF (Cmd 8) as Unknown and cannot refresh status.
-            failures.append("bridge_1_3_10_required")
+        if obs.bridge_refresh_limit is None or obs.bridge_confirmation_followups is None:
+            # 1.3.9 reports OFF (Cmd 8) as Unknown and cannot refresh status;
+            # 1.3.10 ends a command at the first read even when the cloud
+            # reports the new mode late (T3b).
+            failures.append("bridge_1_3_11_required")
+        if obs.bridge_confirmation_pending:
+            # Another command (for example one published by hand) still awaits
+            # its outcome; the bridge would refuse a new one anyway.
+            failures.append("bridge_confirmation_pending")
         if obs.poll_at is None:
             failures.append("no_heater_status")
         else:

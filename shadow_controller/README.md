@@ -1,6 +1,6 @@
 # Thermann Shadow Planner 0.4.0 (candidate)
 
-> **0.6.1 production controller candidate (Manual 70 °C permit / Thermann OFF park; needs bridge 1.3.10):** upgrade with [UPGRADE_0_6_0_TO_0_6_1.md](UPGRADE_0_6_0_TO_0_6_1.md); see [CONTROLLER.md](CONTROLLER.md),
+> **0.6.2 production controller candidate (Manual 70 °C permit / Thermann OFF park; needs bridge 1.3.11):** upgrade with [UPGRADE_0_6_1_TO_0_6_2.md](UPGRADE_0_6_1_TO_0_6_2.md); see [CONTROLLER.md](CONTROLLER.md),
 > [COMMISSIONING.md](COMMISSIONING.md) and
 > [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Automatic control is
 > **off** and impossible until commissioning (Stage B, T3) is complete; everything

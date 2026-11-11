@@ -1,5 +1,28 @@
 # Thermann Shadow Planner
 
+## 0.6.2 — bounded confirmation for a late cloud readback (bridge 1.3.11)
+
+- **Why.** T3b: the bridge's only read right after the POST still showed the
+  old mode although the heater went OFF. 0.6.1 would have waited for a
+  background poll and locked if that poll was ≥5 minutes later and still old.
+- **Requires bridge 1.3.11** (`bridge_1_3_11_required` otherwise). Its
+  `awaiting_confirmation` and `submitting` are in progress: no status seen
+  meanwhile is taken as an outcome, and the old 5-minute late-poll rule no
+  longer applies while the bridge is still deciding.
+- `not_confirmed_within_limit` → `fault_locked` (`command_not_confirmed`) with
+  guidance (sent once, not repeated; check the app; Acknowledge).
+  `unexpected_state_after_command` → owner override.
+- New gate `bridge_confirmation_pending`: no command while the bridge awaits
+  any command's outcome (for example one published by hand).
+- Unchanged: two commands, OFF target rule, 70 °C confirmation, dwell, daily and
+  request budgets, latency reserve, peak guard, protective heating, persisted
+  intents, no retry, restart reconciliation, disabled by default. No option is
+  added, removed or migrated.
+- Real-HA CI adds the 0.6.1 → 0.6.2 upgrade (frozen copy of `1324a3c`, identical
+  to the installed files). The compatibility test against the real bridge 1.3.11
+  code adds delayed readback (old mode first, requested mode at either
+  follow-up), no confirmation, an owner change and a bridge restart mid-window.
+
 ## 0.6.1 — commands between polls with bridge 1.3.10; owner changes found at command time
 
 - **Requires bridge 1.3.10** (PR #15). It reads OFF correctly (`Cmd` 8, seen in

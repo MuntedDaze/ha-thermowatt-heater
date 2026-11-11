@@ -1,4 +1,4 @@
-# Production-readiness checklist — 0.6.1
+# Production-readiness checklist — 0.6.2
 
 Legend: **Done** = implemented and tested offline · **Gate** = needs owner
 participation or approval · **Risk** = accepted or open limitation.
@@ -13,7 +13,8 @@ participation or approval · **Risk** = accepted or open limitation.
 | 4 | OFF target rule: 70 or no usable value means resume; a usable other value means owner override (never silently reset); resume confirmed only at Manual 70 | Done (controller and bridge) | OFF tests |
 | 4a | Only `Manual:70` and `off` can reach the heater (bridge allowlist, default policy); legacy commands only by explicit choice | Done (PR #12, merged) | allowlist tests |
 | 4b | OFF read correctly (`Cmd` 8, seen in T3) | Done in bridge 1.3.10 (PR #15); **Gate**: merge and install | `test_command_refresh_1_3_10.py` |
-| 4c | Commands practical between polls without blind execution: one bounded pre-command status read, every rule re-checked on it, failures never executed | Done in bridge 1.3.10 and controller 0.6.1; **Gate**: T3b | refresh tests, `test_bridge_controller_compat.py` |
+| 4c | Commands practical between polls without blind execution: one bounded pre-command status read, every rule re-checked on it, failures never executed | Done in bridge 1.3.10 (deployed) and controller 0.6.1; T3b proved the refresh | refresh tests, `test_bridge_controller_compat.py` |
+| 4e | A late cloud readback is not a failure: bounded follow-up reads, POST never repeated, no other command meanwhile, success only from a matching fresh read, a terminal owner fault otherwise; restart-safe | Done in bridge 1.3.11 and controller 0.6.2; **Gate**: T3c | `test_command_confirmation_1_3_11.py`, compat delayed-readback tests |
 | 4d | An app change since the last poll is never overridden by a command | Done (bridge mode re-check; controller owner override) | owner-change tests |
 | 5 | Protective heating while OFF never interrupted; no command while it runs | Done | protective tests, closed loop |
 | 6 | Planner, tariffs, DST, solar, deadlines and budgets unchanged | Done (all 0.5.0 closed loops pass) | `test_controller.py` |
@@ -26,12 +27,17 @@ participation or approval · **Risk** = accepted or open limitation.
 
 ## Outstanding physical qualifications (owner)
 
-1. ~~T3 with bridge 1.3.9~~ — done 12 Nov 2026: OFF = `Cmd` 8, target 70 kept;
-   `off` and `Manual:70` work; 60 s freshness made commands impractical.
-2. **Upgrade to 0.6.1** (Stage A, control off).
-3. **Bridge 1.3.10 and T3b** (Stage B2): stale-status `off` and `Manual:70`
-   through the refresh path, duplicate and policy checks, power steps.
-4. Supervised trial, then production.
+1. ~~T3 with bridge 1.3.9~~ — done 12 Nov 2026.
+2. ~~T3b with bridge 1.3.10~~ — done 13 Nov 2026, stopped: the refresh worked
+   and the heater went OFF, but the immediate readback was the old mode.
+3. **Upgrade to 0.6.2** (Stage A, control off).
+4. **Bridge 1.3.11 and T3c** (Stage B3): `off` and `Manual:70` confirmed
+   through the bounded follow-ups; record the cloud's readback delay.
+5. Supervised trial, then production.
+
+**Open:** the cloud's readback delay is unmeasured (1.3.10 did not record the
+mode its immediate read saw). If it regularly exceeds 300 s, the follow-up
+schedule needs an owner decision.
 
 ## Remaining risks
 

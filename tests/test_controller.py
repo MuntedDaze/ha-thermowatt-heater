@@ -50,6 +50,8 @@ def obs(now, **kw):
         "mqtt_ready": True,
         "bridge_refresh_limit": 24,  # bridge >= 1.3.10
         "bridge_refreshes_24h": 0,
+        "bridge_confirmation_followups": [60, 300],  # bridge >= 1.3.11
+        "bridge_confirmation_pending": False,
     }
     values.update(kw)
     if values["mode"] == "Manual" and "target_c" not in kw:
@@ -248,7 +250,7 @@ def test_bridge_without_pre_command_refresh_is_never_commanded():
     for poll_age in (5, 600):
         old = obs(now, poll_at=now - timedelta(seconds=poll_age), bridge_refresh_limit=None)
         assert not publishes(controller.step(old, PERMIT, cfg()))
-        assert "bridge_1_3_10_required" in controller.gate_failures
+        assert "bridge_1_3_11_required" in controller.gate_failures
 
 
 def test_exhausted_bridge_refresh_budget_waits_for_a_background_poll():
@@ -878,15 +880,19 @@ def test_park_payload_is_the_existing_auto_contract_on_the_real_bridge(factory, 
 
 
 class SimBridge:
-    """Faithful model of the bridge 1.3.10 command contract plus a thermostat heater.
+    """Faithful model of the bridge 1.3.11 command contract plus a thermostat heater.
 
     Background poll every 30 min; commands processed ~15 s after publish; drop if
     the command is >30 s old. Status older than 60 s gets ONE pre-command read
     (counted, at most 24 a day). The FRESH status is then re-checked under the
     automation policy: Manual:70 only from OFF (target 70 or unusable), off only
     from Manual 70; otherwise refused (owner choice); already in the requested
-    state sends nothing. One POST then one confirmation read; the cloud may apply
-    late (``apply_delay``) or never (``lose``). OFF reports ``off_setpoint``."""
+    state sends nothing. One POST (never repeated) then an immediate read; if
+    that still shows the old mode the command is ``awaiting_confirmation`` and at
+    most two follow-up reads (60 s, 300 s after the POST; background polls count)
+    decide it, else ``not_confirmed_within_limit``. No other command is accepted
+    meanwhile. The cloud may apply late (``apply_delay``) or never (``lose``).
+    OFF reports ``off_setpoint``."""
 
     def __init__(self, start, temperature=45.0, apply_delay=timedelta(0), lose=False):
         self.mode, self.target, self.temperature = "Off", 70.0, temperature
@@ -900,6 +906,8 @@ class SimBridge:
         self.last_command = None
         self.posts = []
         self.refreshes = []  # times of pre-command status reads
+        self.awaiting = None  # [posted, payload, wanted, followups_done, refresh]
+        self.refused_while_pending = []
 
     def publish(self, now, payload):
         self.queue.append((now, payload))
@@ -921,6 +929,9 @@ class SimBridge:
             if processed > now:
                 continue
             self.queue.remove((issued, payload))
+            if self.awaiting:
+                self.refused_while_pending.append((processed, payload))
+                continue
             refresh = "not_needed"
             if processed - self.poll_at > timedelta(seconds=60):
                 recent = [at for at in self.refreshes if processed - at < timedelta(hours=24)]
@@ -958,10 +969,19 @@ class SimBridge:
                 self.pending = (processed + self.apply_delay, wanted)
             self._apply(processed + timedelta(seconds=1))
             self.poll_at = processed + timedelta(seconds=1)
-            result = (
-                "observed_in_status" if self.mode == wanted else "not_observed_in_immediate_status"
-            )
-            self._result(payload, result, processed, refresh)
+            if self.mode == wanted:
+                self._result(payload, "observed_in_status", processed, refresh)
+            else:
+                self.awaiting = [processed, payload, wanted, 0, refresh]
+                self._result(payload, "awaiting_confirmation", processed, refresh)
+        if self.awaiting:
+            posted, payload, wanted, done, refresh = self.awaiting
+            if done < 2 and now >= posted + timedelta(seconds=(60, 300)[done]):
+                self.awaiting[3] = done = done + 1
+                self.requests += 1
+                self._apply(now)
+                self.poll_at = now
+                self._judge(now)
         self._apply(now)
         # Thermostat: 8 °C hysteresis, Manual only (OFF never heats ordinarily).
         if self.mode == "Manual" and self.temperature <= self.target - 8:
@@ -974,6 +994,26 @@ class SimBridge:
         if now - self.poll_at >= timedelta(minutes=30):
             self.poll_at = now
             self.requests += 3  # GET 401 -> refresh -> GET, as measured
+            if self.awaiting:
+                self._judge(now)
+        if self.awaiting and now >= self.awaiting[0] + timedelta(seconds=360):
+            self._finish(now, "not_confirmed_within_limit")
+
+    def _judge(self, now):
+        posted, payload, wanted, done, refresh = self.awaiting
+        if self.mode == wanted:
+            self._finish(now, "observed_in_status")
+        elif self.mode != {"Manual": "Off", "Off": "Manual"}[wanted]:
+            self._finish(now, "unexpected_state_after_command")
+        elif done >= 2:
+            self._finish(now, "not_confirmed_within_limit")
+        else:
+            self._result(payload, "awaiting_confirmation", now, refresh)
+
+    def _finish(self, now, result):
+        posted, payload, wanted, done, refresh = self.awaiting
+        self.awaiting = None
+        self._result(payload, result, now, refresh)
 
     def _apply(self, at):
         if self.pending and self.pending[0] <= at:
@@ -990,6 +1030,7 @@ class SimBridge:
             element="on" if self.element else "off",
             requests_total=self.requests,
             last_command=self.last_command,
+            bridge_confirmation_pending=self.awaiting is not None,
             bridge_refreshes_24h=len(
                 [at for at in self.refreshes if now - at < timedelta(hours=24)]
             ),
@@ -1048,7 +1089,9 @@ def test_end_to_end_lost_command_locks_once_and_never_retries():
     controller = enabled(start)
     run_day(sim, controller, lambda now: PERMIT, start, 240)
     assert [p for _, p in sim.posts] == ["Manual:70"]
-    assert controller.state == ctl.FAULT_LOCKED and controller.fault == "command_not_applied"
+    # 0.6.2 + bridge 1.3.11: ends within the bridge's bounded window (~6 min).
+    assert controller.state == ctl.FAULT_LOCKED and controller.fault == "command_not_confirmed"
+    assert controller.history[-1]["status"] == "not_confirmed"
 
 
 def test_end_to_end_owner_app_change_mid_session_is_respected():
@@ -1736,3 +1779,150 @@ def test_daily_command_and_request_budgets_bound_cloud_traffic():
     polling = 48 * 3
     assert command_requests + polling <= config.max_requests_per_day
     assert config.max_commands_per_day <= 24
+
+
+# --- 0.6.2: bridge 1.3.11 bounded confirmation --------------------------------------------
+
+
+def confirming_permit(now):
+    controller = started(now)
+    assert controller.state == ctl.CONFIRMING
+    return controller
+
+
+def test_awaiting_confirmation_is_neither_success_nor_failure():
+    """T3b: the read right after the POST still showed the old mode."""
+    now = local(hour=11)
+    controller = confirming_permit(now)
+    for minute in (0.5, 1, 3, 5, 6):  # well past the old 5-minute late-poll rule
+        at = now + timedelta(minutes=minute)
+        controller.step(
+            obs(at, poll_at=at, mode="Off", last_command=report(now, "awaiting_confirmation")),
+            PERMIT,
+            cfg(),
+        )
+        assert controller.state == ctl.CONFIRMING, minute
+        assert controller.fault is None
+    at = now + timedelta(minutes=6, seconds=10)
+    controller.step(
+        obs(at, poll_at=at, mode="Manual", last_command=report(now, "observed_in_status")),
+        PERMIT,
+        cfg(),
+    )
+    assert controller.state == ctl.HEATING_PERMITTED
+    assert controller.history[-1]["status"] == "confirmed"
+
+
+def test_requested_mode_is_confirmed_only_once_the_bridge_has_judged_it():
+    now = local(hour=11)
+    controller = confirming_permit(now)
+    at = now + timedelta(minutes=1)
+    controller.step(
+        obs(at, poll_at=at, mode="Manual", last_command=report(now, "awaiting_confirmation")),
+        PERMIT,
+        cfg(),
+    )
+    assert controller.state == ctl.CONFIRMING  # status first, outcome a moment later
+    controller.step(
+        obs(
+            at,
+            poll_at=at,
+            mode="Manual",
+            last_command=report(now, "observed_in_status", seconds=61),
+        ),
+        PERMIT,
+        cfg(),
+    )
+    assert controller.state == ctl.HEATING_PERMITTED
+
+
+def test_resume_is_never_confirmed_at_another_target():
+    now = local(hour=11)
+    controller = confirming_permit(now)
+    at = now + timedelta(minutes=1)
+    controller.step(
+        obs(
+            at,
+            poll_at=at,
+            mode="Manual",
+            target_c=65.0,
+            last_command=report(now, "unexpected_state_after_command"),
+        ),
+        PERMIT,
+        cfg(),
+    )
+    assert controller.state == ctl.OWNER_OVERRIDE
+    assert controller.reason == "unexpected_mode_during_confirmation"
+
+
+def test_not_confirmed_within_the_bridge_window_locks_with_owner_guidance():
+    now = local(hour=11)
+    controller = confirming_permit(now)
+    at = now + timedelta(minutes=6)
+    record = {**report(now, "not_confirmed_within_limit"), "observed_mode": "Off"}
+    effects = controller.step(obs(at, poll_at=at, mode="Off", last_command=record), PERMIT, cfg())
+    assert controller.state == ctl.FAULT_LOCKED and controller.fault == "command_not_confirmed"
+    assert "fault_command_not_confirmed" in notices(effects)
+    message = next(e.message for e in effects if e.key == "fault_command_not_confirmed")
+    assert "not repeated" in message and "Acknowledge" in message
+    for minute in range(7, 240):
+        later = now + timedelta(minutes=minute)
+        assert not publishes(controller.step(obs(later, poll_at=later), PERMIT, cfg()))
+    assert controller.acknowledge(now + timedelta(hours=4))
+    assert controller.state == ctl.OBSERVING
+
+
+def test_another_pending_bridge_command_blocks_a_controller_command():
+    now = local(hour=11)
+    controller = parked_controller(now)
+    assert not publishes(controller.step(obs(now, bridge_confirmation_pending=True), PERMIT, cfg()))
+    assert "bridge_confirmation_pending" in controller.gate_failures
+    assert len(publishes(controller.step(obs(now), PERMIT, cfg()))) == 1
+
+
+def test_bridge_1_3_10_is_not_commanded_by_0_6_2():
+    now = local(hour=11)
+    controller = parked_controller(now)
+    assert not publishes(
+        controller.step(obs(now, bridge_confirmation_followups=None), PERMIT, cfg())
+    )
+    assert "bridge_1_3_11_required" in controller.gate_failures
+
+
+@pytest.mark.parametrize("delay", [timedelta(seconds=45), timedelta(minutes=4)])
+def test_closed_loop_delayed_cloud_readback_confirms_without_a_second_post(delay):
+    start = local(hour=10, minute=50)
+    sim = SimBridge(start - timedelta(minutes=29), apply_delay=delay)
+    controller = enabled(start)
+    run_day(sim, controller, lambda now: PERMIT, start, 30)
+    assert [p for _, p in sim.posts] == ["Manual:70"]
+    assert controller.state == ctl.HEATING_PERMITTED and controller.fault is None
+    assert sim.last_command["result"] == "observed_in_status"
+    assert sim.refused_while_pending == []  # the controller never sent another
+
+
+def test_ha_restart_while_the_bridge_awaits_confirmation_never_resends():
+    now = local(hour=11)
+    controller = confirming_permit(now)
+    restored = ctl.Controller.from_dict(controller.to_dict())
+    restored.restored(now + timedelta(minutes=1))
+    at = now + timedelta(minutes=2)
+    assert not publishes(
+        restored.step(
+            obs(at, poll_at=at, mode="Off", last_command=report(now, "awaiting_confirmation")),
+            PERMIT,
+            cfg(),
+        )
+    )
+    assert restored.state == ctl.CONFIRMING
+    restored.step(
+        obs(
+            at,
+            poll_at=at,
+            mode="Manual",
+            last_command=report(now, "observed_in_status", seconds=70),
+        ),
+        PERMIT,
+        cfg(),
+    )
+    assert restored.state == ctl.HEATING_PERMITTED

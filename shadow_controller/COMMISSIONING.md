@@ -1,4 +1,4 @@
-# Commissioning runbook — Thermann Hot Water Controller 0.6.1
+# Commissioning runbook — Thermann Hot Water Controller 0.6.2
 
 **Method:** Manual 70 °C = heating permitted; Thermann software **OFF** =
 parked. No native Schedule configuration is required, and none is changed.
@@ -9,9 +9,10 @@ agent.
 
 | Stage | What | Needs |
 | --- | --- | --- |
-| A | Install the controller with control **off** | 0.6.0 installed (control off). Next: upgrade to 0.6.1 ([UPGRADE_0_6_0_TO_0_6_1.md](UPGRADE_0_6_0_TO_0_6_1.md)) |
+| A | Install the controller with control **off** | 0.6.1 installed 13 Nov 2026 (control off). Next: upgrade to 0.6.2 ([UPGRADE_0_6_1_TO_0_6_2.md](UPGRADE_0_6_1_TO_0_6_2.md)) |
 | B | **T3**: prove the bridge's `off` and `Manual:70` reproduce the app results | **Done 12 Nov 2026** with bridge 1.3.9; found OFF = `Cmd` 8 and the 60 s freshness problem |
-| B2 | **T3b**: repeat with bridge 1.3.10, from stale status | Approval to merge PR #15, update the add-on and enable commands temporarily |
+| B2 | **T3b**: repeat with bridge 1.3.10, from stale status | **Done 13 Nov 2026, stopped**: refresh worked, the app showed OFF, but the bridge reported `not_observed_in_immediate_status` |
+| B3 | **T3c**: bridge 1.3.11 bounded confirmation | Approval to merge the 1.3.11 PR, update the add-on and enable commands temporarily |
 | C | Supervised controller trial (limited cycles) | Approval to enable automatic control |
 | D | Production enablement | Approval after reviewing C |
 
@@ -65,7 +66,33 @@ OFF reports 70, so the OFF target rule allows the resume. `WaterHeaterSts`
 
 ---
 
-## Stage B2 — T3b with bridge 1.3.10 (supervised)
+## Stage B2 result (13 Nov 2026)
+
+Controller 0.6.1 disabled, bridge 1.3.10. A stale-status `off` gave one
+pre-command read (`status_refresh: refreshed`, `command_refresh: 1`); the app
+then showed OFF; the bridge reported `not_observed_in_immediate_status`. No
+cloud or authentication error. The owner stopped the test, restored Manual
+70 °C in the app, disabled bridge commands and restarted the add-on.
+
+Root cause and fix: [UPGRADING_1_3_11.md](../UPGRADING_1_3_11.md). The steps
+below are kept as the procedure; repeat them as **T3c** with bridge 1.3.11
+(Stage B3).
+
+---
+
+## Stage B3 — T3c with bridge 1.3.11 (supervised)
+
+Follow *Supervised validation (T3c)* in
+[UPGRADING_1_3_11.md](../UPGRADING_1_3_11.md). It adds to T3b: watch
+`last_command` for up to 6 minutes per command, record `status_reads`,
+`followups_done` and the readback delay, and check that a repeated command while
+awaiting is refused with no request. **Pass** needs `observed_in_status` for
+both `off` and `Manual:70`. Any `not_confirmed_within_limit` or
+`unexpected_state_after_command` is a stop.
+
+---
+
+## Stage B2 procedure — T3b with bridge 1.3.10 (supervised)
 
 **Preconditions:**
 - PR #15 approved and merged; the add-on updated to **1.3.10** with
@@ -100,7 +127,7 @@ on *Bridge commands qualified (T3)*.
 
 ## Stage C — supervised controller trial
 
-**Preconditions:** A, B and B2 have passed. Bridge 1.3.10 with
+**Preconditions:** A, B and B3 have passed. Bridge 1.3.11 with
 `commands_enabled: true`. The
 heater is in **OFF** or **Manual 70** (set it in the app; any other mode puts the
 controller in owner override).
@@ -144,7 +171,7 @@ Rollback as in C.
 
 ## Owner actions outstanding
 
-1. Approve the 0.6.1 upgrade (Stage A).
-2. Approve PR #15, update the add-on to 1.3.10 and run T3b (Stage B2).
+1. Approve the 0.6.2 upgrade (Stage A).
+2. Approve the 1.3.11 PR, update the add-on to 1.3.11 and run T3c (Stage B3).
 3. Approve the trial (Stage C), then production (Stage D).
 4. Merge decisions for PRs #9–#16.

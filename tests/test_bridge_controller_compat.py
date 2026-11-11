@@ -35,10 +35,10 @@ if os.environ.get("XCHECK_BRIDGE"):  # local check against another checkout's br
 else:
     from conftest import bridge_module as b
 
-# Runs once the in-tree bridge is >= 1.3.10 (this controller branch is stacked
-# on an older base; the bridge PR is separate). Until then it skips.
+# Runs once the in-tree bridge is >= 1.3.11 (this controller branch is stacked
+# on an older base; the bridge PRs are separate). Until then it skips.
 pytestmark = pytest.mark.skipif(
-    not hasattr(b, "OFF_CODES"), reason="needs the bridge 1.3.10 code in this tree"
+    not hasattr(b, "CONFIRM_FOLLOWUPS"), reason="needs the bridge 1.3.11 code in this tree"
 )
 TOPIC = "P/TEST123/CMD/MODE"
 CFG = ctl.ControllerConfig(command_topic=TOPIC, bridge_commands_qualified=True)
@@ -134,6 +134,8 @@ class HA:
             mqtt_ready=True,
             bridge_refresh_limit=d.get("command_status_refresh_limit_24h"),
             bridge_refreshes_24h=d.get("command_status_refreshes_24h"),
+            bridge_confirmation_followups=d.get("command_confirmation_followups_seconds"),
+            bridge_confirmation_pending=d.get("command_confirmation_pending"),
         )
 
 
@@ -282,5 +284,145 @@ def test_fresh_status_needs_no_refresh(rig):
     ha, seen = HA(), [0]
     controller = enabled_parked(rig, ha, seen)
     sent = run(rig, controller, ha, ctl.Desire("permit", "solar"), [response(204), status(9)], seen)
-    assert sent == ["Manual:70"] and controller.state == ctl.HEATING_PERMITTED
+    assert sent == ["Manual:70"] and controller.state == ctl.HEATING_PERMITTED, (
+        controller.reason,
+        ha.diag["last_command"],
+        ha.status,
+    )
     assert ha.diag["request_categories"]["command_refresh"] == 0
+
+
+def follow(rig, controller, ha, desire, at, http, seen):
+    """Let the bridge tick at ``at`` (epoch seconds) with ``http``; step the
+    controller after every resulting message. Returns any controller publish."""
+    now = lambda: datetime.fromtimestamp(rig.clock(), timezone.utc)  # noqa: E731
+    sent = []
+    rig.clock.t = at
+    rig.session.request.side_effect = http
+    rig.bridge.next_cloud = 0
+    rig.bridge.tick()
+    calls = rig.mqtt.publish.call_args_list
+    while seen[0] < len(calls):
+        call = calls[seen[0]]
+        seen[0] += 1
+        if ha.apply(call):
+            for effect in controller.step(ha.observation(now()), desire, CFG):
+                if effect.kind == "publish":
+                    sent.append(effect.payload)
+    for effect in controller.step(ha.observation(now()), desire, CFG):
+        if effect.kind == "publish":
+            sent.append(effect.payload)
+    return sent
+
+
+def http_posts(rig):
+    return [
+        c.args[1].rsplit("/", 1)[-1]
+        for c in rig.session.request.call_args_list
+        if c.args[0] == "POST"
+    ]
+
+
+@pytest.mark.parametrize("confirming_read", [1, 2])
+def test_delayed_readback_old_mode_first_then_requested_mode(rig, confirming_read):
+    """T3b: the read right after the POST still shows Manual; a later bounded
+    follow-up shows OFF. One POST; the controller confirms only then."""
+    ha, seen = HA(), [0]
+    controller = enabled_parked(rig, ha, seen)
+    rig.clock.t += 20 * 60  # stale: the bridge reads status before the command
+    sent = run(
+        rig,
+        controller,
+        ha,
+        ctl.Desire("permit", "solar"),
+        [status(8), response(204), status(9)],
+        seen,
+    )
+    assert sent == ["Manual:70"] and controller.state == ctl.HEATING_PERMITTED, (
+        controller.reason,
+        ha.diag["last_command"],
+        ha.status,
+    )
+    rig.clock.t += 25 * 60
+    background_poll(rig, 9)
+    rig.clock.t += 15 * 60
+    park = ctl.Desire("park", "done")
+    sent = run(rig, controller, ha, park, [status(9), response(204), status(9)], seen)
+    assert sent == ["off"]
+    assert ha.diag["last_command"]["result"] == "awaiting_confirmation"
+    assert controller.state == ctl.CONFIRMING and controller.fault is None
+    posted = rig.bridge.pending["posted_at"]
+    if confirming_read == 2:
+        assert follow(rig, controller, ha, park, posted + 60, [status(9)], seen) == []
+        assert ha.diag["last_command"]["result"] == "awaiting_confirmation"
+        assert controller.state == ctl.CONFIRMING
+    at = posted + (60, 300)[confirming_read - 1]
+    assert follow(rig, controller, ha, park, at, [status(8)], seen) == []
+    assert ha.diag["last_command"]["result"] == "observed_in_status"
+    assert controller.state == ctl.PARKED, controller.reason
+    assert http_posts(rig) == ["login", "manual", "off"]
+
+
+def test_never_confirmed_locks_the_controller_once_and_nothing_is_resent(rig):
+    ha, seen = HA(), [0]
+    controller = enabled_parked(rig, ha, seen)
+    rig.clock.t += 20 * 60  # stale: the bridge reads status before the command
+    permit = ctl.Desire("permit", "solar")
+    sent = run(rig, controller, ha, permit, [status(8), response(204), status(8)], seen)
+    assert sent == ["Manual:70"] and controller.state == ctl.CONFIRMING
+    posted = rig.bridge.pending["posted_at"]
+    assert follow(rig, controller, ha, permit, posted + 60, [status(8)], seen) == []
+    assert follow(rig, controller, ha, permit, posted + 300, [status(8)], seen) == []
+    assert ha.diag["last_command"]["result"] == "not_confirmed_within_limit"
+    assert controller.state == ctl.FAULT_LOCKED and controller.fault == "command_not_confirmed"
+    for minutes in range(6, 60):  # background polls may fall due; never a command
+        assert follow(rig, controller, ha, permit, posted + minutes * 60, [status(8)], seen) == []
+    assert http_posts(rig) == ["login", "manual"]
+
+
+def test_owner_change_during_confirmation_is_owner_override(rig):
+    ha, seen = HA(), [0]
+    controller = enabled_parked(rig, ha, seen)
+    rig.clock.t += 20 * 60  # stale: the bridge reads status before the command
+    permit = ctl.Desire("permit", "solar")
+    run(rig, controller, ha, permit, [status(8), response(204), status(8)], seen)
+    posted = rig.bridge.pending["posted_at"]
+    follow(rig, controller, ha, permit, posted + 60, [status(17)], seen)  # app: Schedule
+    assert ha.diag["last_command"]["result"] == "unexpected_state_after_command"
+    assert controller.state == ctl.OWNER_OVERRIDE, controller.reason
+    assert http_posts(rig) == ["login", "manual"]
+
+
+def test_follow_up_timeout_then_confirmation_and_a_bridge_restart_never_resends(rig, tmp_path):
+    ha, seen = HA(), [0]
+    controller = enabled_parked(rig, ha, seen)
+    rig.clock.t += 20 * 60  # stale: the bridge reads status before the command
+    permit = ctl.Desire("permit", "solar")
+    run(rig, controller, ha, permit, [status(8), response(204), status(8)], seen)
+    posted = rig.bridge.pending["posted_at"]
+    follow(rig, controller, ha, permit, posted + 60, [requests.Timeout()], seen)
+    assert controller.state == ctl.CONFIRMING and controller.fault is None
+    # Bridge restart (same /data): the pending command is reloaded, never re-sent.
+    restarted = b.MyThermowattBridge(
+        dict(rig.bridge.options),
+        tmp_path,
+        session=rig.session,
+        mqtt_client=rig.mqtt,
+        clock=rig.clock,
+        monotonic=rig.clock,
+    )
+    restarted.mqtt_connected.set()
+    assert restarted.pending is not None
+    rig.bridge = restarted
+    follow(
+        rig,
+        controller,
+        ha,
+        permit,
+        posted + 120,
+        [response(body={"result": {"termostati": [{"seriale": "TEST123"}]}}), status(9)],
+        seen,
+    )
+    assert ha.diag["last_command"]["result"] == "observed_in_status"
+    assert controller.state == ctl.HEATING_PERMITTED, controller.reason
+    assert http_posts(rig) == ["login", "manual"]

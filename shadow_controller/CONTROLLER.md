@@ -1,4 +1,4 @@
-# Thermann Hot Water Controller 0.6.1 — production candidate
+# Thermann Hot Water Controller 0.6.2 — production candidate
 
 **Status: built and tested offline only.** Nothing has been deployed, no
 command has been sent, and no heater, Schedule, T-Comfort or bridge setting has
@@ -35,7 +35,21 @@ needs no particular configuration. If HA, the cloud or the bridge fails:
 
 The owner accepts this and recovers in the app: Manual at 70 °C, or ON.
 
-## Bridge requirement: 1.3.10 (PR #15)
+## Bridge requirement: 1.3.11
+
+**0.6.2 needs bridge 1.3.11** (bounded confirmation, below). 1.3.10 (PR #15,
+deployed) added the `Cmd` 8 mapping and the pre-command refresh described here.
+
+**T3b (13 Nov 2026, bridge 1.3.10, controller disabled):** a stale-status `off`
+refreshed once and was POSTed; the app then showed OFF, but 1.3.10 reported
+`not_observed_in_immediate_status`. Its only status read came milliseconds after
+the POST, before the cloud reported the change, and it never looked again. 1.3.11
+treats that as `awaiting_confirmation` and makes at most two follow-up reads
+(60 s and 300 s after the POST), never re-sending the POST, and refuses any other
+command meanwhile. It ends with `observed_in_status`,
+`unexpected_state_after_command` or, after 360 s, `not_confirmed_within_limit`.
+
+### Earlier: 1.3.10
 
 **Control vocabulary: exactly two commands.** `Manual:70` (heating permitted;
 the "ON" command) and `off` (parked). No generic `On`, no temperature writes, no
@@ -79,7 +93,9 @@ treats it as owner control:
 | --- | --- |
 | `observed_in_status` | confirmed |
 | `already_in_requested_state`, `refused_mode_mismatch`, `refused_target_mismatch` | **owner override** (`mode_or_target_changed_outside_controller`); nothing was written |
-| `refreshing_status`, `submitted_awaiting_status` | still in progress: a status seen now is not an outcome |
+| `refreshing_status`, `submitting`, `submitted_awaiting_status`, `awaiting_confirmation` (1.3.11) | still in progress: a status seen now is not an outcome, however long it takes; the controller's 65-minute timeout is the outer bound |
+| `unexpected_state_after_command` (1.3.11) | **owner override** (`unexpected_mode_during_confirmation`) |
+| `not_confirmed_within_limit` (1.3.11) | `fault_locked` (`command_not_confirmed`): sent once, never repeated; check the app, then Acknowledge |
 | any other `dropped_*`, `refused_*`, `rejected_*` (e.g. `refused_status_refresh_failed`, `refused_cloud_backoff`) | `fault_locked` (`bridge_refused_or_dropped`), never retried |
 
 ## Architecture
@@ -127,8 +143,10 @@ Unchanged from 0.5.0:
 
 **Bridge and cloud**
 - MQTT ready and the bridge available;
-- the bridge reports `commands_enabled: true`, and is **1.3.10** (reports its
-  pre-command refresh budget; otherwise `bridge_1_3_10_required`);
+- the bridge reports `commands_enabled: true`, and is **1.3.11** (reports its
+  refresh budget and confirmation schedule; otherwise `bridge_1_3_11_required`);
+- no command awaits confirmation at the bridge (`bridge_confirmation_pending`,
+  for example one published by hand);
 - cloud health `ok`, auth `authorized`, no backoff.
 
 **Heater state**
@@ -167,7 +185,9 @@ evaluated every minute and on every new poll). With bridge 1.3.10:
   uses it: one write plus one confirmation read;
 - otherwise the bridge reads status once first: three requests in all.
 
-At the default limit of 6 commands a day that is at most 18 command requests,
+With bridge 1.3.11 a slow cloud readback adds at most two follow-up reads,
+so a command costs at most 5 requests. At the default limit of 6 commands a
+day that is at most 30 command requests,
 inside the 220-a-day request budget and the bridge's 24 refreshes a day.
 Normal 30-minute polling is unchanged. Dwell (30 min), the daily command limit
 with its comfort reserve, the peak guard and the latency reserve still keep
@@ -209,6 +229,10 @@ is never reset automatically.
 
   All 0.5.0 closed-loop days still pass with OFF parking: sunny, cloudy,
   shower, winter, weekend, DST and forecast error.
+- **Bridge 1.3.11:** 709 tests, including delayed readback (old mode first,
+  requested mode at the first or second follow-up), no confirmation, a third
+  state, failed follow-ups, POST timeouts, lockouts, refusals while pending,
+  restart while pending and the 5-request bound.
 - **Bridge 1.3.10 (PR #15):** 670 tests, including `Cmd` 8, the bounded
   pre-command refresh and its failures, and the mode re-check.
 - **Bridge 1.3.9:** 519 tests, including the OFF status handling and the guarded

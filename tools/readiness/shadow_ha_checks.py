@@ -5,7 +5,7 @@ container with --network none. Never import this on the owner's Home Assistant.
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
 - forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
-- genuine 0.2.0, 0.3.0, 0.5.0 and 0.6.0 -> 0.6.1 upgrades over persisted HA storage;
+- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0 and 0.6.1 -> 0.6.2 upgrades over persisted HA storage;
 - unchanged MQTT payloads (no state write) stay fresh while polls succeed.
 """
 
@@ -192,7 +192,7 @@ async def upgrade_from(folder, fixture, version, customise):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.6.1"
+    assert integration["thermann_shadow"].version.__str__() == "0.6.2"
     (entry,) = hass.config_entries.async_entries("thermann_shadow")
     assert entry.entry_id == entry_id and dict(entry.options) == saved_options
     assert await async_setup_component(hass, "thermann_shadow", {})
@@ -562,7 +562,7 @@ async def check_unchanged_mqtt_payload_freshness(hass, entry):
 
 
 async def check_controller(hass, entry, entity_for):
-    """Production controller (0.6.1: Manual 70 permit / software OFF park) on REAL HA Core.
+    """Production controller (0.6.2: Manual 70 permit / software OFF park) on REAL HA Core.
 
     Fresh install refuses to enable; after commissioning, one poll produces
     exactly one guarded MQTT message (captured here, never sent: the network is
@@ -605,6 +605,8 @@ async def check_controller(hass, entry, entity_for):
                 "last_command": None,
                 "command_status_refreshes_24h": 0,  # bridge 1.3.10
                 "command_status_refresh_limit_24h": 24,
+                "command_confirmation_followups_seconds": [60, 300],  # bridge 1.3.11
+                "command_confirmation_pending": False,
                 "poll_interval_seconds": 1800,
             },
         )
@@ -699,16 +701,26 @@ async def check_controller(hass, entry, entity_for):
 
 
 async def upgrade_from_0_6_0(folder):
-    """The owner's INSTALLED version (0.6.0, automatic control off) -> current.
+    return await _upgrade_from_0_6(folder, "0.6.0")
+
+
+async def upgrade_from_0_6_1(folder):
+    """The owner's INSTALLED version since 13 Nov 2026 (0.6.1, control off)."""
+    return await _upgrade_from_0_6(folder, "0.6.1")
+
+
+async def _upgrade_from_0_6(folder, version):
+    """An installed 0.6.x (automatic control off) -> current.
 
     Saved options, an entity rename, every entity ID and the persisted DISABLED
     controller state survive unchanged; no option is added, removed or
     migrated; nothing is published."""
     from homeassistant.components import mqtt
 
-    hass = await start_hass(folder, ROOT / "tools/readiness/fixtures/thermann_shadow_0_6_0")
+    fixture = f"tools/readiness/fixtures/thermann_shadow_{version.replace('.', '_')}"
+    hass = await start_hass(folder, ROOT / fixture)
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.6.0"
+    assert integration["thermann_shadow"].version.__str__() == version
     from custom_components.thermann_shadow.config import DEFAULT_OPTIONS, DEFAULT_SOURCES
 
     result = await hass.config_entries.flow.async_init(
@@ -726,7 +738,7 @@ async def upgrade_from_0_6_0(folder):
     assert saved["type"] == "create_entry", saved
     await hass.async_block_till_done()
     runtime = hass.data["thermann_shadow"][entry.entry_id]
-    await runtime.executor.async_step()  # writes the 0.6.0 controller state file
+    await runtime.executor.async_step()  # writes the 0.6.x controller state file
     assert runtime.executor.controller.state == "disabled"
     registry = er.async_get(hass)
     registry.async_update_entity(
@@ -742,7 +754,7 @@ async def upgrade_from_0_6_0(folder):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.6.1"
+    assert integration["thermann_shadow"].version.__str__() == "0.6.2"
     captured = []
 
     async def record(*args, **kwargs):
@@ -784,7 +796,7 @@ async def upgrade_from_0_6_0(folder):
             mqtt.async_publish = original
     await flush_and_close(hass)
     return {
-        "from": "0.6.0",
+        "from": version,
         "options_unchanged": True,
         "entities_kept": len(before),
         "controller_state_kept_disabled": True,
@@ -839,7 +851,7 @@ async def upgrade_from_0_5_0(folder):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.6.1"
+    assert integration["thermann_shadow"].version.__str__() == "0.6.2"
     captured = []
 
     async def record(*args, **kwargs):

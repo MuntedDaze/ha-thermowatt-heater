@@ -161,6 +161,12 @@ class Executor:
             obs.last_command = dict(last) if isinstance(last, dict) else None
             obs.bridge_refresh_limit = _int(attrs.get("command_status_refresh_limit_24h"))
             obs.bridge_refreshes_24h = _int(attrs.get("command_status_refreshes_24h"))
+            followups = attrs.get("command_confirmation_followups_seconds")
+            obs.bridge_confirmation_followups = (
+                list(followups) if isinstance(followups, list) else None
+            )
+            pending = attrs.get("command_confirmation_pending")
+            obs.bridge_confirmation_pending = pending if isinstance(pending, bool) else None
         obs.bridge_available = (
             mode is not None and mode.state != "unavailable" and obs.cloud_health is not None
         )
