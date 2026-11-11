@@ -24,13 +24,13 @@ participation or approval · **Risk** = accepted or open limitation.
 | 15 | HA-native UI: master switch, override, acknowledge, status, readiness, cost, last command, bridge health | Done | dashboard *Automatic control* section |
 | 16 | Notifications with cooldowns and restoration notice | Done | notification tests |
 | 17 | Fresh install incapable of control | Done | fresh-install tests, real-HA check |
-| 18 | Comprehensive offline tests, real HA Core, replay | Done: 851 local; CI below | `tests/`, `shadow_ha_checks.py`, `replay_history.py` |
+| 18 | Comprehensive offline tests, real HA Core, replay | Done: 852 local; CI all green | `tests/`, `shadow_ha_checks.py`, `replay_history.py` |
 | 19 | Commissioning runbook with gates and rollback | Done | [COMMISSIONING_0_5_0.md](COMMISSIONING_0_5_0.md) |
 | 20 | Local-only control report | Done | [LOCAL_CONTROL_FEASIBILITY.md](LOCAL_CONTROL_FEASIBILITY.md) |
 
 ## Outstanding physical qualifications (owner)
 
-1. **Stage A**: deploy the planner (0.4.0, then 0.5.0 with control off).
+1. **Stage A**: install 0.5.0 directly over 0.3.0, with control off ([STAGE_A_INSTALL.md](STAGE_A_INSTALL.md)).
 2. **Stage B / T3**: bridge 1.3.9 `Manual:70` and `Auto` against the real
    heater (latency, power steps, readback, request cost).
 3. **Stage C**: empty weekly Schedule saved, with the old programme recorded.

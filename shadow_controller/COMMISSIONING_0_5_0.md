@@ -6,7 +6,7 @@ performed by the agent.
 
 | Stage | What | Needs |
 | --- | --- | --- |
-| A | Install the planner (0.4.0, then 0.5.0 with control **off**) | Approval to deploy to HA |
+| A | Install 0.5.0 (planner + controller, control **off**) directly over 0.3.0 | Approval to deploy to HA |
 | B | **T3**: prove the bridge's `Manual:70`/`Auto` reproduce the app (T1) results | Approval to merge PR #12 (bridge 1.3.9), update the add-on and enable commands temporarily |
 | C | Save the **empty** weekly Schedule; keep a restorable copy | Approval to change the live programme |
 | D | Supervised executor trial (limited cycles) | Approval to enable automatic control |
@@ -21,31 +21,23 @@ mode. Never reset Thermowatt authentication locks to force anything.
 
 ---
 
-## Stage A — install the planner
+## Stage A — install the planner and controller (control off)
 
-1. **0.4.0:** follow [UPGRADING_0_4_0.md](UPGRADING_0_4_0.md): backup, replace
-   the folder, restart once, verify, roll back if needed.
-2. **0.5.0 with control off:**
-   - Back up HA again. Replace `/config/custom_components/thermann_shadow` with
-     this version (`manifest.json` 0.5.0; new `controller.py`,
-     `control_plan.py`, `executor.py`). Restart HA Core once.
-   - Import [dashboard.yaml](dashboard.yaml).
+Exact steps, checks and rollback: **[STAGE_A_INSTALL.md](STAGE_A_INSTALL.md)**.
+
+- **Path:** upgrade directly from the installed 0.3.0 to 0.5.0. A separate 0.4.0
+  step is not needed: CI verifies 0.3.0 → 0.5.0 on HA 2026.11.1.
+- **What is installed:** only the `custom_components/thermann_shadow` folder and
+  the Hot Water dashboard. Then one HA restart.
+- **What stays:** the Thermowatt add-on stays at 1.3.8 with commands disabled.
 
 **Pass:**
-- All existing entity IDs, options and history are kept. New options take
-  inert defaults: topic blank, both confirmations off, 6 commands/day,
-  220 requests/day, 30-min latency reserve.
-- *Automatic heater control* is **off**, and *Automatic control state* is
-  `disabled`.
-- Turning the switch on fails with "commissioning is complete: …".
-- The *controller* sensor's attributes show `control_capable: false`.
-- The bridge request counter rises only with its normal polling (about 6 per
-  hour).
+- the controller is present and `disabled`, and the master switch refuses to turn on;
+- entities, options and history are kept;
+- the bridge polls as before;
+- the app and native Schedule are unchanged.
 
-**Fail / rollback:** restore the 0.4.0 folder (or 0.3.0) and the dashboard,
-then restart once. The 0.5.0 controller state file
-`.storage/thermann_shadow.<entry>.controller` is ignored by older versions and
-may be deleted. No heater handback is needed: nothing was sent.
+**Rollback:** put back the saved 0.3.0 folder and restart (see the guide).
 
 ---
 
