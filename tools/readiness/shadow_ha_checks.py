@@ -5,7 +5,7 @@ container with --network none. Never import this on the owner's Home Assistant.
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
 - forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
-- genuine 0.2.0 -> 0.4.0 and 0.3.0 -> 0.4.0 upgrades over persisted HA storage;
+- genuine 0.2.0 -> 0.5.0 and 0.3.0 -> 0.5.0 upgrades over persisted HA storage;
 - unchanged MQTT payloads (no state write) stay fresh while polls succeed.
 """
 
@@ -192,7 +192,7 @@ async def upgrade_from(folder, fixture, version, customise):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.4.0"
+    assert integration["thermann_shadow"].version.__str__() == "0.5.0"
     (entry,) = hass.config_entries.async_entries("thermann_shadow")
     assert entry.entry_id == entry_id and dict(entry.options) == saved_options
     assert await async_setup_component(hass, "thermann_shadow", {})

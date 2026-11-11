@@ -289,6 +289,12 @@ def test_minimum_rest_and_daily_command_limit():
     controller.last_transition_at = (now - timedelta(hours=2)).isoformat()
     controller.commands = [(now - timedelta(hours=h)).isoformat() for h in (1, 2, 3, 4)]
     assert not publishes(controller.step(obs(now + timedelta(seconds=1)), PERMIT, cfg()))
+    assert "economic_command_budget_reached" in controller.gate_failures
+    comfort = ctl.Desire("permit", "comfort_fallback_latest_start", comfort=True)
+    reserve = ctl.Controller.from_dict(controller.to_dict())
+    assert publishes(reserve.step(obs(now + timedelta(seconds=1)), comfort, cfg()))
+    controller.commands = [(now - timedelta(hours=h)).isoformat() for h in range(1, 7)]
+    assert not publishes(controller.step(obs(now + timedelta(seconds=2)), comfort, cfg()))
     assert "daily_command_limit_reached" in controller.gate_failures
     controller.commands = [(now - timedelta(hours=25)).isoformat()] * 4
     assert publishes(controller.step(obs(now + timedelta(seconds=2)), PERMIT, cfg()))
@@ -745,7 +751,7 @@ def test_empty_weekly_schedule_is_a_valid_native_reference():
 
 def test_controller_options_are_bounded_and_commissioning_preserved_on_restore():
     for key, value in {
-        "controller_max_commands_per_day": 9,
+        "controller_max_commands_per_day": 11,
         "controller_min_heating_minutes": 10,
         "controller_confirmation_timeout_minutes": 30,
         "controller_execution_latency_minutes": 61,

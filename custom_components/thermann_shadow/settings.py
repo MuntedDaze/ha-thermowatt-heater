@@ -375,9 +375,9 @@ CATALOG = {
     "controller_max_commands_per_day": Setting(
         "Maximum commands per day",
         "Controller",
-        "Rolling 24 h limit on mode commands. A typical day needs 2 (one heating period) or 4 (morning and afternoon).",
-        2,
-        8,
+        "Rolling 24 h limit on mode commands. A typical day needs 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved for a comfort start and its park.",
+        4,
+        10,
     ),
     "controller_confirmation_timeout_minutes": Setting(
         "Command confirmation timeout",

@@ -78,7 +78,8 @@ class ControllerConfig:
     hysteresis_c: float = 8.0
     min_heating_minutes: float = 30.0
     min_rest_minutes: float = 30.0
-    max_commands_per_day: int = 4
+    max_commands_per_day: int = 6
+    comfort_reserve_commands: int = 2  # kept for a comfort start + its park
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
     command_slot_seconds: float = 35.0
@@ -137,6 +138,7 @@ class Desire:
     next_start: datetime | None = None
     next_stop: datetime | None = None
     comfort_risk: str | None = None  # goal kind seriously at risk
+    comfort: bool = False  # permit needed for a comfort goal (may use the reserve)
 
 
 @dataclass
@@ -463,7 +465,12 @@ class Controller:
         self.intent = None
 
     def gates(
-        self, obs: Observation, action: str, cfg: ControllerConfig, new_poll: bool
+        self,
+        obs: Observation,
+        action: str,
+        cfg: ControllerConfig,
+        new_poll: bool,
+        comfort: bool = False,
     ) -> list[str]:
         """Every reason the controller may NOT publish now (empty = eligible)."""
         failures = list(cfg.missing_commissioning())
@@ -503,6 +510,14 @@ class Controller:
                 failures.append("minimum_dwell_not_elapsed")
         if len(self.commands) >= cfg.max_commands_per_day:
             failures.append("daily_command_limit_reached")
+        elif (
+            action == "permit"
+            and not comfort
+            and len(self.commands) >= cfg.max_commands_per_day - cfg.comfort_reserve_commands
+        ):
+            # Economic starts stop early so a comfort start and its park
+            # always remain possible within the daily limit.
+            failures.append("economic_command_budget_reached")
         used = self.requests_last_24h(now)
         if used is None:
             failures.append("request_accounting_unavailable")
@@ -537,7 +552,7 @@ class Controller:
             self.gate_failures = []
             return
         self.state = PARK_REQUESTED if action == "park" else HEATING_REQUESTED
-        failures = self.gates(obs, action, cfg, new_poll)
+        failures = self.gates(obs, action, cfg, new_poll, desire.comfort)
         self.gate_failures = failures
         if failures:
             self.reason = failures[0]

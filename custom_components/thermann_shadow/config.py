@@ -84,7 +84,7 @@ DEFAULT_OPTIONS = {
     "controller_bridge_qualified": False,
     "controller_min_heating_minutes": 30.0,
     "controller_min_rest_minutes": 30.0,
-    "controller_max_commands_per_day": 4.0,
+    "controller_max_commands_per_day": 6.0,
     "controller_confirmation_timeout_minutes": 65.0,
     "controller_max_requests_per_day": 220.0,
     "controller_execution_latency_minutes": 30.0,
@@ -93,7 +93,7 @@ DEFAULT_OPTIONS = {
 CONTROLLER_BOUNDS = {
     "controller_min_heating_minutes": (30, 180),
     "controller_min_rest_minutes": (30, 240),
-    "controller_max_commands_per_day": (2, 8),
+    "controller_max_commands_per_day": (4, 10),
     "controller_confirmation_timeout_minutes": (35, 120),
     "controller_max_requests_per_day": (160, 400),
     "controller_execution_latency_minutes": (0, 60),

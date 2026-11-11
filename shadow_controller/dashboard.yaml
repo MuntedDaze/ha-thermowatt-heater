@@ -379,12 +379,12 @@ views:
       **Minimum rest period** — current **{{ states('number.thermann_shadow_minimum_rest_period') }} min**\
       \ · recommended & original **30 min** · *restored by Restore*  \nShortest time parked before heating\
       \ is permitted again.\n\n**Maximum commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day')\
-      \ }}** · recommended & original **4** · *restored by Restore*  \nRolling 24 h limit on mode commands.\
-      \ A typical day needs 2 (one heating period) or 4 (morning and afternoon).\n\n**Command confirmation\
-      \ timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout') }} min**\
-      \ · recommended & original **65 min** · *restored by Restore*  \nIf no status confirms a command\
-      \ within this time, automatic control locks until you acknowledge. At least one poll interval plus\
-      \ margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
+      \ }}** · recommended & original **6** · *restored by Restore*  \nRolling 24 h limit on mode commands.\
+      \ A typical day needs 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved\
+      \ for a comfort start and its park.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
+      \ }} min** · recommended & original **65 min** · *restored by Restore*  \nIf no status confirms\
+      \ a command within this time, automatic control locks until you acknowledge. At least one poll interval\
+      \ plus margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
       \ }}** · recommended & original **220** · *restored by Restore*  \nNo command is sent once the bridge's\
       \ local request count over 24 h reaches this. Normal 30-minute polling uses about 150/day.\n\n**Execution\
       \ latency reserve** — current **{{ states('number.thermann_shadow_execution_latency_reserve') }}\

@@ -69,9 +69,11 @@ def desire_from_advice(
     if permitted and peak_soon and element_state != "on":
         return Desire("park", "peak_starting_element_not_heating", **common)
     if code == "heat_now_comfort_fallback":
-        return Desire("permit", "comfort_fallback_latest_start", **common)
+        return Desire("permit", "comfort_fallback_latest_start", comfort=True, **common)
     if code == "insufficient_time":
-        return Desire("permit", "insufficient_time_heat_as_much_as_possible", **common)
+        return Desire(
+            "permit", "insufficient_time_heat_as_much_as_possible", comfort=True, **common
+        )
     if permitted and peak_soon:
         return Desire("park", "peak_starting", **common)
     if permitted and advice.satisfied:
