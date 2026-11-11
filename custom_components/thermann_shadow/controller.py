@@ -73,6 +73,7 @@ RECOVERY = {
     "unexpected_mode_during_confirmation": "The heater reported a mode that was neither the previous nor the requested one. Check the Thermann app. Resume automatic control when you are satisfied.",
     "mode_or_target_changed_outside_controller": "The Thermann mode or target changed without a controller command (for example in the app). Automatic control stays paused until you press Resume automatic control.",
     "unexpected_mode_or_target": "The heater is not OFF or in Manual at 70 °C (for example it is in Schedule or Eco). Automatic control will not touch it. In the Thermann app choose Manual at 70 °C or turn it OFF, then press Resume automatic control.",
+    "off_target_not_70": "While OFF the heater reports a usable target other than 70 °C. That may be your own setting, so automatic control will not change it. To hand control back, set Manual at 70 °C in the Thermann app (you may then turn it OFF again) and press Resume automatic control.",
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
 }
 
@@ -356,15 +357,24 @@ class Controller:
             return False
         return after is None or obs.poll_at > after
 
+    def _off_target_ok(self, obs: Observation) -> bool:
+        """While OFF: no usable setpoint (absent or outside 20-75 °C, e.g. an
+        unreported value), or exactly 70. A usable OTHER value may be the owner's
+        own setting and is never silently replaced by Manual:70 (bridge 1.3.9
+        refuses it too)."""
+        target = obs.target_c
+        return target is None or not 20 <= target <= 75 or abs(target - APPROVED_TARGET_C) < 0.01
+
     def _known_target(self, obs: Observation) -> bool:
         return obs.target_c is not None and abs(obs.target_c - APPROVED_TARGET_C) < 0.01
 
     def _classify(self, obs: Observation, effects: list[Effect]) -> None:
         self.inspect_after = None
-        if obs.mode == PARK_MODE:
-            # OFF's reported setpoint is not an operating target (it may be
-            # anything, or flagged invalid); Manual:70 sets 70 explicitly.
+        if obs.mode == PARK_MODE and self._off_target_ok(obs):
             self.state, self.reason = PARKED, "inspected_parked_off"
+        elif obs.mode == PARK_MODE:
+            self._override("off_target_not_70", obs, effects)
+            return
         elif obs.mode == "Manual" and self._known_target(obs):
             self.state, self.reason = HEATING_PERMITTED, "inspected_manual_70"
         else:
@@ -375,7 +385,9 @@ class Controller:
     def _check_external_change(self, obs: Observation, effects: list[Effect]) -> None:
         permitted = self.state in {HEATING_PERMITTED, PARK_REQUESTED}
         expected = "Manual" if permitted else PARK_MODE
-        if obs.mode != expected or (permitted and not self._known_target(obs)):
+        if obs.mode == PARK_MODE and not permitted and not self._off_target_ok(obs):
+            self._override("off_target_not_70", obs, effects)
+        elif obs.mode != expected or (permitted and not self._known_target(obs)):
             self._override("mode_or_target_changed_outside_controller", obs, effects)
 
     def _override(self, reason: str, obs: Observation, effects: list[Effect]) -> None:
@@ -510,6 +522,8 @@ class Controller:
             failures.append(f"heater_not_{expected_now.lower()}")
         if action == "park" and not self._known_target(obs):
             failures.append("target_not_70")
+        if action == "permit" and not self._off_target_ok(obs):
+            failures.append("off_target_not_70")
         since = _dt(self.last_transition_at)
         if since is not None:
             dwell = cfg.min_rest_minutes if action == "permit" else cfg.min_heating_minutes

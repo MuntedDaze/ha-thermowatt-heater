@@ -56,10 +56,12 @@ restart once.
    INFO → water-heater discovery → `mode_command_topic` (`P/<serial>/CMD/MODE`).
    Keep it private.
 2. **Enable commands for the test only.** Add-on Configuration:
-   `commands_enabled: true`; leave `on_demand_refresh_enabled: false`. Restart
-   the add-on.
-   - *Check:* diagnostics show `commands_enabled: true`, cloud health `ok`,
-     auth `authorized`.
+   `commands_enabled: true`, `command_policy: automation` (the default); leave
+   `on_demand_refresh_enabled: false`. Restart the add-on.
+   - *Check:* diagnostics show `commands_enabled: true`,
+     `command_policy: automation`, cloud health `ok`, auth `authorized`.
+   - *Allowlist check:* publish `Eco` (or `TEMP` 65) once. **Expect**
+     `refused_by_policy`, no request and no change.
 3. **Start from Manual 70 °C** (set it in the app if needed). Record mode,
    target, reading, grid power and the request counter.
 4. **Manual 70 → OFF.**
@@ -73,6 +75,8 @@ restart once.
      - the app shows OFF.
    - **Record what OFF reports:** `T_SetPoint`, `setpoint_valid` and
      `WaterHeaterSts` (vendor-mode attributes and the STATUS payload).
+   - If OFF reports a **usable target other than 70**, stop here. `Manual:70`
+     would be refused by design. Decide with ChatGPT before continuing.
 5. Wait at least one poll (30 min) in OFF.
    - *Check:* the bridge stays healthy, with no `status_temperature_out_of_range`.
 6. **OFF → Manual 70.**

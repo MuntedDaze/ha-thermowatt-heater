@@ -8,8 +8,10 @@
   and frost protection stay active in OFF.
 - **New method:**
   - the controller now parks with `off` and resumes with the guarded
-    `Manual:70`;
-  - OFF's reported setpoint is never used to classify, permit or confirm;
+    `Manual:70`; these are its only two commands, and they match the bridge
+    1.3.9 `command_policy: automation` allowlist;
+  - OFF reporting 70 or no usable setpoint allows a resume; a usable other
+    target means owner override (never silently reset to 70);
   - a resume is confirmed only at Manual **70 °C**;
   - Schedule, Eco and Holiday are owner control.
 - **Protective heating** while OFF is never interrupted, and no command is sent

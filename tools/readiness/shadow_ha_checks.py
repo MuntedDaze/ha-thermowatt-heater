@@ -652,8 +652,8 @@ async def check_controller(hass, entry, entity_for):
         executor = hass.data["thermann_shadow"][entry.entry_id].executor
         executor.desire = lambda now: ctl.Desire("permit", "real_ha_wiring_check")
         hass.config.components.add("mqtt")
-        # Parked OFF reporting an unusual setpoint: the guarded resume still goes.
-        bridge("Off", dt_util.utcnow(), setpoint=40)
+        # Parked OFF reporting no usable setpoint (0): the guarded resume still goes.
+        bridge("Off", dt_util.utcnow(), setpoint=0)
         await hass.async_block_till_done()
         assert captured == [("P/TEST123/CMD/MODE", "Manual:70", 1, False)], captured
         assert hass.states.get(status).state == "confirming"

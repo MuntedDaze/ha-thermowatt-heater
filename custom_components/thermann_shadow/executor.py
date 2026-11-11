@@ -155,8 +155,6 @@ class Executor:
             obs.auth_mode = attrs.get("auth_guard_mode")
             obs.consecutive_failures = _int(attrs.get("consecutive_failures"))
             obs.cooldown_seconds = _int(attrs.get("cooldown_remaining_seconds"))
-        if heater is not None and heater.state == "off":
-            obs.target_c = None  # OFF's setpoint is not an operating target
             flag = attrs.get("commands_enabled")
             obs.bridge_commands_enabled = flag if isinstance(flag, bool) else None
             last = attrs.get("last_command")

@@ -37,20 +37,33 @@ The owner accepts this and recovers in the app: Manual at 70 °C, or ON.
 
 ## Bridge requirement: 1.3.9 (PR #12)
 
+**Control vocabulary: exactly two commands.** `Manual:70` (heating permitted;
+the "ON" command) and `off` (parked). No generic `On`, no temperature writes, no
+other modes.
+
 | Need | 1.3.8 | 1.3.9 |
 | --- | --- | --- |
+| Only the two automation commands accepted | no (all 1.3.8 commands) | `command_policy: automation` (default) refuses everything else before any request (`refused_by_policy`); `legacy` only if chosen explicitly |
 | Park: `off` → POST `/off`, confirm `Cmd` 16 | yes | yes |
-| Resume: `Manual:70` → POST `/manual` with 70 explicitly | unknown payload, ignored | accepted from OFF (whatever OFF reports as its setpoint) or when the target is already 70; other modes with another target refused |
+| Resume: `Manual:70` → POST `/manual` with 70 explicitly | unknown payload, ignored | accepted when the target is already 70, or when OFF reports no usable setpoint (outside 20–75 °C); a usable other target (OFF included) is refused |
 | Status while OFF with a setpoint outside 20–75 °C | **poll fails and the bridge backs off** | published with `setpoint_valid: false` |
 | Plain `Manual` with an invalid observed setpoint | would POST it | refused |
 | Command outcome in diagnostics (`last_command`) | no | yes |
 
 **What OFF reports as its setpoint has never been observed by the bridge.** The
-owner's OFF test fell between polls. The controller therefore **ignores the
-setpoint while OFF**, both to classify OFF and to permit a resume. It requires
-**Manual at exactly 70 °C** to confirm a resume. If the heater came back at
-another target, the controller would pause (`owner_override`) and nothing would
-be re-sent. T3 records the real OFF readback.
+owner's OFF test fell between polls (recorder, read-only), so it cannot be
+confirmed offline. The rule is designed so `Manual:70` never fails silently and
+never blindly changes the thermostat setting:
+
+| OFF reports | Controller | Bridge |
+| --- | --- | --- |
+| 70 °C | parked; resume allowed | accepts `Manual:70` |
+| no usable value (missing, or outside 20–75 °C, which 1.3.9 publishes with `setpoint_valid: false`) | parked; resume allowed; 70 is sent explicitly | accepts |
+| a usable other value (for example 40 or 65) | **owner override**, notice naming the target; nothing sent | refuses (`refused_target_mismatch`) |
+
+A resume is confirmed only at **Manual 70 °C**. T3 records what OFF really
+reports. If it turns out to be a fixed usable value other than 70, the rule needs
+an owner decision before the trial.
 
 ## Architecture
 
@@ -174,6 +187,9 @@ bridge authentication, and that is never reset automatically.
 
 - **OFF readback is unknown:** what the cloud reports for `T_SetPoint` and
   `WaterHeaterSts` while OFF. The design tolerates any value; T3 observes it.
+- **OFF target rule may need revisiting:** if T3 shows that OFF always reports a
+  fixed usable value other than 70, every resume pauses for the owner. This is
+  safe, but it needs a decision before the trial.
 - **API equivalence is unproven:** `/manual` from OFF is assumed to resume like
   the app's power button. T3 tests it. If it does not, `Manual:70` is confirmed
   as not applied and the controller locks, with no retry.

@@ -14,6 +14,7 @@ from test_shadow_model import c, local, m, runtime  # noqa: F401
 from test_cloud_and_commands import ready
 
 ctl = importlib.import_module(f"{m.__package__}.controller")
+ROOT_PACKAGE = __import__("pathlib").Path(ctl.__file__).parent
 plan_mod = importlib.import_module(f"{m.__package__}.control_plan")
 native = importlib.import_module(f"{m.__package__}.native")
 advisor_mod = importlib.import_module(f"{m.__package__}.advisor")
@@ -369,15 +370,24 @@ def test_wrong_target_refusal_and_unexpected_target_both_stop_control():
     report = {"payload": "Manual:70", "result": "refused_target_mismatch", "at": now.isoformat()}
     controller.step(obs(now + timedelta(seconds=20), last_command=report), PERMIT, cfg())
     assert controller.state == ctl.FAULT_LOCKED
-    # While OFF the reported setpoint is not an operating target: 65 (or 40,
-    # or an invalid value) neither counts as an owner change nor blocks the
-    # guarded resume, which sends 70 explicitly.
-    for reported in (65, 40, 0, None):
+    # While OFF: 70 or no usable setpoint (unreported or outside 20-75) allows
+    # the guarded resume, which sends 70 explicitly.
+    for reported in (70, 0, 90, None):
         parked = parked_controller(now)
         effects = parked.step(
             obs(now + timedelta(seconds=5), poll_at=now, target_c=reported), PERMIT, cfg()
         )
         assert [e.payload for e in publishes(effects)] == ["Manual:70"], reported
+    # A usable OTHER target while OFF may be the owner's setting: never
+    # silently replaced; control pauses with an explicit notice.
+    for reported in (65, 40, 20, 75):
+        parked = parked_controller(now)
+        effects = parked.step(
+            obs(now + timedelta(seconds=5), poll_at=now, target_c=reported), PERMIT, cfg()
+        )
+        assert not publishes(effects), reported
+        assert parked.state == ctl.OWNER_OVERRIDE and parked.reason == "off_target_not_70"
+        assert any(f"{reported}" in e.message for e in effects if e.kind == "notify")
     # In Manual a target other than 70 is an owner change: control pauses.
     permitted = permitted_controller(local(hour=13))
     at = local(hour=13, minute=2)
@@ -908,7 +918,7 @@ class SimBridge:
             now,
             poll_at=self.poll_at,
             mode=self.mode,
-            target_c=self.target if self.mode == "Manual" else None,
+            target_c=self.target if self.mode == "Manual" else self.off_setpoint,
             temperature_c=round(self.temperature),
             element="on" if self.element else "off",
             requests_total=self.requests,
@@ -1302,8 +1312,8 @@ def test_tariff_93_boundaries_stay_fixed_aest_across_dst(at, expected_local):
 def test_off_manual_off_cycle_ignores_off_setpoint_and_requires_70_in_manual():
     now = local(hour=11)
     controller = parked_controller(now)
-    # Parked OFF reports a setpoint of 40 (as the app showed with an empty Schedule).
-    [start] = publishes(controller.step(obs(now, target_c=40), PERMIT, cfg()))
+    # Parked OFF reporting no usable setpoint (here 0): resume sends 70 explicitly.
+    [start] = publishes(controller.step(obs(now, target_c=0), PERMIT, cfg()))
     assert start.payload == "Manual:70" and controller.intent["prior_mode"] == "Off"
     confirm = now + timedelta(seconds=20)
     controller.step(
@@ -1468,7 +1478,7 @@ class ProtectiveSimBridge(SimBridge):
             self.temperature += 3.0 / 60 / m.TANK_KWH_PER_C
 
 
-@pytest.mark.parametrize("off_setpoint", [0.0, 40.0, 70.0])
+@pytest.mark.parametrize("off_setpoint", [0.0, 70.0, 90.0])
 def test_closed_loop_off_park_with_antibacterial_cycle_and_any_off_setpoint(off_setpoint):
     start = local(hour=10, minute=50)
     cycle = (local(hour=12, minute=30), local(hour=13, minute=10))
@@ -1490,3 +1500,21 @@ def test_closed_loop_off_park_with_antibacterial_cycle_and_any_off_setpoint(off_
     during = [at for at, _ in sim.posts if cycle[0] <= at < cycle[1] + timedelta(seconds=20)]
     assert during == []
     assert controller.fault is None
+
+
+def test_closed_loop_off_with_a_usable_other_target_never_resumes_silently():
+    start = local(hour=10, minute=50)
+    sim = SimBridge(start - timedelta(minutes=29), temperature=45)
+    sim.off_setpoint = 40.0  # e.g. a target the owner chose, reported while OFF
+    controller = enabled(start)
+    run_day(sim, controller, lambda now: PERMIT, start, 120)
+    assert sim.posts == [] and sim.mode == "Off"
+    assert controller.state == ctl.OWNER_OVERRIDE and controller.reason == "off_target_not_70"
+
+
+def test_disabled_and_automation_payloads_are_the_only_two_the_controller_can_emit():
+    """The controller's command vocabulary is exactly the bridge allowlist."""
+    assert {ctl.PERMIT_PAYLOAD, ctl.PARK_PAYLOAD} == {"Manual:70", "off"}
+    source = (ROOT_PACKAGE / "controller.py").read_text()
+    published = [line for line in source.splitlines() if 'Effect("publish"' in line]
+    assert len(published) == 1 and "payload=payload" in published[0]
