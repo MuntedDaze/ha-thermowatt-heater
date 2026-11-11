@@ -1,5 +1,8 @@
 # Later supervised qualification — not executed
 
+**Superseded in detail by [Stage 4A](STAGE_4A_CONTROL_METHOD.md)**, which compares
+Off/On with Manual ↔ Schedule and gives a step-by-step supervised procedure.
+
 Phase 2A has no command path. The owner accepts occasional manual recovery after
 serious outages; universal automatic Schedule handback is not required. This does
 not approve live tests, unsafe setpoints or changes to native safety functions.
