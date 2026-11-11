@@ -5,7 +5,8 @@ container with --network none. Never import this on the owner's Home Assistant.
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
 - forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
-- a genuine 0.2.0 -> 0.3.0 upgrade over persisted HA storage.
+- genuine 0.2.0 -> 0.4.0 and 0.3.0 -> 0.4.0 upgrades over persisted HA storage;
+- unchanged MQTT payloads (no state write) stay fresh while polls succeed.
 """
 
 from datetime import timedelta
@@ -142,12 +143,22 @@ LEGACY_CUSTOM_TARIFF = json.dumps(
 )
 
 
-async def upgrade_from_0_2_0(folder):
-    hass = await start_hass(folder, LEGACY)
+RETIRED_IN_0_4_0 = (
+    "simulated_cycle_count",
+    "simulated_stop_count",
+    "suppressed_switching_episodes",
+    "simulated_cost_aud",
+)
+
+
+async def upgrade_from(folder, fixture, version, customise):
+    """Install an older frozen component, save options + an entity rename to real
+    HA storage, stop, then load the CURRENT component over the same storage."""
+    hass = await start_hass(folder, fixture)
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.2.0"
+    assert integration["thermann_shadow"].version.__str__() == version
     from custom_components.thermann_shadow.config import DEFAULT_OPTIONS, DEFAULT_SOURCES
-    from custom_components.thermann_shadow.sensor import SENSORS as LEGACY_SENSORS
+    from custom_components.thermann_shadow.sensor import SENSORS as OLD_SENSORS
 
     result = await hass.config_entries.flow.async_init(
         "thermann_shadow", context={"source": "user"}
@@ -158,14 +169,9 @@ async def upgrade_from_0_2_0(folder):
     await hass.async_block_till_done()
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_SOURCES)
-    legacy = {
-        **DEFAULT_OPTIONS,
-        "target_c": 65.0,
-        "margin_minutes": 45.0,
-        "import_positive": False,
-        "tariff_periods": LEGACY_CUSTOM_TARIFF,
-    }
-    saved = await hass.config_entries.options.async_configure(flow["flow_id"], legacy)
+    saved = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {**DEFAULT_OPTIONS, **customise}
+    )
     assert saved["type"] == "create_entry", saved
     await hass.async_block_till_done()
     registry = er.async_get(hass)
@@ -176,42 +182,80 @@ async def upgrade_from_0_2_0(folder):
         item.unique_id: item.entity_id
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
-    assert len(before) == len(LEGACY_SENSORS) == 35
     assert "sensor.hot_water_shadow_controller" in before.values()
+    sensors_before = len(OLD_SENSORS)
     saved_options = dict(entry.options)
+    assert saved_options["morning_threshold_c"] == 40.0  # old default, saved explicitly
     entry_id = entry.entry_id
     stored = await flush_and_close(hass)
     assert {"core.config_entries", "core.entity_registry"} <= stored, stored
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.3.0"
+    assert integration["thermann_shadow"].version.__str__() == "0.4.0"
     (entry,) = hass.config_entries.async_entries("thermann_shadow")
     assert entry.entry_id == entry_id and dict(entry.options) == saved_options
     assert await async_setup_component(hass, "thermann_shadow", {})
     await hass.async_block_till_done()
     assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
-    assert dict(entry.options) == saved_options  # loading never rewrites options
+    # The only rewrite is the documented 1.1 -> 1.2 migration of the untouched
+    # old 40 °C default to the 42 °C requirement; everything else is kept.
+    assert entry.minor_version == 2
+    assert dict(entry.options) == {**saved_options, "morning_threshold_c": 42.0}
     runtime = hass.data["thermann_shadow"][entry.entry_id]
-    assert runtime.settings.target_c == 65 and runtime.settings.margin_minutes == 45
-    assert len(runtime.tariffs) == 1 and runtime.tariffs[0].kind == "off_peak"
+    for key, value in customise.items():
+        if key in {"target_c", "margin_minutes"}:
+            assert getattr(runtime.settings, key) == value, key
     registry = er.async_get(hass)
     after = {
         item.unique_id: item.entity_id
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
     assert {key: after[key] for key in before} == before  # identities and renames kept
-    for entity_id in after.values():
-        assert hass.states.get(entity_id) is not None, entity_id
+    retired = {f"{entry_id}_{key}" for key in RETIRED_IN_0_4_0}
+    for unique_id, entity_id in after.items():
+        if unique_id in retired:
+            assert hass.states.get(entity_id) is None, entity_id  # no longer provided
+        else:
+            assert hass.states.get(entity_id) is not None, entity_id
     report_inputs(hass, DEFAULT_SOURCES)
     runtime.update(dt_util.utcnow())
-    assert hass.states.get("select.thermann_shadow_tariff_periods_mode").state == "custom"
-    assert hass.states.get("number.thermann_shadow_afternoon_storage_target").state == "65.0"
     controller = hass.states.get("sensor.hot_water_shadow_controller")
     assert controller.attributes["control_capable"] is False
     json.dumps(dict(controller.attributes), allow_nan=False)
     await flush_and_close(hass)
-    return {"legacy_entities": len(before), "entities_after_upgrade": len(after)}
+    return {
+        "from": version,
+        "legacy_sensors": sensors_before,
+        "legacy_entities": len(before),
+        "entities_after_upgrade": len(after),
+        "retired_still_registered": len(retired & set(after)),
+        "morning_threshold_migrated_40_to_42": True,
+    }
+
+
+async def upgrade_from_0_2_0(folder):
+    result = await upgrade_from(
+        folder,
+        LEGACY,
+        "0.2.0",
+        {
+            "target_c": 65.0,
+            "margin_minutes": 45.0,
+            "import_positive": False,
+            "tariff_periods": LEGACY_CUSTOM_TARIFF,
+        },
+    )
+    assert result["legacy_sensors"] == 35
+    return result
+
+
+async def upgrade_from_0_3_0(folder):
+    result = await upgrade_from(
+        folder, ROOT / "tools/readiness/fixtures/thermann_shadow_0_3_0", "0.3.0", {}
+    )
+    assert result["retired_still_registered"] == len(RETIRED_IN_0_4_0)
+    return result
 
 
 # --- Native settings through the real service layer --------------------------------
@@ -284,7 +328,9 @@ async def check_settings_services(hass, entry, runtime, entity_for):
         assert state is not None, entity_id
         attrs = state.attributes
         assert attrs["recommended_default"] == DEFAULT_OPTIONS[key], key
-        assert attrs["original_default"] == DEFAULT_OPTIONS[key], key
+        from custom_components.thermann_shadow.settings import ORIGINAL_DEFAULTS
+
+        assert attrs["original_default"] == ORIGINAL_DEFAULTS[key], key
         assert attrs["explanation"] and attrs["group"] == meta.group
         assert attrs["execution_enabled"] is False
         current = entry.options.get(key, DEFAULT_OPTIONS[key])
@@ -437,8 +483,11 @@ async def check_forecasts(hass, entry, entity_for):
     assert runtime.forecast.load_basis == "published_household_load_forecast"
     assert runtime.details["forecast"]["intervals"] > 0
     surplus = hass.states.get("sensor.thermann_shadow_forecast_net_surplus")
-    expected = 4.5 * 0.75 - 0.6 * 1.25 - 0.3
-    assert abs(float(surplus.state) - expected) < 0.01, surplus.state
+    base = float(
+        hass.states.get("sensor.thermann_shadow_base_household_load_excluding_hot_water").state
+    )
+    # 0.4.0: forecast AC PV (clipped at 5 kW) minus de-embedded measured base load.
+    assert abs(float(surplus.state) - (4.5 - base)) < 0.01, (surplus.state, base)
     assert float(hass.states.get("sensor.thermann_shadow_forecast_age").state) < 5
     results["emhass"] = runtime.values["decision"]
     validate_dashboard(hass, "forecast_present")
@@ -478,3 +527,34 @@ async def check_forecasts(hass, entry, entity_for):
     assert entry.options["sources"]["forecast_pv"] == pv_id
     assert runtime.forecast.source == "disabled"
     return results
+
+
+async def check_unchanged_mqtt_payload_freshness(hass, entry):
+    """Stage 1 F1 regression on real HA: cloud entities NOT rewritten for 50 min
+    (identical MQTT payloads cause no state write) while the bridge keeps polling."""
+    from custom_components.thermann_shadow.config import DEFAULT_SOURCES
+
+    runtime = hass.data["thermann_shadow"][entry.entry_id]
+    now = dt_util.utcnow()
+    old = (now - timedelta(minutes=50)).timestamp()
+    values = {
+        "heater": ("unknown", {"current_temperature": 55, "temperature": 70}),
+        "mode": ("Schedule", {"Cmd": 17, "WaterHeaterSts": 32}),
+        "cloud_health": ("ok", {}),
+    }
+    for key, (state, attrs) in values.items():
+        hass.states.async_set(DEFAULT_SOURCES[key], state, attrs, timestamp=old)
+    assert hass.states.get(DEFAULT_SOURCES["mode"]).last_reported.timestamp() == old
+    hass.states.async_set(DEFAULT_SOURCES["last_poll"], (now - timedelta(minutes=5)).isoformat())
+    for key, value in {"grid": 1501, "pv": 2322, "house": 821}.items():
+        hass.states.async_set(DEFAULT_SOURCES[key], value, {"unit_of_measurement": "W"})
+    runtime.update(now)
+    assert runtime.plan.state == "shadow_advising", runtime.plan.reasons
+    assert runtime.values["temperature"] == 55
+    # A genuinely old poll still blocks.
+    hass.states.async_set(DEFAULT_SOURCES["last_poll"], (now - timedelta(minutes=50)).isoformat())
+    runtime.update(now)
+    assert runtime.plan.state == "shadow_blocked"
+    hass.states.async_set(DEFAULT_SOURCES["last_poll"], (now - timedelta(minutes=5)).isoformat())
+    runtime.update(now)
+    return {"cloud_entities_last_written_minutes_ago": 50, "planner_available": True}

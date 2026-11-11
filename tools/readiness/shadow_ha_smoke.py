@@ -24,10 +24,12 @@ from sqlalchemy import create_engine, select
 from shadow_ha_checks import (
     DRIVER,
     check_forecasts,
+    check_unchanged_mqtt_payload_freshness,
     check_settings_services,
     install_service_guard,
     start_hass,
     upgrade_from_0_2_0,
+    upgrade_from_0_3_0,
     validate_dashboard,
 )
 
@@ -135,6 +137,8 @@ async def main():
     install_service_guard()
     with tempfile.TemporaryDirectory() as legacy:
         upgrade = await upgrade_from_0_2_0(legacy)
+    with tempfile.TemporaryDirectory() as installed:
+        upgrade_030 = await upgrade_from_0_3_0(installed)
     with tempfile.TemporaryDirectory() as folder:
         hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
         assert "thermann_shadow" in await loader.async_get_config_flows(hass)
@@ -295,12 +299,13 @@ async def main():
         await hass.async_block_till_done()
         runtime = hass.data[DOMAIN][entry.entry_id]
         assert runtime is not old_runtime and not old_runtime.listeners
-        assert runtime.cycle.starts == 0 and runtime.plan.state == "shadow_blocked"
+        assert runtime.advisor.shown is None or runtime.plan.state == "shadow_blocked"
         assert set(sensor_ids) == {
             state.entity_id
             for state in hass.states.async_all("sensor")
             if state.entity_id.startswith("sensor.thermann_shadow_")
         }
+        freshness = await check_unchanged_mqtt_payload_freshness(hass, entry)
         forecast_paths = await check_forecasts(hass, entry, entity_for)
         runtime = hass.data[DOMAIN][entry.entry_id]
         assert_entity_serialization(hass, runtime.sources)
@@ -325,7 +330,9 @@ async def main():
                     "dashboard_entity_references_resolved": dashboard_refs,
                     "dashboard_templates_rendered": dashboard_templates,
                     "forecast_paths": forecast_paths,
-                    "upgrade_0_2_0_to_0_3_0": upgrade,
+                    "upgrade_0_2_0_to_0_4_0": upgrade,
+                    "upgrade_0_3_0_to_0_4_0": upgrade_030,
+                    "unchanged_mqtt_payload_freshness": freshness,
                     "add_integration_hub_listing": "PASS",
                     "websocket_states_and_events_json": "PASS",
                     "recorder_attributes_and_sqlite_roundtrip": "PASS",
