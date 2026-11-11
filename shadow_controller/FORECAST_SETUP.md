@@ -199,14 +199,16 @@ Compare forecast and measured PV for a few representative days before trusting
 forecast-driven waiting. No real-data forecast accuracy has been measured for
 this installation.
 
-## Why forecasts matter with the default switching threshold
+## Why forecasts matter
 
-Without a forecast, only 15 minutes of measured surplus is credited when
-deciding whether to start early. That caps the advantage of a solar start at
-about (0.1702 − 0.0928) × 0.75 kWh ≈ **AUD 0.058** off-peak, below the
-recommended AUD 0.10 switching threshold. So with forecasts off, the default
-settings will normally wait for the reserved fallback, and the Diagnostics
-warning `measured_only_solar_benefit_below_switching_threshold` says so. The
-threshold is not silently changed: enabling a qualified forecast, raising the
-recent-export horizon (Advanced, max 30 min) or lowering the threshold are owner
-choices. The closed-loop scenarios (`DAY_SCENARIO_RESULTS.md`) show both cases.
+Without a qualified forecast, 0.4.0 credits only the measured AC solar for the
+next 30 minutes and assumes **zero** solar after that. It will therefore heat now
+on available solar when that is the cheapest option. It will never recommend
+waiting for sun it cannot see. A qualified forecast lets it recognise genuinely
+cheaper solar later. Waiting still needs a saving of at least 5 c per kWh that
+would be heated now, and a viable comfort fallback.
+
+The EMHASS household-load forecast currently includes past heater cycles (and,
+before 10 Nov 14:25, PV output). 0.4.0 therefore defaults to the de-embedded
+measured base load (`base_load_source: measured_only`). See
+[STAGE_3B_3C_PROPOSAL.md](STAGE_3B_3C_PROPOSAL.md) for the de-embedding plan.

@@ -1,4 +1,4 @@
-# Thermann Shadow Planner 0.3.0
+# Thermann Shadow Planner 0.4.0 (candidate)
 
 A **shadow-only** hot-water planner for the Thermann 315 L / 3 kW heater. It reads
 existing Home Assistant entities, decides when heating *would* be best, and
@@ -6,13 +6,19 @@ explains why on a dashboard. **It never operates the heater.** The native
 Schedule keeps controlling the real element. Draft PR #9; owner review required,
 no merge or deployment is authorised.
 
-Priorities, in order: **comfort first, maximise solar second, minimise cost third.**
+Priorities, in order: **manufacturer safety, hot-water readiness, minimum total
+electricity cost (including foregone feed-in), solar self-consumption when cost is
+equal, fewer switches.**
 
-- [Upgrade or install 0.3.0](UPGRADING_0_3_0.md) — safe owner steps.
+- [Stage 3a / 0.4.0 changes and evidence](PHASE3A_0_4_0.md) and
+  [0.3.0 vs 0.4.0 comparison](COMPARISON_0_3_0_VS_0_4_0.md).
+- [Upgrade 0.3.0 → 0.4.0](UPGRADING_0_4_0.md) — owner steps, verification, rollback.
+- [Stage 3b/3c proposal](STAGE_3B_3C_PROPOSAL.md) — forecasts, whole-home solar
+  advisor, Tapo appliances, notifications, wall-tablet dashboard (design only).
+- [Upgrade or install 0.3.0](UPGRADING_0_3_0.md) — previous version.
 - [Forecast setup](FORECAST_SETUP.md) — EMHASS / Forecast.Solar / baseline.
 - [Phase 2B design and review](PHASE2B.md) — economics, cycles, decisions, tests.
-- [Closed-loop day scenarios](DAY_SCENARIO_RESULTS.md) and
-  [cloud-interruption cycle results](CYCLE_SCENARIO_RESULTS.md) — reproducible.
+- [Legacy 0.3.0 cloud-interruption cycle results](CYCLE_SCENARIO_RESULTS.md).
 - [Control and recovery](CONTROL_AND_RECOVERY.md), [native On/Off review](NATIVE_ON_OFF_REVIEW.md)
   and [supervised qualification plan](SUPERVISED_VALIDATION.md) — future control only.
 
@@ -44,51 +50,53 @@ the real comfort fallback. Cloud-read time is not a device sample time.
 
 ## How it decides
 
-The thermal estimate is `315 × 4.186 × rise / 3600 ≈ 0.3663 kWh/°C`, about
-7.3 minutes per °C at a full 3 kW. It uses the bottom sensor directly; it is not
-a whole-tank reserve or a hygiene measurement.
+The thermal estimate is `315 × 4.186 × rise / 3600 ≈ 0.3663 kWh/°C` (about 7.3 min
+per °C at 3 kW). It uses the vendor reading `T_Avg` directly. That is a planning
+reading, not a whole-tank reserve, and not the thermostat's own control
+temperature.
 
-- **Morning comfort:** 40 °C by 07:00 Hobart (both editable). At or above the
-  threshold no morning heat is planned. 40 °C is a decision threshold, **never a
-  storage setpoint**. Example: 35→40 °C ≈ 37 ideal minutes, so heating is planned
-  to begin by about 05:53 with the 30-minute allowance.
-- **Afternoon storage:** 70 °C by default (65–70 °C, never silently reduced).
-  On weekdays the deadline is the actual evening peak: 16:00 Hobart in winter,
-  17:00 in daylight time (Aurora Tariff 93 is fixed AEST). The editable 16:00
-  comfort time is shown separately and is the weekend deadline.
-- **Heating time allowance** (30 min) moves start times earlier; it is not extra
-  heat. A full off-peak **grid fallback** is reserved independently of forecasts
-  and starts when due, whatever the forecast says.
-- **Partial solar counts.** The element is always a full 3 kW load. With 2 kW
-  surplus, 2 kW is self-consumed and 1 kW imported: one hour costs
-  `2 × 0.092760 + 1 × 0.170200 = AUD 0.3557` including foregone feed-in, versus
-  `AUD 0.5106` all-grid off-peak. Costs compare a continuous cycle now with the
-  best feasible later cycle, minute by minute across tariff boundaries.
-- **Stable cycles:** an optional start needs 10 minutes of sustained advantage
-  and a 30-minute gap since the last cycle; an optional stop needs 20 minutes of
-  sustained disadvantage after at least 30 minutes of running; the advantage must
-  exceed AUD 0.10. Comfort, data gates, protections and owner action override
-  these optional timings.
+- **Morning:** **42 °C** reading before the morning peak starts: 07:00 standard
+  time, **08:00 daylight time** on weekdays, derived from the tariff table itself.
+  An optional earlier shower-ready time can only make it earlier. Weekends use a
+  household time (default 08:00). **Never a 42 °C storage setpoint.**
+- **Afternoon:** 70 °C (65–70 °C) before the evening peak: **16:00 standard time,
+  17:00 daylight time**. Weekends use a household time (default 16:00). If the
+  native thermostat switches the element off inside a permitted window, storage
+  counts as ready (its own sensor reached the target) until the reading falls >5 °C.
+- **Requirements** are cumulative from now and include an assumed standing loss
+  (0.2 °C/h) and morning draw (10 °C). Both are editable assumptions, not
+  measurements.
+- **Actual heating:** the element state is estimated ON / OFF / UNKNOWN from
+  `WaterHeaterSts` bit 0 (empirical) and 3 kW load changes. **Base household load =
+  house − 3 kW while ON**, so the real heater is never counted twice.
+- **Cost:** extra cost of running the fixed 3 kW element, relative to not running
+  it, per 15 minutes:
+  `hours × [0.09276 × s + rate × (3 − s)]`, with s = min(3, AC PV − base load).
+  For example, 1 kW exported → 43.3 c/h off-peak, 81.7 c/h peak; 2 kW surplus →
+  35.6 c/h off-peak versus 51.1 c/h all-grid.
+- **Plans compared** (all deliver the same energy by each deadline):
+  - heat now (for at least the 30-min minimum cycle);
+  - the best plan overall (≤3 blocks);
+  - the best single block, and the best single block later;
+  - a fallback start that keeps the 30-min allowance.
+- **Waiting** is recommended only if it saves at least **5 c per kWh** that would
+  be heated now and the fallback stays viable. Without a qualified forecast,
+  future solar is assumed zero, so waiting is never based on hoped-for sun.
 
 Recommendations shown in large type:
 
 | Label | Meaning |
 |---|---|
-| HEAT NOW | solar covers the element, partial solar beats the grid alternative, or a cycle rides through a short cloud |
-| GRID FALLBACK | the reserved fallback is due: heat to protect the deadline |
-| INSUFFICIENT TIME | even heating continuously from now cannot reach the goal; shortfall shown honestly |
-| WAIT FOR SOLAR | a useful surplus is qualifying, or a qualified forecast shows a cheaper solar window |
-| WAIT FOR PLANNED WINDOW | no worthwhile advantage now (or forecast unavailable); fallback reserved |
-| NO HEATING NEEDED | the goal is already met |
+| HEAT NOW | heating now is the cheapest plan, solar is available and waiting saves too little, or the comfort fallback is due |
+| HEATING NOW (NATIVE) | the native Schedule is heating; the text says whether that matches the cheapest plan |
+| WAIT – CHEAPER LATER | a later plan saves at least the threshold; saving, start and latest safe start shown |
+| NO HURRY | no meaningful cost difference; heat before the stated latest start |
+| NO HEATING NEEDED | both goals met (or storage satisfied by the native thermostat) |
+| INSUFFICIENT TIME | even continuous heating cannot meet the goal; shortfall shown |
 | DATA UNAVAILABLE / OWNER REVIEW / PAUSED | gates; nothing is recommended |
 
-Each comes with a plain-language explanation containing the numbers used.
-
-**Important default behaviour:** without a forecast only 15 minutes of measured
-surplus is credited, which caps a solar start's advantage at ≈ AUD 0.058 —
-below the AUD 0.10 threshold. With forecasts off the defaults therefore usually
-wait for the fallback, and Diagnostics says so. See
-[Forecast setup](FORECAST_SETUP.md#why-forecasts-matter-with-the-default-switching-threshold).
+Optional changes must persist 10 minutes before the shown recommendation changes;
+comfort and data gates apply immediately.
 
 ## Tariff (owner-confirmed Aurora 93)
 

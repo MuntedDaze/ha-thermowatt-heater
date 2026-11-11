@@ -428,7 +428,12 @@ def assess(
     plans: dict[str, PlanResult] = {}
     if total <= 1e-9:
         code = "native_heating_economical" if element_state == "on" else "no_heating_needed"
-        text = "Both readiness goals are already met on the current reading. " + (
+        text = (
+            "The native thermostat switched the element off inside its window, so storage "
+            "counts as ready (its own sensor reached the target) until water is used. "
+            if storage_satisfied
+            else "Both readiness goals are already met on the current reading. "
+        ) + (
             "The native Schedule is heating anyway (its own 70 °C target)."
             if element_state == "on"
             else "No heating is needed before the next deadlines."

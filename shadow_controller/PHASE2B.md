@@ -1,4 +1,8 @@
-# Phase 2B — Shadow Planner 0.3.0 design and review
+# Phase 2B — Shadow Planner 0.3.0 design and review (historical)
+
+> Superseded by [Stage 3a / 0.4.0](PHASE3A_0_4_0.md). The closed-loop day harness
+> referenced below (`tools/replay_shadow_days.py`, `DAY_SCENARIO_RESULTS.md`) was
+> retired in 0.4.0 because it simulated an executor that does not exist (audit F12).
 
 Read-only planning on draft PR #9, not a heater controller. Thermowatt stays
 1.3.8 (byte-identical to main) with commands and on-demand refresh disabled.
