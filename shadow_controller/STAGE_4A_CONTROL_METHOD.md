@@ -31,6 +31,61 @@ the existing windows, where Schedule already parks the element (the 11 Nov
 00:00–04:00 evidence). Emptying the programme is a later step, T4, approved
 separately.
 
+## 0a. T1 result (owner, official app, 11 Nov 2026) — PASSED
+
+**Final architecture (owner, 11 Nov):**
+- Manual 70 °C = heating permitted.
+- **Empty weekly Schedule** = parked. The owner has confirmed that a blank
+  Schedule works.
+- No automatic fallback windows, and no `/off`. T2 is optional.
+- The next physical gate is T3: proving that the bridge's own `Manual`/`Auto`
+  requests reproduce the app's results. It needs separate approval.
+
+Initial conditions: Schedule mode, target 70 °C, about 55 °C reported, the
+existing windows (weekdays 04–08 and 11–17, weekends 06–22), T-Comfort 10 °C,
+bridge commands disabled. The test ran during the evening peak, outside every
+native window.
+
+Recorder correlation (GoodWe HK1000 meter; negative = import):
+
+| Time (AEDT) | Grid | Step | Owner action / app |
+| --- | --- | --- | --- |
+| 20:36:25 | −0.87 → −3.93 kW | +3.07 kW | Manual selected; app showed Manual 70 °C with the heating indicator on |
+| 20:39:05 | −4.01 → −0.92 kW | −3.09 kW | Schedule selected; app showed Schedule with 70 °C unchanged |
+| 20:41:25 | −0.91 → −3.92 kW | +3.01 kW | Manual again |
+| 20:42:29 | −3.96 → −0.90 kW | −3.06 kW | Schedule again |
+
+- **Response time.** Each mode change moved the element within one 1-minute
+  meter sample. The steps match the 3 kW element in both directions.
+- **Park works without the programme.** Schedule parked the element outside its
+  windows with the programme unchanged.
+- **Polls did not see Manual.** The bridge polls at 20:17:54 and 20:47:57 both
+  saw Schedule (`Cmd` 17, 70 °C). The 6-minute test fell between them, as
+  expected with 30-minute polling. There were no command or confirmation
+  requests.
+
+**Temperature 55 → 62 °C (the app showed 63 °C).** The element ran for only
+about 3.7 min, about 0.19 kWh, which is roughly 0.5 °C for a uniformly mixed
+315 L tank. A 7 °C rise therefore cannot be tank energy.
+- It is most likely local heating at the bottom sensor, which sits beside the
+  element (stratification / sensor placement), seen at the next poll 5 minutes
+  after the element stopped.
+- It is not a delayed reading. The 20:17 poll still showed 55 °C, falling about
+  1 °C per 30 min.
+- Contrast with long heating: on the morning of 11 Nov, 4 h at 3 kW (about
+  12 kWh) moved the reading 16 → 49 °C. That matches the uniform-tank figure of
+  about 0.37 kWh per °C.
+
+**Consequence for control:**
+- After short heating, the bottom reading overstates stored energy.
+- It can also exceed the 62 °C restart point, so the thermostat may not call for
+  heat again until the hot zone mixes.
+
+The production controller therefore caps the planning temperature during and
+after a session at start reading + delivered energy ÷ 0.366 kWh/°C. It plans
+in heating periods of at least 30 minutes and never toggles modes to beat
+hysteresis.
+
 ## 1. Recommendation in one paragraph (as originally proposed)
 
 Use **Manual 70 °C as the "heat permitted" state and Schedule as the "parked"
