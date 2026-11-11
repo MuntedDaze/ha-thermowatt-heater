@@ -8,7 +8,30 @@ has `commands_enabled: false` and `on_demand_refresh_enabled: false`.
 The owner accepts manual recovery if Home Assistant or the cloud fails, so a fully
 automatic fallback is not a prerequisite. Manufacturer safety stays first.
 
-## 1. Recommendation in one paragraph
+## 0. Owner decision (11 Nov 2026) — supersedes the backstop in §1
+
+- HA should control normal heating completely. The Thermann thermostat and all
+  manufacturer protections stay active.
+- Occasional cold showers are acceptable if HA or the cloud fails. **No automatic
+  morning backup and no 13:00–16:00 backstop window** are wanted.
+- **Preferred if T1 passes:** Manual 70 °C = heating permitted; an **empty native
+  Schedule** (Option 2) = ordinary heating parked.
+- **Use instead** if genuine software Off/On proves more reliable and can be
+  controlled programmatically in both directions (Option 1).
+- The owner is not attached to either method: choose the simplest, safest and
+  most reliable.
+- Keep investigating local-only control, but not as a prerequisite.
+- **Approved:** T0–T2 only. The owner operates the official app; there are no API
+  writes and no bridge option changes.
+- **Not approved:** Schedule edits, an executor, or T3–T6. Each needs separate
+  approval.
+
+T1 can test the Schedule park **without editing the Schedule**: it runs outside
+the existing windows, where Schedule already parks the element (the 11 Nov
+00:00–04:00 evidence). Emptying the programme is a later step, T4, approved
+separately.
+
+## 1. Recommendation in one paragraph (as originally proposed)
 
 Use **Manual 70 °C as the "heat permitted" state and Schedule as the "parked"
 state**, with the native Schedule reduced by the owner to **one late afternoon
@@ -62,6 +85,8 @@ native programme alone.
 - **Native relay chatter.** Around the 16:46 cut-off the element switched on and off
   4 times within 8 minutes. Two or four commanded transitions a day are small by
   comparison.
+  On 11 Nov the element made about 10 short bursts between 15:05 and 16:50
+  before the 17:00 window end.
 - **Energy.** 315 L tank, so 1 °C ≈ 0.37 kWh. A reheat from 62 to 70 °C is about
   2.9 kWh; from 45 to 70 °C about 9.2 kWh. The 3 kW element raised the reading by
   about 1 °C every 3.5–4 minutes.
@@ -182,6 +207,23 @@ General rules for every step:
 - observe through the normal 30-minute polls and the house meter;
 - abort by returning to the baseline in the app, and simply record unexpected
   heating, since the thermostat ends it.
+
+Owner conditions (11 Nov) for T1/T2:
+- Keep the Schedule, 70 °C target, T-Comfort and safety settings unchanged.
+- Restore the original settings and confirm normal operation after each test.
+- Never interrupt apparent antibacterial or protective heating: if the element is
+  already on outside a window before a step, do not start.
+- Stop at anything unexpected and restore.
+
+Test-specific stop points:
+- If Manual shows a target other than 70 °C, **do not adjust it**: return to
+  Schedule and stop.
+- If Off makes the bridge's polls fail (for example a reported target outside
+  20–75 °C), the bridge backs off for 60 minutes or more. That is not an auth
+  lock. The owner presses On in the app and the bridge recovers by itself.
+
+Act straight after a background poll, so the next poll (30 minutes later) records
+each state.
 
 | Step | Who acts | Procedure | Pass criteria |
 | --- | --- | --- | --- |
