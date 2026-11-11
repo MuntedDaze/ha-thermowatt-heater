@@ -906,8 +906,9 @@ class MyThermowattBridge:
             "payload": safe if kind == "MODE" else "temperature",
             "result": result,
             # Pre-command status read (1.3.10): not_needed (status was fresh),
-            # refreshed, failed, or refused (no read attempted). None when the
-            # command was dropped or refused before status was considered.
+            # in_progress, refreshed, failed, or refused (no read attempted).
+            # None when the command was dropped or refused before status was
+            # considered.
             "status_refresh": refresh,
             "at": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(),
         }
@@ -1023,6 +1024,9 @@ class MyThermowattBridge:
                 return
             self.command_refreshes.append(self.monotonic())
             LOG.info("Command needs fresh status: one pre-command status read.")
+            # Published BEFORE the read: a consumer (the controller) then knows
+            # the STATUS that follows is the pre-command read, not an outcome.
+            self._command_result(kind, payload, "refreshing_status", refresh="in_progress")
             try:
                 self.poll_status(serial, category="command_refresh")
             except CloudError as error:

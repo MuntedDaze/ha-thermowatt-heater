@@ -617,3 +617,27 @@ def test_legacy_policy_commands_use_the_same_bounded_refresh(factory, clock):
     bridge.process_command((clock(), SERIAL, "MODE", "Manual"))
     assert [c[0] for c in calls(bridge)] == ["GET", "POST", "GET"]
     assert bridge.session.request.call_args_list[1].kwargs["json"] == {"T_SetPoint": 60}
+
+
+def test_refresh_is_announced_before_its_status_so_it_is_never_read_as_an_outcome(factory, clock):
+    """Order on MQTT: last_command=refreshing_status, then the pre-command
+    STATUS, then the outcome. A consumer never sees that STATUS with an older
+    or final outcome attached."""
+    bridge = commanded(factory)
+    stale(bridge, 9)
+    bridge.session.request.side_effect = [body(OFF_70)]
+    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    sequence = []
+    for call in bridge.mqtt_client.publish.call_args_list:
+        if call.args[0].endswith("/DIAGNOSTICS"):
+            last = json.loads(call.args[1])["last_command"]
+            sequence.append(("diag", last and last["result"]))
+        elif call.args[0].endswith("/STATUS"):
+            sequence.append(("status", json.loads(call.args[1])["result"]["vendor_mode"]))
+    first_status = sequence.index(("status", "Off"))
+    assert ("diag", "refreshing_status") in sequence[:first_status]
+    assert all(
+        item == ("diag", "refreshing_status")
+        for item in sequence[sequence.index(("diag", "refreshing_status")) : first_status]
+    )
+    assert sequence[first_status + 1 :][-1] == ("diag", "already_in_requested_state")
