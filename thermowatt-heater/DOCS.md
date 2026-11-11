@@ -250,6 +250,18 @@ observed target is already 70 °C, or the heater is software OFF with no usable
 setpoint; a usable setpoint other than 70 is refused with no request. While OFF an out-of-range
 reported setpoint is published with `setpoint_valid: false` instead of failing the
 poll. Each command's outcome is published as `last_command` in diagnostics.
+Software OFF is `Cmd` 8 on the tested heater (1.3.10; `Cmd` 16 is also accepted
+as OFF for compatibility). A command needs status no older than 60 s. If the last
+status is older, the bridge makes at most one bounded status read for that
+command, only after the policy, queue-age, device, authentication, quota/backoff,
+60-second spacing and 24-per-day refresh checks pass, and re-applies every
+target and owner-override rule to the new status. A failed read never leads to
+the command and is not retried. `off` while already OFF, and `Manual:70` while
+already Manual 70, send nothing (`already_in_requested_state`). Under the
+automation policy `Manual:70` is accepted only from OFF and `off` only from
+Manual 70 °C; any other mode or target (including a change made in the app since
+the last poll) is refused with no request (`refused_mode_mismatch` or
+`refused_target_mismatch`).
 Commands are queued on the MQTT callback and executed serially by the main loop.
 Retained commands are rejected, including retained writes while connected using
 MQTT v5 retain-as-published. Stale/unknown commands and commands while unavailable

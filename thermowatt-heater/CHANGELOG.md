@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.10] - Actual OFF code and bounded pre-command status refresh (owner review required)
+
+- **OFF is `Cmd` 8.** T3 on the owner's heater showed software OFF reports
+  `Cmd` 8 (`WaterHeaterSts` 32) with `T_SetPoint` still 70; Manual 70 reports
+  `Cmd` 9 (`WaterHeaterSts` 33). 1.3.9 only knew `Cmd` 16, so OFF showed as
+  Unknown and a successful `off` was reported `not_observed_in_immediate_status`.
+  `Cmd` 8 and 16 are now both OFF for the vendor-mode sensor, the Home Assistant
+  water-heater mode (`off`), status validation, `off` confirmation and the
+  guarded `Manual:70` rule. `Cmd` 16 is kept for compatibility (unobserved).
+  No other code is treated as OFF. `WaterHeaterSts` stays a raw, unverified
+  value; it is not used as element feedback.
+- **Pre-command status refresh.** A command still needs status no older than
+  60 s. When the confirmed status is older, the bridge now makes **at most one**
+  bounded status read for that command (counted as `command_refresh`) instead
+  of dropping it as `dropped_status_older_than_60s`. Before that read it checks,
+  with no request: configuration, MQTT, queue age (≤30 s), device identity,
+  command policy, command text, authentication guard, cloud quota/backoff,
+  60 s spacing since any status read and a limit of 24 refreshes per rolling
+  24 h. Every target and owner-override rule is then evaluated against the new
+  status. A failed read is never followed by the command, gets the ordinary
+  status-read backoff, and is reported (`refused_status_refresh_failed` with a
+  fixed error code). A command older than 75 s after the read is dropped.
+- **Mode re-check (automation policy).** Because a controller's view may now be
+  up to one poll old, the fresh status must still show the state the command is
+  meant to leave: `Manual:70` only from OFF (target 70 or unusable), `off` only
+  from Manual 70 °C. Schedule, Eco, Holiday, an unknown code, or Manual at
+  another target is the owner's choice and is refused with no request
+  (`refused_mode_mismatch` / `refused_target_mismatch`). This also applies to
+  the Home Assistant water-heater *off* button. `legacy` keeps the 1.3.9 rules.
+- **No duplicate writes.** `off` when already OFF and `Manual:70` when already
+  Manual 70 send nothing (`already_in_requested_state`). A status read made for
+  a command counts as the ordinary poll if one falls due in the same tick.
+- Diagnostics: `last_command.status_refresh`
+  (`not_needed`/`refreshed`/`failed`/`refused`), optional `last_command.error`,
+  `command_status_refreshes_24h` and `command_status_refresh_limit_24h`. The
+  request ledger gains a `command_refresh` category; an older ledger is upgraded
+  with its counts kept.
+- Unchanged: authentication, token refresh, the persistent 401/403/429 lockout,
+  the 30-minute polling default, the optional demand refresh (still off), the
+  automation allowlist, no retries, entity IDs, and `commands_enabled: false`
+  by default. Changes heater-command handling: owner approval required to merge.
+
 ## [1.3.9] - Guarded Manual command for a local executor (owner review required)
 
 - New `command_policy` option, default **`automation`**: only `MODE=Manual:70`

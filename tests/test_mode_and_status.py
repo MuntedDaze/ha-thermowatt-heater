@@ -31,6 +31,9 @@ def render(template, status):
         (17, "Schedule", "None"),
         (65, "Holiday", "None"),
         (16, "Off", "off"),
+        (8, "Off", "off"),  # the code the heater actually reports when OFF (T3)
+        (2, "Unknown", "None"),
+        (64, "Unknown", "None"),
         (0, "Unknown", "None"),
         (99, "Unknown", "None"),
         (257, "Unknown", "None"),

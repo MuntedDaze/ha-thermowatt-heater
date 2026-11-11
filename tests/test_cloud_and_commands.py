@@ -145,6 +145,7 @@ def test_status_is_allowlisted_not_sensitive_body(factory):
 def test_failed_command_is_not_replayed_or_published_as_success(factory, clock, failure, caplog):
     bridge = factory(commands_enabled=True)
     ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70)  # automation parks only Manual 70
     bridge.session.request.side_effect = [failure]
     bridge.commands.put((clock(), "TEST123", "MODE", "off"))
     bridge.tick()
@@ -299,6 +300,7 @@ def test_http_200_command_failure_is_rejected_without_fake_state(factory, clock,
 def test_invalid_command_ack_never_substitutes_requested_state(factory, clock):
     bridge = factory(commands_enabled=True)
     ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70)  # automation parks only Manual 70
     bridge.session.request.side_effect = [response(body=ValueError()), response(body=STATUS)]
     bridge.process_command((clock(), "TEST123", "MODE", "off"))
     assert json.loads(status_messages(bridge)[0])["result"]["Cmd"] == "9"
@@ -377,7 +379,9 @@ def last_command(bridge):
 
 
 def test_guarded_manual_sends_explicit_70_only_when_observed_target_is_70(factory, clock):
-    bridge = factory(commands_enabled=True)
+    # From Schedule only under the legacy policy (1.3.10: automation resumes
+    # only from OFF; see test_command_refresh_1_3_10.py).
+    bridge = factory(commands_enabled=True, command_policy="legacy")
     ready(bridge)
     bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
     bridge.session.request.side_effect = [
@@ -416,27 +420,15 @@ def test_only_the_exact_guarded_payload_is_accepted(factory, clock, payload):
     assert last_command(bridge)["payload"] == "other"  # unknown payload text is never echoed
 
 
-@pytest.mark.parametrize(
-    "setup,reason",
-    [
-        (lambda b, c: None, "dropped_command_older_than_30s"),
-        (
-            lambda b, c: b.confirmed.__setitem__(
-                "TEST123", (b.monotonic() - 61, b.confirmed["TEST123"][1])
-            ),
-            "dropped_status_older_than_60s",
-        ),
-    ],
-)
-def test_stale_command_or_status_is_dropped_and_reported(factory, clock, setup, reason):
+def test_stale_command_is_dropped_and_reported(factory, clock):
+    # 1.3.10: stale STATUS no longer drops the command; it triggers at most one
+    # bounded pre-command read (tests/test_command_refresh_1_3_10.py).
     bridge = factory(commands_enabled=True)
     ready(bridge)
     bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
-    setup(bridge, clock)
-    issued = clock() - 31 if reason == "dropped_command_older_than_30s" else clock()
-    bridge.process_command((issued, "TEST123", "MODE", "Manual:70"))
+    bridge.process_command((clock() - 31, "TEST123", "MODE", "Manual:70"))
     bridge.session.request.assert_not_called()
-    assert last_command(bridge)["result"] == reason
+    assert last_command(bridge)["result"] == "dropped_command_older_than_30s"
 
 
 def test_guarded_manual_remains_disabled_by_default_and_reports_nothing(factory, clock):
@@ -461,10 +453,10 @@ def test_guarded_payload_passes_the_mqtt_callback_length_gate(factory, clock):
 def test_unconfirmed_guarded_manual_is_reported_and_never_retried(factory, clock):
     bridge = factory(commands_enabled=True)
     ready(bridge)
-    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=8)
     bridge.session.request.side_effect = [
         response(204),
-        response(body={"result": {**STATUS["result"], "Cmd": "17", "T_SetPoint": "70"}}),
+        response(body={"result": {**STATUS["result"], "Cmd": "8", "T_SetPoint": "70"}}),
     ]
     bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
     assert bridge.session.request.call_count == 2

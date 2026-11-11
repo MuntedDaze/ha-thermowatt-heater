@@ -9,7 +9,18 @@ from pathlib import Path
 from typing import cast
 
 LOG = logging.getLogger("thermowatt")
-KINDS = ("password_login", "token_refresh", "discovery", "status", "command", "confirmation")
+KINDS = (
+    "password_login",
+    "token_refresh",
+    "discovery",
+    "status",
+    "command",
+    "confirmation",
+    "command_refresh",
+)
+# Categories added after the ledger format was introduced. A ledger written by
+# an older version lacks them and is upgraded with a zero count, never reset.
+ADDED_KINDS = frozenset({"command_refresh"})
 
 
 def poll_seconds(options: Mapping[str, object]) -> int:
@@ -71,9 +82,10 @@ class RequestUsage:
                 if (
                     data["version"] != 1
                     or not isinstance(counts, dict)
-                    or set(counts) != set(KINDS)
+                    or not set(KINDS) - ADDED_KINDS <= set(counts) <= set(KINDS)
                 ):
                     raise ValueError
+                counts = {kind: counts.get(kind, 0) for kind in KINDS}
                 if any(type(v) is not int or not 0 <= v < 2**63 for v in counts.values()):
                     raise ValueError
                 since = data["since"]

@@ -135,6 +135,7 @@ def test_private_usage_confirmation_categories_persist_without_identifiers(facto
         "status": 1,
         "command": 1,
         "confirmation": 1,
+        "command_refresh": 0,
     }
     assert bridge.usage.total == 5
     stored = bridge.usage.path.read_text()
