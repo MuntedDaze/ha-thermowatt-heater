@@ -664,7 +664,8 @@ async def check_controller(hass, entry, entity_for):
         ):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
     finally:
-        hass.config.components.discard("mqtt")
+        if "mqtt" in hass.config.components:
+            hass.config.components.remove("mqtt")
         if original is not None:
             mqtt.async_publish = original
     return {
