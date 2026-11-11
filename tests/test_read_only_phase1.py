@@ -117,7 +117,7 @@ def test_http_429_keeps_existing_operator_lock_across_restart(factory, clock):
 
 
 def test_private_usage_confirmation_categories_persist_without_identifiers(factory, clock):
-    bridge = factory(commands_enabled=True)
+    bridge = factory(commands_enabled=True, command_policy="legacy")
     bridge.session.request.side_effect = [
         response(body=TOKENS),
         response(body={"result": {"termostati": [{"seriale": "TEST123"}]}}),

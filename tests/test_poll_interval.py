@@ -134,7 +134,9 @@ def test_authentication_retry_timing_is_not_replaced_by_poll_interval(factory, c
 
 
 def test_fresh_command_keeps_existing_cadence_and_stale_command_still_rejected(factory, clock):
-    bridge = factory(commands_enabled=True)  # Mocked instance, never a live heater.
+    bridge = factory(
+        commands_enabled=True, command_policy="legacy"
+    )  # Mocked instance, never a live heater.
     ready(bridge)
     bridge.session.request.side_effect = [response(body=STATUS)]
     bridge.tick()
@@ -216,7 +218,7 @@ def test_all_http_attempts_counted_including_auth_discovery_refresh_and_confirma
     factory, clock, caplog
 ):
     caplog.set_level("INFO")
-    bridge = factory(commands_enabled=True)  # Mocked only.
+    bridge = factory(commands_enabled=True, command_policy="legacy")  # Mocked only.
     bridge.session.request.side_effect = [
         response(body=TOKENS),
         response(body={"result": {"termostati": [{"seriale": "TEST123"}]}}),

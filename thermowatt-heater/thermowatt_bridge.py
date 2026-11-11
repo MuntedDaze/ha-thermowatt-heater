@@ -255,6 +255,19 @@ class AuthGuard:
         self._save()
 
 
+# MODE payloads that name the only acceptable Manual target. 70 °C is the
+# owner-approved storage target; nothing else is accepted in guarded form.
+GUARDED_PAYLOADS = {"Manual:70": 70}
+PLAIN_PAYLOADS = {"off", "Off", "Eco", "Auto", "Manual"}
+# Command policy. "automation" (the default) accepts EXACTLY the two operations
+# the hot-water controller needs; every other command (temperature writes, Eco,
+# Auto/Schedule, plain Manual, Holiday, malformed payloads) is refused before
+# any cloud request. "legacy" restores the full 1.3.8 command set and must be
+# chosen explicitly. Read-only monitoring is identical under both.
+COMMAND_POLICIES = ("automation", "legacy")
+AUTOMATION_COMMANDS = {("MODE", "Manual:70"), ("MODE", "off")}
+
+
 class MyThermowattBridge:
     API_KEY = _APP_API_KEY  # Existing embedded app identifier; never log it.
     BASE_URL = "https://myapp-connectivity.com/api/v1"
@@ -287,6 +300,9 @@ class MyThermowattBridge:
         self.data_dir = Path(data_dir)
         self.usage = RequestUsage(self.data_dir / "request_usage.json", clock, atomic_json)
         self.confirmation_read = False
+        # Outcome of the most recent MQTT command (fixed codes only, no payload
+        # bodies). Lets a local executor see refusals without another cloud read.
+        self.last_command = None
         self.last_success = {}
         self.last_error = safe_diagnostic(self.usage.last_error) if self.usage.last_error else None
         self.quota_signal = None
@@ -702,6 +718,9 @@ class MyThermowattBridge:
                 "poll_interval_seconds": self.poll_interval,
                 "consecutive_failures": self.failures,
                 "on_demand_refresh_enabled": self.options.get("on_demand_refresh_enabled", False),
+                "commands_enabled": bool(self.options.get("commands_enabled", False)),
+                "command_policy": self.options.get("command_policy", "automation"),
+                "last_command": dict(self.last_command) if self.last_command else None,
             }
             self._publish_read_only(f"P/{serial}/DIAGNOSTICS", payload)
 
@@ -827,16 +846,23 @@ class MyThermowattBridge:
             raise CloudError("status_values_non_numeric") from None
         if not all(math.isfinite(v) for v in values.values()):
             raise CloudError("status_values_non_finite")
-        if not 0 <= values["T_Avg"] <= 100 or not 20 <= values["T_SetPoint"] <= 75:
-            raise CloudError("status_temperature_out_of_range")
         if values["Cmd"] < 0 or values["Cmd"] != int(values["Cmd"]):
             raise CloudError("status_mode_invalid")
+        # While the heater is software OFF (Cmd 16) the cloud's setpoint is not an
+        # operating target, and it has never been observed. An out-of-range value
+        # then must not fail every poll (that would back the bridge off for hours
+        # while the heater stays off). It is published but flagged invalid, and
+        # no command may reuse it (see process_command).
+        setpoint_valid = 20 <= values["T_SetPoint"] <= 75
+        if not 0 <= values["T_Avg"] <= 100 or (not setpoint_valid and values["Cmd"] != 16):
+            raise CloudError("status_temperature_out_of_range")
         if values["WaterHeaterSts"] < 0 or values["WaterHeaterSts"] != int(
             values["WaterHeaterSts"]
         ):
             raise CloudError("status_heater_state_invalid")
         safe = {key: result[key] for key in self.STATUS_FIELDS}
         safe["vendor_mode"] = self.MODES.get(int(values["Cmd"]), "Unknown")
+        safe["setpoint_valid"] = setpoint_valid
         # WaterHeaterSts is an opaque diagnostic value, not proven element feedback.
         safe["heating"] = None
         self.confirmed[serial] = (self.monotonic(), values)
@@ -847,17 +873,37 @@ class MyThermowattBridge:
         self.publish_diagnostics(force=True)
         return values
 
+    def _command_result(self, kind, payload, result):
+        safe = payload if payload in GUARDED_PAYLOADS or payload in PLAIN_PAYLOADS else "other"
+        self.last_command = {
+            "kind": kind if kind in {"MODE", "TEMP"} else "other",
+            "payload": safe if kind == "MODE" else "temperature",
+            "result": result,
+            "at": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(),
+        }
+        self.publish_diagnostics(force=True)
+
     def process_command(self, command):
         issued, serial, kind, payload = command
         confirmed = self.confirmed.get(serial)
-        if (
-            not self.options.get("commands_enabled", False)
-            or not self.mqtt_connected.is_set()
-            or self.monotonic() - issued > 30
-            or serial not in self.active_devices
-            or not confirmed
-            or self.monotonic() - confirmed[0] > 60
-        ):
+        if not self.options.get("commands_enabled", False):
+            return
+        reason = None
+        if not self.mqtt_connected.is_set():
+            reason = "dropped_mqtt_disconnected"
+        elif self.monotonic() - issued > 30:
+            reason = "dropped_command_older_than_30s"
+        elif serial not in self.active_devices:
+            reason = "dropped_unknown_device"
+        elif not confirmed or self.monotonic() - confirmed[0] > 60:
+            reason = "dropped_status_older_than_60s"
+        if reason:
+            self._command_result(kind, payload, reason)
+            return
+        policy = self.options.get("command_policy", "automation")
+        if policy != "legacy" and (kind, payload) not in AUTOMATION_COMMANDS:
+            LOG.warning("Command refused by the automation command policy. No request sent.")
+            self._command_result(kind, payload, "refused_by_policy")
             return
         endpoint, arguments, expected = None, {}, None
         if kind == "TEMP":
@@ -877,6 +923,23 @@ class MyThermowattBridge:
             endpoint = "/manual"
             arguments = {"json": {"T_SetPoint": int(temperature)}}
             expected = ("T_SetPoint", temperature)
+        elif kind == "MODE" and payload in GUARDED_PAYLOADS:
+            # Guarded Manual: enter Manual ONLY at the stated target, sent
+            # explicitly. Accepted when the fresh observed target already equals
+            # it, or when the heater is software OFF (Cmd 16) and reports NO
+            # usable target (outside 20-75 °C). A usable target other than 70
+            # (in any mode, OFF included) may be a deliberate owner setting: it
+            # is refused, never silently "corrected" to 70.
+            wanted = GUARDED_PAYLOADS[payload]
+            observed = confirmed[1]["T_SetPoint"]
+            off_without_target = confirmed[1]["Cmd"] == 16 and not 20 <= observed <= 75
+            if observed != wanted and not off_without_target:
+                LOG.warning("Guarded Manual refused: observed target differs. No request sent.")
+                self._command_result(kind, payload, "refused_target_mismatch")
+                return
+            endpoint = "/manual"
+            arguments = {"json": {"T_SetPoint": wanted}}
+            expected = ("Cmd", 9)
         elif kind == "MODE":
             endpoint = {
                 "off": "/off",
@@ -887,13 +950,20 @@ class MyThermowattBridge:
             }.get(payload)
             # Holiday used to invent a 30-day end date. Never invent schedule writes.
             if not endpoint:
+                self._command_result(kind, payload, "refused_invalid_command")
                 return
             expected = ("Cmd", {"off": 16, "Off": 16, "Eco": 3, "Auto": 17, "Manual": 9}[payload])
             if payload == "Manual":
+                if not 20 <= confirmed[1]["T_SetPoint"] <= 75:
+                    # Plain Manual reuses the observed setpoint; never send an
+                    # invalid one (possible only while OFF). Use Manual:70.
+                    self._command_result(kind, payload, "refused_setpoint_unavailable")
+                    return
                 arguments = {"json": {"T_SetPoint": int(confirmed[1]["T_SetPoint"])}}
             else:
                 arguments = {"data": ""}
         if not endpoint:
+            self._command_result(kind, payload, "refused_invalid_command")
             return
         self.operation = "heater_command"
         self._availability(serial, False)
@@ -905,13 +975,17 @@ class MyThermowattBridge:
         if isinstance(acknowledgement, dict) and (
             acknowledgement.get("success") is False or acknowledgement.get("error")
         ):
+            self._command_result(kind, payload, "rejected_by_cloud")
             raise CloudError("command_rejected")
         LOG.info("Command submitted; waiting for observed cloud state.")
+        self._command_result(kind, payload, "submitted_awaiting_status")
         observed = self.poll_status(serial)
         if observed[expected[0]] == expected[1]:
             LOG.info("Requested value observed in cloud status.")
+            self._command_result(kind, payload, "observed_in_status")
         else:
             LOG.warning("Command not confirmed; published observed state. No retry.")
+            self._command_result(kind, payload, "not_observed_in_immediate_status")
 
     def tick(self):
         """One bounded iteration; authentication failure idles instead of exiting."""
@@ -1058,6 +1132,8 @@ def load_options(path):
     for key in ("cloud_enabled", "commands_enabled", "on_demand_refresh_enabled"):
         if type(options.get(key, False)) is not bool:
             raise ValueError
+    if options.get("command_policy", "automation") not in COMMAND_POLICIES:
+        raise ValueError
     generation = options.get("auth_retry_generation", 0)
     if type(generation) is not int or generation < 0:
         raise ValueError

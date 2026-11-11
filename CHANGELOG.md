@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.9] - Guarded Manual command for a local executor (owner review required)
+
+- New `command_policy` option, default **`automation`**: only `MODE=Manual:70`
+  (heating permitted) and `MODE=off` (parked) are accepted. Every other command
+  (temperature writes, Eco, Auto/Schedule, plain Manual, Holiday, malformed) is
+  refused before any cloud request, as `refused_by_policy`. `legacy` restores
+  the 1.3.8 command set only when chosen explicitly. Monitoring is unchanged.
+- Add MQTT `MODE` payload `Manual:70`. It sends `T_SetPoint` 70 explicitly and
+  is accepted only when the fresh observed status (≤60 s) already shows 70 °C,
+  or shows software **OFF** (`Cmd` 16) with no usable setpoint (outside
+  20–75 °C). A usable setpoint other than 70, OFF included, is refused with no
+  request (`refused_target_mismatch`): it is never silently changed to 70.
+- While OFF, a reported setpoint outside 20–75 °C no longer fails the poll (it
+  would otherwise back the bridge off while the heater stays off); it is
+  published with `setpoint_valid: false`. Outside OFF the 1.3.8 validation is
+  unchanged. Plain `Manual` refuses an invalid observed setpoint
+  (`refused_setpoint_unavailable`) instead of sending it.
+- Publish `commands_enabled` and a `last_command` record (fixed result codes:
+  dropped/refused/rejected/submitted/observed/not observed, no bodies) in the
+  existing diagnostics topic, so a dropped stale command is visible without an
+  extra cloud read.
+- No change to authentication, token refresh, lockouts, polling, request
+  accounting, freshness limits, retries (still none) or defaults:
+  `commands_enabled` remains false. Changes heater-command handling, so this
+  PR requires explicit owner approval before merge; deployment is separate.
+
 ## [1.3.8] - Phase 1 dependent review candidate
 
 - Add optional `on_demand_refresh_enabled`, disabled by default. Non-retained
