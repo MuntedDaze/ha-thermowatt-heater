@@ -312,7 +312,11 @@ class Controller:
         """Heating while parked: antibacterial, protective, frost or a programme
         that is not empty. Detected BEFORE any decision, so no command can be sent
         on the same tick. It is NEVER interrupted; writes wait until it ends."""
-        parked = self.state in {PARKED, HEATING_REQUESTED, OBSERVING, DISABLED}
+        if not self.enabled:
+            # Disabled (Stage A): the native programme may legitimately heat.
+            self.unexplained_since = None
+            return
+        parked = self.state in {PARKED, HEATING_REQUESTED, OBSERVING}
         confident = obs.element_confidence in {"verified", "high"}
         if parked and obs.mode == "Schedule" and obs.element == "on" and confident:
             self.unexplained_since = self.unexplained_since or _iso(obs.now)
@@ -590,8 +594,16 @@ class Controller:
         self, obs: Observation, desire: Desire, cfg: ControllerConfig, effects: list[Effect]
     ) -> None:
         now = obs.now
+        if not self.enabled:
+            # A disabled controller is silent: no alerts while the native
+            # Schedule and the planner run on their own (installation Stage A).
+            for key in list(self.alerts):
+                del self.alerts[key]
+                effects.append(Effect("resolve", key=key))
+            effects[:] = [e for e in effects if e.kind != "notify"]
+            return
         alerts: list[tuple[str, str, str]] = []
-        managed = self.enabled and self.state not in {DISABLED}
+        managed = True
         if self.unexplained_since:
             alerts.append(
                 (

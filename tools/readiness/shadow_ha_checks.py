@@ -617,6 +617,24 @@ async def check_controller(hass, entry, entity_for):
         state = hass.states.get(master)
         assert state.state == "off", state
         assert len(state.attributes["commissioning_missing"]) == 3
+        # Stage A (disabled): repeated evaluations neither publish, notify nor
+        # rewrite the controller's storage file when nothing changed.
+        idle = hass.data["thermann_shadow"][entry.entry_id].executor
+        writes = []
+        real_save = idle.store.async_save
+
+        async def counting_save(data):
+            writes.append(1)
+            await real_save(data)
+
+        idle.store.async_save = counting_save
+        await idle.async_step()
+        before = len(writes)
+        for _ in range(5):
+            await idle.async_step()
+        assert len(writes) == before, "idle controller rewrote its storage"
+        assert not captured
+        idle.store.async_save = real_save
         try:
             await drive(hass, "switch", "turn_on", master)
         except HomeAssistantError:

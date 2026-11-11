@@ -66,6 +66,7 @@ class Executor:
         self.listeners: set = set()
         self.last_observation: Observation | None = None
         self.save_failed = False
+        self._saved: dict | None = None
         self.configure(entry.options)
 
     # ------------------------------------------------------------------ setup
@@ -80,6 +81,7 @@ class Executor:
     async def async_load(self) -> None:
         data = await self.store.async_load()
         self.controller = Controller.from_dict(data)
+        self._saved = data if isinstance(data, dict) else None
         self.controller.restored(dt_util.utcnow())
         self.runtime.controller_active = self.controller.enabled
 
@@ -221,8 +223,15 @@ class Executor:
         self._notify_listeners()
 
     async def _save(self) -> bool:
+        """Write only when the controller state changed (no per-minute disk
+        writes while idle). An intent is always new state, so it is always
+        written before its message is published."""
+        data = self.controller.to_dict()
+        if data == self._saved and not self.save_failed:
+            return True
         try:
-            await self.store.async_save(self.controller.to_dict())
+            await self.store.async_save(data)
+            self._saved = data
             self.save_failed = False
             return True
         except Exception:  # noqa: BLE001

@@ -1178,3 +1178,28 @@ def test_closed_loop_forecast_error_sunny_forecast_cloudy_reality_still_ready():
     assert controller.fault is None
     assert ready_at(trace, "17:00") >= 65, ready_at(trace, "17:00")
     assert len(sim.posts) <= 4
+
+
+def test_disabled_controller_is_silent_while_the_native_schedule_heats():
+    """Stage A: installed but disabled, with the EXISTING (non-empty) native
+    programme still heating. No notifications, no tracking, no commands."""
+    now = local(hour=11)
+    controller = ctl.Controller()
+    for minute in range(0, 180):
+        at = now + timedelta(minutes=minute)
+        effects = controller.step(
+            obs(at, poll_at=now - timedelta(minutes=90), element="on", mode="Schedule"),
+            ctl.Desire("hold", "data_unavailable", planner_ok=False, comfort_risk="afternoon"),
+            ctl.ControllerConfig(),
+        )
+        assert not [e for e in effects if e.kind in {"publish", "notify"}], effects
+    assert controller.state == ctl.DISABLED
+    assert controller.unexplained_since is None and controller.alerts == {}
+    # Disabling after an alert resolves it rather than leaving it standing.
+    enabled_ = parked_controller(now)
+    enabled_.step(obs(now, element="on"), PERMIT, cfg())
+    assert "unexplained_heating" in enabled_.alerts
+    enabled_.set_enabled(False, now)
+    effects = enabled_.step(obs(now + timedelta(minutes=1), element="on"), PERMIT, cfg())
+    assert any(e.kind == "resolve" and e.key == "unexplained_heating" for e in effects)
+    assert not [e for e in effects if e.kind == "notify"]
