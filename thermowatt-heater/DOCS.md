@@ -262,6 +262,13 @@ automation policy `Manual:70` is accepted only from OFF and `off` only from
 Manual 70 °C; any other mode or target (including a change made in the app since
 the last poll) is refused with no request (`refused_mode_mismatch` or
 `refused_target_mismatch`).
+After the POST (1.3.11), a read still showing the previous state means
+`awaiting_confirmation`: at most two follow-up reads follow, 60 s and 300 s
+after the POST, and the command ends as `observed_in_status`,
+`unexpected_state_after_command` or, after 360 s, `not_confirmed_within_limit`.
+The POST is never repeated, and every other command is refused while one awaits
+confirmation. The pending command is kept in a private `command_state.json`, so
+a restart never re-sends it.
 Commands are queued on the MQTT callback and executed serially by the main loop.
 Retained commands are rejected, including retained writes while connected using
 MQTT v5 retain-as-published. Stale/unknown commands and commands while unavailable

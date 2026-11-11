@@ -114,7 +114,10 @@ def test_off_is_not_confirmed_by_any_other_mode_code(factory, clock, cmd):
     set_status(bridge, 9)
     bridge.session.request.side_effect = [response(204), body({**OFF_70, "Cmd": cmd})]
     bridge.process_command((clock(), SERIAL, "MODE", "off"))
-    assert last_command(bridge)["result"] == "not_observed_in_immediate_status"
+    # 1.3.11: the previous mode (9) awaits a bounded follow-up; any other code
+    # is neither old nor requested and ends the command (never success).
+    expected = "awaiting_confirmation" if cmd == "9" else "unexpected_state_after_command"
+    assert last_command(bridge)["result"] == expected
     assert bridge.session.request.call_count == 2  # never retried
 
 

@@ -460,7 +460,9 @@ def test_unconfirmed_guarded_manual_is_reported_and_never_retried(factory, clock
     ]
     bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
     assert bridge.session.request.call_count == 2
-    assert last_command(bridge)["result"] == "not_observed_in_immediate_status"
+    # 1.3.11: the old state right after the POST is not a failure; the command
+    # awaits a bounded follow-up read and is never re-sent.
+    assert last_command(bridge)["result"] == "awaiting_confirmation"
 
 
 def test_diagnostics_expose_commands_enabled_flag(factory, clock):

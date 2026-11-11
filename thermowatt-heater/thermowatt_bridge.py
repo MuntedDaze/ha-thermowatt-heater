@@ -277,6 +277,15 @@ STATUS_MAX_AGE = 60
 COMMAND_MAX_AGE = 30
 # ...and at most this old after a pre-command status refresh, just before POST.
 COMMAND_MAX_AGE_AFTER_REFRESH = 75
+# Bounded command confirmation (1.3.11). The cloud may report a command's new
+# mode some time after the POST is accepted, so the immediate read showing the
+# OLD mode is not a failure. After it, at most these follow-up reads are made
+# (seconds after the POST); every other status read (a background poll) is also
+# checked. The POST itself is NEVER repeated. With no confirmation by the
+# deadline the command ends as not_confirmed_within_limit (owner action).
+CONFIRM_FOLLOWUPS = (60, 300)
+CONFIRM_DEADLINE = CONFIRM_FOLLOWUPS[-1] + 60
+COMMAND_STATE_VERSION = 1
 
 
 class MyThermowattBridge:
@@ -320,6 +329,13 @@ class MyThermowattBridge:
         # Outcome of the most recent MQTT command (fixed codes only, no payload
         # bodies). Lets a local executor see refusals without another cloud read.
         self.last_command = None
+        # The single command whose outcome is not yet known (persisted, so a
+        # restart neither forgets nor re-sends it) and the last command refused
+        # because of it (kept apart so the pending record is never overwritten).
+        self.pending = None
+        self.refused_while_pending = None
+        self.command_state_path = self.data_dir / "command_state.json"
+        self._load_command_state()
         self.last_success = {}
         self.last_error = safe_diagnostic(self.usage.last_error) if self.usage.last_error else None
         self.quota_signal = None
@@ -741,6 +757,11 @@ class MyThermowattBridge:
                 "last_command": dict(self.last_command) if self.last_command else None,
                 "command_status_refreshes_24h": self._recent_command_refreshes(),
                 "command_status_refresh_limit_24h": self.COMMAND_REFRESH_DAILY_LIMIT,
+                "command_confirmation_pending": self.pending is not None,
+                "command_confirmation_followups_seconds": list(CONFIRM_FOLLOWUPS),
+                "refused_while_pending": dict(self.refused_while_pending)
+                if self.refused_while_pending
+                else None,
             }
             self._publish_read_only(f"P/{serial}/DIAGNOSTICS", payload)
 
@@ -850,12 +871,12 @@ class MyThermowattBridge:
         atomic_json(self.config_path, self.config)
         self.discovered = True
 
-    def poll_status(self, serial, category=None):
+    def poll_status(self, serial, category=None, operation=None):
         self.last_status_attempt[serial] = self.monotonic()
         if category is None:
             category = "confirmation" if self.operation == "heater_command" else "status"
         self.read_category = category
-        self.operation = (
+        self.operation = operation or (
             "command_status_refresh" if category == "command_refresh" else "status_poll"
         )
         try:
@@ -897,9 +918,11 @@ class MyThermowattBridge:
         self.last_success[serial] = self.clock()
         self.cloud_health = "ok"
         self.publish_diagnostics(force=True)
+        # Every fresh read after a command's POST is evidence for its outcome.
+        self._observe_pending(serial, values)
         return values
 
-    def _command_result(self, kind, payload, result, refresh=None, error=None):
+    def _command_result(self, kind, payload, result, refresh=None, error=None, extra=None):
         safe = payload if payload in GUARDED_PAYLOADS or payload in PLAIN_PAYLOADS else "other"
         self.last_command = {
             "kind": kind if kind in {"MODE", "TEMP"} else "other",
@@ -914,7 +937,139 @@ class MyThermowattBridge:
         }
         if error is not None:
             self.last_command["error"] = safe_diagnostic(error)
+        if extra:
+            self.last_command.update(extra)
         self.publish_diagnostics(force=True)
+
+    # ------------------------------------------------------------------ confirmation
+    def _iso(self, moment):
+        return datetime.fromtimestamp(moment, timezone.utc).isoformat()
+
+    def _load_command_state(self):
+        try:
+            if not self.command_state_path.exists():
+                return
+            if self.command_state_path.stat().st_size > 8192:
+                raise ValueError
+            data = json.loads(self.command_state_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or data.get("version") != COMMAND_STATE_VERSION:
+                raise ValueError
+            pending, last = data.get("pending"), data.get("last_command")
+            if pending is not None:
+                if not isinstance(pending, dict) or not self.valid_serial(pending.get("serial")):
+                    raise ValueError
+                for key in ("posted_at",):
+                    if type(pending.get(key)) not in (int, float):
+                        raise ValueError
+                for key in ("followups_done", "reads", "prior_cmd"):
+                    if type(pending.get(key)) is not int:
+                        raise ValueError
+                if not isinstance(pending.get("expect_cmd"), list):
+                    raise ValueError
+            if last is not None and not isinstance(last, dict):
+                raise ValueError
+            self.pending, self.last_command = pending, last
+            os.chmod(self.command_state_path, 0o600)
+            if pending is not None:
+                LOG.warning(
+                    "Restart with a command awaiting confirmation: it is never re-sent; "
+                    "the next status reads decide its outcome."
+                )
+        except (OSError, ValueError, TypeError, KeyError):
+            LOG.warning("Command state: code=command_state_invalid; ignored.")
+
+    def _save_command_state(self):
+        atomic_json(
+            self.command_state_path,
+            {
+                "version": COMMAND_STATE_VERSION,
+                "pending": self.pending,
+                "last_command": self.last_command,
+            },
+        )
+
+    def _pending_result(self, result, observed_mode=None, error=None, pending=None):
+        pending = pending or self.pending
+        extra = {
+            "status_reads": pending["reads"],
+            "followups_done": pending["followups_done"],
+            "posted_at": self._iso(pending["posted_at"]),
+            "confirm_by": self._iso(pending["posted_at"] + CONFIRM_DEADLINE),
+        }
+        if observed_mode is not None:
+            extra["observed_mode"] = observed_mode
+        self._command_result(
+            pending["kind"],
+            pending["payload"],
+            result,
+            refresh=pending["refresh"],
+            error=error,
+            extra=extra,
+        )
+
+    def _finish_pending(self, result, observed_mode=None, error=None):
+        # Cleared first, so the published diagnostics never show a terminal
+        # outcome with the command still marked pending.
+        pending, self.pending = self.pending, None
+        self._pending_result(result, observed_mode, error, pending=pending)
+        try:
+            self._save_command_state()
+        except OSError:
+            LOG.warning("Command state: code=command_state_storage_unavailable.")
+        if result == "observed_in_status":
+            LOG.info("Requested value observed in cloud status.")
+        else:
+            LOG.warning("Command outcome: code=%s. No retry; owner action may be required.", result)
+
+    def _observe_pending(self, serial, values):
+        pending = self.pending
+        if pending is None or pending["serial"] != serial:
+            return
+        pending["reads"] += 1
+        cmd, setpoint = int(values["Cmd"]), values["T_SetPoint"]
+        observed_mode = self.MODES.get(cmd, "Unknown")
+        wanted = pending["expect_setpoint"]
+        if cmd in pending["expect_cmd"] and (wanted is None or setpoint == wanted):
+            self._finish_pending("observed_in_status", observed_mode)
+        elif cmd == pending["prior_cmd"] and (
+            cmd in OFF_CODES or setpoint == pending["prior_setpoint"]
+        ):
+            # Still the state before the POST: the cloud may not have applied
+            # it YET. Not success, not failure; wait for a bounded follow-up.
+            if pending["followups_done"] < len(CONFIRM_FOLLOWUPS):
+                LOG.warning(
+                    "Command not confirmed yet: status still shows the previous state; "
+                    "awaiting a bounded follow-up read. No retry."
+                )
+                self._pending_result("awaiting_confirmation", observed_mode)
+                self._save_command_state_quietly()
+            else:
+                self._finish_pending("not_confirmed_within_limit", observed_mode)
+        else:
+            # Neither the old nor the requested state (e.g. an app change).
+            self._finish_pending("unexpected_state_after_command", observed_mode)
+
+    def _save_command_state_quietly(self):
+        try:
+            self._save_command_state()
+        except OSError:
+            LOG.warning("Command state: code=command_state_storage_unavailable.")
+
+    def _expire_pending(self):
+        pending = self.pending
+        if pending is not None and self.clock() >= pending["posted_at"] + CONFIRM_DEADLINE:
+            self._finish_pending("not_confirmed_within_limit", error=pending.get("error"))
+
+    def _followup_due(self):
+        pending = self.pending
+        if pending is None or pending["serial"] not in self.active_devices:
+            return None
+        done = pending["followups_done"]
+        if done >= len(CONFIRM_FOLLOWUPS):
+            return None
+        if self.clock() < pending["posted_at"] + CONFIRM_FOLLOWUPS[done]:
+            return None
+        return pending["serial"]
 
     def _recent_command_refreshes(self):
         horizon = self.monotonic() - 86400
@@ -987,6 +1142,20 @@ class MyThermowattBridge:
         issued, serial, kind, payload = command
         if not self.options.get("commands_enabled", False):
             return
+        if self.pending is not None:
+            # One uncertain command at a time. Duplicates (an MQTT redelivery,
+            # a repeated publish) and any other command wait for the outcome.
+            # Recorded apart from last_command, which keeps the pending record.
+            LOG.warning("Command refused: a previous command awaits confirmation. No request.")
+            safe = payload if payload in GUARDED_PAYLOADS or payload in PLAIN_PAYLOADS else "other"
+            self.refused_while_pending = {
+                "kind": kind if kind in {"MODE", "TEMP"} else "other",
+                "payload": safe if kind == "MODE" else "temperature",
+                "result": "refused_confirmation_pending",
+                "at": self._iso(self.clock()),
+            }
+            self.publish_diagnostics(force=True)
+            return
         reason = None
         if not self.mqtt_connected.is_set():
             reason = "dropped_mqtt_disconnected"
@@ -1058,7 +1227,7 @@ class MyThermowattBridge:
             if mode != 9:
                 return
             arguments = {"json": {"T_SetPoint": int(temperature)}}
-            expected = ("T_SetPoint", {temperature})
+            expected = ({9}, temperature)
         elif payload in GUARDED_PAYLOADS:
             # Guarded Manual: enter Manual ONLY at the stated target, sent
             # explicitly. Accepted when the fresh observed target already equals
@@ -1082,7 +1251,7 @@ class MyThermowattBridge:
                 self._command_result(kind, payload, "refused_mode_mismatch", refresh=refresh)
                 return
             arguments = {"json": {"T_SetPoint": int(temperature)}}
-            expected = ("Cmd", {9})
+            expected = ({9}, temperature)  # confirmed only as Manual AT 70
         else:
             if payload == "off" and mode in OFF_CODES:
                 # Already OFF: a second write would only cost a request.
@@ -1096,7 +1265,6 @@ class MyThermowattBridge:
                 self._command_result(kind, payload, reason, refresh=refresh)
                 return
             expected = (
-                "Cmd",
                 {
                     "off": OFF_CODES,
                     "Off": OFF_CODES,
@@ -1104,6 +1272,7 @@ class MyThermowattBridge:
                     "Auto": {17},
                     "Manual": {9},
                 }[payload],
+                None,
             )
             if payload == "Manual":
                 if not 20 <= observed <= 75:
@@ -1114,11 +1283,45 @@ class MyThermowattBridge:
                     )
                     return
                 arguments = {"json": {"T_SetPoint": int(observed)}}
+                expected = ({9}, observed)
             else:
                 arguments = {"data": ""}
+        # Persist the uncertain command BEFORE the POST: a crash or restart from
+        # here on never re-sends it, and the next reads decide its outcome.
+        self.pending = {
+            "serial": serial,
+            "kind": kind,
+            "payload": payload,
+            "refresh": refresh,
+            "expect_cmd": sorted(expected[0]),
+            "expect_setpoint": expected[1],
+            "prior_cmd": mode,
+            "prior_setpoint": observed,
+            "posted_at": self.clock(),
+            "followups_done": 0,
+            "reads": 0,
+        }
+        try:
+            self._pending_result("submitting")
+            self._save_command_state()
+        except OSError:
+            self.pending = None
+            self._command_result(
+                kind, payload, "refused_command_state_unavailable", refresh=refresh
+            )
+            LOG.warning("Command refused: command state cannot be stored. No request sent.")
+            return
         self.operation = "heater_command"
         self._availability(serial, False)
-        response = self.request("POST", endpoint, serial, **arguments)
+        try:
+            response = self.request("POST", endpoint, serial, **arguments)
+        except CloudError as error:
+            # Unknown whether the cloud acted (e.g. a timeout after delivery):
+            # never re-sent; the bounded reads decide, or the deadline does.
+            code = self.quota_signal or (error.args[0] if error.args else None)
+            self._pending_result("awaiting_confirmation", error=code)
+            self._save_command_state_quietly()
+            raise
         try:
             acknowledgement = response.json()
         except ValueError:
@@ -1126,21 +1329,19 @@ class MyThermowattBridge:
         if isinstance(acknowledgement, dict) and (
             acknowledgement.get("success") is False or acknowledgement.get("error")
         ):
-            self._command_result(kind, payload, "rejected_by_cloud", refresh=refresh)
+            self._finish_pending("rejected_by_cloud")
             raise CloudError("command_rejected")
         LOG.info("Command submitted; waiting for observed cloud state.")
-        self._command_result(kind, payload, "submitted_awaiting_status", refresh=refresh)
-        observed_status = self.poll_status(serial)
-        if observed_status[expected[0]] in expected[1]:
-            LOG.info("Requested value observed in cloud status.")
-            self._command_result(kind, payload, "observed_in_status", refresh=refresh)
-        else:
-            LOG.warning("Command not confirmed; published observed state. No retry.")
-            self._command_result(kind, payload, "not_observed_in_immediate_status", refresh=refresh)
+        self._pending_result("submitted_awaiting_status")
+        self._save_command_state_quietly()
+        self.poll_status(serial, category="confirmation")
 
     def tick(self):
         """One bounded iteration; authentication failure idles instead of exiting."""
         self.publish_diagnostics()
+        # Needs no request: a command whose confirmation window has passed ends
+        # as not confirmed even while the cloud is unreachable or locked.
+        self._expire_pending()
         if self.mqtt_reconnected.is_set():
             self.mqtt_reconnected.clear()
             self._offline()
@@ -1167,6 +1368,14 @@ class MyThermowattBridge:
                 command = None
             if command is not None:
                 self.process_command(command)
+            followup = self._followup_due()
+            if followup is not None and followup not in self.read_this_tick:
+                self.pending["followups_done"] += 1
+                self._save_command_state_quietly()
+                LOG.info("Command awaiting confirmation: one bounded follow-up status read.")
+                self.poll_status(
+                    followup, category="confirmation", operation="command_confirmation"
+                )
             targets = self._take_demand()
             if poll_due:
                 targets |= {
@@ -1177,10 +1386,10 @@ class MyThermowattBridge:
             if poll_due or targets:
                 polling = True
                 for serial in sorted(targets):
-                    # A command in this tick has just read this heater's status
-                    # (pre-command refresh or confirmation): that read counts as
-                    # the due poll, so no duplicate request is made.
-                    if command is None or serial not in self.read_this_tick:
+                    # A command or confirmation read in this tick has just read
+                    # this heater's status: that read counts as the due poll, so
+                    # no duplicate request is made.
+                    if serial not in self.read_this_tick:
                         self.poll_status(serial)
                     self.next_background[serial] = self.clock() + self.poll_interval
                 self.next_poll = min(
@@ -1224,6 +1433,10 @@ class MyThermowattBridge:
             if self.quota_signal:
                 code = self.quota_signal
             diagnostic = (self.operation, code, delay)
+            if self.pending is not None:
+                # Remembered for the command's outcome (e.g. at the deadline).
+                self.pending["error"] = code
+                self._save_command_state_quietly()
             self.last_error = code
             self.usage.last_error = code
             self.usage.save()
