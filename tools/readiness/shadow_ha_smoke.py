@@ -48,10 +48,13 @@ def assert_entity_serialization(hass, sources):
         for state in hass.states.async_all()
         if state.entity_id.split(".", 1)[1].startswith("thermann_shadow_")
     ]
-    from custom_components.thermann_shadow.sensor import SENSORS
+    from custom_components.thermann_shadow.sensor import CONTROLLER_SENSORS, SENSORS
     from custom_components.thermann_shadow.settings import CATALOG
 
-    assert len(states) == len(SENSORS) + sum(meta.kind != "form" for meta in CATALOG.values()) + 2
+    settings = sum(meta.kind != "form" for meta in CATALOG.values())
+    # + restore/undo buttons; 0.5.0: controller sensors, master switch, 3 owner buttons.
+    expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3
+    assert len(states) == expected, (len(states), expected)
     frames = []
     connection = SimpleNamespace(
         user=SimpleNamespace(is_admin=True),
@@ -259,9 +262,9 @@ async def main():
             for state in hass.states.async_all("sensor")
             if state.entity_id.startswith("sensor.thermann_shadow_")
         ]
-        from custom_components.thermann_shadow.sensor import SENSORS
+        from custom_components.thermann_shadow.sensor import CONTROLLER_SENSORS, SENSORS
 
-        assert len(sensor_ids) == len(SENSORS), sensor_ids
+        assert len(sensor_ids) == len(SENSORS) + len(CONTROLLER_SENSORS), sensor_ids
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
