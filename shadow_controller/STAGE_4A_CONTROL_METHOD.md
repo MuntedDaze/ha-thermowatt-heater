@@ -1,14 +1,17 @@
 # Stage 4A — Thermann control method: investigation and supervised validation plan
 
-**Status: proposal for ChatGPT/owner review. Nothing here has been executed.**
-No heater command, option change, Schedule or T-Comfort edit, extra Thermann
-request or deployment was made. Thermowatt add-on 1.3.8 is unchanged and still
+**Status: decided (owner, 11 Nov 2026).** Manual 70 °C = heating permitted;
+**empty weekly Schedule** = normal heating parked. T1 passed in the official
+app; T2 (Off/On) is **optional** and not a prerequisite; T3 (bridge commands) is
+the next physical gate. Apart from the owner's own app test, no heater command,
+option change, Schedule or T-Comfort edit, extra Thermann request or deployment
+was made. Thermowatt add-on 1.3.8 is unchanged and still
 has `commands_enabled: false` and `on_demand_refresh_enabled: false`.
 
 The owner accepts manual recovery if Home Assistant or the cloud fails, so a fully
 automatic fallback is not a prerequisite. Manufacturer safety stays first.
 
-## 0. Owner decision (11 Nov 2026) — supersedes the backstop in §1
+## 0. Owner decision (11 Nov 2026)
 
 - HA should control normal heating completely. The Thermann thermostat and all
   manufacturer protections stay active.
@@ -26,10 +29,10 @@ automatic fallback is not a prerequisite. Manufacturer safety stays first.
 - **Not approved:** Schedule edits, an executor, or T3–T6. Each needs separate
   approval.
 
-T1 can test the Schedule park **without editing the Schedule**: it runs outside
+T1 tested the Schedule park **without editing the Schedule**: it ran outside
 the existing windows, where Schedule already parks the element (the 11 Nov
-00:00–04:00 evidence). Emptying the programme is a later step, T4, approved
-separately.
+00:00–04:00 evidence). Saving the empty programme is commissioning Stage C,
+approved separately.
 
 ## 0a. T1 result (owner, official app, 11 Nov 2026) — PASSED
 
@@ -86,26 +89,27 @@ after a session at start reading + delivered energy ÷ 0.366 kWh/°C. It plans
 in heating periods of at least 30 minutes and never toggles modes to beat
 hysteresis.
 
-## 1. Recommendation in one paragraph (as originally proposed)
+## 1. Final method
 
-Use **Manual 70 °C as the "heat permitted" state and Schedule as the "parked"
-state**, with the native Schedule reduced by the owner to **one late afternoon
-backstop window** (proposed 13:00–16:00 local every day, no morning window).
+Use **Manual 70 °C as the "heating permitted" state** and **Schedule with an
+empty weekly programme as the "parked" state**. There are no fallback heating
+windows (morning or afternoon) and no `/off`.
 
-- Both directions already exist in bridge 1.3.8: `/manual` carries an explicit
-  70 °C target, `/auto` selects Schedule, and readback distinguishes them (`Cmd` 9 / 17).
-- History shows that Schedule outside a window really holds the element off. It
-  stayed off for four hours at a 16 °C reading.
-- If HA fails while parked, the backstop still heats the tank before the evening
-  peak at off-peak or solar cost. If HA fails in Manual, the heater behaves as a
+- Both directions exist in the bridge: `/manual` carries the 70 °C target and
+  `/auto` selects Schedule; readback distinguishes them (`Cmd` 9 / 17). Bridge
+  1.3.9 (PR #12) adds the guarded `Manual:70` so Manual can never be entered at
+  another target.
+- History and T1 both show Schedule outside its windows holds the element off.
+  With the programme empty, Schedule parks ordinary heating at all times; the
+  antibacterial and frost functions stay with the manufacturer.
+- If HA, the cloud or the bridge fails while parked, ordinary heating stays off
+  until the owner selects Manual (or restores the old programme) in the app. The
+  owner accepts this. If it fails in Manual, the heater behaves as a
   conventional 70 °C heater.
 
-Genuine **Off/On while staying in Manual** (Option 1, the owner's preference) is
-structurally the same pair of writes in this API (`Cmd` 9 ↔ 16). It cannot yet be
-called reliable, because the resume path and what `Off` reports are unverified,
-and a stuck Off gives no heat at all. Qualify it with the **app-only** observation
-T2 below; it can then replace the Schedule park if the owner prefers to leave the
-native programme alone.
+**Off/On (Option 1)** is structurally the same pair of writes (`Cmd` 9 ↔ 16),
+but its resume path and what `Off` reports are unverified, and a stuck Off gives
+no heat at all. It remains an **optional** alternative (T2), not a prerequisite.
 
 ## 2. Evidence
 
@@ -176,7 +180,7 @@ minimum cycle.
 
 ## 3. Options compared
 
-| | **1. Off/On, stay Manual 70** | **2. Manual ↔ Schedule, empty Schedule** | **3. Manual ↔ Schedule, backstop window (recommended)** | 0. Today's Schedule + Manual boost |
+| | **1. Off/On, stay Manual 70** (optional) | **2. Manual ↔ Schedule, empty Schedule (CHOSEN)** | 3. Manual ↔ Schedule, backstop window (**declined by owner**) | 0. Today's Schedule + Manual boost |
 | --- | --- | --- | --- | --- |
 | Writes per heating opportunity | 2 (`/manual`, `/off`) | 2 (`/manual`, `/auto`) | 0–2 (none when the backstop alone suffices) | 1–2, but cannot stop native windows |
 | Both directions exist in 1.3.8 | `/off` yes. Resume via `/manual` **unverified** (the app uses a power button) | Yes | Yes | Yes |
@@ -193,12 +197,11 @@ minimum cycle.
 | Native programme edit by owner | None | Clear all windows | Shorten to the backstop (record the original to restore) | None |
 | Economics with HA working | Full control | Full control | Full control, except that the backstop heats if the tank is still ≤62 °C at 13:00, i.e. only when HA has not already heated it | Loses the main saving: the 04:00 off-peak reheat cannot be stopped |
 
-**Why Option 3 over Option 1:**
-- In this API both options are the same pair of mode writes, so they cost the same.
-- Option 3 parks in a state already observed to work, and its park keeps a native
-  backstop.
-- Option 1's park disables both the windows and T-Comfort, and its resume and
-  `Off` readback are unverified.
+**Why Option 2:** it is the owner's choice and the simplest reliable method.
+Both mode writes exist and were reproduced in the app (T1); the park state is
+observed to hold the element off. Option 3's backstop window was proposed
+earlier and **declined**: the owner prefers complete HA control and accepts
+manual recovery after a failure. Option 1 stays optional.
 
 **Rejected:**
 - A low Manual target as a "stop": it is a hygiene and safety change and is not approved.
@@ -221,9 +224,9 @@ Annual value depends on how many days give about 3 kW of surplus for 2–3 hours
 Quantify it from at least a month of 0.4.0 shadow data (*benefit of heating now*
 and the native-versus-cheapest comparison) before enabling execution.
 
-## 4. Proposed control policy (design; implementation is a later, separately approved PR)
+## 4. Control policy (implemented in the 0.5.0 controller, PR #13)
 
-1. **States.** `PARKED` = Schedule (`Cmd` 17) outside the backstop window.
+1. **States.** `PARKED` = Schedule (`Cmd` 17) with the empty programme.
    `PERMITTED` = Manual (`Cmd` 9) at 70 °C. Any other observed mode or target means
    **owner control**: no automatic writes until the owner hands back.
 2. **Start** when the 0.4.0 planner's stabilised decision is `heat_now_cheapest` or
@@ -236,7 +239,7 @@ and the native-versus-cheapest comparison) before enabling execution.
    - **never** while unexplained element activity could be antibacterial.
 4. **Limits:**
    - writes only aligned with background polls, at most one per poll (≥30 min apart);
-   - ≤4 per day and ≤2 per opportunity;
+   - ≤6 per day (the last 2 reserved for a comfort start and its park) and ≤2 per opportunity;
    - no retries, and never the same intent twice;
    - after any unconfirmed result, stop automatic writes until the owner acknowledges.
 5. **Confirmation:**
@@ -247,7 +250,7 @@ and the native-versus-cheapest comparison) before enabling execution.
    The vendor status alone is not physical proof.
 6. **Recovery.** In every failure, stop automatic writes, keep the last confirmed
    state and alert the owner. The owner's manual route is the official app: select
-   Manual (hot water now) or Schedule, or restore the original programme. An auth
+   Manual (hot water now) or Schedule, or restore the recorded programme. An auth
    block is cleared only by the owner's documented generation bump.
 
 ## 5. Supervised validation procedure
@@ -284,13 +287,13 @@ each state.
 | --- | --- | --- | --- |
 | **T0** Preparation | Owner (no heater action) | Record firmware 07.00.09.06, baseline screenshots, tariff, bridge options (commands/on-demand off), current request counts | Baseline recorded; restoration steps written down |
 | **T1** Manual ↔ Schedule, app only (Options 2/3) | Owner in the app | From Schedule (parked), select Manual and check 70 °C. Wait ≥1 poll. Select Schedule. Wait ≥1 poll | Start ≤2 min (meter +3 kW, red LED on). Poll shows 9/70 with bit 0 set. **Stop ≤2 min after selecting Schedule**. Poll shows 17/70. Windows and T-Comfort unchanged |
-| **T2** Off/On, app only (Option 1) | Owner in the app | From Manual 70 while heating, press power Off. Wait ≥1 poll (bridge must stay healthy). Press On. Wait ≥1 poll. Return to baseline | Element stops. Record exactly what `Cmd`/`T_SetPoint` Off reports. On returns to **Manual 70** (`Cmd` 9) and heating resumes at ≤62 °C. No `status_temperature_out_of_range` |
-| **T3** API equivalence | Owner sets `commands_enabled: true` for the session only | One write per poll, published right after the STATUS update. Option 3: MODE `Manual`, then `Auto`. Option 1 (only if T2 passed): `off`, then `Manual`. At most 4 writes; no retry. Set `commands_enabled: false` afterwards | Each write is confirmed by the immediate or next poll and by the meter, exactly as in T1/T2. Request counts rise by 2 per write. No auth block |
-| **T4** Backstop programme (Option 3) | Owner edits the Schedule in the app | Replace the windows with 13:00–16:00 daily (owner may choose the hours); keep T-Comfort 10. Restore the original if any issue | The backstop starts heating at ≤62 °C and stays off at >62 °C. No heating outside the window |
-| **T5** Supervised trial | Separately approved executor PR | 1–2 weeks with commands enabled under the §4 limits; daily review of writes, confirmations, readiness and cost | Readiness goals met; ≤4 writes/day; zero unconfirmed writes; requests within plan |
+| **T2** Off/On, app only (Option 1; **optional**) | Owner in the app | From Manual 70 while heating, press power Off. Wait ≥1 poll (bridge must stay healthy). Press On. Wait ≥1 poll. Return to baseline | Element stops. Record exactly what `Cmd`/`T_SetPoint` Off reports. On returns to **Manual 70** (`Cmd` 9) and heating resumes at ≤62 °C. No `status_temperature_out_of_range` |
+| **T3** API equivalence | Owner sets `commands_enabled: true` for the session only | One write per poll, published right after the STATUS update: MODE `Manual:70` (bridge 1.3.9), then `Auto`. At most 4 writes; no retry. Set `commands_enabled: false` afterwards | Each write is confirmed by the immediate or next poll and by the meter, exactly as in T1/T2. Request counts rise by 2 per write. No auth block |
+| **T4** Empty programme (commissioning Stage C) | Owner, in the app | Screenshot every day's windows (restore copy), then save an empty programme for every day; keep T-Comfort 10 and 70 °C | In Schedule, a former window time passes with no 3 kW step |
+| **T5** Supervised trial (commissioning Stage D) | Controller 0.5.0 (PR #13), separately approved | Days with commands enabled under the §4 limits; daily review of writes, confirmations, readiness and cost | Readiness goals met; ≤6 writes/day; zero unconfirmed writes; requests within plan |
 | **T6** Failure drills | Owner | HA stopped while parked or in Manual; bridge restart between start and stop | Behaviour matches §3. The owner recovers using the app |
 
-T1 and T2 involve **no API writes** and can run in either order. They show what the
+T1 (done) and T2 (optional) involve **no API writes**. They show what the
 official app does, which is the reference behaviour. T3 then checks that the
 bridge's existing endpoints do the same.
 
@@ -306,12 +309,10 @@ Never force this.
 4. Is switching mode during an antibacterial cycle safe, and does the cycle continue?
 5. Is there a recommended maximum mode-change frequency or API write rate?
 
-## 7. Owner decisions requested
+## 7. Decisions (resolved, 11 Nov 2026)
 
-1. Accept Option 3 as primary, with Option 1 kept for T2 qualification; or prefer
-   Option 1 if T2 passes.
-2. Backstop hours: 13:00–16:00 daily, or longer on weekends or in summer.
-3. Morning: no native window (cool water possible if HA fails, accepted manual
-   recovery), or a short winter-only window.
-4. Approve T0–T2 (app-only) first. T3 onward need separate approvals, including
-   the `commands_enabled` change and the executor PR.
+1. Method: **Manual 70 °C permit / empty Schedule park** (Option 2).
+2. **No** backstop or morning fallback windows; manual recovery after a failure
+   is accepted.
+3. T0 and T1 done (T1 passed). **T2 optional.** T3 onward are separately
+   approved commissioning stages (see `COMMISSIONING_0_5_0.md` in PR #13).
