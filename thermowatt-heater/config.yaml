@@ -20,6 +20,7 @@ options:
   password: ""
   cloud_enabled: false
   commands_enabled: false
+  command_policy: automation
   poll_interval_minutes: 30
   poll_interval_unit: minutes
   min_cloud_retry_minutes: 60
@@ -30,6 +31,7 @@ schema:
   password: password
   cloud_enabled: bool
   commands_enabled: bool
+  command_policy: list(automation|legacy)
   poll_interval_minutes: int(1,7200)
   poll_interval_unit: list(seconds|minutes)
   min_cloud_retry_minutes: int(5,1440)

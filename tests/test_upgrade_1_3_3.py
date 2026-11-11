@@ -26,6 +26,8 @@ def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(sou
     assert old["version"] == source_version and new["version"] == "1.3.9"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
     assert {"1.3.8", "1.3.9"} <= set(new["breaking_versions"])
+    assert new["options"].pop("command_policy") == "automation"
+    assert new["schema"].pop("command_policy") == "list(automation|legacy)"
     assert new["options"].pop("on_demand_refresh_enabled") is False
     assert new["schema"].pop("on_demand_refresh_enabled") == "bool"
     assert new["options"].pop("poll_interval_minutes") == 30

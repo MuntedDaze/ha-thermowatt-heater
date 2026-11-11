@@ -299,7 +299,9 @@ def test_refresh_timeout_recovers_after_restart_without_password_fallback(factor
 
 
 def test_command_failure_and_confirmation_read_have_distinct_operations(factory, clock, caplog):
-    bridge = factory(commands_enabled=True)  # Synthetic isolated instance only.
+    bridge = factory(
+        commands_enabled=True, command_policy="legacy"
+    )  # Synthetic isolated instance only.
     ready(bridge)
     bridge.session.request.side_effect = [response(body={"error": "SENSITIVE_BODY"})]
     bridge.commands.put((clock(), "TEST123", "MODE", "Manual"))

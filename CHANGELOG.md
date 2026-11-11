@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.9] - Guarded Manual command for a local executor (owner review required)
 
+- New `command_policy` option, default **`automation`**: only `MODE=Manual:70`
+  (heating permitted) and `MODE=off` (parked) are accepted. Every other command
+  (temperature writes, Eco, Auto/Schedule, plain Manual, Holiday, malformed) is
+  refused before any cloud request, as `refused_by_policy`. `legacy` restores
+  the 1.3.8 command set only when chosen explicitly. Monitoring is unchanged.
 - Add MQTT `MODE` payload `Manual:70`. It sends `T_SetPoint` 70 explicitly and
   is accepted only when the fresh observed status (≤60 s) already shows 70 °C,
-  or shows software **OFF** (`Cmd` 16), whose setpoint is not an operating
-  target. Any other mode with another target is refused with no request.
+  or shows software **OFF** (`Cmd` 16) with no usable setpoint (outside
+  20–75 °C). A usable setpoint other than 70, OFF included, is refused with no
+  request (`refused_target_mismatch`): it is never silently changed to 70.
 - While OFF, a reported setpoint outside 20–75 °C no longer fails the poll (it
   would otherwise back the bridge off while the heater stays off); it is
   published with `setpoint_valid: false`. Outside OFF the 1.3.8 validation is

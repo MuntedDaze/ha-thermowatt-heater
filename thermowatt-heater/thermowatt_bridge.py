@@ -259,6 +259,13 @@ class AuthGuard:
 # owner-approved storage target; nothing else is accepted in guarded form.
 GUARDED_PAYLOADS = {"Manual:70": 70}
 PLAIN_PAYLOADS = {"off", "Off", "Eco", "Auto", "Manual"}
+# Command policy. "automation" (the default) accepts EXACTLY the two operations
+# the hot-water controller needs; every other command (temperature writes, Eco,
+# Auto/Schedule, plain Manual, Holiday, malformed payloads) is refused before
+# any cloud request. "legacy" restores the full 1.3.8 command set and must be
+# chosen explicitly. Read-only monitoring is identical under both.
+COMMAND_POLICIES = ("automation", "legacy")
+AUTOMATION_COMMANDS = {("MODE", "Manual:70"), ("MODE", "off")}
 
 
 class MyThermowattBridge:
@@ -712,6 +719,7 @@ class MyThermowattBridge:
                 "consecutive_failures": self.failures,
                 "on_demand_refresh_enabled": self.options.get("on_demand_refresh_enabled", False),
                 "commands_enabled": bool(self.options.get("commands_enabled", False)),
+                "command_policy": self.options.get("command_policy", "automation"),
                 "last_command": dict(self.last_command) if self.last_command else None,
             }
             self._publish_read_only(f"P/{serial}/DIAGNOSTICS", payload)
@@ -892,6 +900,11 @@ class MyThermowattBridge:
         if reason:
             self._command_result(kind, payload, reason)
             return
+        policy = self.options.get("command_policy", "automation")
+        if policy != "legacy" and (kind, payload) not in AUTOMATION_COMMANDS:
+            LOG.warning("Command refused by the automation command policy. No request sent.")
+            self._command_result(kind, payload, "refused_by_policy")
+            return
         endpoint, arguments, expected = None, {}, None
         if kind == "TEMP":
             try:
@@ -912,12 +925,15 @@ class MyThermowattBridge:
             expected = ("T_SetPoint", temperature)
         elif kind == "MODE" and payload in GUARDED_PAYLOADS:
             # Guarded Manual: enter Manual ONLY at the stated target, sent
-            # explicitly. Allowed when the fresh observed target already equals
-            # it, or when the heater is software OFF (Cmd 16), whose reported
-            # setpoint is not an operating target. Any other mode with another
-            # target is refused, never "corrected".
+            # explicitly. Accepted when the fresh observed target already equals
+            # it, or when the heater is software OFF (Cmd 16) and reports NO
+            # usable target (outside 20-75 °C). A usable target other than 70
+            # (in any mode, OFF included) may be a deliberate owner setting: it
+            # is refused, never silently "corrected" to 70.
             wanted = GUARDED_PAYLOADS[payload]
-            if confirmed[1]["T_SetPoint"] != wanted and confirmed[1]["Cmd"] != 16:
+            observed = confirmed[1]["T_SetPoint"]
+            off_without_target = confirmed[1]["Cmd"] == 16 and not 20 <= observed <= 75
+            if observed != wanted and not off_without_target:
                 LOG.warning("Guarded Manual refused: observed target differs. No request sent.")
                 self._command_result(kind, payload, "refused_target_mismatch")
                 return
@@ -1116,6 +1132,8 @@ def load_options(path):
     for key in ("cloud_enabled", "commands_enabled", "on_demand_refresh_enabled"):
         if type(options.get(key, False)) is not bool:
             raise ValueError
+    if options.get("command_policy", "automation") not in COMMAND_POLICIES:
+        raise ValueError
     generation = options.get("auth_retry_generation", 0)
     if type(generation) is not int or generation < 0:
         raise ValueError

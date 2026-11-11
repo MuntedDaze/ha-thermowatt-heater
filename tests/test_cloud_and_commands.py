@@ -157,7 +157,7 @@ def test_failed_command_is_not_replayed_or_published_as_success(factory, clock, 
 
 
 def test_200_command_uses_actual_status_not_requested_value(factory, clock, caplog):
-    bridge = factory(commands_enabled=True)
+    bridge = factory(commands_enabled=True, command_policy="legacy")
     ready(bridge)
     bridge.session.request.side_effect = [
         response(body={}),
@@ -170,7 +170,7 @@ def test_200_command_uses_actual_status_not_requested_value(factory, clock, capl
 
 def test_observed_command_confirmation_and_manual_preserves_setpoint(factory, clock, caplog):
     caplog.set_level("INFO")
-    bridge = factory(commands_enabled=True)
+    bridge = factory(commands_enabled=True, command_policy="legacy")
     ready(bridge)
     bridge.session.request.side_effect = [response(204), response(body=STATUS)]
     bridge.process_command((clock(), "TEST123", "MODE", "Manual"))
@@ -326,7 +326,7 @@ def test_explicit_failure_status_with_result_is_not_published(factory, module):
 def test_existing_command_contract_only_posts_once_then_reads_status(
     factory, clock, kind, payload, endpoint, cmd, setpoint
 ):
-    bridge = factory(commands_enabled=True)
+    bridge = factory(commands_enabled=True, command_policy="legacy")
     ready(bridge)
     bridge.confirmed["TEST123"][1]["T_SetPoint"] = 70
     bridge.session.request.side_effect = [
@@ -412,7 +412,7 @@ def test_only_the_exact_guarded_payload_is_accepted(factory, clock, payload):
     bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
     bridge.process_command((clock(), "TEST123", "MODE", payload))
     bridge.session.request.assert_not_called()
-    assert last_command(bridge)["result"] == "refused_invalid_command"
+    assert last_command(bridge)["result"] == "refused_by_policy"
     assert last_command(bridge)["payload"] == "other"  # unknown payload text is never echoed
 
 
@@ -511,8 +511,10 @@ def test_out_of_range_setpoint_outside_off_still_fails_the_poll(factory, module,
         bridge.poll_status("TEST123")
 
 
-@pytest.mark.parametrize("observed", [0, 40, 65, 70])
-def test_guarded_manual_from_off_sends_explicit_70_whatever_off_reports(factory, clock, observed):
+@pytest.mark.parametrize("observed", [0, 5, 90, 70])
+def test_guarded_manual_from_off_sends_explicit_70_when_off_has_no_other_target(
+    factory, clock, observed
+):
     bridge = factory(commands_enabled=True)
     ready(bridge)
     bridge.confirmed["TEST123"][1].update(T_SetPoint=observed, Cmd=16)
@@ -536,7 +538,7 @@ def test_guarded_manual_from_schedule_with_other_target_is_still_refused(factory
 
 
 def test_plain_manual_never_sends_an_invalid_setpoint_seen_while_off(factory, clock):
-    bridge = factory(commands_enabled=True)
+    bridge = factory(commands_enabled=True, command_policy="legacy")
     ready(bridge)
     bridge.confirmed["TEST123"][1].update(T_SetPoint=0, Cmd=16)
     bridge.process_command((clock(), "TEST123", "MODE", "Manual"))
@@ -557,3 +559,137 @@ def test_off_park_command_confirms_even_if_off_reports_an_unusual_setpoint(facto
     assert write.args[1].endswith("/off") and write.kwargs["data"] == ""
     assert last_command(bridge)["result"] == "observed_in_status"
     assert bridge.cloud_health == "ok"
+
+
+@pytest.mark.parametrize("observed", [40, 65, 20, 75])
+def test_guarded_manual_never_silently_resets_a_usable_off_target(factory, clock, observed):
+    """A usable target other than 70 while OFF may be the owner's setting: no
+    request is sent and the refusal is visible (never a silent change to 70)."""
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=observed, Cmd=16)
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
+    bridge.session.request.assert_not_called()
+    assert last_command(bridge)["result"] == "refused_target_mismatch"
+
+
+# --- 1.3.9: automation command policy (allowlist) -----------------------------------
+
+
+@pytest.mark.parametrize(
+    "kind,payload",
+    [
+        ("TEMP", "65"),
+        ("TEMP", "70"),
+        ("TEMP", "40"),
+        ("MODE", "Manual"),
+        ("MODE", "Eco"),
+        ("MODE", "Auto"),
+        ("MODE", "Off"),
+        ("MODE", "Holiday"),
+        ("MODE", "on"),
+        ("MODE", "On"),
+        ("MODE", "Manual:65"),
+        ("MODE", "manual:70"),
+        ("MODE", "off "),
+        ("MODE", ""),
+        ("MODE", "Manual:70;off"),
+    ],
+)
+@pytest.mark.parametrize("cmd", [9, 16, 17])
+def test_automation_policy_blocks_every_unauthorised_command(factory, clock, kind, payload, cmd):
+    bridge = factory(commands_enabled=True)  # default policy: automation
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=cmd)
+    bridge.process_command((clock(), "TEST123", kind, payload))
+    bridge.session.request.assert_not_called()
+    assert last_command(bridge)["result"] == "refused_by_policy"
+
+
+def test_unauthorised_commands_cannot_reach_the_heater_through_mqtt(factory, clock):
+    """End to end through the MQTT callback and the worker loop: only the two
+    automation commands ever produce an HTTP request."""
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.mqtt_connected.set()
+    for topic, payload in [
+        ("P/TEST123/CMD/TEMP", b"75"),
+        ("P/TEST123/CMD/MODE", b"Eco"),
+        ("P/TEST123/CMD/MODE", b"Auto"),
+        ("P/TEST123/CMD/MODE", b"Manual"),
+        ("P/TEST123/CMD/MODE", b"Holiday"),
+    ]:
+        bridge.on_mqtt_message(
+            None, None, SimpleNamespace(topic=topic, payload=payload, retain=False)
+        )
+        bridge.confirmed["TEST123"] = (
+            bridge.monotonic(),
+            {**bridge.confirmed["TEST123"][1], "T_SetPoint": 70, "Cmd": 16},
+        )
+        bridge.process_command(bridge.commands.get_nowait())
+        bridge.session.request.assert_not_called()
+        assert last_command(bridge)["result"] == "refused_by_policy"
+    bridge.session.request.side_effect = [
+        response(204),
+        response(body={"result": {**STATUS["result"], "Cmd": "9", "T_SetPoint": "70"}}),
+    ]
+    bridge.on_mqtt_message(
+        None, None, SimpleNamespace(topic="P/TEST123/CMD/MODE", payload=b"Manual:70", retain=False)
+    )
+    bridge.process_command(bridge.commands.get_nowait())
+    write, _ = bridge.session.request.call_args_list
+    assert write.args[1].endswith("/manual") and write.kwargs["json"] == {"T_SetPoint": 70}
+
+
+@pytest.mark.parametrize("cmd,payload,endpoint", [(16, "Manual:70", "/manual"), (9, "off", "/off")])
+def test_automation_policy_allows_exactly_the_two_controller_commands(
+    factory, clock, cmd, payload, endpoint
+):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=cmd)
+    expected = {"/manual": "9", "/off": "16"}[endpoint]
+    bridge.session.request.side_effect = [
+        response(204),
+        response(body={"result": {**STATUS["result"], "Cmd": expected, "T_SetPoint": "70"}}),
+    ]
+    bridge.process_command((clock(), "TEST123", "MODE", payload))
+    write, read = bridge.session.request.call_args_list
+    assert write.args[1].endswith(endpoint) and read.args[1].endswith("/status")
+    assert last_command(bridge)["result"] == "observed_in_status"
+
+
+def test_legacy_policy_must_be_chosen_explicitly_and_policy_is_validated(
+    factory, clock, module, tmp_path
+):
+    bridge = factory(commands_enabled=True, command_policy="legacy")
+    ready(bridge)
+    bridge.session.request.side_effect = [response(204), response(body=STATUS)]
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual"))
+    assert bridge.session.request.call_count == 2
+    for bad in ("Legacy", "open", 1, None):
+        path = tmp_path / "options.json"
+        path.write_text(json.dumps({"command_policy": bad}))
+        with pytest.raises(ValueError):
+            module.load_options(path)
+    path.write_text(json.dumps({}))
+    assert module.load_options(path).get("command_policy", "automation") == "automation"
+
+
+def test_policy_does_not_change_read_only_monitoring(factory):
+    for policy in ("automation", "legacy"):
+        bridge = factory(command_policy=policy)
+        ready(bridge)
+        for cmd in ("9", "16", "17", "3", "65"):
+            body = {"result": {**STATUS["result"], "Cmd": cmd, "T_SetPoint": "70"}}
+            bridge.session.request.side_effect = [response(body=body)]
+            bridge.poll_status("TEST123")
+            published = json.loads(status_messages(bridge)[-1])["result"]
+            assert published["Cmd"] == cmd
+        bridge.publish_diagnostics(force=True)
+        diag = [
+            c
+            for c in bridge.mqtt_client.publish.call_args_list
+            if c.args[0].endswith("/DIAGNOSTICS")
+        ]
+        assert json.loads(diag[-1].args[1])["command_policy"] == policy
