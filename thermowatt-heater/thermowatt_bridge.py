@@ -1043,6 +1043,10 @@ class MyThermowattBridge:
                 return
         status = self.confirmed[serial][1]
         mode, observed = int(status["Cmd"]), status["T_SetPoint"]
+        # Automation policy: the controller's view may be up to one poll
+        # interval old, so the FRESH status must still show the exact state the
+        # command is meant to leave (OFF for Manual:70, Manual 70 for off).
+        automation = policy != "legacy"
 
         arguments, expected = {}, None
         if kind == "TEMP":
@@ -1066,12 +1070,26 @@ class MyThermowattBridge:
             if mode == 9 and observed == temperature:
                 self._command_result(kind, payload, "already_in_requested_state", refresh=refresh)
                 return
+            if automation and mode not in OFF_CODES:
+                # The controller resumes ONLY from OFF. Schedule, Eco, Holiday or
+                # an unknown mode at 70 is the owner's choice (perhaps made in
+                # the app since the controller last saw the heater): refused.
+                LOG.warning("Guarded Manual refused: heater not OFF. No request sent.")
+                self._command_result(kind, payload, "refused_mode_mismatch", refresh=refresh)
+                return
             arguments = {"json": {"T_SetPoint": int(temperature)}}
             expected = ("Cmd", {9})
         else:
             if payload == "off" and mode in OFF_CODES:
                 # Already OFF: a second write would only cost a request.
                 self._command_result(kind, payload, "already_in_requested_state", refresh=refresh)
+                return
+            if automation and payload == "off" and (mode != 9 or observed != 70):
+                # The controller parks ONLY from Manual 70 °C. Any other mode or
+                # target is the owner's choice and is never switched OFF.
+                reason = "refused_mode_mismatch" if mode != 9 else "refused_target_mismatch"
+                LOG.warning("Park refused: heater not in Manual 70. No request sent.")
+                self._command_result(kind, payload, reason, refresh=refresh)
                 return
             expected = (
                 "Cmd",

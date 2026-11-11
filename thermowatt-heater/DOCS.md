@@ -257,7 +257,11 @@ command, only after the policy, queue-age, device, authentication, quota/backoff
 60-second spacing and 24-per-day refresh checks pass, and re-applies every
 target and owner-override rule to the new status. A failed read never leads to
 the command and is not retried. `off` while already OFF, and `Manual:70` while
-already Manual 70, send nothing (`already_in_requested_state`).
+already Manual 70, send nothing (`already_in_requested_state`). Under the
+automation policy `Manual:70` is accepted only from OFF and `off` only from
+Manual 70 °C; any other mode or target (including a change made in the app since
+the last poll) is refused with no request (`refused_mode_mismatch` or
+`refused_target_mismatch`).
 Commands are queued on the MQTT callback and executed serially by the main loop.
 Retained commands are rejected, including retained writes while connected using
 MQTT v5 retain-as-published. Stale/unknown commands and commands while unavailable

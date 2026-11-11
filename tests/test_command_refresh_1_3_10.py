@@ -225,6 +225,10 @@ def test_refresh_does_not_move_the_ordinary_poll_schedule(factory, clock):
         ({**MANUAL_70, "Cmd": "17", "T_SetPoint": "40"}, "refused_target_mismatch"),
         ({**MANUAL_70, "T_SetPoint": "65"}, "refused_target_mismatch"),
         ({**OFF_70, "T_SetPoint": "65"}, "refused_target_mismatch"),
+        ({**MANUAL_70, "Cmd": "17"}, "refused_mode_mismatch"),  # Schedule at 70
+        ({**MANUAL_70, "Cmd": "3"}, "refused_mode_mismatch"),  # Eco at 70
+        ({**MANUAL_70, "Cmd": "65"}, "refused_mode_mismatch"),  # Holiday
+        ({**MANUAL_70, "Cmd": "2"}, "refused_mode_mismatch"),  # unknown code
         (MANUAL_70, "already_in_requested_state"),
     ],
 )
@@ -236,6 +240,42 @@ def test_resume_is_revalidated_against_the_refreshed_status(factory, clock, refr
     bridge.process_command((clock(), SERIAL, "MODE", "Manual:70"))
     assert calls(bridge) == [("GET", "status")]  # never a write
     assert last_command(bridge)["result"] == reason
+
+
+@pytest.mark.parametrize(
+    "refreshed,reason",
+    [
+        ({**MANUAL_70, "Cmd": "17"}, "refused_mode_mismatch"),  # owner chose Schedule
+        ({**MANUAL_70, "Cmd": "3"}, "refused_mode_mismatch"),
+        ({**MANUAL_70, "Cmd": "65"}, "refused_mode_mismatch"),
+        ({**MANUAL_70, "Cmd": "2"}, "refused_mode_mismatch"),
+        ({**MANUAL_70, "T_SetPoint": "60"}, "refused_target_mismatch"),  # owner's Manual 60
+    ],
+)
+def test_park_is_revalidated_and_never_overrides_an_owner_choice(factory, clock, refreshed, reason):
+    bridge = commanded(factory)
+    stale(bridge, 9)
+    bridge.session.request.side_effect = [body(refreshed)]
+    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    assert calls(bridge) == [("GET", "status")]  # never a write
+    assert last_command(bridge)["result"] == reason
+
+
+@pytest.mark.parametrize("cmd,setpoint", [(17, 70), (3, 70), (9, 60)])
+def test_automation_park_with_fresh_status_also_requires_manual_70(factory, clock, cmd, setpoint):
+    bridge = commanded(factory)
+    set_status(bridge, cmd, setpoint)
+    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.session.request.assert_not_called()
+    assert last_command(bridge)["result"].startswith("refused_")
+
+
+def test_legacy_policy_keeps_the_1_3_9_off_and_resume_rules(factory, clock):
+    bridge = commanded(factory, command_policy="legacy")
+    set_status(bridge, 17, 40)
+    bridge.session.request.side_effect = [response(204), body(OFF_70)]
+    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    assert last_command(bridge)["result"] == "observed_in_status"
 
 
 def test_park_sees_heater_already_off_after_refresh_and_sends_nothing(factory, clock):

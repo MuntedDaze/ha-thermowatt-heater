@@ -145,6 +145,7 @@ def test_status_is_allowlisted_not_sensitive_body(factory):
 def test_failed_command_is_not_replayed_or_published_as_success(factory, clock, failure, caplog):
     bridge = factory(commands_enabled=True)
     ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70)  # automation parks only Manual 70
     bridge.session.request.side_effect = [failure]
     bridge.commands.put((clock(), "TEST123", "MODE", "off"))
     bridge.tick()
@@ -299,6 +300,7 @@ def test_http_200_command_failure_is_rejected_without_fake_state(factory, clock,
 def test_invalid_command_ack_never_substitutes_requested_state(factory, clock):
     bridge = factory(commands_enabled=True)
     ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70)  # automation parks only Manual 70
     bridge.session.request.side_effect = [response(body=ValueError()), response(body=STATUS)]
     bridge.process_command((clock(), "TEST123", "MODE", "off"))
     assert json.loads(status_messages(bridge)[0])["result"]["Cmd"] == "9"
@@ -377,7 +379,9 @@ def last_command(bridge):
 
 
 def test_guarded_manual_sends_explicit_70_only_when_observed_target_is_70(factory, clock):
-    bridge = factory(commands_enabled=True)
+    # From Schedule only under the legacy policy (1.3.10: automation resumes
+    # only from OFF; see test_command_refresh_1_3_10.py).
+    bridge = factory(commands_enabled=True, command_policy="legacy")
     ready(bridge)
     bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
     bridge.session.request.side_effect = [
@@ -449,10 +453,10 @@ def test_guarded_payload_passes_the_mqtt_callback_length_gate(factory, clock):
 def test_unconfirmed_guarded_manual_is_reported_and_never_retried(factory, clock):
     bridge = factory(commands_enabled=True)
     ready(bridge)
-    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=8)
     bridge.session.request.side_effect = [
         response(204),
-        response(body={"result": {**STATUS["result"], "Cmd": "17", "T_SetPoint": "70"}}),
+        response(body={"result": {**STATUS["result"], "Cmd": "8", "T_SetPoint": "70"}}),
     ]
     bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
     assert bridge.session.request.call_count == 2

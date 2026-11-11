@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status. A failed read is never followed by the command, gets the ordinary
   status-read backoff, and is reported (`refused_status_refresh_failed` with a
   fixed error code). A command older than 75 s after the read is dropped.
+- **Mode re-check (automation policy).** Because a controller's view may now be
+  up to one poll old, the fresh status must still show the state the command is
+  meant to leave: `Manual:70` only from OFF (target 70 or unusable), `off` only
+  from Manual 70 °C. Schedule, Eco, Holiday, an unknown code, or Manual at
+  another target is the owner's choice and is refused with no request
+  (`refused_mode_mismatch` / `refused_target_mismatch`). This also applies to
+  the Home Assistant water-heater *off* button. `legacy` keeps the 1.3.9 rules.
 - **No duplicate writes.** `off` when already OFF and `Manual:70` when already
   Manual 70 send nothing (`already_in_requested_state`). A status read made for
   a command counts as the ordinary poll if one falls due in the same tick.

@@ -31,9 +31,15 @@ older than 60 s.
    `refused_status_refresh_failed` with a fixed `error` code, and the ordinary
    status-read backoff applies. The existing authentication lockout is
    unchanged.
-4. The command is re-validated against the new status:
-   - `Manual:70` is refused if a usable target other than 70 is shown (OFF
-     included), so the owner's own setting is never overwritten;
+4. The command is re-validated against the new status, because the
+   controller's view may be up to one poll old:
+   - `Manual:70` is accepted only from OFF; Schedule, Eco, Holiday or an
+     unknown mode is refused (`refused_mode_mismatch`), and a usable target
+     other than 70 (OFF included) is refused (`refused_target_mismatch`), so the
+     owner's own setting is never overwritten;
+   - `off` is accepted only from Manual 70 °C, so an owner's Schedule, Eco or
+     other Manual target is never switched OFF (this also applies to the HA
+     water-heater *off* button under the automation policy);
    - nothing is sent if the heater is already in the requested state;
    - it is dropped if it became older than 75 s during the read.
 5. POST, then one confirmation read, as before. No retry.
