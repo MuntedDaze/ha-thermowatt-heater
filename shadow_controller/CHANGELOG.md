@@ -24,7 +24,13 @@
   90 minutes after heating.
 - **Peak guard:** parks at the last slot before a peak unless the element is
   heating for comfort. This was found by replaying the 10 Nov history.
-- **Empty native Schedule** (`[]`) is accepted.
+- **Empty native Schedule** (`[]`) is accepted. With it, the heater-clock DST
+  warning and "native programme is the comfort fallback" are not raised. The
+  protective-heating warning remains, and so does a warning that nothing heats
+  ordinarily while control is off. A non-empty programme keeps its clock
+  warnings.
+- **Disabled controller is silent:** no notifications, and controller state is
+  written only when it changes.
 - **Fresh installs cannot command:** the master switch refuses to turn on until
   the command topic and both commissioning confirmations are set.
 - **Tests:** 62 new controller tests, including:

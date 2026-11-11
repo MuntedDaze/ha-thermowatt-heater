@@ -516,9 +516,11 @@ def build():
                 "- {{ item }}\n{% endfor %}"
                 "{% for item in state_attr('" + CONTROLLER + "','strategy_warnings') or [] %}"
                 "- {{ item }}\n{% endfor %}\n"
-                "Native clock: compare manually with Hobart "
-                "{{ now().strftime('%a %d %b %H:%M') }} after DST changes. Tariff 93 stays "
-                "fixed AEST. The planner adds zero cloud requests."
+                "{% if states('" + sensor("Device clock check") + "') != "
+                "'not_applicable_empty_schedule' %}Native clock: compare manually with Hobart "
+                "{{ now().strftime('%a %d %b %H:%M') }} after DST changes. {% else %}"
+                "Native Schedule is empty: the heater clock does not affect heating. "
+                "{% endif %}Tariff 93 stays fixed AEST. The planner adds zero cloud requests."
             ),
         },
     ]

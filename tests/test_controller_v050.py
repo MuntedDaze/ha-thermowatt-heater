@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from conftest import STATUS, response
-from test_shadow_model import c, local, m
+from test_shadow_model import c, local, m, runtime  # noqa: F401
 from test_cloud_and_commands import ready
 
 ctl = importlib.import_module(f"{m.__package__}.controller")
@@ -1203,3 +1203,79 @@ def test_disabled_controller_is_silent_while_the_native_schedule_heats():
     effects = enabled_.step(obs(now + timedelta(minutes=1), element="on"), PERMIT, cfg())
     assert any(e.kind == "resolve" and e.key == "unexplained_heating" for e in effects)
     assert not [e for e in effects if e.kind == "notify"]
+
+
+# --- native clock and fallback warnings: empty versus non-empty programme ---------------
+
+CLOCK_WARNING = "check_thermann_clock_manual_dst_adjustment_required"
+FALLBACK_WARNING = "native_programme_is_primary_comfort_fallback"
+PROTECTIVE = "manufacturer_antibacterial_and_frost_protection_may_heat_while_parked"
+NO_HEAT = "empty_native_schedule_and_automatic_control_off_no_normal_heating"
+
+
+def evaluate_at(instance, at, options):
+    instance.set_native_reference(options)
+    instance.update(at)
+    return instance.values["device_clock_check"], set(instance.plan.warnings)
+
+
+@pytest.mark.parametrize(
+    "at",
+    [
+        local(day=10, hour=12),  # ordinary summer weekday
+        local(month=10, day=4, hour=12),  # DST starts (Sun 4 Oct 2026)
+        local(month=10, day=5, hour=12),  # first weekday after DST start
+        local(year=2027, month=4, day=4, hour=12),  # DST ends (Sun 4 Apr 2027)
+        local(year=2027, month=4, day=5, hour=12),  # first weekday after DST end
+    ],
+)
+def test_empty_programme_has_no_clock_or_fallback_warning_but_keeps_protective(runtime, at):  # noqa: F811
+    instance, _, _ = runtime
+    check, warnings = evaluate_at(instance, at, {"native_schedule_periods": "[]"})
+    assert check == "not_applicable_empty_schedule"
+    assert CLOCK_WARNING not in warnings and FALLBACK_WARNING not in warnings
+    assert "native_schedule_times_approximate_clock_unverified" not in warnings
+    assert "reported_native_windows_may_not_fit_depleted_tank_scenario" not in warnings
+    assert PROTECTIVE in warnings  # protective functions are never hidden
+    assert NO_HEAT in warnings  # before commissioning nothing heats ordinarily
+    instance.controller_active = True
+    _, warnings = evaluate_at(instance, at, {"native_schedule_periods": "[]"})
+    assert NO_HEAT not in warnings and PROTECTIVE in warnings
+
+
+def test_existing_programme_keeps_clock_and_fallback_warnings_across_dst(runtime):  # noqa: F811
+    instance, _, _ = runtime
+    # Today's programme (the default reference), clock never checked.
+    check, warnings = evaluate_at(instance, local(day=10, hour=12), {})
+    assert check == "check_required"
+    assert {CLOCK_WARNING, FALLBACK_WARNING} <= warnings and PROTECTIVE not in warnings
+    # Checked after the October DST change: no clock warning until the next one.
+    verified = {"native_schedule_clock_verified": True, "native_clock_check_date": "2026-10-05"}
+    check, warnings = evaluate_at(instance, local(day=10, hour=12), verified)
+    assert check == "checked_this_dst_period" and CLOCK_WARNING not in warnings
+    assert FALLBACK_WARNING in warnings
+    check, warnings = evaluate_at(instance, local(year=2027, month=4, day=5, hour=12), verified)
+    assert check == "check_required" and CLOCK_WARNING in warnings
+    # Switching to the empty programme (commissioning Stage C) clears both.
+    check, warnings = evaluate_at(
+        instance,
+        local(year=2027, month=4, day=5, hour=12),
+        {**verified, "native_schedule_periods": "[]"},
+    )
+    assert check == "not_applicable_empty_schedule" and CLOCK_WARNING not in warnings
+
+
+@pytest.mark.parametrize(
+    "at,expected_local",
+    [
+        (local(day=10, hour=16, minute=30), "17:00"),  # AEDT: 16:00 AEST peak = 17:00 local
+        (local(month=7, day=14, hour=15, minute=30), "16:00"),  # AEST winter
+        (local(month=10, day=5, hour=7, minute=30), "08:00"),  # first weekday after DST start
+        (local(year=2027, month=4, day=5, hour=6, minute=30), "07:00"),  # after DST end
+    ],
+)
+def test_tariff_93_boundaries_stay_fixed_aest_across_dst(at, expected_local):
+    settings, tariffs = c.parse_options({"native_schedule_periods": "[]"})
+    change = goals_mod.next_tariff_change(at, tariffs, settings.tariff_clock)
+    assert change[1].kind == "peak"
+    assert change[0].astimezone(m.HOBART).strftime("%H:%M") == expected_local

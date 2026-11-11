@@ -24,7 +24,7 @@ participation or approval · **Risk** = accepted or open limitation.
 | 15 | HA-native UI: master switch, override, acknowledge, status, readiness, cost, last command, bridge health | Done | dashboard *Automatic control* section |
 | 16 | Notifications with cooldowns and restoration notice | Done | notification tests |
 | 17 | Fresh install incapable of control | Done | fresh-install tests, real-HA check |
-| 18 | Comprehensive offline tests, real HA Core, replay | Done: 852 local; CI all green | `tests/`, `shadow_ha_checks.py`, `replay_history.py` |
+| 18 | Comprehensive offline tests, real HA Core, replay | Done: 862 local; CI all green | `tests/`, `shadow_ha_checks.py`, `replay_history.py` |
 | 19 | Commissioning runbook with gates and rollback | Done | [COMMISSIONING_0_5_0.md](COMMISSIONING_0_5_0.md) |
 | 20 | Local-only control report | Done | [LOCAL_CONTROL_FEASIBILITY.md](LOCAL_CONTROL_FEASIBILITY.md) |
 
@@ -51,8 +51,10 @@ participation or approval · **Risk** = accepted or open limitation.
 - **Model limits.** Closed-loop results use a simple tank model; real
   stratification and draws will differ. The 30-minute latency reserve and comfort
   fallback cover typical cases, not every draw pattern.
-- **Clock.** The heater's own clock no longer matters once the Schedule is empty.
-  Tariff and deadline handling uses HA time (DST tested).
+- **Clock.** The heater's own clock no longer matters once the Schedule is empty,
+  so the clock and native-fallback warnings are suppressed then. They remain
+  while a non-empty programme is configured. Tariff and deadline handling uses
+  HA time (Australia/Hobart, DST tested).
 - **Upgrade path.** The 0.4.0 → 0.5.0 upgrade adds only default options and a
   new storage file. It is covered by the 0.2.0/0.3.0 → 0.5.0 real-HA upgrades,
   not a dedicated 0.4.0 fixture.

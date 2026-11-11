@@ -37,7 +37,9 @@ Exact steps, checks and rollback: **[STAGE_A_INSTALL.md](STAGE_A_INSTALL.md)**.
 - the bridge polls as before;
 - the app and native Schedule are unchanged.
 
-**Rollback:** put back the saved 0.3.0 folder and restart (see the guide).
+**Rollback:** install the provided 0.3.0 rollback package (identical to the installed
+`bd95f04` component) and restart (see the guide). No backup preparation is required
+(owner decision, 12 Nov 2026).
 
 ---
 

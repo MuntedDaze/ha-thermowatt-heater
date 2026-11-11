@@ -1,167 +1,128 @@
-# Stage A — install the planner and controller (control disabled)
+# Stage A — install Controller 0.5.0 over Shadow Planner 0.3.0 (control disabled)
 
-**Not yet approved. Nothing here has been done to your Home Assistant.**
-Stage A installs code only. It sends no heater command, changes no Thermann
-mode, Schedule, target or T-Comfort, and leaves the Thermowatt add-on at
-**1.3.8** with commands disabled. Automatic hot-water control stays **off**, and
-it cannot be switched on until Stages B and C are complete.
+**Read-only installation, not activation.** Stage A replaces one custom
+integration folder and restarts Home Assistant once. It does **not**:
+- send any heater command or MQTT heater message;
+- change the Thermann mode, Schedule, 70 °C target or T-Comfort;
+- touch the Thermowatt add-on, which stays at 1.3.8 with `commands_enabled: false`
+  and on-demand refresh disabled;
+- change any other integration, automation, dashboard or recorder history.
 
-Your system, from a read-only check on 11 Nov:
-- Home Assistant **2026.11.1**;
-- `thermann_shadow` **0.3.0** installed;
-- Hot Water storage dashboard (`/hot-water`);
-- saved morning threshold 40 °C.
+*Automatic heater control* stays **OFF**, and it cannot be turned on until
+commissioning Stages B and C are approved and completed.
 
-CI tests exactly this upgrade, 0.3.0 → 0.5.0 on HA 2026.11.1, over real
-persisted storage.
+## Decisions for this install (owner, 12 Nov 2026)
 
-## Install 0.4.0 first, or go straight to 0.5.0?
-
-**Go straight to 0.5.0.** It contains all of 0.4.0, and with control disabled it
-behaves as the 0.4.0 planner plus inert controller entities. The direct
-0.3.0 → 0.5.0 upgrade is what CI verifies:
-- every entity ID, unique ID, rename and option is kept;
-- history is kept;
-- the only migration is morning threshold 40 → 42 °C.
-
-Installing 0.4.0 first would add a second restart and nothing that is tested.
+- **Direct upgrade** from the installed 0.3.0 to 0.5.0. CI tests exactly this path
+  on HA 2026.11.1 over real persisted storage.
+- **No backup preparation** (owner's choice; reduced rollback accepted).
+  Rollback still exists: the installed 0.3.0 was verified, read-only, to be
+  **byte-identical to commit `bd95f04`** (22/22 files), so a rollback package is
+  provided from git.
 
 ## What is kept, and what changes
 
 **Kept:**
-- the config entry and all saved options;
-- every existing `thermann_shadow` entity ID and its recorder history;
-- the Thermowatt add-on, its credentials, tokens, guard state and options;
-- every other integration, automation and dashboard.
+- the existing config entry and all saved options;
+- every `thermann_shadow` entity ID and its recorder history;
+- all other HA configuration.
 
 **Changes:**
 - **Morning threshold:** a saved 40 °C (the old default) becomes **42 °C**.
-- **Weekend morning time:** your saved `07:00` is now read as the weekend morning
-  time. You can change it later in Settings; this is optional.
-- **Retired sensors:** four now show *unavailable*: simulated cycle count,
-  simulated stop count, suppressed switching episodes, simulated session cost.
-  Remove them later if you like.
-- **New entities:**
-  - about 13 controller sensors;
-  - the *Automatic heater control* switch (**off**);
-  - three owner buttons;
-  - the 0.4.0 and 0.5.0 settings.
-- **New file:** `.storage/thermann_shadow.<entry_id>.controller`, created on the
-  first write after start.
+- **Weekend morning time:** the saved `07:00` is now read as the weekend morning
+  time.
+- **Retired sensors:** four show *unavailable*: simulated cycle count, simulated
+  stop count, suppressed switching episodes, simulated session cost.
+- **New entities:** controller sensors, the *Automatic heater control* switch
+  (**off**), three owner buttons and new settings.
+- **New file:** one state file, `.storage/thermann_shadow.<entry_id>.controller`.
+  It is written only when the controller state changes.
 
-## Steps
+## Packages
 
-### 1. Back up (about 10 minutes)
+See the PR #13 comment for the exact commit and SHA-256 of each file.
+- **Install:** `thermann_shadow-0.5.0-<commit>.zip`, containing
+  `custom_components/thermann_shadow/` (0.5.0), `shadow_controller/dashboard.yaml`
+  and this guide.
+- **Rollback:** `thermann_shadow-0.3.0-bd95f04-rollback.zip`, the exact installed
+  0.3.0 component.
 
-1. **Full backup:** Settings → System → Backups → **Create backup** → choose a
-   full backup (Home Assistant settings and history, plus all add-ons, including
-   Thermowatt). Wait until it shows as complete, then use ⋮ → **Download** to
-   copy it to your PC.
-2. **The current component:** on your PC, open
-   `\\<your-HA-host>\config\custom_components\` and **copy** the `thermann_shadow`
-   folder to somewhere outside HA, for example
-   `Documents\ha-backups\thermann_shadow-0.3.0-<date>\`. Check that the copy
-   contains `manifest.json` with `"version": "0.3.0"`.
-3. **The dashboard:** open the Hot Water dashboard → ✏️ Edit → ⋮ → **Raw
-   configuration editor**. Select all, copy, and save it as
-   `hot_water_dashboard_0.3.0.yaml` next to the folder copy. Close without saving.
-4. **Baseline notes** (keep these private):
-   - Thermowatt add-on version **1.3.8**; its Configuration (`commands_enabled:
-     false`, `on_demand_refresh_enabled: false`, 30-min polling);
-   - the *Cloud request attempts* value and its `request_categories`
-     (`command: 0`);
-   - in the Thermann app: mode **Schedule**, target **70 °C**, the weekly windows
-     (screenshot each day) and **T-Comfort 10 °C**.
+## Procedure — one action at a time
 
-### 2. Get the exact package
+Confirm each action's check before moving on. Stop and ask if any check fails.
 
-Use the package built from the reviewed commit (see *Package identity* below).
-Unzip it on your PC. It contains `custom_components/thermann_shadow/`
-(manifest 0.5.0) and `dashboard.yaml`. Check that the folder includes at least:
-- `__init__.py`, `manifest.json`;
-- `controller.py`, `control_plan.py`, `executor.py`;
-- `advisor.py`, `goals.py`, `heater_state.py`, `strategy.py`;
-- `translations/en.json`, `strings.json`.
+1. **Verify the package.** On the PC, check the zip's SHA-256 against the PR
+   comment: in PowerShell, `Get-FileHash <zip> -Algorithm SHA256`. Unzip it.
+   - *Check:* `custom_components\thermann_shadow\manifest.json` says
+     `"version": "0.5.0"`, and there is no `__pycache__` folder.
+2. **Record the baseline** (read-only, 1 minute):
+   - Thermowatt add-on Info shows **1.3.8**;
+   - its Configuration shows `commands_enabled: false` and
+     `on_demand_refresh_enabled: false`;
+   - the Thermann app shows **Schedule**, **70 °C**, your current windows and
+     T-Comfort as they are.
 
-### 3. Replace only this component's folder
+   Don't change anything.
+3. **Delete the old folder.** In File Explorer, open
+   `\\<your-HA-host>\config\custom_components\` and delete the `thermann_shadow`
+   folder.
+   - Do **not** rename it inside `custom_components`: a renamed copy would be
+     loaded as another integration.
+   - Do **not** remove the integration in the HA UI.
+4. **Copy the new folder.** Copy the package's `thermann_shadow` folder into
+   `\\<your-HA-host>\config\custom_components\`.
+   - *Check:* `custom_components\thermann_shadow\manifest.json` says `0.5.0`, and
+     `controller.py`, `control_plan.py`, `executor.py` and `translations\en.json`
+     are present.
+5. **Restart Home Assistant once.** Settings → System → ⋮ → **Restart Home
+   Assistant** → *Restart Home Assistant* (not a host reboot). Wait 1–3 minutes.
+6. **Check the log.** Settings → System → Logs, filter `thermann_shadow`.
+   - *Check:* no errors. A "custom integration not tested by Home Assistant"
+     warning is normal.
+7. **Check the controller is disabled:**
 
-1. In `\\<your-HA-host>\config\custom_components\`, **delete** the `thermann_shadow`
-   folder; your copy from step 1.2 is the backup. Do **not** rename it inside
-   `custom_components`: Home Assistant would try to load the renamed folder as
-   another integration.
-2. Copy the new `thermann_shadow` folder into `custom_components\`.
-3. Open the copied `manifest.json` and confirm `"version": "0.5.0"`. There must be
-   no `__pycache__` folder (the package has none).
+   | Entity | Expected |
+   | --- | --- |
+   | `switch.thermann_shadow_automatic_heater_control` | **off**; `commissioning_missing` lists 3 items |
+   | `sensor.thermann_shadow_automatic_control_state` | **disabled** (reason `automatic_control_disabled`) |
+   | `sensor.thermann_shadow_controller` attributes | `control_capable: false`, `controller_active: false` |
+   | `sensor.thermann_shadow_commands_in_last_24_hours` | `0` |
+   | Notifications | none from the controller |
 
-Do not touch anything else in `/config`. Do not remove or re-add the integration
-in the HA UI.
+   Leave the switch off. Don't press Hold, Resume or Acknowledge.
+8. **Check the planner.**
+   - *Recommendation* shows a real decision within a few minutes, not stuck on
+     DATA UNAVAILABLE.
+   - The morning threshold reads 42 °C.
+   - *Device clock check* is `check_required`. This is correct while your
+     current, non-empty Schedule is active, and it becomes
+     `not_applicable_empty_schedule` after Stage C.
+9. **Check the bridge and heater are unaffected:**
+   - *Last successful poll* keeps advancing about every 30 min, and cloud health
+     is `ok`;
+   - the request attempts rise about 6 per hour with `command: 0`;
+   - the Thermann app is unchanged;
+   - the next native window heats as usual: about +3 kW at the meter and
+     *Heater element state* ON.
+10. **Update the Hot Water dashboard.** Do this only after checks 6–9 pass. Open
+    the Hot Water dashboard → ✏️ Edit → ⋮ → **Raw configuration editor**, replace
+    the contents with the package's `shadow_controller/dashboard.yaml`, and
+    **Save**.
+    - *Check:* the new *Automatic control* section shows DISABLED and lists the
+      commissioning still needed.
 
-### 4. Restart Home Assistant once
+Then observe for **24–48 hours** before Stage B.
 
-Settings → System → ⋮ (top right) → **Restart Home Assistant** → *Restart Home
-Assistant*. Restart HA only, not the host. Wait until the UI is back (1–3
-minutes).
+## Rollback
 
-Then check Settings → System → **Logs** and filter `thermann_shadow`: there
-should be no errors. A warning about a custom integration not tested by Home
-Assistant is normal.
+1. Delete `custom_components\thermann_shadow`, then copy in the `thermann_shadow`
+   folder from the rollback zip (0.3.0, `bd95f04`). Restart HA once.
+2. The 0.5.0 dashboard then shows a few unavailable entities. The previous
+   dashboard was not exported (owner's choice); the 0.3.0 repository version is
+   included in the rollback zip as `shadow_controller/dashboard.yaml`.
+3. Optionally delete `.storage\thermann_shadow.*.controller`, and remove the new
+   unavailable entities under Settings → Entities.
+4. The config entry still loads in 0.3.0 (same major version). The 42 °C
+   threshold remains; set it to 40 °C if you want the old value.
 
-### 5. Update the Hot Water dashboard
-
-Hot Water dashboard → ✏️ Edit → ⋮ → **Raw configuration editor** → replace
-everything with the package's `dashboard.yaml` → **Save**. Change only this
-dashboard.
-
-### 6. Verify the controller is present but completely disabled
-
-| Check | Expected |
-| --- | --- |
-| `switch.thermann_shadow_automatic_heater_control` | **off**; attribute `commissioning_missing` lists 3 items (topic, empty-Schedule confirmation, T3 qualification) |
-| `sensor.thermann_shadow_automatic_control_state` | **disabled**; reason `automatic_control_disabled` |
-| `sensor.thermann_shadow_controller` attributes | `control_capable: false`, `controller_active: false`, `shadow_mode: true` |
-| *Commands in last 24 hours* / *Last command* | `0` / unknown |
-| Settings → Controller group | *Controller command topic* blank; *Empty Schedule park confirmed* **off**; *Bridge commands qualified (T3)* **off** |
-| HA notifications | none from the controller |
-
-**Optional safety check.** Try to switch *Automatic heater control* on. It must
-refuse ("cannot be enabled until commissioning is complete …") and stay off.
-Nothing is sent. Leave the Hold, Resume and Acknowledge buttons alone; they are
-harmless, but there is nothing for them to do yet.
-
-### 7. Verify the bridge, app and native Schedule are unaffected
-
-| Check | Expected |
-| --- | --- |
-| Thermowatt add-on | still **1.3.8**, running, Configuration unchanged |
-| *Last successful poll* | advances about every 30 minutes |
-| *Cloud health* | `ok`; auth `authorized` |
-| *Cloud request attempts* | rises about 6 per hour, as before; `command: 0`, `confirmation: 0` |
-| Thermann app | Schedule, 70 °C, same weekly windows, T-Comfort 10 °C |
-| Next native window (for example 04:00 or 11:00 on a weekday) | the element starts as before: about +3 kW at the meter, and *Heater element state* ON |
-| Planner | *Recommendation* is no longer stuck on DATA UNAVAILABLE (the 0.4.0 fix); readiness and deadlines show |
-
-Observe for **24–48 hours** before asking to start Stage B.
-
-## Rollback (any time)
-
-1. **Component:** delete `custom_components\thermann_shadow` and copy back your
-   0.3.0 folder from step 1.2. Restart Home Assistant once.
-2. **Dashboard:** paste `hot_water_dashboard_0.3.0.yaml` back into the Raw
-   configuration editor.
-3. **Leftovers:** optionally delete `\\<your-HA-host>\config\.storage\thermann_shadow.*.controller`.
-   The new controller entities then show *unavailable*; remove them under
-   Settings → Entities if you like. The 42 °C threshold stays (set it to 40 if
-   you prefer). The entry loads in 0.3.0, because the minor version is
-   unchanged within major version 1.
-4. **Only if Home Assistant itself misbehaves:** restore the step 1.1 backup
-   (Settings → System → Backups → the backup → Restore). Restoring the full
-   backup also rewinds history to the backup time.
-
-No heater handback is ever needed: Stage A sends nothing to the heater.
-
-## Package identity
-
-The package is built from the reviewed `codex/controller-0.5.0` branch (PR #13);
-see the PR comment for the exact commit, zip name and SHA-256.
-`git archive` of `custom_components/thermann_shadow` at that commit reproduces
-the folder exactly.
+No heater handback is needed: Stage A never sends anything to the heater.

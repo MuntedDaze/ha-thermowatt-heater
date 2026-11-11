@@ -359,31 +359,49 @@ class ShadowRuntime:
             # measured grid can include the REAL 3 kW element. The planner does not
             # de-embed an unverified load: solar economics are then understated.
             self.plan.warnings.append("measured_grid_may_already_include_native_element_load")
+        # The heater's own clock only matters while its weekly programme has
+        # heating windows. With the owner-approved EMPTY programme (the
+        # controller's park) there are no native windows to mistime and no
+        # native comfort fallback; Home Assistant time (Australia/Hobart) and
+        # the fixed-AEST tariff decide everything.
+        empty_programme = not self.native_periods
         self.plan.warnings.extend(
             [
                 "schedule_permission_is_not_element_power",
                 "t_comfort_not_assumed_in_manual_or_off",
-                "native_programme_is_primary_comfort_fallback",
             ]
         )
-        if not self.native_options["native_schedule_clock_verified"]:
-            self.plan.warnings.append("native_schedule_times_approximate_clock_unverified")
-        from .native import clock_check_required
+        if empty_programme:
+            # Never hide that the manufacturer's protective functions can still
+            # heat while parked, or that nothing else heats with control off.
+            self.plan.warnings.append(
+                "manufacturer_antibacterial_and_frost_protection_may_heat_while_parked"
+            )
+            if not self.controller_active:
+                self.plan.warnings.append(
+                    "empty_native_schedule_and_automatic_control_off_no_normal_heating"
+                )
+            self.values["device_clock_check"] = "not_applicable_empty_schedule"
+        else:
+            self.plan.warnings.append("native_programme_is_primary_comfort_fallback")
+            if not self.native_options["native_schedule_clock_verified"]:
+                self.plan.warnings.append("native_schedule_times_approximate_clock_unverified")
+            from .native import clock_check_required
 
-        clock_check = clock_check_required(now, self.native_options["native_clock_check_date"])
-        self.values["device_clock_check"] = (
-            "check_required"
-            if clock_check or not self.native_options["native_schedule_clock_verified"]
-            else "checked_this_dst_period"
-        )
-        if self.values["device_clock_check"] == "check_required":
-            self.plan.warnings.append("check_thermann_clock_manual_dst_adjustment_required")
+            clock_check = clock_check_required(now, self.native_options["native_clock_check_date"])
+            self.values["device_clock_check"] = (
+                "check_required"
+                if clock_check or not self.native_options["native_schedule_clock_verified"]
+                else "checked_this_dst_period"
+            )
+            if self.values["device_clock_check"] == "check_required":
+                self.plan.warnings.append("check_thermann_clock_manual_dst_adjustment_required")
         if self.native_options["t_comfort_reference_c"] == 10:
             self.plan.warnings.append("t_comfort_10C_not_practical_hot_water_reserve")
         else:
             self.plan.warnings.append("higher_t_comfort_can_heat_outside_schedule_including_peak")
         native_minutes = None
-        if self.plan.comfort_deadline is not None:
+        if self.plan.comfort_deadline is not None and not empty_programme:
             native_minutes = permitted_minutes(
                 now,
                 self.plan.comfort_deadline,

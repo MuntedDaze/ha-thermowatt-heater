@@ -197,7 +197,7 @@ Bridge 1.3.8/1.3.9 silently drops a command whose observed status is older than
 
 ## Evidence (offline)
 
-- **Tests: 852 pass locally**: the 789 existing tests plus 63 new controller
+- **Tests: 862 pass locally**: the 789 existing tests plus 73 new controller
   tests. They cover:
   - fresh install unable to command;
   - topic validation;
