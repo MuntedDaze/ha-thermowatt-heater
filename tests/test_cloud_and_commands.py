@@ -362,3 +362,124 @@ def test_all_reviewed_commands_remain_disabled_by_default(factory, clock, kind, 
     ready(bridge)
     bridge.process_command((clock(), "TEST123", kind, payload))
     bridge.session.request.assert_not_called()
+
+
+# --- 1.3.9 guarded Manual and command outcome diagnostics -----------------------
+
+
+def last_command(bridge):
+    payloads = [
+        json.loads(call.args[1])
+        for call in bridge.mqtt_client.publish.call_args_list
+        if call.args[0].endswith("/DIAGNOSTICS")
+    ]
+    return payloads[-1]["last_command"] if payloads else None
+
+
+def test_guarded_manual_sends_explicit_70_only_when_observed_target_is_70(factory, clock):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
+    bridge.session.request.side_effect = [
+        response(204),
+        response(body={"result": {**STATUS["result"], "Cmd": "9", "T_SetPoint": "70"}}),
+    ]
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
+    write, read = bridge.session.request.call_args_list
+    assert write.args[0] == "POST" and write.args[1].endswith("/manual")
+    assert write.kwargs["json"] == {"T_SetPoint": 70}
+    assert last_command(bridge)["result"] == "observed_in_status"
+    assert last_command(bridge)["payload"] == "Manual:70"
+
+
+@pytest.mark.parametrize("observed", [65, 60, 69.5, 75])
+def test_guarded_manual_refuses_any_other_observed_target_without_request(
+    factory, clock, observed, caplog
+):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=observed, Cmd=17)
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
+    bridge.session.request.assert_not_called()
+    assert last_command(bridge)["result"] == "refused_target_mismatch"
+    assert "Guarded Manual refused" in caplog.text
+
+
+@pytest.mark.parametrize("payload", ["Manual:65", "Manual:75", "Manual:", "manual:70"])
+def test_only_the_exact_guarded_payload_is_accepted(factory, clock, payload):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
+    bridge.process_command((clock(), "TEST123", "MODE", payload))
+    bridge.session.request.assert_not_called()
+    assert last_command(bridge)["result"] == "refused_invalid_command"
+    assert last_command(bridge)["payload"] == "other"  # unknown payload text is never echoed
+
+
+@pytest.mark.parametrize(
+    "setup,reason",
+    [
+        (lambda b, c: None, "dropped_command_older_than_30s"),
+        (
+            lambda b, c: b.confirmed.__setitem__(
+                "TEST123", (b.monotonic() - 61, b.confirmed["TEST123"][1])
+            ),
+            "dropped_status_older_than_60s",
+        ),
+    ],
+)
+def test_stale_command_or_status_is_dropped_and_reported(factory, clock, setup, reason):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
+    setup(bridge, clock)
+    issued = clock() - 31 if reason == "dropped_command_older_than_30s" else clock()
+    bridge.process_command((issued, "TEST123", "MODE", "Manual:70"))
+    bridge.session.request.assert_not_called()
+    assert last_command(bridge)["result"] == reason
+
+
+def test_guarded_manual_remains_disabled_by_default_and_reports_nothing(factory, clock):
+    bridge = factory()
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
+    bridge.session.request.assert_not_called()
+    assert bridge.last_command is None
+
+
+def test_guarded_payload_passes_the_mqtt_callback_length_gate(factory, clock):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.mqtt_connected.set()
+    bridge.on_mqtt_message(
+        None, None, SimpleNamespace(topic="P/TEST123/CMD/MODE", payload=b"Manual:70", retain=False)
+    )
+    assert bridge.commands.get_nowait()[2:] == ("MODE", "Manual:70")
+
+
+def test_unconfirmed_guarded_manual_is_reported_and_never_retried(factory, clock):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=17)
+    bridge.session.request.side_effect = [
+        response(204),
+        response(body={"result": {**STATUS["result"], "Cmd": "17", "T_SetPoint": "70"}}),
+    ]
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
+    assert bridge.session.request.call_count == 2
+    assert last_command(bridge)["result"] == "not_observed_in_immediate_status"
+
+
+def test_diagnostics_expose_commands_enabled_flag(factory, clock):
+    bridge = factory(commands_enabled=False)
+    ready(bridge)
+    bridge.publish_diagnostics(force=True)
+    payload = json.loads(
+        [
+            c
+            for c in bridge.mqtt_client.publish.call_args_list
+            if c.args[0].endswith("/DIAGNOSTICS")
+        ][-1].args[1]
+    )
+    assert payload["commands_enabled"] is False and payload["last_command"] is None

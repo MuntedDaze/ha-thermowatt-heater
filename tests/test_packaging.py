@@ -10,8 +10,16 @@ ADDON = ROOT / "thermowatt-heater"
 
 def test_supervisor_options_and_release_metadata(module):
     config = yaml.safe_load((ADDON / "config.yaml").read_text())
-    assert config["version"] == "1.3.8"
-    assert config["breaking_versions"] == ["1.3.2", "1.3.3", "1.3.4", "1.3.6", "1.3.7", "1.3.8"]
+    assert config["version"] == "1.3.9"
+    assert config["breaking_versions"] == [
+        "1.3.2",
+        "1.3.3",
+        "1.3.4",
+        "1.3.6",
+        "1.3.7",
+        "1.3.8",
+        "1.3.9",
+    ]
     assert config["options"]["on_demand_refresh_enabled"] is False
     assert set(config["arch"]) == {"amd64", "aarch64"}
     assert config["init"] is False

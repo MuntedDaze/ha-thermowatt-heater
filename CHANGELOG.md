@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.9] - Guarded Manual command for a local executor (owner review required)
+
+- Add MQTT `MODE` payload `Manual:70`. It enters Manual **only** when the fresh
+  observed target (≤60 s) is already 70 °C, and sends `T_SetPoint` 70
+  explicitly. A different observed target is refused with no request; the
+  target is never changed. Plain `Manual` keeps its 1.3.8 behaviour.
+- Publish `commands_enabled` and a `last_command` record (fixed result codes:
+  dropped/refused/rejected/submitted/observed/not observed, no bodies) in the
+  existing diagnostics topic, so a dropped stale command is visible without an
+  extra cloud read.
+- No change to authentication, token refresh, lockouts, polling, request
+  accounting, freshness limits, retries (still none) or defaults:
+  `commands_enabled` remains false. Changes heater-command handling, so this
+  PR requires explicit owner approval before merge; deployment is separate.
+
 ## [1.3.8] - Phase 1 dependent review candidate
 
 - Add optional `on_demand_refresh_enabled`, disabled by default. Non-retained
