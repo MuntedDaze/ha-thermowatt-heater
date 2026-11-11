@@ -353,7 +353,7 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
     assert executor.count("mqtt.async_publish(") == 1
     assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.6.0"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.6.1"
     assert manifest["integration_type"] == "hub"
     assert "mqtt" not in manifest.get("dependencies", [])  # loads without MQTT
 

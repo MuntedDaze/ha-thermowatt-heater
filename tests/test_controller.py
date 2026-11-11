@@ -48,6 +48,8 @@ def obs(now, **kw):
         "bridge_commands_enabled": True,
         "requests_total": 1000,
         "mqtt_ready": True,
+        "bridge_refresh_limit": 24,  # bridge >= 1.3.10
+        "bridge_refreshes_24h": 0,
     }
     values.update(kw)
     if values["mode"] == "Manual" and "target_c" not in kw:
@@ -228,16 +230,47 @@ def test_already_in_desired_mode_sends_nothing():
     assert not publishes(permitted.step(obs(at, mode="Manual", element="on"), PERMIT, cfg()))
 
 
-def test_command_waits_for_the_next_poll_slot_then_sends_once():
+def test_stale_status_no_longer_waits_for_a_poll_with_bridge_1_3_10():
+    """0.6.1: the bridge reads status once before a command when its status is
+    older than 60 s, so the controller publishes when the planner decides."""
     now = local(hour=11, minute=5)
     controller = parked_controller(now)
-    stale = obs(now, poll_at=now - timedelta(minutes=4))
-    assert not publishes(controller.step(stale, PERMIT, cfg()))
-    assert controller.state == ctl.HEATING_REQUESTED
-    assert controller.reason == "waiting_for_next_bridge_poll"
-    slot = now + timedelta(minutes=26)
-    effects = controller.step(obs(slot, poll_at=slot - timedelta(seconds=5)), PERMIT, cfg())
-    assert len(publishes(effects)) == 1
+    stale = obs(now, poll_at=now - timedelta(minutes=24))
+    effects = controller.step(stale, PERMIT, cfg())
+    assert [e.payload for e in publishes(effects)] == ["Manual:70"]
+    assert controller.state == ctl.CONFIRMING
+
+
+def test_bridge_without_pre_command_refresh_is_never_commanded():
+    """Bridge 1.3.9 reports OFF (Cmd 8) as Unknown and drops stale commands."""
+    now = local(hour=11, minute=5)
+    controller = parked_controller(now)
+    for poll_age in (5, 600):
+        old = obs(now, poll_at=now - timedelta(seconds=poll_age), bridge_refresh_limit=None)
+        assert not publishes(controller.step(old, PERMIT, cfg()))
+        assert "bridge_1_3_10_required" in controller.gate_failures
+
+
+def test_exhausted_bridge_refresh_budget_waits_for_a_background_poll():
+    now = local(hour=11, minute=5)
+    controller = parked_controller(now)
+    spent = {"bridge_refreshes_24h": 24, "bridge_refresh_limit": 24}
+    assert not publishes(
+        controller.step(obs(now, poll_at=now - timedelta(minutes=10), **spent), PERMIT, cfg())
+    )
+    assert controller.reason == "bridge_refresh_budget_exhausted"
+    later = now + timedelta(minutes=20)
+    fresh = obs(later, poll_at=later - timedelta(seconds=10), **spent)  # no refresh needed
+    assert len(publishes(controller.step(fresh, PERMIT, cfg()))) == 1
+
+
+def test_status_older_than_one_poll_interval_blocks_commands():
+    now = local(hour=11, minute=5)
+    controller = parked_controller(now)
+    assert not publishes(
+        controller.step(obs(now, poll_at=now - timedelta(minutes=36)), PERMIT, cfg())
+    )
+    assert "heater_status_too_old" in controller.gate_failures
 
 
 def test_thermostat_hysteresis_means_no_command_above_62():
@@ -369,7 +402,10 @@ def test_wrong_target_refusal_and_unexpected_target_both_stop_control():
     controller = started(now)
     report = {"payload": "Manual:70", "result": "refused_target_mismatch", "at": now.isoformat()}
     controller.step(obs(now + timedelta(seconds=20), last_command=report), PERMIT, cfg())
-    assert controller.state == ctl.FAULT_LOCKED
+    # 0.6.1: the bridge's FRESH status showed another target: owner control.
+    assert controller.state == ctl.OWNER_OVERRIDE
+    assert controller.reason == "mode_or_target_changed_outside_controller"
+    assert controller.history[-1]["status"] == "external_change"
     # While OFF: 70 or no usable setpoint (unreported or outside 20-75) allows
     # the guarded resume, which sends 70 explicitly.
     for reported in (70, 0, 90, None):
@@ -842,16 +878,19 @@ def test_park_payload_is_the_existing_auto_contract_on_the_real_bridge(factory, 
 
 
 class SimBridge:
-    """Faithful model of the bridge 1.3.9 command contract plus a thermostat heater.
+    """Faithful model of the bridge 1.3.10 command contract plus a thermostat heater.
 
     Background poll every 30 min; commands processed ~15 s after publish; drop if
-    the command is >30 s old or the confirmed status >60 s old; guarded Manual
-    refused unless the observed target is 70; one POST then one confirmation
-    read; the cloud may apply late (``apply_delay``) or never (``lose``)."""
+    the command is >30 s old. Status older than 60 s gets ONE pre-command read
+    (counted, at most 24 a day). The FRESH status is then re-checked under the
+    automation policy: Manual:70 only from OFF (target 70 or unusable), off only
+    from Manual 70; otherwise refused (owner choice); already in the requested
+    state sends nothing. One POST then one confirmation read; the cloud may apply
+    late (``apply_delay``) or never (``lose``). OFF reports ``off_setpoint``."""
 
     def __init__(self, start, temperature=45.0, apply_delay=timedelta(0), lose=False):
         self.mode, self.target, self.temperature = "Off", 70.0, temperature
-        self.off_setpoint = 0.0  # what the cloud reports while OFF (unknown in reality)
+        self.off_setpoint = 70.0  # T3: OFF keeps reporting 70
         self.element = False
         self.poll_at = start
         self.requests = 1000
@@ -860,9 +899,21 @@ class SimBridge:
         self.apply_delay, self.lose = apply_delay, lose
         self.last_command = None
         self.posts = []
+        self.refreshes = []  # times of pre-command status reads
 
     def publish(self, now, payload):
         self.queue.append((now, payload))
+
+    def _result(self, payload, result, at, refresh):
+        self.last_command = {
+            "payload": payload,
+            "result": result,
+            "status_refresh": refresh,
+            "at": at.isoformat(),
+        }
+
+    def reported_target(self):
+        return self.target if self.mode == "Manual" else self.off_setpoint
 
     def tick(self, now, draw_c=0.0):
         for issued, payload in list(self.queue):
@@ -870,19 +921,35 @@ class SimBridge:
             if processed > now:
                 continue
             self.queue.remove((issued, payload))
+            refresh = "not_needed"
             if processed - self.poll_at > timedelta(seconds=60):
-                self.last_command = {
-                    "payload": payload,
-                    "result": "dropped_status_older_than_60s",
-                    "at": processed.isoformat(),
-                }
-                continue
-            if payload == "Manual:70" and self.mode != "Off" and self.target != 70:
-                self.last_command = {
-                    "payload": payload,
-                    "result": "refused_target_mismatch",
-                    "at": processed.isoformat(),
-                }
+                recent = [at for at in self.refreshes if processed - at < timedelta(hours=24)]
+                if len(recent) >= 24:
+                    self._result(payload, "refused_status_refresh_limit", processed, "refused")
+                    continue
+                self.refreshes.append(processed)
+                self.requests += 1
+                self._apply(processed)
+                self.poll_at = processed
+                refresh = "refreshed"
+            target = self.reported_target()
+            usable = 20 <= target <= 75
+            reason = None
+            if payload == "Manual:70":
+                if target != 70 and not (self.mode == "Off" and not usable):
+                    reason = "refused_target_mismatch"
+                elif self.mode == "Manual":
+                    reason = "already_in_requested_state"
+                elif self.mode != "Off":
+                    reason = "refused_mode_mismatch"
+            elif self.mode == "Off":
+                reason = "already_in_requested_state"
+            elif self.mode != "Manual":
+                reason = "refused_mode_mismatch"
+            elif target != 70:
+                reason = "refused_target_mismatch"
+            if reason:
+                self._result(payload, reason, processed, refresh)
                 continue
             wanted = {"Manual:70": "Manual", "off": "Off"}[payload]
             self.posts.append((processed, payload))
@@ -894,7 +961,7 @@ class SimBridge:
             result = (
                 "observed_in_status" if self.mode == wanted else "not_observed_in_immediate_status"
             )
-            self.last_command = {"payload": payload, "result": result, "at": processed.isoformat()}
+            self._result(payload, result, processed, refresh)
         self._apply(now)
         # Thermostat: 8 °C hysteresis, Manual only (OFF never heats ordinarily).
         if self.mode == "Manual" and self.temperature <= self.target - 8:
@@ -918,11 +985,14 @@ class SimBridge:
             now,
             poll_at=self.poll_at,
             mode=self.mode,
-            target_c=self.target if self.mode == "Manual" else self.off_setpoint,
+            target_c=self.reported_target(),
             temperature_c=round(self.temperature),
             element="on" if self.element else "off",
             requests_total=self.requests,
             last_command=self.last_command,
+            bridge_refreshes_24h=len(
+                [at for at in self.refreshes if now - at < timedelta(hours=24)]
+            ),
         )
 
 
@@ -1097,7 +1167,9 @@ def test_closed_loop_shower_just_before_the_deadline_puts_comfort_first():
     sim, controller, trace = closed_loop(start, 4 * 60, 50, draws={150: 8.0})  # 07:30
     posts = [(at.astimezone(m.HOBART).strftime("%H:%M"), payload) for at, payload in sim.posts]
     assert controller.fault is None
-    assert posts[0] == ("07:31", "Manual:70"), posts  # comfort fallback at the next poll
+    # 0.6.1 + bridge 1.3.10: the comfort start follows the shower within the
+    # minute (0.6.0 waited for the 07:31 poll).
+    assert posts[0] == ("07:30", "Manual:70"), posts
     assert len(posts) <= 4
 
 
@@ -1518,3 +1590,149 @@ def test_disabled_and_automation_payloads_are_the_only_two_the_controller_can_em
     source = (ROOT_PACKAGE / "controller.py").read_text()
     published = [line for line in source.splitlines() if 'Effect("publish"' in line]
     assert len(published) == 1 and "payload=payload" in published[0]
+
+
+# --- 0.6.1: bridge 1.3.10 fresh-status command path ----------------------------------------
+
+
+def report(now, result, payload="Manual:70", seconds=15, refresh="refreshed"):
+    return {
+        "kind": "MODE",
+        "payload": payload,
+        "result": result,
+        "status_refresh": refresh,
+        "at": (now + timedelta(seconds=seconds)).isoformat(),
+    }
+
+
+@pytest.mark.parametrize(
+    "result",
+    ["already_in_requested_state", "refused_mode_mismatch", "refused_target_mismatch"],
+)
+def test_bridge_seeing_an_owner_change_pauses_control_without_a_fault(result):
+    now = local(hour=11)
+    controller = started(now)
+    later = now + timedelta(seconds=20)
+    mode = "Manual" if result == "already_in_requested_state" else "Schedule"
+    effects = controller.step(
+        obs(
+            later, poll_at=now + timedelta(seconds=14), mode=mode, last_command=report(now, result)
+        ),
+        PERMIT,
+        cfg(),
+    )
+    assert controller.state == ctl.OWNER_OVERRIDE and controller.fault is None
+    assert controller.reason == "mode_or_target_changed_outside_controller"
+    assert "override_mode_or_target_changed_outside_controller" in notices(effects)
+    for minute in range(1, 180):
+        at = now + timedelta(minutes=minute)
+        assert not publishes(controller.step(obs(at, poll_at=at, mode=mode), PERMIT, cfg()))
+
+
+def test_pre_command_status_is_not_mistaken_for_confirmation():
+    """1.3.10 publishes the pre-command read's status before the outcome. If it
+    already shows the requested mode, that is an owner change, not success."""
+    now = local(hour=11)
+    controller = started(now)
+    pre = obs(
+        now + timedelta(seconds=16),
+        poll_at=now + timedelta(seconds=15),
+        mode="Manual",
+        last_command=report(now, "refreshing_status", refresh="in_progress"),
+    )
+    controller.step(pre, PERMIT, cfg())
+    assert controller.state == ctl.CONFIRMING
+    outcome = obs(
+        now + timedelta(seconds=17),
+        poll_at=now + timedelta(seconds=15),
+        mode="Manual",
+        last_command=report(now, "already_in_requested_state"),
+    )
+    controller.step(outcome, PERMIT, cfg())
+    assert controller.state == ctl.OWNER_OVERRIDE
+
+
+def test_refreshed_command_confirms_on_the_bridge_outcome():
+    now = local(hour=11)
+    controller = started(now)
+    for result, state in (
+        ("refreshing_status", ctl.CONFIRMING),
+        ("submitted_awaiting_status", ctl.CONFIRMING),
+        ("observed_in_status", ctl.HEATING_PERMITTED),
+    ):
+        controller.step(
+            obs(
+                now + timedelta(seconds=20),
+                poll_at=now + timedelta(seconds=16),
+                mode="Manual" if result != "refreshing_status" else "Off",
+                last_command=report(now, result),
+            ),
+            PERMIT,
+            cfg(),
+        )
+        assert controller.state == state, result
+    assert controller.history[-1]["bridge_result"] == "observed_in_status"
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        "refused_status_refresh_failed",
+        "refused_cloud_backoff",
+        "refused_cloud_quota_limited",
+        "refused_auth_not_ready",
+        "refused_status_refresh_too_soon",
+        "refused_status_refresh_limit",
+        "dropped_command_expired_during_refresh",
+        "refused_status_not_fresh",
+        "refused_by_policy",
+        "refused_some_future_code",
+    ],
+)
+def test_every_bridge_refusal_locks_once_and_is_never_retried(result):
+    now = local(hour=11)
+    controller = started(now)
+    effects = controller.step(
+        obs(now + timedelta(seconds=20), last_command=report(now, result)), PERMIT, cfg()
+    )
+    assert controller.state == ctl.FAULT_LOCKED and controller.fault == "bridge_refused_or_dropped"
+    assert "fault_bridge_refused_or_dropped" in notices(effects)
+    for minute in range(1, 120):
+        assert not publishes(controller.step(obs(now + timedelta(minutes=minute)), PERMIT, cfg()))
+
+
+def test_closed_loop_stale_status_commands_cost_at_most_three_requests_each():
+    start = local(hour=10, minute=50)
+    sim = SimBridge(start - timedelta(minutes=29), temperature=45)
+    controller = enabled(start)
+    window = (local(hour=11, minute=10), local(hour=14, minute=10))  # between polls
+
+    def desire(now):
+        if window[0] <= now < window[1]:
+            return PERMIT
+        return PARK
+
+    before = sim.requests
+    run_day(sim, controller, desire, start, 300)
+    payloads = [payload for _, payload in sim.posts]
+    assert payloads == ["Manual:70", "off"]
+    assert controller.fault is None and controller.state == ctl.PARKED
+    # Both commands were sent between polls (no 0.6.0 poll-slot wait) ...
+    sent = [at for at, _ in sim.posts]
+    assert sent[0] - window[0] < timedelta(minutes=2)
+    assert sent[1] - window[1] < timedelta(minutes=2)
+    # ... and each cost one pre-command read, one write and one confirmation.
+    assert len(sim.refreshes) == 2
+    polls = 3 * 10  # at most ten background polls (GET 401 -> refresh -> GET) in 300 min
+    assert sim.requests - before <= polls + 2 * 3
+
+
+def test_daily_command_and_request_budgets_bound_cloud_traffic():
+    """Worst case at the default limits: 6 commands, each a pre-command read,
+    a write and a confirmation, plus 30-minute polling, stays far inside both
+    the controller's request budget and the bridge's 24 refreshes a day."""
+    config = ctl.ControllerConfig()
+    command_requests = config.max_commands_per_day * 3
+    polling = 48 * 3
+    assert command_requests + polling <= config.max_requests_per_day
+    assert config.max_commands_per_day <= 24

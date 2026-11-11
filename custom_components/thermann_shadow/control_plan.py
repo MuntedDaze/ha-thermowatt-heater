@@ -2,8 +2,8 @@
 
 ``desire_from_advice`` turns the 0.4.0 planner's advice (stabilised economic
 decision, best plan blocks, readiness) into ONE desired action for the coming
-command interval. Commands are poll-aligned, so a decision is rounded to the
-nearest command slot (half the poll interval) instead of chasing every minute.
+command interval. A decision is rounded to the nearest command slot (half the
+latency reserve) instead of chasing every minute, which keeps switching rare.
 
 ``SessionTemperature`` guards against the bottom-sensor overshoot seen in T1
 (11 Nov 2026): ~0.19 kWh of heating moved the reading 55 -> 62 °C. During and

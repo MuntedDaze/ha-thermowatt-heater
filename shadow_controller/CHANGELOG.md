@@ -1,5 +1,32 @@
 # Thermann Shadow Planner
 
+## 0.6.1 — commands between polls with bridge 1.3.10; owner changes found at command time
+
+- **Requires bridge 1.3.10** (PR #15). It reads OFF correctly (`Cmd` 8, seen in
+  T3) and reads status once before a command when its status is older than
+  60 s. A bridge without that support is never commanded
+  (`bridge_1_3_10_required`).
+- **No more poll-slot wait.** 0.6.0 published only within 35 s after a poll;
+  0.6.1 publishes when the planner decides. New gates: `heater_status_too_old`
+  (no status for more than a poll interval + 5 min) and
+  `bridge_refresh_budget_exhausted` (the bridge's 24 refreshes a day used up;
+  clears at the next poll).
+- **Owner changes found by the bridge.** `already_in_requested_state`,
+  `refused_mode_mismatch` and `refused_target_mismatch` now mean owner override
+  (nothing was written), not a fault. While the bridge reports
+  `refreshing_status` or `submitted_awaiting_status`, a new status is not taken
+  as the outcome, so the pre-command read is never mistaken for confirmation.
+- **Every other bridge refusal** (`dropped_*`, `refused_*`, `rejected_*`,
+  including new and future codes) locks with `bridge_refused_or_dropped`, never
+  retried.
+- Unchanged: two commands only, OFF target rule, dwell, 6 commands a day with
+  2 for comfort, 220 requests a day, latency reserve (30 min), peak guard,
+  protective heating never interrupted, persisted intents, no retry, restart
+  reconciliation, disabled by default. No option is added, removed or migrated.
+- Real-HA CI adds the **0.6.0 → 0.6.1** upgrade from the installed version.
+  A compatibility test drives the real bridge 1.3.10 code with the controller
+  (runs once the bridge code is in this tree; verified locally).
+
 ## 0.6.0 — control architecture corrected: Manual 70 °C permit / software OFF park
 
 - **Why the change.** The owner's app testing showed that an empty native

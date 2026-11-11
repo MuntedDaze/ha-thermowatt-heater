@@ -22,10 +22,15 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 
 APPROVED_TARGET_C = 70.0
-# Bridge >= 1.3.9: sends 70 °C explicitly; accepted from OFF (whatever OFF
-# reports as its setpoint) or when the observed target is already 70.
+# Bridge >= 1.3.10 (automation policy): sends 70 °C explicitly; accepted only
+# from OFF whose target is 70 or unusable. The controller never reads Cmd: it
+# uses the bridge's vendor mode, which 1.3.10 reports as "Off" for the heater's
+# actual OFF code (Cmd 8, seen in T3) and for the older assumed Cmd 16.
 PERMIT_PAYLOAD = "Manual:70"
-PARK_PAYLOAD = "off"  # bridge: POST /off -> software OFF (Cmd 16)
+PARK_PAYLOAD = "off"  # bridge: POST /off -> software OFF; accepted only from Manual 70
+# Status at most this old is used by the bridge without a pre-command read
+# (the bridge allows 60 s; up to ~20 s pass before it takes the command).
+BRIDGE_FRESH_SECONDS = 30.0
 EXPECTED_MODE = {"permit": "Manual", "park": "Off"}
 PARK_MODE = "Off"
 TOPIC_PREFIX, TOPIC_SUFFIX = "P/", "/CMD/MODE"
@@ -53,16 +58,26 @@ STATES = (
 STEADY = {PARKED, HEATING_PERMITTED, HEATING_REQUESTED, PARK_REQUESTED}
 EVENT_PREFIXES = ("fault_", "override_")
 
-# Bridge 1.3.9 last_command results that prove the command was NOT applied.
-DEFINITE_FAILURES = {
-    "dropped_mqtt_disconnected",
-    "dropped_command_older_than_30s",
-    "dropped_unknown_device",
-    "dropped_status_older_than_60s",
+# Bridge last_command results. Any dropped_/refused_/rejected_ code proves the
+# command was NOT applied (1.3.10 adds refresh refusals and failures; unknown
+# future codes with these prefixes are treated the same, never as success).
+FAILURE_PREFIXES = ("dropped_", "refused_", "rejected_")
+# ...but these mean the bridge's FRESH status showed something the controller
+# did not expect (the owner changed mode or target since the last poll): that is
+# owner control, so control pauses instead of locking with a fault.
+OWNER_CHANGE_RESULTS = {
     "refused_target_mismatch",
-    "refused_invalid_command",
-    "rejected_by_cloud",
+    "refused_mode_mismatch",
+    "already_in_requested_state",
 }
+# The bridge is still working on the command (1.3.10 publishes the status of its
+# pre-command read, and of its confirmation read, BEFORE the final outcome).
+BRIDGE_IN_PROGRESS_RESULTS = {"refreshing_status", "submitted_awaiting_status"}
+
+
+def bridge_failure(result: object) -> bool:
+    return isinstance(result, str) and result.startswith(FAILURE_PREFIXES)
+
 
 RECOVERY = {
     "command_not_applied": "The heater did not change mode. Check the Thermann app: it should show the mode you expect. Then press Acknowledge fault; automatic control re-inspects the heater before doing anything.",
@@ -89,7 +104,6 @@ class ControllerConfig:
     comfort_reserve_commands: int = 2  # kept for a comfort start + its park
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
-    command_slot_seconds: float = 35.0
     poll_interval_minutes: float = 30.0
     notification_cooldown_hours: float = 6.0
 
@@ -128,7 +142,10 @@ class Observation:
     cooldown_seconds: int | None = None
     bridge_available: bool = False
     bridge_commands_enabled: bool | None = None
-    last_command: dict | None = None  # bridge 1.3.9 diagnostics
+    last_command: dict | None = None  # bridge >= 1.3.9 diagnostics
+    # Bridge >= 1.3.10: bounded pre-command status refresh (None = older bridge).
+    bridge_refresh_limit: int | None = None
+    bridge_refreshes_24h: int | None = None
     requests_total: int | None = None
     mqtt_ready: bool = False
 
@@ -428,6 +445,22 @@ class Controller:
         )
         if bridge_fresh:
             intent["bridge_result"] = result
+        if bridge_fresh and result in OWNER_CHANGE_RESULTS:
+            # The bridge's fresh status (1.3.10 pre-command read) showed the
+            # heater already changed, or at another mode/target: owner control.
+            # Nothing was written. Checked BEFORE the mode test below, because
+            # "already in the requested state" also shows the expected mode.
+            self._resolve("external_change", obs, effects)
+            self._override("mode_or_target_changed_outside_controller", obs, effects)
+            return
+        if bridge_fresh and bridge_failure(result):
+            self._resolve("not_applied", obs, effects)
+            self._lock(
+                "bridge_refused_or_dropped",
+                f"Last command ({intent['payload']}) result: {result}.",
+                effects,
+            )
+            return
         # The bridge marks the heater unavailable while a command is in flight:
         # no mode means "not yet known", never "changed".
         after_publish = (
@@ -436,33 +469,28 @@ class Controller:
             and published is not None
             and obs.poll_at > published
         )
+        # While the bridge reports this command in progress, a new status is
+        # not conclusive: it may be the pre-command read, whose outcome (for
+        # example "already in the requested state", i.e. an owner change)
+        # follows a moment later. A later background poll (>= 5 min) always is.
+        late_poll = after_publish and obs.poll_at - published >= timedelta(minutes=5)
+        in_progress = bridge_fresh and result in BRIDGE_IN_PROGRESS_RESULTS
+        conclusive = after_publish and (not in_progress or late_poll)
         target_ok = intent["action"] == "park" or self._known_target(obs)
-        if after_publish and obs.mode == expected and target_ok:
+        if conclusive and obs.mode == expected and target_ok:
             self._resolve("confirmed", obs, effects)
             self.state = HEATING_PERMITTED if intent["action"] == "permit" else PARKED
             self.reason = f"{intent['action']}_confirmed"
             self.last_transition_at = _iso(obs.poll_at)
             self.permitted_off_since = None
             return
-        if bridge_fresh and result in DEFINITE_FAILURES:
-            self._resolve("not_applied", obs, effects)
-            self._lock(
-                "bridge_refused_or_dropped",
-                f"Last command ({intent['payload']}) result: {result}.",
-                effects,
-            )
-            return
-        if after_publish and obs.mode not in {expected, intent.get("prior_mode")}:
+        if conclusive and obs.mode not in {expected, intent.get("prior_mode")}:
             self._resolve("ambiguous", obs, effects)
             self._override("unexpected_mode_during_confirmation", obs, effects)
             return
         # The bridge's immediate read may precede the cloud applying the change.
         # A later BACKGROUND poll still showing the prior mode is conclusive.
-        if (
-            after_publish
-            and obs.poll_at - published >= timedelta(minutes=5)
-            and obs.mode == intent.get("prior_mode")
-        ):
+        if late_poll and obs.mode == intent.get("prior_mode"):
             self._resolve("not_applied", obs, effects)
             self._lock(
                 "command_not_applied",
@@ -511,12 +539,23 @@ class Controller:
             failures.append("bridge_auth_not_authorized")
         if obs.consecutive_failures not in (0, None) or (obs.cooldown_seconds or 0) > 0:
             failures.append("bridge_in_backoff")
+        if obs.bridge_refresh_limit is None:
+            # 1.3.9 reports OFF (Cmd 8) as Unknown and cannot refresh status.
+            failures.append("bridge_1_3_10_required")
         if obs.poll_at is None:
             failures.append("no_heater_status")
-        elif not 0 <= (now - obs.poll_at).total_seconds() <= cfg.command_slot_seconds:
-            # Poll-aligned: the bridge drops commands whose status is >60 s old,
-            # so publish only in the slot just after a background poll.
-            failures.append("waiting_for_next_bridge_poll")
+        else:
+            age = (now - obs.poll_at).total_seconds()
+            if age > (cfg.poll_interval_minutes + 5) * 60:
+                failures.append("heater_status_too_old")
+            elif (
+                age > BRIDGE_FRESH_SECONDS
+                and obs.bridge_refresh_limit is not None
+                and (obs.bridge_refreshes_24h or 0) >= obs.bridge_refresh_limit
+            ):
+                # No refresh left today: wait for a background poll, after
+                # which the status is fresh and no refresh is needed.
+                failures.append("bridge_refresh_budget_exhausted")
         expected_now = PARK_MODE if action == "permit" else "Manual"
         if obs.mode != expected_now:
             failures.append(f"heater_not_{expected_now.lower()}")

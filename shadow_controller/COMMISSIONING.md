@@ -1,4 +1,4 @@
-# Commissioning runbook — Thermann Hot Water Controller 0.6.0
+# Commissioning runbook — Thermann Hot Water Controller 0.6.1
 
 **Method:** Manual 70 °C = heating permitted; Thermann software **OFF** =
 parked. No native Schedule configuration is required, and none is changed.
@@ -9,8 +9,9 @@ agent.
 
 | Stage | What | Needs |
 | --- | --- | --- |
-| A | Install the controller with control **off** | Done for 0.5.0 (installed, disabled). Next: upgrade to 0.6.0 ([UPGRADE_0_5_0_TO_0_6_0.md](UPGRADE_0_5_0_TO_0_6_0.md)) |
-| B | **T3**: prove the bridge's `off` and `Manual:70` reproduce the app results | Approval to merge PR #12 (bridge 1.3.9), update the add-on and enable commands temporarily |
+| A | Install the controller with control **off** | 0.6.0 installed (control off). Next: upgrade to 0.6.1 ([UPGRADE_0_6_0_TO_0_6_1.md](UPGRADE_0_6_0_TO_0_6_1.md)) |
+| B | **T3**: prove the bridge's `off` and `Manual:70` reproduce the app results | **Done 12 Nov 2026** with bridge 1.3.9; found OFF = `Cmd` 8 and the 60 s freshness problem |
+| B2 | **T3b**: repeat with bridge 1.3.10, from stale status | Approval to merge PR #15, update the add-on and enable commands temporarily |
 | C | Supervised controller trial (limited cycles) | Approval to enable automatic control |
 | D | Production enablement | Approval after reviewing C |
 
@@ -28,9 +29,10 @@ Never reset Thermowatt authentication locks to force anything.
 
 ## Stage A — controller installed, control off
 
-0.5.0 is installed and disabled. Upgrade to 0.6.0 with
-[UPGRADE_0_5_0_TO_0_6_0.md](UPGRADE_0_5_0_TO_0_6_0.md): replace one folder,
-restart once.
+0.6.0 is installed with control off. Upgrade to 0.6.1 with
+[UPGRADE_0_6_0_TO_0_6_1.md](UPGRADE_0_6_0_TO_0_6_1.md): replace one folder,
+restart once. (From 0.5.0, the same steps apply; see
+[UPGRADE_0_5_0_TO_0_6_0.md](UPGRADE_0_5_0_TO_0_6_0.md) for the removed setting.)
 
 **Pass:**
 - the control state is `disabled`, and *commissioning missing* lists 2 items
@@ -38,82 +40,68 @@ restart once.
 - the bridge polls as before, `command: 0`;
 - the app is unchanged.
 
-**Rollback:** reinstall the 0.5.0 package and restart.
+**Rollback:** reinstall the 0.6.0 package and restart.
 
 ---
 
-## Stage B — T3 bridge qualification (supervised)
+## Stage B — T3 bridge qualification (done 12 Nov 2026, bridge 1.3.9)
+
+Owner present, commands enabled temporarily, MQTT published by hand:
+
+| Step | Result |
+| --- | --- |
+| Manual 70 °C | `Cmd` 9, `WaterHeaterSts` 33, target 70 |
+| `off` | heater OFF in the app; `Cmd` **8**, `WaterHeaterSts` 32, target **70** kept |
+| `Manual:70` | Manual 70 °C restored, heating resumed |
+
+Findings, fixed in bridge 1.3.10 (PR #15):
+- 1.3.9 knew only `Cmd` 16 as OFF, so OFF showed as *Unknown* and a successful
+  `off` was reported unconfirmed;
+- commands were dropped as `dropped_status_older_than_60s` unless sent within a
+  minute of the 30-minute poll (in T3 only after restarting the add-on).
+
+OFF reports 70, so the OFF target rule allows the resume. `WaterHeaterSts`
+32/33 matched OFF/Manual here but is **not** treated as element activity.
+
+---
+
+## Stage B2 — T3b with bridge 1.3.10 (supervised)
 
 **Preconditions:**
-- PR #12 is approved and merged, and the add-on is updated to **1.3.9** (it
-  never updates automatically);
-- credentials, tokens and guard state are unchanged;
-- the owner is present, the app works, and the reading is ≤60 °C so the
-  thermostat will call for heat;
-- the test runs off-peak.
+- PR #15 approved and merged; the add-on updated to **1.3.10** with
+  [UPGRADING_1_3_10.md](../UPGRADING_1_3_10.md) (commands disabled first);
+- controller 0.6.1 installed, *Automatic heater control* **off**;
+- the owner is present with the app open and the power reading visible;
+- off-peak.
 
-1. **Command topic.** Settings → Devices & services → MQTT → *Boiler …* → MQTT
-   INFO → water-heater discovery → `mode_command_topic` (`P/<serial>/CMD/MODE`).
-   Keep it private.
-2. **Enable commands for the test only.** Add-on Configuration:
-   `commands_enabled: true`, `command_policy: automation` (the default); leave
-   `on_demand_refresh_enabled: false`. Restart the add-on.
-   - *Check:* diagnostics show `commands_enabled: true`,
-     `command_policy: automation`, cloud health `ok`, auth `authorized`.
-   - *Allowlist check:* publish `Eco` (or `TEMP` 65) once. **Expect**
-     `refused_by_policy`, no request and no change.
-3. **Start from Manual 70 °C** (set it in the app if needed). Record mode,
-   target, reading, grid power and the request counter.
-4. **Manual 70 → OFF.**
-   - Within **20 s** after *Last successful poll* changes, run Developer Tools →
-     Actions → `mqtt.publish` with topic = the command topic, payload `off`,
-     retain **off**.
-   - **Expect:**
-     - `last_command.result` = `observed_in_status`;
-     - mode **Off**;
-     - if the element was heating, import down by about 3 kW within 2 minutes;
-     - the app shows OFF.
-   - **Record what OFF reports:** `T_SetPoint`, `setpoint_valid` and
-     `WaterHeaterSts` (vendor-mode attributes and the STATUS payload).
-   - If OFF reports a **usable target other than 70**, stop here. `Manual:70`
-     would be refused by design. Decide with ChatGPT before continuing.
-5. Wait at least one poll (30 min) in OFF.
-   - *Check:* the bridge stays healthy, with no `status_temperature_out_of_range`.
-6. **OFF → Manual 70.**
-   - Same timing, payload `Manual:70`.
-   - **Expect:**
-     - `observed_in_status` (or `not_observed_in_immediate_status`, then Manual
-       at the next poll);
-     - mode **Manual** at **70 °C**;
-     - about +3 kW within 2 minutes if the reading is ≤62 °C;
-     - the app shows Manual 70.
-7. **Optional repeat:** after another poll, OFF again, then Manual:70 again, to
-   check retention twice.
-8. **Optional negative check:** publish outside the 20-s slot.
-   - **Expect:** `dropped_status_older_than_60s`, with no request.
-9. Set `commands_enabled: false` and restart the add-on, unless Stage C follows
-   with approval.
+Follow the *Supervised validation (T3b)* steps in
+[UPGRADING_1_3_10.md](../UPGRADING_1_3_10.md):
+1. with status over 2 minutes old, publish `off`: expect `observed_in_status`
+   with `status_refresh: refreshed`, vendor mode **Off** (`Cmd` 8), HA water
+   heater **off**, the app OFF;
+2. repeat `off` within 60 s: `already_in_requested_state`, no write;
+3. publish `Eco`: `refused_by_policy`, no request;
+4. with status over 2 minutes old, publish `Manual:70`: `observed_in_status`,
+   Manual 70 °C, about +3 kW if the tank is below the restart point.
 
 **Pass:**
-- both transitions behave as in the app, and 70 °C is kept on resume;
-- about ±3 kW steps when the thermostat calls for heat;
-- confirmation from observed status;
-- request cost per command recorded (expected 2–4);
-- no auth lock and no retries;
-- OFF readback recorded.
+- each step as expected, 70 °C kept throughout;
+- three requests per stale-status command (refresh, write, confirmation);
+- no auth lock and no retry.
 
-**Fail:** wrong mode or target, no resume from OFF, an auth lock, or polling
-failures while OFF. Stop and restore in the app (Manual 70, or ON). Set
-commands disabled and report.
+**Stop** at any unexpected code, a target other than 70, an app/HA mismatch, or
+power not following the mode. Set `commands_enabled: false` and report.
 
-**Then, in HA:** set *Controller command topic* and switch on *Bridge commands
-qualified (T3)*.
+**Then, in HA:** set *Controller command topic* (`P/<serial>/CMD/MODE`, from
+the water-heater discovery's `mode_command_topic`; keep it private) and switch
+on *Bridge commands qualified (T3)*.
 
 ---
 
 ## Stage C — supervised controller trial
 
-**Preconditions:** A and B have passed. Bridge `commands_enabled: true`. The
+**Preconditions:** A, B and B2 have passed. Bridge 1.3.10 with
+`commands_enabled: true`. The
 heater is in **OFF** or **Manual 70** (set it in the app; any other mode puts the
 controller in owner override).
 
@@ -156,7 +144,7 @@ Rollback as in C.
 
 ## Owner actions outstanding
 
-1. Approve the 0.6.0 upgrade (Stage A).
-2. Approve PR #12, update the add-on to 1.3.9 and run T3 (Stage B).
+1. Approve the 0.6.1 upgrade (Stage A).
+2. Approve PR #15, update the add-on to 1.3.10 and run T3b (Stage B2).
 3. Approve the trial (Stage C), then production (Stage D).
-4. Merge decisions for PRs #9–#14.
+4. Merge decisions for PRs #9–#16.

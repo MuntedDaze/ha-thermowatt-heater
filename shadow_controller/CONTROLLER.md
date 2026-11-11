@@ -1,4 +1,4 @@
-# Thermann Hot Water Controller 0.6.0 — production candidate
+# Thermann Hot Water Controller 0.6.1 — production candidate
 
 **Status: built and tested offline only.** Nothing has been deployed, no
 command has been sent, and no heater, Schedule, T-Comfort or bridge setting has
@@ -35,35 +35,52 @@ needs no particular configuration. If HA, the cloud or the bridge fails:
 
 The owner accepts this and recovers in the app: Manual at 70 °C, or ON.
 
-## Bridge requirement: 1.3.9 (PR #12)
+## Bridge requirement: 1.3.10 (PR #15)
 
 **Control vocabulary: exactly two commands.** `Manual:70` (heating permitted;
 the "ON" command) and `off` (parked). No generic `On`, no temperature writes, no
-other modes.
+other modes. The bridge's `command_policy: automation` (default since 1.3.9)
+refuses everything else before any request.
 
-| Need | 1.3.8 | 1.3.9 |
-| --- | --- | --- |
-| Only the two automation commands accepted | no (all 1.3.8 commands) | `command_policy: automation` (default) refuses everything else before any request (`refused_by_policy`); `legacy` only if chosen explicitly |
-| Park: `off` → POST `/off`, confirm `Cmd` 16 | yes | yes |
-| Resume: `Manual:70` → POST `/manual` with 70 explicitly | unknown payload, ignored | accepted when the target is already 70, or when OFF reports no usable setpoint (outside 20–75 °C); a usable other target (OFF included) is refused |
-| Status while OFF with a setpoint outside 20–75 °C | **poll fails and the bridge backs off** | published with `setpoint_valid: false` |
-| Plain `Manual` with an invalid observed setpoint | would POST it | refused |
-| Command outcome in diagnostics (`last_command`) | no | yes |
+**T3 (12 Nov 2026, bridge 1.3.9, owner present)** established what OFF reports:
 
-**What OFF reports as its setpoint has never been observed by the bridge.** The
-owner's OFF test fell between polls (recorder, read-only), so it cannot be
-confirmed offline. The rule is designed so `Manual:70` never fails silently and
-never blindly changes the thermostat setting:
+| State | `Cmd` | `WaterHeaterSts` | `T_SetPoint` |
+| --- | --- | --- | --- |
+| Manual 70 °C | 9 | 33 | 70 |
+| software OFF | **8** | 32 | **70** |
+
+MQTT `off` switched the heater OFF and `Manual:70` restored Manual 70 °C and
+heating. Two bridge problems followed, both fixed in 1.3.10:
+
+| Problem in 1.3.9 | 1.3.10 |
+| --- | --- |
+| OFF is `Cmd` 8, but only `Cmd` 16 was known: OFF showed as *Unknown* and a successful `off` as unconfirmed | `Cmd` 8 and 16 are OFF (vendor mode, HA mode, validation, confirmation, guarded resume) |
+| A command was dropped (`dropped_status_older_than_60s`) unless sent within a minute of the 30-minute poll | at most **one** bounded status read per command, then every rule re-checked against it |
+
+The controller never reads `Cmd`; it uses the bridge's vendor mode. It never
+interprets `WaterHeaterSts` (still unverified) as element activity.
+
+**OFF target rule** (unchanged; T3 saw 70, the first row):
 
 | OFF reports | Controller | Bridge |
 | --- | --- | --- |
 | 70 °C | parked; resume allowed | accepts `Manual:70` |
-| no usable value (missing, or outside 20–75 °C, which 1.3.9 publishes with `setpoint_valid: false`) | parked; resume allowed; 70 is sent explicitly | accepts |
+| no usable value (missing, or outside 20–75 °C) | parked; resume allowed; 70 is sent explicitly | accepts |
 | a usable other value (for example 40 or 65) | **owner override**, notice naming the target; nothing sent | refuses (`refused_target_mismatch`) |
 
-A resume is confirmed only at **Manual 70 °C**. T3 records what OFF really
-reports. If it turns out to be a fixed usable value other than 70, the rule needs
-an owner decision before the trial.
+**Bridge re-check on fresh status (1.3.10, automation policy).** The controller
+decides from the last poll, up to 30 minutes old. The bridge re-checks the
+command against status no older than 60 s (reading it once if needed):
+`Manual:70` only from OFF, `off` only from Manual 70 °C. An app change since
+the poll is therefore refused with no write and reported, and the controller
+treats it as owner control:
+
+| Bridge outcome | Controller |
+| --- | --- |
+| `observed_in_status` | confirmed |
+| `already_in_requested_state`, `refused_mode_mismatch`, `refused_target_mismatch` | **owner override** (`mode_or_target_changed_outside_controller`); nothing was written |
+| `refreshing_status`, `submitted_awaiting_status` | still in progress: a status seen now is not an outcome |
+| any other `dropped_*`, `refused_*`, `rejected_*` (e.g. `refused_status_refresh_failed`, `refused_cloud_backoff`) | `fault_locked` (`bridge_refused_or_dropped`), never retried |
 
 ## Architecture
 
@@ -91,8 +108,8 @@ an owner decision before the trial.
 | `disabled` | Master switch off. Never commands, silent | Owner enables (only when commissioned) |
 | `observing` | Waiting for a **new** status after enable, resume, acknowledge or restart | OFF (any setpoint) → `parked`; Manual 70 → `heating_permitted`; anything else (Schedule, Eco, Holiday, Manual ≠ 70) → `owner_override` |
 | `parked` / `heating_permitted` | Steady | Planner wants the other state → `*_requested` |
-| `heating_requested` / `park_requested` | Wanted, waiting for an eligible poll slot | All gates pass → one message → `confirming` |
-| `confirming` | One persisted intent published | Manual at 70 (resume) or OFF (park) observed → steady; definite failure, not applied or timeout → `fault_locked`; foreign mode → `owner_override` |
+| `heating_requested` / `park_requested` | Wanted, waiting for every gate to pass | All gates pass → one message → `confirming` |
+| `confirming` | One persisted intent published | Manual at 70 (resume) or OFF (park) observed → steady; the bridge's fresh status shows an owner change (`refused_mode_mismatch`, `refused_target_mismatch`, `already_in_requested_state`) or a foreign mode → `owner_override`; any other bridge refusal, not applied or timeout → `fault_locked` |
 | `owner_override` | An app change, an unexpected mode or target, or **Hold** | Owner presses **Resume** → `observing` |
 | `fault_locked` | Ambiguous or failed command | Owner presses **Acknowledge** → `observing` |
 
@@ -110,11 +127,15 @@ Unchanged from 0.5.0:
 
 **Bridge and cloud**
 - MQTT ready and the bridge available;
-- the bridge reports `commands_enabled: true` (only 1.3.9 reports this flag);
+- the bridge reports `commands_enabled: true`, and is **1.3.10** (reports its
+  pre-command refresh budget; otherwise `bridge_1_3_10_required`);
 - cloud health `ok`, auth `authorized`, no backoff.
 
 **Heater state**
-- the status is at most 35 s old (just after a poll);
+- a status exists and is at most one poll interval + 5 min old
+  (`heater_status_too_old`); if it is older than 30 s the bridge will read it
+  again before the command, so a refresh must remain in the bridge's 24-a-day
+  budget (`bridge_refresh_budget_exhausted`, which clears at the next poll);
 - **resume**: currently OFF (the setpoint is ignored);
 - **park**: currently Manual at exactly 70 °C.
 
@@ -139,10 +160,21 @@ interrupted**:
 
 ## Command timing
 
-Poll-aligned, unchanged from 0.5.0: publish within 35 s of a bridge poll, a
-30-min latency reserve, and the peak guard. The cost is usually the POST plus
-one confirmation read, but this is not guaranteed. A POST 401/403/429 locks
-bridge authentication, and that is never reset automatically.
+0.6.0 published only within 35 s after a bridge poll, because bridge 1.3.9
+dropped anything later. **0.6.1 publishes when the planner decides** (it is
+evaluated every minute and on every new poll). With bridge 1.3.10:
+- if the status is fresh (≤60 s, for example right after a poll), the bridge
+  uses it: one write plus one confirmation read;
+- otherwise the bridge reads status once first: three requests in all.
+
+At the default limit of 6 commands a day that is at most 18 command requests,
+inside the 220-a-day request budget and the bridge's 24 refreshes a day.
+Normal 30-minute polling is unchanged. Dwell (30 min), the daily command limit
+with its comfort reserve, the peak guard and the latency reserve still keep
+switching rare. The 30-minute latency reserve is kept as a conservative default;
+with 1.3.10 a command normally lands within a minute, so it may be reduced after
+the supervised trial. A POST 401/403/429 locks bridge authentication, and that
+is never reset automatically.
 
 ## Home Assistant interface
 
@@ -177,6 +209,8 @@ bridge authentication, and that is never reset automatically.
 
   All 0.5.0 closed-loop days still pass with OFF parking: sunny, cloudy,
   shower, winter, weekend, DST and forecast error.
+- **Bridge 1.3.10 (PR #15):** 670 tests, including `Cmd` 8, the bounded
+  pre-command refresh and its failures, and the mode re-check.
 - **Bridge 1.3.9:** 519 tests, including the OFF status handling and the guarded
   resume from OFF.
 - **Real HA Core check** (CI): a fresh install refuses; one captured `Manual:70`

@@ -159,6 +159,8 @@ class Executor:
             obs.bridge_commands_enabled = flag if isinstance(flag, bool) else None
             last = attrs.get("last_command")
             obs.last_command = dict(last) if isinstance(last, dict) else None
+            obs.bridge_refresh_limit = _int(attrs.get("command_status_refresh_limit_24h"))
+            obs.bridge_refreshes_24h = _int(attrs.get("command_status_refreshes_24h"))
         obs.bridge_available = (
             mode is not None and mode.state != "unavailable" and obs.cloud_health is not None
         )
@@ -305,7 +307,7 @@ class Executor:
             "permit_payload": "Manual:70 (bridge >= 1.3.9 guarded Manual)",
             "park_payload": "off (Thermann software OFF; antibacterial and frost protection stay active)",
             "execution_latency_reserved_minutes": self.latency_minutes,
-            "command_timing": "poll_aligned_single_message_no_retry",
+            "command_timing": "single_message_bridge_fresh_status_no_retry",
             "planning_temperature": self.session.summary(),
             "state_saved": not self.save_failed,
             "observation": {
@@ -318,6 +320,8 @@ class Executor:
                 "cloud_health": obs.cloud_health if obs else None,
                 "bridge_commands_enabled": obs.bridge_commands_enabled if obs else None,
                 "bridge_last_command": obs.last_command if obs else None,
+                "bridge_refreshes_24h": obs.bridge_refreshes_24h if obs else None,
+                "bridge_refresh_limit_24h": obs.bridge_refresh_limit if obs else None,
             },
             "recovery_manual": "Official Thermann app: select Manual at 70 °C (hot water now), or turn the heater OFF (parked). "
             "Never reset authentication locks automatically; see the add-on documentation.",

@@ -391,7 +391,7 @@ CATALOG = {
     "controller_execution_latency_minutes": Setting(
         "Execution latency reserve",
         "Controller",
-        "Commands are sent only right after a bridge poll. Comfort deadlines are planned this much earlier so a 30-minute command delay cannot cause a miss.",
+        "Comfort deadlines are planned this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command normally reaches the heater within about a minute; the 30-minute default is a conservative margin you may reduce after the supervised trial.",
         0,
         60,
         "min",

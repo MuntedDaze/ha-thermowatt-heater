@@ -49,8 +49,8 @@ async def async_setup_entry(hass, entry):
 
     @callback
     def new_poll(event):
-        # Commands are poll-aligned: evaluate immediately when a bridge status
-        # lands, so a command reaches the bridge while its status is <60 s old.
+        # Evaluate immediately when a bridge status lands: a command sent then
+        # needs no pre-command status read by the bridge (fewer cloud requests).
         update(dt_util.utcnow())
 
     entry.async_on_unload(async_track_time_interval(hass, update, timedelta(minutes=1)))

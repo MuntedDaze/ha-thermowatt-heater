@@ -78,8 +78,8 @@ class TickInputs:
     load_series: tuple = ()
     forecast_available: bool = False
     # 0.5.0: True while the production controller owns heating permission.
-    # Comfort deadlines are then planned ``latency_minutes`` earlier, because a
-    # poll-aligned command may take up to one poll interval to reach the heater.
+    # Comfort deadlines are then planned ``latency_minutes`` earlier: a margin
+    # for command delay (bridge 1.3.10 normally carries it out within a minute).
     controlled: bool = False
     latency_minutes: float = 0.0
 

@@ -1,0 +1,16 @@
+{
+  "domain": "thermann_shadow",
+  "name": "Thermann Hot Water Controller",
+  "version": "0.6.0",
+  "documentation": "https://github.com/MuntedDaze/ha-thermowatt-heater/tree/main/shadow_controller",
+  "codeowners": [
+    "@MuntedDaze"
+  ],
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "requirements": [],
+  "after_dependencies": [
+    "mqtt"
+  ]
+}

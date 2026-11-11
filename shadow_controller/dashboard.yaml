@@ -385,9 +385,10 @@ views:
       \ }}** · recommended & original **220** · *restored by Restore*  \nNo command is sent once the bridge's\
       \ local request count over 24 h reaches this. Normal 30-minute polling uses about 150/day.\n\n**Execution\
       \ latency reserve** — current **{{ states('number.thermann_shadow_execution_latency_reserve') }}\
-      \ min** · recommended & original **30 min** · *restored by Restore*  \nCommands are sent only right\
-      \ after a bridge poll. Comfort deadlines are planned this much earlier so a 30-minute command delay\
-      \ cannot cause a miss.\n\n**Notification service** — current **{{ states('text.thermann_shadow_notification_service')\
+      \ min** · recommended & original **30 min** · *restored by Restore*  \nComfort deadlines are planned\
+      \ this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command\
+      \ normally reaches the heater within about a minute; the 30-minute default is a conservative margin\
+      \ you may reduce after the supervised trial.\n\n**Notification service** — current **{{ states('text.thermann_shadow_notification_service')\
       \ }}** · recommended & original **blank / unknown** · *kept by Restore*  \nOptional notify service\
       \ name, e.g. mobile_app_phone (without notify.). Blank = Home Assistant notifications only."
   - type: entities
