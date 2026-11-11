@@ -838,16 +838,23 @@ class MyThermowattBridge:
             raise CloudError("status_values_non_numeric") from None
         if not all(math.isfinite(v) for v in values.values()):
             raise CloudError("status_values_non_finite")
-        if not 0 <= values["T_Avg"] <= 100 or not 20 <= values["T_SetPoint"] <= 75:
-            raise CloudError("status_temperature_out_of_range")
         if values["Cmd"] < 0 or values["Cmd"] != int(values["Cmd"]):
             raise CloudError("status_mode_invalid")
+        # While the heater is software OFF (Cmd 16) the cloud's setpoint is not an
+        # operating target, and it has never been observed. An out-of-range value
+        # then must not fail every poll (that would back the bridge off for hours
+        # while the heater stays off). It is published but flagged invalid, and
+        # no command may reuse it (see process_command).
+        setpoint_valid = 20 <= values["T_SetPoint"] <= 75
+        if not 0 <= values["T_Avg"] <= 100 or (not setpoint_valid and values["Cmd"] != 16):
+            raise CloudError("status_temperature_out_of_range")
         if values["WaterHeaterSts"] < 0 or values["WaterHeaterSts"] != int(
             values["WaterHeaterSts"]
         ):
             raise CloudError("status_heater_state_invalid")
         safe = {key: result[key] for key in self.STATUS_FIELDS}
         safe["vendor_mode"] = self.MODES.get(int(values["Cmd"]), "Unknown")
+        safe["setpoint_valid"] = setpoint_valid
         # WaterHeaterSts is an opaque diagnostic value, not proven element feedback.
         safe["heating"] = None
         self.confirmed[serial] = (self.monotonic(), values)
@@ -904,11 +911,13 @@ class MyThermowattBridge:
             arguments = {"json": {"T_SetPoint": int(temperature)}}
             expected = ("T_SetPoint", temperature)
         elif kind == "MODE" and payload in GUARDED_PAYLOADS:
-            # Guarded Manual: enter Manual ONLY at the stated target, and only if
-            # the fresh observed target already equals it. Never changes the
-            # target; an unexpected target is refused, not "corrected".
+            # Guarded Manual: enter Manual ONLY at the stated target, sent
+            # explicitly. Allowed when the fresh observed target already equals
+            # it, or when the heater is software OFF (Cmd 16), whose reported
+            # setpoint is not an operating target. Any other mode with another
+            # target is refused, never "corrected".
             wanted = GUARDED_PAYLOADS[payload]
-            if confirmed[1]["T_SetPoint"] != wanted:
+            if confirmed[1]["T_SetPoint"] != wanted and confirmed[1]["Cmd"] != 16:
                 LOG.warning("Guarded Manual refused: observed target differs. No request sent.")
                 self._command_result(kind, payload, "refused_target_mismatch")
                 return
@@ -929,6 +938,11 @@ class MyThermowattBridge:
                 return
             expected = ("Cmd", {"off": 16, "Off": 16, "Eco": 3, "Auto": 17, "Manual": 9}[payload])
             if payload == "Manual":
+                if not 20 <= confirmed[1]["T_SetPoint"] <= 75:
+                    # Plain Manual reuses the observed setpoint; never send an
+                    # invalid one (possible only while OFF). Use Manual:70.
+                    self._command_result(kind, payload, "refused_setpoint_unavailable")
+                    return
                 arguments = {"json": {"T_SetPoint": int(confirmed[1]["T_SetPoint"])}}
             else:
                 arguments = {"data": ""}

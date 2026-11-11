@@ -7,10 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.9] - Guarded Manual command for a local executor (owner review required)
 
-- Add MQTT `MODE` payload `Manual:70`. It enters Manual **only** when the fresh
-  observed target (≤60 s) is already 70 °C, and sends `T_SetPoint` 70
-  explicitly. A different observed target is refused with no request; the
-  target is never changed. Plain `Manual` keeps its 1.3.8 behaviour.
+- Add MQTT `MODE` payload `Manual:70`. It sends `T_SetPoint` 70 explicitly and
+  is accepted only when the fresh observed status (≤60 s) already shows 70 °C,
+  or shows software **OFF** (`Cmd` 16), whose setpoint is not an operating
+  target. Any other mode with another target is refused with no request.
+- While OFF, a reported setpoint outside 20–75 °C no longer fails the poll (it
+  would otherwise back the bridge off while the heater stays off); it is
+  published with `setpoint_valid: false`. Outside OFF the 1.3.8 validation is
+  unchanged. Plain `Manual` refuses an invalid observed setpoint
+  (`refused_setpoint_unavailable`) instead of sending it.
 - Publish `commands_enabled` and a `last_command` record (fixed result codes:
   dropped/refused/rejected/submitted/observed/not observed, no bodies) in the
   existing diagnostics topic, so a dropped stale command is visible without an

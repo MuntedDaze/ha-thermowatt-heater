@@ -242,9 +242,11 @@ heating booleans. No verified `WaterHeaterSts` bit definition was found. The
 published `result.heating` is null; consumers must not interpret it as false or
 as proof of an unpowered element. Use the raw value for later reviewed diagnosis.
 
-Guarded `MODE=Manual:70` (1.3.9) enters Manual only when the fresh observed
-target is already 70 °C and never changes the target; a mismatch is refused with no
-request. Each command's outcome is published as `last_command` in diagnostics.
+Guarded `MODE=Manual:70` (1.3.9) sends 70 °C explicitly and is accepted only when
+the fresh observed target is already 70 °C or the heater is software OFF; any other
+mode with another target is refused with no request. While OFF an out-of-range
+reported setpoint is published with `setpoint_valid: false` instead of failing the
+poll. Each command's outcome is published as `last_command` in diagnostics.
 Commands are queued on the MQTT callback and executed serially by the main loop.
 Retained commands are rejected, including retained writes while connected using
 MQTT v5 retain-as-published. Stale/unknown commands and commands while unavailable

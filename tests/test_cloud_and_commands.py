@@ -483,3 +483,77 @@ def test_diagnostics_expose_commands_enabled_flag(factory, clock):
         ][-1].args[1]
     )
     assert payload["commands_enabled"] is False and payload["last_command"] is None
+
+
+# --- 1.3.9: software OFF as the parked state ------------------------------------------
+
+
+@pytest.mark.parametrize("setpoint", ["0", "40", "70", "5", "90"])
+def test_status_while_off_is_published_even_with_an_unusual_setpoint(factory, setpoint):
+    bridge = factory()
+    ready(bridge)
+    body = {"result": {**STATUS["result"], "Cmd": "16", "T_SetPoint": setpoint}}
+    bridge.session.request.side_effect = [response(body=body)]
+    values = bridge.poll_status("TEST123")
+    assert values["Cmd"] == 16
+    published = json.loads(status_messages(bridge)[-1])["result"]
+    assert published["vendor_mode"] == "Off"
+    assert published["setpoint_valid"] is (20 <= float(setpoint) <= 75)
+
+
+@pytest.mark.parametrize("cmd", ["9", "17", "3"])
+def test_out_of_range_setpoint_outside_off_still_fails_the_poll(factory, module, cmd):
+    bridge = factory()
+    ready(bridge)
+    body = {"result": {**STATUS["result"], "Cmd": cmd, "T_SetPoint": "0"}}
+    bridge.session.request.side_effect = [response(body=body)]
+    with pytest.raises(module.CloudError):
+        bridge.poll_status("TEST123")
+
+
+@pytest.mark.parametrize("observed", [0, 40, 65, 70])
+def test_guarded_manual_from_off_sends_explicit_70_whatever_off_reports(factory, clock, observed):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=observed, Cmd=16)
+    bridge.session.request.side_effect = [
+        response(204),
+        response(body={"result": {**STATUS["result"], "Cmd": "9", "T_SetPoint": "70"}}),
+    ]
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
+    write, read = bridge.session.request.call_args_list
+    assert write.args[1].endswith("/manual") and write.kwargs["json"] == {"T_SetPoint": 70}
+    assert last_command(bridge)["result"] == "observed_in_status"
+
+
+def test_guarded_manual_from_schedule_with_other_target_is_still_refused(factory, clock):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=40, Cmd=17)
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual:70"))
+    bridge.session.request.assert_not_called()
+    assert last_command(bridge)["result"] == "refused_target_mismatch"
+
+
+def test_plain_manual_never_sends_an_invalid_setpoint_seen_while_off(factory, clock):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=0, Cmd=16)
+    bridge.process_command((clock(), "TEST123", "MODE", "Manual"))
+    bridge.session.request.assert_not_called()
+    assert last_command(bridge)["result"] == "refused_setpoint_unavailable"
+
+
+def test_off_park_command_confirms_even_if_off_reports_an_unusual_setpoint(factory, clock):
+    bridge = factory(commands_enabled=True)
+    ready(bridge)
+    bridge.confirmed["TEST123"][1].update(T_SetPoint=70, Cmd=9)
+    bridge.session.request.side_effect = [
+        response(204),
+        response(body={"result": {**STATUS["result"], "Cmd": "16", "T_SetPoint": "0"}}),
+    ]
+    bridge.process_command((clock(), "TEST123", "MODE", "off"))
+    write, read = bridge.session.request.call_args_list
+    assert write.args[1].endswith("/off") and write.kwargs["data"] == ""
+    assert last_command(bridge)["result"] == "observed_in_status"
+    assert bridge.cloud_health == "ok"
