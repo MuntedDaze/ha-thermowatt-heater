@@ -1,5 +1,9 @@
 # Thermowatt Smart Boiler Bridge for Home Assistant
 
+> **1.3.9 candidate (PR #12):** automation command allowlist (`Manual:70` and `off`
+> only, by default), guarded resume from OFF and robust OFF polling. Commands stay
+> disabled. See [1.3.9 update notes](UPGRADING_1_3_9.md).
+
 The **1.3.7 foundation and dependent 1.3.8 demand-refresh PRs are review
 candidates**, not deployed updates. The dependent
 [1.3.8 notes](UPGRADING_1_3_8.md) document the optional read-only interface,
