@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.11] - Bounded command confirmation for a delayed cloud readback (owner review required)
+
+- **Why.** In T3b (1.3.10) a stale-status `off` was refreshed once and POSTed,
+  and the official app then showed OFF, but the single status read made
+  immediately after the POST still showed the old mode. 1.3.10 then published
+  that read as current and ended the command as
+  `not_observed_in_immediate_status`, with no further check: a delayed cloud
+  update looked the same as a command that did nothing.
+- **Bounded confirmation.** The old mode right after the POST is now
+  `awaiting_confirmation`, neither success nor failure. At most **two**
+  follow-up status reads are made, **60 s and 300 s** after the POST; any
+  background poll in that window also counts. The command is:
+  - `observed_in_status` only when a fresh read shows the requested mode (and,
+    for `Manual:70`, a 70 °C target);
+  - `unexpected_state_after_command` when a read shows neither the old nor the
+    requested state (for example an app change);
+  - `not_confirmed_within_limit` when nothing confirms it by **360 s** (also
+    when reads fail or authentication locks), for owner action.
+- **The POST is never repeated**, including after a POST timeout or HTTP error,
+  whose outcome is unknown and is observed instead (`awaiting_confirmation`
+  with a fixed `error`). An explicit cloud rejection stays `rejected_by_cloud`.
+- **One uncertain command at a time.** While a command awaits confirmation
+  every other command, including an MQTT redelivery, is refused with no
+  request. It is recorded in `refused_while_pending`, so `last_command` keeps
+  the pending record.
+- **Restart-safe.** The pending command and the last outcome are written to a
+  private `command_state.json` **before** the POST. A restart never re-sends
+  it; the next reads (or the deadline) decide it. If that file cannot be
+  written, the command is refused before any request.
+- Diagnostics: `last_command.observed_mode`, `status_reads`,
+  `followups_done`, `posted_at`, `confirm_by`; `command_confirmation_pending`,
+  `command_confirmation_followups_seconds` (`[60, 300]`) and
+  `refused_while_pending`.
+- Worst case per command: 5 requests (pre-command read, POST, 3 reads). The
+  30-minute polling, `Cmd` 8 OFF mapping, 70 °C rules, automation allowlist,
+  authentication guards, lockouts, refresh budget and `commands_enabled: false`
+  default are unchanged.
+
 ## [1.3.10] - Actual OFF code and bounded pre-command status refresh (owner review required)
 
 - **OFF is `Cmd` 8.** T3 on the owner's heater showed software OFF reports
