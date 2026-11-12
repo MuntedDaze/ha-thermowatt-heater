@@ -23,7 +23,7 @@ participation or approval · **Risk** = accepted or open limitation.
 | 9 | Disabled controller silent; storage written only on change | Done | disabled tests, real-HA check |
 | 10 | Fresh install incapable of control | Done | fresh-install tests, real-HA check |
 | 11 | HA-native UI, notifications, recovery guidance for OFF | Done | dashboard, `RECOVERY` |
-| 12 | Commissioning with gates and rollback | Done | [COMMISSIONING.md](COMMISSIONING.md) |
+| 12 | Commissioning with gates and rollback | Done | [COMMISSIONING.md](COMMISSIONING_0_6.md) |
 
 ## Outstanding physical qualifications (owner)
 

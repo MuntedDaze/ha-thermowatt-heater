@@ -4,7 +4,7 @@
 - **Implemented:** a read-only observer that collects evidence and publishes diagnostics.
 - **Designed, not implemented:** the adaptive estimator and any use of it for control.
 
-Nothing in this document changes heater commands. The planner still uses the conservative physical model: 315 L at 0.366 kWh/°C (2.73 °C/kWh), the planner's 0.2 °C/h standing-loss assumption, and the 3 kW element. The morning hard-minimum allowance uses the provisional 0.5 °C/h cooling described in CONTROLLER.md.
+Nothing in this document changes heater commands. The planner still uses the conservative physical model: 315 L at 0.366 kWh/°C (2.73 °C/kWh), the planner's 0.2 °C/h standing-loss assumption, and the 3 kW element. The morning hard-minimum allowance uses the provisional 0.5 °C/h cooling described in [HOW_IT_DECIDES.md](HOW_IT_DECIDES.md).
 
 ## Why
 

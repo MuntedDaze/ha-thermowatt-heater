@@ -3,7 +3,7 @@
 Offline and deterministic. 0.3.0 is loaded from the byte-identical fixture of
 the installed version (tools/readiness/fixtures/thermann_shadow_0_3_0).
 
-    python tools/compare_versions.py   # rewrites shadow_controller/COMPARISON_0_3_0_VS_0_4_0.md
+    python tools/compare_versions.py   # rewrites docs/history/controller/COMPARISON_0_3_0_VS_0_4_0.md
 """
 
 from datetime import datetime, timedelta
@@ -13,7 +13,7 @@ import sys
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "shadow_controller/COMPARISON_0_3_0_VS_0_4_0.md"
+OUT = ROOT / "docs/history/controller/COMPARISON_0_3_0_VS_0_4_0.md"
 
 
 def package(name, path):

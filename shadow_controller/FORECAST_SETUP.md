@@ -211,4 +211,4 @@ would be heated now, and a viable comfort fallback.
 The EMHASS household-load forecast currently includes past heater cycles (and,
 before 10 Nov 14:25, PV output). 0.4.0 therefore defaults to the de-embedded
 measured base load (`base_load_source: measured_only`). See
-[STAGE_3B_3C_PROPOSAL.md](STAGE_3B_3C_PROPOSAL.md) for the de-embedding plan.
+[STAGE_3B_3C_PROPOSAL.md](../docs/history/controller/STAGE_3B_3C_PROPOSAL.md) for the de-embedding plan.

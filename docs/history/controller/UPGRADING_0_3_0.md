@@ -70,7 +70,7 @@ are needed. Continue with step 5.
    tiles sensible, no "entity not available" cards. Report any card that does not
    render — this has not been seen on the owner's real devices.
 5. Leave **Use published forecasts** off until the inputs in
-   [Forecast setup](FORECAST_SETUP.md) are verified. With forecasts off, expect
+   [Forecast setup](../../../shadow_controller/FORECAST_SETUP.md) are verified. With forecasts off, expect
    mostly WAIT FOR PLANNED WINDOW then GRID FALLBACK on sunny days: see the
    switching-threshold note in that guide.
 6. Watch one normal poll cycle: request attempts may grow by the usual
