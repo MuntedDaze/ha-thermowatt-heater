@@ -620,3 +620,37 @@ def test_tariff_changes_and_pause_only_change_shadow_model_outputs():
         now, now - timedelta(minutes=1), values, replace(settings, paused=True), expensive
     )
     assert paused.state == "shadow_paused" and paused.windows == []
+
+
+def test_active_controller_is_not_gated_by_the_shadow_schedule_check(runtime):
+    """Regression (Stage C preflight): with the heater in Manual or OFF (the
+    controller's own states) the shadow-era "native Schedule expected" check
+    and the intervention latch gated the planner, so an ENABLED controller
+    would never have received economic or comfort advice."""
+    GATE_CODES = importlib.import_module(f"{m.__package__}.advisor").GATE_CODES
+    SessionTemperature = importlib.import_module(f"{m.__package__}.control_plan").SessionTemperature
+
+    instance, report, clock = runtime
+    report("mode", "Manual")
+    instance.update(clock[0])
+    clock[0] += timedelta(minutes=1)
+    report("mode", "Off")
+    report("last_poll", clock[0].isoformat())
+    instance.update(clock[0])
+    assert instance.plan.state == "shadow_native_intervention"  # control off: shadow review
+    instance.executor = SimpleNamespace(
+        session=SessionTemperature(),
+        latency_minutes=30.0,
+        permitted=lambda: False,
+        controller=SimpleNamespace(holiday_window=lambda now: None),
+    )
+    instance.controller_active = True
+    for mode in ("Off", "Manual"):
+        clock[0] += timedelta(minutes=1)
+        report("mode", mode)
+        report("last_poll", clock[0].isoformat())
+        for key, value in {"grid": 1501, "pv": 2322, "pv_ac": 2322, "house": 821}.items():
+            report(key, value, {"unit_of_measurement": "W"})
+        instance.update(clock[0])
+        assert instance.plan.state != "shadow_native_intervention", mode
+        assert instance.advice.economic_code not in GATE_CODES, (mode, instance.plan.reasons)
