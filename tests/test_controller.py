@@ -1182,6 +1182,7 @@ def closed_loop(
         change = goals_mod.next_tariff_change(now, tariffs, settings.tariff_clock)
         peak = change[0] if change and change[1].kind == "peak" else None
         away = holiday is not None and holiday[0] <= now < holiday[1]
+        peak_now = m.tariff_at(now, tariffs, settings.tariff_clock).kind == "peak"
         if economic and not away:
             soon = peak is not None and now <= peak <= now + timedelta(minutes=35)
             econ = standby.assess(
@@ -1198,10 +1199,11 @@ def closed_loop(
                 economics=econ,
                 reading=reading,
                 morning_window=plan_mod.morning_failsafe_window(now, settings, tariffs),
+                peak_now=peak_now,
             )
         elif away:
             desire = plan_mod.holiday_desire(
-                now, holiday, advice, permitted, 30, peak, advice.heater.state
+                now, holiday, advice, permitted, 30, peak, advice.heater.state, peak_now
             )
         else:
             desire = plan_mod.desire_from_advice(

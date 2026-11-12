@@ -333,3 +333,79 @@ def test_daily_command_count_stays_within_the_limit_over_two_days():
         window = [t for t in times if at - timedelta(hours=24) < t <= at]
         assert len(window) <= 6
     assert controller.fault is None
+
+
+# --- review fix: no indefinite permission through a peak when inputs fail ----------------
+
+
+def desire_now(now, advice, permitted, economics=None, reading=None, peak_now=False):
+    policy = permission.StandbyPermission()
+    return plan_mod.desire_from_advice(
+        now,
+        advice,
+        permitted,
+        30,
+        None,
+        standby=policy,
+        economics=economics,
+        reading=reading,
+        morning_window=plan_mod.morning_failsafe_window(now, SETTINGS, TARIFFS),
+        peak_now=peak_now,
+    )
+
+
+def test_planner_or_meter_outage_during_a_peak_parks_instead_of_holding():
+    now = local(hour=17, minute=40)  # peak already running
+    desire = desire_now(now, None, permitted=True, peak_now=True)
+    assert (desire.action, desire.reason, desire.urgent) == (
+        "park",
+        "peak_planner_unavailable",
+        True,
+    )
+    assert desire_now(now, None, permitted=False, peak_now=True).action == "hold"
+    assert desire_now(local(hour=13), None, permitted=True).action == "hold"  # off-peak
+
+
+def test_morning_comfort_still_wins_when_the_planner_is_unavailable():
+    desire = desire_now(local(hour=5), None, permitted=True, reading=38.0, peak_now=False)
+    assert desire.action == "permit" and desire.comfort
+
+
+def test_no_alternative_or_no_comparison_during_a_peak_parks():
+    policy = permission.StandbyPermission()
+    now = local(hour=17, minute=40)
+    empty = SimpleNamespace(surplus_now_kw=3.0, slots=[], goals=[])
+    econ = policy.assess(now, empty, SETTINGS, TARIFFS)
+    assert econ.alternative_kwh is None and econ.peak
+    assert policy.decide(now, econ, True, False) == ("park", "peak_economics_unknown", True)
+    assert policy.decide(now, None, True, False, peak_now=True)[0] == "park"
+    assert policy.decide(local(hour=13), None, True, False)[0] == "hold"  # off-peak
+
+
+def test_missing_forecast_still_gives_a_tariff_based_comparison():
+    policy = permission.StandbyPermission()
+    now = local(hour=17, minute=40)
+    econ = policy.assess(now, fake_advice(now, 0.0), SETTINGS, TARIFFS)  # no forecast PV
+    assert econ.alternative_kwh == pytest.approx(OFF)
+    assert econ.withdraw  # peak grid with no solar is clearly worse than off-peak later
+
+
+def test_recovery_after_an_outage_needs_sustained_conditions_again():
+    policy = permission.StandbyPermission()
+    start = local(hour=12)
+    run_policy(policy, start, [3.0] * 12, permitted=False)
+    policy.assess(start + timedelta(minutes=12), None, SETTINGS, TARIFFS)  # outage
+    decisions = run_policy(policy, start + timedelta(minutes=13), [3.0] * 12, permitted=False)
+    actions = [a for a, *_ in decisions]
+    assert actions[:9] == ["park"] * 9 and actions[-1] == "permit"
+
+
+def test_gated_planner_advice_counts_as_an_outage_for_the_timers():
+    policy = permission.StandbyPermission()
+    start = local(hour=12)
+    run_policy(policy, start, [3.0] * 12, permitted=False)
+    gated = SimpleNamespace(
+        economic_code="data_unavailable", surplus_now_kw=3.0, slots=[], goals=[]
+    )
+    assert policy.assess(start + timedelta(minutes=12), gated, SETTINGS, TARIFFS) is None
+    assert policy.grant_since is None and not policy.samples

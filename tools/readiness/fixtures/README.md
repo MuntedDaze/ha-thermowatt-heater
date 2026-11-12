@@ -25,3 +25,7 @@ frozen copies stay identical to what shipped.
 - `thermann_shadow_0_6_1/` — byte-for-byte copy at commit `1324a3c` (Controller
   0.6.1, installed on 13 Nov 2026 for T3b, automatic control off; the installed
   files were compared and are identical).
+
+- `thermann_shadow_0_6_2/` — byte-for-byte copy at commit `5fe48e3` (Controller
+  0.6.2, the version installed on 13 Nov 2026 and still installed, automatic
+  control off; the installed files were compared and are identical).

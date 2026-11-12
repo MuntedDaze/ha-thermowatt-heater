@@ -5,7 +5,7 @@ container with --network none. Never import this on the owner's Home Assistant.
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
 - forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
-- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0 and 0.6.1 -> 0.7.0 upgrades over persisted HA storage;
+- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0, 0.6.1 and 0.6.2 -> 0.7.0 upgrades over persisted HA storage;
 - unchanged MQTT payloads (no state write) stay fresh while polls succeed.
 """
 
@@ -704,8 +704,14 @@ async def upgrade_from_0_6_0(folder):
     return await _upgrade_from_0_6(folder, "0.6.0")
 
 
+async def upgrade_from_0_6_2(folder):
+    """The owner's INSTALLED version since 13 Nov 2026 (0.6.2, control off;
+    the installed files were compared and are identical to 5fe48e3)."""
+    return await _upgrade_from_0_6(folder, "0.6.2")
+
+
 async def upgrade_from_0_6_1(folder):
-    """The owner's INSTALLED version since 13 Nov 2026 (0.6.1, control off)."""
+    """Installed for T3b on 13 Nov 2026 (0.6.1, control off)."""
     return await _upgrade_from_0_6(folder, "0.6.1")
 
 

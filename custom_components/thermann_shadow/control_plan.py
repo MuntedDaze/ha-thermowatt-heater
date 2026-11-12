@@ -52,6 +52,7 @@ def holiday_desire(
     latency_minutes: float,
     next_peak_start: datetime | None,
     element_state: str = "unknown",
+    peak_now: bool = False,
 ) -> Desire:
     """Away (0.7.0): parked (Thermann OFF keeps its antibacterial and frost
     protection) until the last 24 hours; then the planner prepares only the
@@ -62,7 +63,7 @@ def holiday_desire(
     if now < window[1] - HOLIDAY_PREPARATION:
         return Desire("park", "holiday_away")
     return _planner_only_desire(
-        now, advice, permitted, latency_minutes, next_peak_start, element_state
+        now, advice, permitted, latency_minutes, next_peak_start, element_state, peak_now
     )
 
 
@@ -99,6 +100,7 @@ def desire_from_advice(
     economics=None,
     reading: float | None = None,
     morning_window: tuple | None = None,
+    peak_now: bool = False,
 ) -> Desire:
     """ONE desired action for the coming command interval.
 
@@ -114,7 +116,7 @@ def desire_from_advice(
     """
     if standby is None:
         return _planner_only_desire(
-            now, advice, permitted, latency_minutes, next_peak_start, element_state
+            now, advice, permitted, latency_minutes, next_peak_start, element_state, peak_now
         )
     half = timedelta(minutes=max(1.0, latency_minutes) / 2)
     peak_soon = (
@@ -137,10 +139,11 @@ def desire_from_advice(
                     planner_ok=False,
                     comfort=True,
                 )
-        if permitted and peak_soon:
-            return Desire(
-                "park", "peak_starting_planner_unavailable", planner_ok=False, urgent=True
-            )
+        if permitted and (peak_soon or peak_now):
+            # Never keep permission through a peak without a working planner:
+            # a meter or planner outage must not leave Manual on for hours.
+            reason = "peak_planner_unavailable" if peak_now else "peak_starting_planner_unavailable"
+            return Desire("park", reason, planner_ok=False, urgent=True)
         return Desire("hold", reason, planner_ok=False)
     code = advice.economic_code or advice.code
     result = advice.assessment
@@ -158,7 +161,7 @@ def desire_from_advice(
     next_goal = advice.goals[0].kind if advice.goals else None
 
     def economic(reason_prefix: str | None = None) -> Desire:
-        action, reason, urgent = standby.decide(now, economics, permitted, peak_soon)
+        action, reason, urgent = standby.decide(now, economics, permitted, peak_soon, peak_now)
         if action == "permit":
             return Desire("permit", reason, standby=True, **common)
         if action == "park":
@@ -214,6 +217,7 @@ def _planner_only_desire(
     latency_minutes: float,
     next_peak_start: datetime | None,
     element_state: str = "unknown",
+    peak_now: bool = False,
 ) -> Desire:
     """0.6.x rules: no meter economics (kept for planner-only callers)."""
     half = timedelta(minutes=max(1.0, latency_minutes) / 2)
@@ -223,8 +227,13 @@ def _planner_only_desire(
     )
     if advice is None or advice.assessment is None or advice.economic_code in GATE_CODES:
         reason = (advice.economic_code if advice is not None else None) or "planner_not_ready"
-        if permitted and peak_soon:
-            return Desire("park", "peak_starting_planner_unavailable", planner_ok=False)
+        if permitted and (peak_soon or peak_now):
+            return Desire(
+                "park",
+                "peak_planner_unavailable" if peak_now else "peak_starting_planner_unavailable",
+                planner_ok=False,
+                urgent=peak_now,
+            )
         return Desire("hold", reason, planner_ok=False)
     code = advice.economic_code or advice.code
     result = advice.assessment

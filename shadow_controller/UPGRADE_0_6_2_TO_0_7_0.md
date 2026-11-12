@@ -2,7 +2,7 @@
 
 **Not approved for installation.** 0.7.0 is on the feature branch for owner review. Unit tests and closed-loop simulations pass, but the new economic permission, the morning allowance and the guest/holiday modes **have not run on the real heater**.
 
-**What carries over (CI checks this from the installed 0.6.1/0.6.0 over real HA storage):**
+**What carries over (CI checks this on real HA storage from 0.6.2, the installed version, compared byte for byte with the live files, and from 0.6.1 and 0.6.0):**
 - every saved option, unchanged;
 - every entity ID and rename;
 - the controller state stays disabled;

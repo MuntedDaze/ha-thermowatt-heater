@@ -107,6 +107,8 @@ RECOVERY = {
 GUEST_HOURS = 12.0
 GUEST_ALERT_AFTER = timedelta(minutes=10)
 HOLIDAY_MAX_DAYS = 60
+HOLIDAY_BLOCKED_ALERT_AFTER = timedelta(minutes=30)
+HOLIDAY_RETURN_CHECK = timedelta(hours=2)
 
 
 @dataclass(frozen=True)
@@ -248,6 +250,8 @@ class Controller:
     holiday_start: str | None = None
     holiday_return: str | None = None
     refusal: str | None = None  # why the last owner mode request was refused
+    permit_blocked_since: str | None = None  # a wanted permit has been blocked since
+    holiday_returned_at: str | None = None  # last holiday return time (readiness check)
 
     # ------------------------------------------------------------------ persistence
     def to_dict(self) -> dict:
@@ -398,8 +402,10 @@ class Controller:
         back = _dt(self.holiday_return)
         if back is not None and now >= back:
             # Return time reached: normal goals resume (the heater state was
-            # never assumed; normal checks continue from observed status).
+            # never assumed; normal checks continue from observed status). The
+            # return readiness is checked for the next two hours.
             self.holiday_start = self.holiday_return = None
+            self.holiday_returned_at = _iso(back)
 
     def acknowledge(self, now: datetime) -> bool:
         if self.state != FAULT_LOCKED:
@@ -794,6 +800,10 @@ class Controller:
             obs, action, cfg, new_poll, desire.comfort, desire.standby, desire.urgent
         )
         self.gate_failures = failures
+        if action == "permit" and failures:
+            self.permit_blocked_since = self.permit_blocked_since or _iso(obs.now)
+        else:
+            self.permit_blocked_since = None
         if failures:
             self.reason = failures[0]
             if failures == ["thermostat_would_not_call_for_heat"]:
@@ -915,6 +925,42 @@ class Controller:
                     "Hot water: guest mode not applied",
                     f"Guest mode wants Manual at 70 °C but the controller could not apply it "
                     f"({detail}). {RECOVERY['guest_mode_not_applied']}",
+                )
+            )
+        blocked = _dt(self.permit_blocked_since)
+        window = self.holiday_window(now)
+        if (
+            window is not None
+            and now >= window[0]
+            and desire.action == "permit"
+            and self.state == HEATING_REQUESTED
+            and blocked is not None
+            and now - blocked >= HOLIDAY_BLOCKED_ALERT_AFTER
+        ):
+            alerts.append(
+                (
+                    "holiday_return_heating_blocked",
+                    "Hot water: heating for your return is blocked",
+                    f"The controller wants to heat before your return but cannot "
+                    f"({', '.join(self.gate_failures)}). Nothing is retried blindly. Check the "
+                    "Thermowatt add-on and the Thermann app; selecting Manual at 70 °C in the "
+                    "app heats the tank yourself.",
+                )
+            )
+        returned = _dt(self.holiday_returned_at)
+        if (
+            returned is not None
+            and now - returned <= HOLIDAY_RETURN_CHECK
+            and obs.temperature_c is not None
+            and obs.temperature_c < APPROVED_TARGET_C - cfg.hysteresis_c
+        ):
+            alerts.append(
+                (
+                    "holiday_return_not_ready",
+                    "Hot water: not fully heated for your return",
+                    f"The return time has passed and the tank reading is {obs.temperature_c} °C "
+                    "(below the thermostat's restart point). Hot water may be limited. Normal "
+                    "control has resumed; select Manual at 70 °C in the app for heat now.",
                 )
             )
         if desire.comfort_risk and managed:

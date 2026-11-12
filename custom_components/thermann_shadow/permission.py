@@ -32,6 +32,7 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 
+from .advisor import GATE_CODES
 from .model import ELEMENT_KW, tariff_at
 
 ROLLING = timedelta(minutes=10)
@@ -127,7 +128,11 @@ class StandbyPermission:
     ) -> Economics | None:
         """Price the element now. `decision_at` (a peak start about to begin)
         prices the decision at THAT instant's tariff."""
-        if advice is None:
+        if advice is None or getattr(advice, "economic_code", None) in GATE_CODES:
+            # Outage (no planner, stale or suspect meter): forget the evidence, so recovery needs sustained
+            # conditions again before anything is granted or withdrawn.
+            self.samples.clear()
+            self.grant_since = self.withdraw_since = None
             self.last = None
             return None
         surplus = getattr(advice, "surplus_now_kw", None)
@@ -179,14 +184,25 @@ class StandbyPermission:
         return self.last
 
     def decide(
-        self, now: datetime, econ: Economics | None, permitted: bool, peak_soon: bool
+        self,
+        now: datetime,
+        econ: Economics | None,
+        permitted: bool,
+        peak_soon: bool,
+        peak_now: bool = False,
     ) -> tuple[str, str, bool]:
         """(action, reason, urgent). `urgent` lets an economic park during a
         peak bypass the minimum-heating dwell (dwell protects against toggling
-        the element; it must not hold peak imports for half an hour)."""
+        the element; it must not hold peak imports for half an hour).
+
+        Without a usable comparison, permission is never KEPT through a peak
+        (about to start or already running): park. Off-peak, hold the current
+        state until the comparison is available again."""
         if econ is None or econ.alternative_kwh is None:
-            if permitted and peak_soon:
-                return "park", "peak_starting_economics_unknown", True
+            in_peak = peak_now or (econ is not None and econ.peak)
+            if permitted and (peak_soon or in_peak):
+                reason = "peak_economics_unknown" if in_peak else "peak_starting_economics_unknown"
+                return "park", reason, True
             return "hold", "economics_unavailable", False
         if permitted:
             if peak_soon:

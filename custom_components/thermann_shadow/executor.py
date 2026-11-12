@@ -39,6 +39,7 @@ from .controller import (
     Observation,
 )
 from .goals import next_tariff_change
+from .model import tariff_at
 from .permission import StandbyPermission
 
 LOG = logging.getLogger(__name__)
@@ -235,6 +236,10 @@ class Executor:
         )
         obs = self.last_observation
         controller = self.controller
+        try:
+            peak_now = tariff_at(now, tariffs, settings.tariff_clock).kind == "peak"
+        except ValueError:
+            peak_now = True  # unknown tariff: treat as peak (never keep permission blindly)
         if controller.guest_active(now):
             # Guest mode: Manual 70 °C for the whole period, economics relaxed;
             # every controller gate, confirmation and owner rule still applies.
@@ -252,6 +257,7 @@ class Executor:
                 self.latency_minutes,
                 peak,
                 advice.heater.state if advice else "unknown",
+                peak_now,
             )
         return desire_from_advice(
             now,
@@ -264,6 +270,7 @@ class Executor:
             economics=economics,
             reading=obs.temperature_c if obs else None,
             morning_window=morning_failsafe_window(now, settings, tariffs),
+            peak_now=peak_now,
         )
 
     async def async_step(self, now: datetime | None = None) -> None:

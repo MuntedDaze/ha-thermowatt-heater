@@ -159,3 +159,72 @@ def test_closed_loop_holiday_stays_parked_then_is_ready_for_the_return():
     assert rows["Thu 17:00"][2] >= 60  # prepared for the return
     assert controller.fault is None
     assert len(sim.posts) <= 4
+
+
+# --- review fix: holiday return failures are reported, never treated as success -----------
+
+
+def away_controller(now, back):
+    controller = parked_controller(now)
+    assert controller.set_holiday(now, now - timedelta(days=2), back)
+    return controller
+
+
+def test_blocked_return_heating_is_reported_after_thirty_minutes():
+    now = local(hour=12)
+    controller = away_controller(now, local(hour=17))
+    prepare = ctl.Desire("permit", "planned_block_heat_now_cheapest")
+    for minute in range(0, 35):
+        at = now + timedelta(minutes=minute)
+        controller.step(obs(at, poll_at=at, cloud_health="backoff"), prepare, cfg())
+        if minute < 29:
+            assert "holiday_return_heating_blocked" not in controller.active_alerts
+    assert "holiday_return_heating_blocked" in controller.active_alerts
+    assert controller.permit_blocked_since is not None
+
+
+def test_return_not_ready_is_reported_and_clears_when_heated():
+    back = local(hour=17)
+    controller = away_controller(local(hour=12), back)
+    after = back + timedelta(minutes=1)
+    effects = controller.step(obs(after, poll_at=after, temperature_c=50.0), tc.HOLD, cfg())
+    assert controller.operating_mode(after) == "automatic"  # holiday ended on time
+    assert "holiday_return_not_ready" in notices(effects)
+    later = after + timedelta(minutes=40)
+    effects = controller.step(obs(later, poll_at=later, temperature_c=66.0), tc.HOLD, cfg())
+    assert "holiday_return_not_ready" not in controller.active_alerts
+    assert any(e.kind == "resolve" and e.key == "holiday_return_not_ready" for e in effects)
+
+
+def test_unachievable_return_goal_is_reported_by_the_planner_risk_alert():
+    now = local(hour=15)
+    controller = away_controller(now, local(hour=17))
+    risky = ctl.Desire("permit", "afternoon_storage_insufficient_time", comfort_risk="return")
+    effects = controller.step(obs(now), risky, cfg())
+    assert "comfort_risk_return" in notices(effects)
+
+
+def test_owner_app_change_during_holiday_pauses_control_and_keeps_the_dates():
+    now = local(hour=12)
+    controller = away_controller(now, local(day=12, hour=17))
+    later = now + timedelta(minutes=40)
+    controller.step(obs(later, poll_at=later, mode="Manual"), tc.PARK, cfg())
+    assert controller.state == ctl.OWNER_OVERRIDE
+    assert controller.holiday_active(later)  # nothing silently cancelled
+
+
+# --- review: manufacturer protection still wins over the new permits ------------------------
+
+
+def test_protective_heating_while_off_blocks_guest_and_standby_permits():
+    now = local(day=12, hour=2)
+    for desire in (GUEST, ctl.Desire("permit", "solar_permission", standby=True)):
+        controller = parked_controller(now)
+        if desire is GUEST:
+            controller.start_guest(now)
+        for minute in range(0, 20):
+            at = now + timedelta(minutes=minute)
+            assert not publishes(
+                controller.step(obs(at, poll_at=at, element="on", temperature_c=55), desire, cfg())
+            ), desire.reason
+        assert "unexplained_heating_in_progress" in controller.gate_failures
