@@ -59,6 +59,9 @@ DEFAULT_OPTIONS = {
     "evening_time": "16:00",
     "shower_time_enabled": False,
     "shower_time": "07:00",
+    # 0.7.0: morning comfort every day (Hobart local).
+    "morning_preferred_time": "06:00",
+    "morning_hard_time": "07:00",
     "expected_morning_draw_c": 10.0,
     "standing_loss_c_per_hour": 0.2,
     "wait_benefit_aud_per_kwh": 0.05,
@@ -226,11 +229,13 @@ def parse_options(options):
             }
             else number(values[key])
             for key in Settings.__dataclass_fields__
-            if key not in {"morning", "evening", "shower_time"}
+            if key not in {"morning", "evening", "shower_time", "morning_preferred", "morning_hard"}
         },
         morning=time(*divmod(_minute(values["morning_time"]), 60)),
         evening=time(*divmod(_minute(values["evening_time"]), 60)),
         shower_time=time(*divmod(_minute(values["shower_time"]), 60)),
+        morning_preferred=time(*divmod(_minute(values["morning_preferred_time"]), 60)),
+        morning_hard=time(*divmod(_minute(values["morning_hard_time"]), 60)),
     )
     validate_settings(settings)
     from datetime import date

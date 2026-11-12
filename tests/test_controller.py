@@ -16,6 +16,7 @@ from test_cloud_and_commands import ready
 ctl = importlib.import_module(f"{m.__package__}.controller")
 ROOT_PACKAGE = __import__("pathlib").Path(ctl.__file__).parent
 plan_mod = importlib.import_module(f"{m.__package__}.control_plan")
+permission_mod = importlib.import_module(f"{m.__package__}.permission")
 native = importlib.import_module(f"{m.__package__}.native")
 advisor_mod = importlib.import_module(f"{m.__package__}.advisor")
 goals_mod = importlib.import_module(f"{m.__package__}.goals")
@@ -1117,12 +1118,23 @@ def sunny_pv(at):
     return max(0.0, 5.0 * (1 - ((hour - 13.0) / 6.0) ** 2))
 
 
-def closed_loop(start, minutes, temperature, pv=sunny_pv, draws=None, forecast=True):
+def closed_loop(
+    start,
+    minutes,
+    temperature,
+    pv=sunny_pv,
+    draws=None,
+    forecast=True,
+    economic=False,
+    extra_load=None,
+    options=None,
+):
     """Minute-by-minute: bridge model -> HA-like observation -> advisor ->
     desire -> controller -> MQTT message -> bridge model. Returns the trace."""
     settings, tariffs = c.parse_options(
-        {"forecast_enabled": forecast, "native_schedule_periods": "[]"}
+        {"forecast_enabled": forecast, "native_schedule_periods": "[]", **(options or {})}
     )
+    standby = permission_mod.StandbyPermission() if economic else None
     advisor = advisor_mod.Advisor()
     session = plan_mod.SessionTemperature()
     sim = SimBridge(start - timedelta(minutes=29), temperature=temperature)
@@ -1132,7 +1144,7 @@ def closed_loop(start, minutes, temperature, pv=sunny_pv, draws=None, forecast=T
     for minute in range(minutes):
         now = start + timedelta(minutes=minute)
         sim.tick(now, (draws or {}).get(minute, 0.0))
-        house = 0.6 + (3.0 if sim.element else 0.0)
+        house = 0.6 + (3.0 if sim.element else 0.0) + (extra_load(now) if extra_load else 0.0)
         pv_now = pv(now)
         series = (
             tuple(
@@ -1167,7 +1179,27 @@ def closed_loop(start, minutes, temperature, pv=sunny_pv, draws=None, forecast=T
         previous = advice.heater.state
         change = goals_mod.next_tariff_change(now, tariffs, settings.tariff_clock)
         peak = change[0] if change and change[1].kind == "peak" else None
-        desire = plan_mod.desire_from_advice(now, advice, permitted, 30, peak, advice.heater.state)
+        if economic:
+            soon = peak is not None and now <= peak <= now + timedelta(minutes=35)
+            econ = standby.assess(
+                now, advice, settings, tariffs, decision_at=peak if soon else None
+            )
+            desire = plan_mod.desire_from_advice(
+                now,
+                advice,
+                permitted,
+                30,
+                peak,
+                advice.heater.state,
+                standby=standby,
+                economics=econ,
+                reading=reading,
+                morning_window=plan_mod.morning_failsafe_window(now, settings, tariffs),
+            )
+        else:
+            desire = plan_mod.desire_from_advice(
+                now, advice, permitted, 30, peak, advice.heater.state
+            )
         observation = sim.observe(now)
         observation.element, observation.element_confidence = (
             advice.heater.state,
@@ -1177,7 +1209,15 @@ def closed_loop(start, minutes, temperature, pv=sunny_pv, draws=None, forecast=T
             if effect.kind == "publish":
                 sim.publish(now, effect.payload)
         trace.append(
-            (now, sim.mode, sim.element, round(sim.temperature, 1), desire.action, controller.state)
+            (
+                now,
+                sim.mode,
+                sim.element,
+                round(sim.temperature, 1),
+                desire.action,
+                controller.state,
+                desire.reason,
+            )
         )
     return sim, controller, trace
 
@@ -1209,13 +1249,14 @@ def test_closed_loop_sunny_weekday_heats_on_solar_and_is_ready_before_the_peak()
 
 
 def test_closed_loop_shower_just_before_the_deadline_puts_comfort_first():
+    # 0.7.0: a shower at 06:30 (preferred 06:00 met, hard deadline 07:00 still
+    # ahead) must restart heating at once for the hard deadline.
     start = local(hour=5)
-    sim, controller, trace = closed_loop(start, 4 * 60, 50, draws={150: 8.0})  # 07:30
+    sim, controller, trace = closed_loop(start, 4 * 60, 50, draws={90: 12.0})  # 06:30, to 38 °C
     posts = [(at.astimezone(m.HOBART).strftime("%H:%M"), payload) for at, payload in sim.posts]
     assert controller.fault is None
-    # 0.6.1 + bridge 1.3.10: the comfort start follows the shower within the
-    # minute (0.6.0 waited for the 07:31 poll).
-    assert posts[0] == ("07:30", "Manual:70"), posts
+    # The comfort start follows the shower within the minute (no poll wait).
+    assert posts[0] == ("06:30", "Manual:70"), posts
     assert len(posts) <= 4
 
 

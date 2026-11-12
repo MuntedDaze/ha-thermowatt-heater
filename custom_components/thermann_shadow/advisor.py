@@ -106,6 +106,7 @@ class Advice:
     schedule: dict | None = None
     economic_code: str | None = None  # stabilised economic decision before heater overlay
     satisfied: dict | None = None
+    slots: list = field(default_factory=list)  # 0.7.0: priced slots (permission economics)
 
 
 class Advisor:
@@ -276,6 +277,7 @@ class Advisor:
             pessimistic_slots=pessimistic,
         )
         advice.assessment, advice.native = result, native
+        advice.slots = slots
         if inputs.native_periods:
             advice.schedule = schedule_advice(
                 now,

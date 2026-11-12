@@ -176,6 +176,12 @@ class Desire:
     next_stop: datetime | None = None
     comfort_risk: str | None = None  # goal kind seriously at risk
     comfort: bool = False  # permit needed for a comfort goal (may use the reserve)
+    # 0.7.0: permission kept/granted because heating NOW would be economical,
+    # not because heat is needed now (Thermann's thermostat decides; it may
+    # not call for heat at all).
+    standby: bool = False
+    # 0.7.0: economic park during a peak; may bypass the minimum-heating dwell.
+    urgent: bool = False
 
 
 @dataclass
@@ -559,6 +565,8 @@ class Controller:
         cfg: ControllerConfig,
         new_poll: bool,
         comfort: bool = False,
+        standby: bool = False,
+        urgent: bool = False,
     ) -> list[str]:
         """Every reason the controller may NOT publish now (empty = eligible)."""
         failures = list(cfg.missing_commissioning())
@@ -613,7 +621,15 @@ class Controller:
                 and obs.element == "off"
                 and obs.element_confidence in {"verified", "high"}
             )
-            if now - since < timedelta(minutes=dwell) and not thermostat_done:
+            # 0.7.0: an economic park during a peak is not held back by the
+            # minimum-heating dwell (that protects against toggling the element,
+            # not against peak imports). Minimum REST still limits permits.
+            economic_override = action == "park" and urgent
+            if (
+                now - since < timedelta(minutes=dwell)
+                and not thermostat_done
+                and not economic_override
+            ):
                 failures.append("minimum_dwell_not_elapsed")
         if len(self.commands) >= cfg.max_commands_per_day:
             failures.append("daily_command_limit_reached")
@@ -635,7 +651,10 @@ class Controller:
         if action == "permit":
             if obs.temperature_c is None:
                 failures.append("temperature_unavailable")
-            elif obs.temperature_c > APPROVED_TARGET_C - cfg.hysteresis_c:
+            elif obs.temperature_c > APPROVED_TARGET_C - cfg.hysteresis_c and not standby:
+                # A standby permission is wanted precisely for LATER reheats
+                # (after hot water is used). Any other permit would heat nothing
+                # now: the thermostat restarts only below about 62 °C.
                 failures.append("thermostat_would_not_call_for_heat")
         return failures
 
@@ -659,7 +678,9 @@ class Controller:
             self.gate_failures = []
             return
         self.state = PARK_REQUESTED if action == "park" else HEATING_REQUESTED
-        failures = self.gates(obs, action, cfg, new_poll, desire.comfort)
+        failures = self.gates(
+            obs, action, cfg, new_poll, desire.comfort, desire.standby, desire.urgent
+        )
         self.gate_failures = failures
         if failures:
             self.reason = failures[0]

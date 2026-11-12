@@ -24,12 +24,12 @@ def test_morning_ready_does_not_heat_just_because_native_schedule_permits_it(tem
     assert result.windows == [] and result.grid_fallback_start is None
 
 
-def test_morning_shortage_uses_42_threshold_and_dst_peak_deadline():
+def test_morning_shortage_uses_42_threshold_and_preferred_morning_deadline():
     now = local(hour=3)  # Tue 10 Nov 2026, Hobart daylight time
     result = owner_plan(now, 35)
     assert result.mixed_model_energy_kwh == pytest.approx(2.564, abs=0.001)  # 35 -> 42
     assert result.modelled_heating_minutes == pytest.approx(81.3, abs=0.1)
-    assert result.deadline == local(hour=8)  # 07:00 AEST morning peak = 08:00 AEDT
+    assert result.deadline == local(hour=6)  # 0.7.0: preferred 06:00 local, every day
     expected = result.deadline - timedelta(hours=(2.5641 + 1.5) / 3)
     assert abs((result.grid_fallback_start - expected).total_seconds()) < 1
     assert result.state == "shadow_wait_for_window"

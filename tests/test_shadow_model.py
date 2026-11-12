@@ -1,7 +1,7 @@
 """Offline model/contract/scenario checks; pure modules need no HA installation."""
 
 from dataclasses import replace
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 import importlib
 from pathlib import Path
 import sys
@@ -258,13 +258,13 @@ def test_meter_sign_units_and_split_inputs_are_explicit(tariffs):
     assert plan(now, tariffs, values).net_export_kw == expected
 
 
-@pytest.mark.parametrize("month,day,hours", [(4, 5, 7.5), (10, 4, 5.5)])
+@pytest.mark.parametrize("month,day,hours", [(4, 5, 6.5), (10, 4, 4.5)])
 def test_tasmania_dst_deadlines_follow_local_calendar(month, day, hours, tariffs):
     now = local(month=month, day=day, hour=0, minute=30)
-    # Both DST change days are Sundays (no peak): the household morning time
-    # applies. Pin it to 07:00 so this test still checks the 23 h/25 h arithmetic.
-    result = plan(now, tariffs, morning=time(7))
-    assert result.deadline.astimezone(m.HOBART).hour == 7
+    # 0.7.0: the morning goal is the preferred 06:00 local, every day. Both DST
+    # change days check the 25 h / 23 h arithmetic (04:00 -> 03:00 / 02:00 -> 03:00).
+    result = plan(now, tariffs)
+    assert result.deadline.astimezone(m.HOBART).hour == 6
     assert (result.deadline - now).total_seconds() / 3600 == hours
 
 
@@ -353,7 +353,7 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
     assert executor.count("mqtt.async_publish(") == 1
     assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.6.2"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.7.0"
     assert manifest["integration_type"] == "hub"
     assert "mqtt" not in manifest.get("dependencies", [])  # loads without MQTT
 

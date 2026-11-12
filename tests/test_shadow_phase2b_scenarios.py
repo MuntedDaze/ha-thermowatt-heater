@@ -18,12 +18,12 @@ ROOT = Path(__file__).parents[1]
 def test_configurable_comfort_and_targets_at_dst_weekends(month, day, target):
     now = local(month=month, day=day, hour=3)
     settings, tariffs = c.parse_options(
-        {"target_c": target, "morning_time": "06:30", "evening_time": "16:30"}
+        {"target_c": target, "morning_preferred_time": "06:30", "evening_time": "16:30"}
     )
     result = m.evaluate(now, now - timedelta(minutes=1), readings(now, 35, 0), settings, tariffs)
     assert result.deadline == local(month=month, day=day, hour=6, minute=30)
     assert result.planning_target_c == 42 and settings.target_c == target  # 0.4.0: 42 °C
-    assert settings.morning == time(6, 30) and settings.evening == time(16, 30)
+    assert settings.morning_preferred == time(6, 30) and settings.evening == time(16, 30)
 
 
 def test_failed_sunshine_forecast_never_moves_conservative_grid_reservation():
@@ -145,6 +145,9 @@ def test_dashboard_and_generated_setting_defaults_are_current_and_no_heater_acti
     content = json.dumps(dashboard)
     for key, meta in catalog.CATALOG.items():
         assert meta.explanation and key in c.DEFAULT_OPTIONS
-        if meta.kind != "form":
+        if meta.kind != "form" and meta.group != "Legacy":
             assert builder.entity(key) in content
+        elif meta.group == "Legacy":
+            # 0.7.0: kept so saved settings are unchanged, never shown.
+            assert builder.entity(key) not in content
     assert "recommended & original" in content and "confirmation" in content

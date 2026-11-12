@@ -16,13 +16,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .config import DOMAIN
-from .control_plan import SessionTemperature, desire_from_advice
+from .control_plan import (
+    PEAK_GUARD_MARGIN,
+    SessionTemperature,
+    desire_from_advice,
+    morning_failsafe_window,
+)
 from .controller import (
     CONFIRMING,
     HEATING_PERMITTED,
@@ -32,6 +37,7 @@ from .controller import (
     Observation,
 )
 from .goals import next_tariff_change
+from .permission import StandbyPermission
 
 LOG = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -61,6 +67,7 @@ class Executor:
         self.store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.controller")
         self.controller = Controller()
         self.session = SessionTemperature()
+        self.standby = StandbyPermission()
         self.lock = asyncio.Lock()
         self.listeners: set = set()
         self.last_observation: Observation | None = None
@@ -189,6 +196,15 @@ class Executor:
             pass
         peak = change[0] if change and change[1].kind == "peak" else None
         advice = self.runtime.advice
+        settings, tariffs = self.runtime.settings, self.runtime.tariffs
+        peak_soon = (
+            peak is not None
+            and now <= peak <= now + timedelta(minutes=self.latency_minutes) + PEAK_GUARD_MARGIN
+        )
+        economics = self.standby.assess(
+            now, advice, settings, tariffs, decision_at=peak if peak_soon else None
+        )
+        obs = self.last_observation
         return desire_from_advice(
             now,
             advice,
@@ -196,6 +212,10 @@ class Executor:
             self.latency_minutes,
             peak,
             advice.heater.state if advice else "unknown",
+            standby=self.standby,
+            economics=economics,
+            reading=obs.temperature_c if obs else None,
+            morning_window=morning_failsafe_window(now, settings, tariffs),
         )
 
     async def async_step(self, now: datetime | None = None) -> None:
@@ -315,6 +335,7 @@ class Executor:
             "execution_latency_reserved_minutes": self.latency_minutes,
             "command_timing": "single_message_bridge_fresh_status_no_retry",
             "planning_temperature": self.session.summary(),
+            "permission_economics": self.standby.last.summary() if self.standby.last else None,
             "state_saved": not self.save_failed,
             "observation": {
                 "poll_at": obs.poll_at.isoformat() if obs and obs.poll_at else None,

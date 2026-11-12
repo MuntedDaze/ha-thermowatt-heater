@@ -31,6 +31,24 @@ OVERSHOOT_ALLOWANCE_C = 1.0
 SESSION_SETTLE = timedelta(minutes=90)
 
 
+COMFORT_CODES = {"heat_now_comfort_fallback", "insufficient_time"}
+MORNING_FAILSAFE_MARGIN_C = 5.0
+MORNING_FAILSAFE_HOURS = 4.0
+
+
+def morning_failsafe_window(now: datetime, settings, tariffs):
+    """(opens, hard deadline, threshold) of the next morning goal: the hours
+    before the hard deadline in which an unavailable planner or meter must
+    not leave the heater parked (off-peak hours on every Aurora 93 day)."""
+    from .goals import upcoming_goals
+
+    for goal in upcoming_goals(now, settings, tariffs):
+        if goal.kind == "morning" and goal.hard_deadline is not None:
+            hard = goal.hard_deadline
+            return hard - timedelta(hours=MORNING_FAILSAFE_HOURS), hard, goal.target_c
+    return None
+
+
 def desire_from_advice(
     now: datetime,
     advice,
@@ -38,7 +56,124 @@ def desire_from_advice(
     latency_minutes: float,
     next_peak_start: datetime | None,
     element_state: str = "unknown",
+    *,
+    standby=None,
+    economics=None,
+    reading: float | None = None,
+    morning_window: tuple[datetime, datetime, float] | None = None,
 ) -> Desire:
+    """ONE desired action for the coming command interval.
+
+    0.7.0 (with ``standby``, the production path) separates heating PERMISSION
+    from heating NEED. Comfort and planned blocks permit as before. Otherwise
+    Manual 70 °C stays permitted, or is granted, while heating now would be
+    economical (meter-priced, see permission.py), and the heater is parked
+    when it no longer is, including at a peak start unless solar justifies
+    staying on. Afternoon storage never buys peak-grid heat; a morning comfort
+    heat continues into a morning peak (hot water before savings).
+
+    Without ``standby`` the 0.6.x planner-only rules apply.
+    """
+    if standby is None:
+        return _planner_only_desire(
+            now, advice, permitted, latency_minutes, next_peak_start, element_state
+        )
+    half = timedelta(minutes=max(1.0, latency_minutes) / 2)
+    peak_soon = (
+        next_peak_start is not None
+        and now <= next_peak_start <= now + timedelta(minutes=latency_minutes) + PEAK_GUARD_MARGIN
+    )
+    if advice is None or advice.assessment is None or advice.economic_code in GATE_CODES:
+        reason = (advice.economic_code if advice is not None else None) or "planner_not_ready"
+        if morning_window is not None:
+            # Meter or planner unavailable before the morning hard deadline:
+            # permit (off-peak hours) rather than risk cold showers.
+            opens, hard, threshold = morning_window
+            if opens <= now < hard and (
+                reading is None or reading < threshold + MORNING_FAILSAFE_MARGIN_C
+            ):
+                return Desire(
+                    "permit",
+                    "morning_failsafe_planner_unavailable",
+                    planner_ok=False,
+                    comfort=True,
+                )
+        if permitted and peak_soon:
+            return Desire(
+                "park", "peak_starting_planner_unavailable", planner_ok=False, urgent=True
+            )
+        return Desire("hold", reason, planner_ok=False)
+    code = advice.economic_code or advice.code
+    result = advice.assessment
+    best = result.plans.get("best_overall")
+    blocks = [(a, b) for a, b in (best.blocks if best else []) if b > now]
+    upcoming = [a for a, _ in blocks if a > now]
+    current = next(((a, b) for a, b in blocks if a - half <= now < b), None)
+    comfort_risk = next(
+        (kind for kind, item in advice.readiness.items() if item.get("status") == "unachievable"),
+        None,
+    )
+    next_start = upcoming[0] if upcoming and not current else None
+    next_stop = current[1] if current else (blocks[0][1] if blocks else None)
+    common = {"next_start": next_start, "next_stop": next_stop, "comfort_risk": comfort_risk}
+    next_goal = advice.goals[0].kind if advice.goals else None
+
+    def economic(reason_prefix: str | None = None) -> Desire:
+        action, reason, urgent = standby.decide(now, economics, permitted, peak_soon)
+        if action == "permit":
+            return Desire("permit", reason, standby=True, **common)
+        if action == "park":
+            return Desire("park", reason_prefix or reason, urgent=urgent, **common)
+        return Desire("hold", reason, **common)
+
+    # Morning comfort comes first, including into a morning peak.
+    if morning_window is not None and reading is not None and next_goal == "morning":
+        opens, hard, threshold = morning_window
+        if opens <= now < hard and reading < threshold + MORNING_FAILSAFE_MARGIN_C:
+            # Real morning hot water before savings: below the threshold,
+            # permit; once heating, keep going until a 5 °C margin covers
+            # standing loss and sensor stratification up to the hard deadline
+            # (these hours are off-peak on every Aurora 93 day).
+            if permitted or reading < threshold:
+                return Desire("permit", "morning_comfort_margin", comfort=True, **common)
+    if code in COMFORT_CODES and next_goal == "morning":
+        return Desire("permit", f"morning_comfort_{code}", comfort=True, **common)
+    # Before a peak (decided ahead: commands take about a minute): afternoon
+    # storage never buys peak-grid heat, whether or not Manual is on now;
+    # only solar can justify permission across the peak start.
+    if peak_soon:
+        return economic()
+    if code in COMFORT_CODES:
+        return Desire("permit", f"afternoon_storage_{code}", comfort=True, **common)
+    if current is not None:
+        ending = permitted and current[1] - now <= half
+        following = next((a for a in upcoming if a >= current[1]), None)
+        if not ending or (following is not None and following - current[1] <= half):
+            return Desire("permit", f"planned_block_{code}", **common)
+        return economic()
+    if code in HEAT_CODES and best is None:
+        return Desire("permit", code, **common)
+    if code == "wait_cheaper_later":
+        # The planner found the NEEDED heat cheaper later; only strong current
+        # economics (e.g. solar now) keeps permission meanwhile.
+        desire = economic()
+        if desire.action == "permit" and not (economics and economics.grant):
+            return Desire("park", "waiting_for_cheaper_heating", **common)
+        return desire
+    # Nothing needed now (goals met, thermostat satisfied, flexible): permission
+    # follows economics only.
+    return economic()
+
+
+def _planner_only_desire(
+    now: datetime,
+    advice,
+    permitted: bool,
+    latency_minutes: float,
+    next_peak_start: datetime | None,
+    element_state: str = "unknown",
+) -> Desire:
+    """0.6.x rules: no meter economics (kept for planner-only callers)."""
     half = timedelta(minutes=max(1.0, latency_minutes) / 2)
     peak_soon = (
         next_peak_start is not None

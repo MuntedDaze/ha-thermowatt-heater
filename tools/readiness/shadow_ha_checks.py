@@ -5,7 +5,7 @@ container with --network none. Never import this on the owner's Home Assistant.
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
 - forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
-- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0 and 0.6.1 -> 0.6.2 upgrades over persisted HA storage;
+- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0 and 0.6.1 -> 0.7.0 upgrades over persisted HA storage;
 - unchanged MQTT payloads (no state write) stay fresh while polls succeed.
 """
 
@@ -192,7 +192,7 @@ async def upgrade_from(folder, fixture, version, customise):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.6.2"
+    assert integration["thermann_shadow"].version.__str__() == "0.7.0"
     (entry,) = hass.config_entries.async_entries("thermann_shadow")
     assert entry.entry_id == entry_id and dict(entry.options) == saved_options
     assert await async_setup_component(hass, "thermann_shadow", {})
@@ -562,7 +562,7 @@ async def check_unchanged_mqtt_payload_freshness(hass, entry):
 
 
 async def check_controller(hass, entry, entity_for):
-    """Production controller (0.6.2: Manual 70 permit / software OFF park) on REAL HA Core.
+    """Production controller (0.7.0: Manual 70 permit / software OFF park) on REAL HA Core.
 
     Fresh install refuses to enable; after commissioning, one poll produces
     exactly one guarded MQTT message (captured here, never sent: the network is
@@ -754,7 +754,7 @@ async def _upgrade_from_0_6(folder, version):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.6.2"
+    assert integration["thermann_shadow"].version.__str__() == "0.7.0"
     captured = []
 
     async def record(*args, **kwargs):
@@ -776,7 +776,9 @@ async def _upgrade_from_0_6(folder, version):
             item.unique_id: item.entity_id
             for item in er.async_entries_for_config_entry(registry_of(hass), entry.entry_id)
         }
-        assert after == before  # same entities, same IDs, renames kept, none added
+        assert {key: after[key] for key in before} == before  # IDs and renames kept
+        added = {key.removeprefix(f"{entry.entry_id}_setting_") for key in set(after) - set(before)}
+        assert added <= {"morning_preferred_time", "morning_hard_time"}, added  # 0.7.0 only
         for unique_id, entity_id in after.items():
             if not unique_id.endswith(RETIRED_SUFFIXES):
                 assert hass.states.get(entity_id) is not None, entity_id
@@ -851,7 +853,7 @@ async def upgrade_from_0_5_0(folder):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.6.2"
+    assert integration["thermann_shadow"].version.__str__() == "0.7.0"
     captured = []
 
     async def record(*args, **kwargs):

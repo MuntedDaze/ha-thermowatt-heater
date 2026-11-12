@@ -77,6 +77,11 @@ class Settings:
     morning: time = time(8)
     evening: time = time(16)
     shower_time: time = time(7)
+    # 0.7.0 morning comfort, EVERY day (Hobart local): at least the morning
+    # threshold by the preferred time; the hard deadline is never abandoned
+    # when the preferred time is missed.
+    morning_preferred: time = time(6)
+    morning_hard: time = time(7)
 
 
 @dataclass
@@ -297,6 +302,11 @@ def validate_settings(settings: Settings) -> None:
         or not isinstance(settings.evening, time)
         or settings.evening.tzinfo is not None
         or not time(0) <= settings.morning <= time(11, 59)
+        or any(
+            not isinstance(value, time) or value.tzinfo is not None
+            for value in (settings.morning_preferred, settings.morning_hard)
+        )
+        or not time(0) <= settings.morning_preferred <= settings.morning_hard <= time(11, 59)
         or not time(12) <= settings.evening <= time(23, 59)
     ):
         raise ValueError("settings_invalid")

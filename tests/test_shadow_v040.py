@@ -39,38 +39,58 @@ def hobart(at):
 
 
 @pytest.mark.parametrize(
-    "day,morning,afternoon,basis",
+    "day,afternoon,basis",
     [
-        (date(2026, 11, 10), time(8), time(17), "tariff_peak_start"),  # Tue, AEDT
-        (date(2026, 6, 9), time(7), time(16), "tariff_peak_start"),  # Tue, AEST
-        (date(2026, 10, 5), time(8), time(17), "tariff_peak_start"),  # Mon after DST starts
-        (date(2026, 4, 6), time(7), time(16), "tariff_peak_start"),  # Mon after DST ends
-        (date(2026, 11, 14), time(8), time(16), "household_time"),  # Saturday
-        (date(2026, 10, 4), time(8), time(16), "household_time"),  # Sun: DST starts 02:00
-        (date(2026, 4, 5), time(8), time(16), "household_time"),  # Sun: DST ends 03:00
-        (date(2026, 3, 9), time(8), time(17), "tariff_peak_start"),  # Eight Hours Day
+        (date(2026, 11, 10), time(17), "tariff_peak_start"),  # Tue, AEDT
+        (date(2026, 6, 9), time(16), "tariff_peak_start"),  # Tue, AEST
+        (date(2026, 10, 5), time(17), "tariff_peak_start"),  # Mon after DST starts
+        (date(2026, 4, 6), time(16), "tariff_peak_start"),  # Mon after DST ends
+        (date(2026, 11, 14), time(16), "household_time"),  # Saturday
+        (date(2026, 10, 4), time(16), "household_time"),  # Sun: DST starts 02:00
+        (date(2026, 4, 5), time(16), "household_time"),  # Sun: DST ends 03:00
+        (date(2026, 3, 9), time(17), "tariff_peak_start"),  # Eight Hours Day
     ],
 )
-def test_weekday_deadlines_follow_actual_peak_and_weekends_use_household_times(
-    day, morning, afternoon, basis
+def test_afternoon_follows_actual_peak_and_morning_is_06_00_preferred_07_00_hard(
+    day, afternoon, basis
 ):
     settings, tariffs = owner()
     morning_goal, afternoon_goal = goals_mod.goals_for_day(day, settings, tariffs)
-    assert hobart(morning_goal.deadline).time() == morning
+    # 0.7.0: morning comfort is a household time EVERY day, DST-correct.
+    assert hobart(morning_goal.deadline).time() == time(6)
+    assert hobart(morning_goal.hard_deadline).time() == time(7)
+    assert morning_goal.basis == "preferred_morning_time"
     assert hobart(afternoon_goal.deadline).time() == afternoon
-    assert morning_goal.basis == basis
+    assert afternoon_goal.basis == basis
     assert morning_goal.target_c == 42 and afternoon_goal.target_c == 70
     # Aurora's 2026-27 schedule has no public-holiday exception: a weekday
     # public holiday (Eight Hours Day, 9 Mar) follows weekday periods.
 
 
-def test_shower_time_can_only_make_weekday_mornings_earlier():
-    settings, tariffs = owner(shower_time_enabled=True, shower_time="06:30")
+def test_missed_preferred_morning_moves_to_the_hard_deadline_never_dropped():
+    settings, tariffs = owner()
+    for hour, minute, expected, basis in (
+        (5, 59, time(6), "preferred_morning_time"),
+        (6, 0, time(7), "hard_morning_deadline"),
+        (6, 45, time(7), "hard_morning_deadline"),
+    ):
+        goals = goals_mod.upcoming_goals(local(hour=hour, minute=minute), settings, tariffs)
+        assert goals[0].kind == "morning" and goals[1].kind == "afternoon"
+        assert hobart(goals[0].deadline).time() == expected and goals[0].basis == basis
+    after = goals_mod.upcoming_goals(local(hour=7), settings, tariffs)
+    assert after[0].kind == "afternoon"  # today's morning is over at 07:00
+
+
+def test_legacy_shower_settings_no_longer_move_the_morning_goal():
+    settings, tariffs = owner(shower_time_enabled=True, shower_time="05:30", morning_time="09:00")
     goal = goals_mod.goals_for_day(date(2026, 11, 10), settings, tariffs)[0]
-    assert hobart(goal.deadline).time() == time(6, 30) and goal.basis == "shower_time"
-    settings, tariffs = owner(shower_time_enabled=True, shower_time="09:30")
+    assert hobart(goal.deadline).time() == time(6)
+    settings, tariffs = owner(morning_preferred_time="05:30", morning_hard_time="06:30")
     goal = goals_mod.goals_for_day(date(2026, 11, 10), settings, tariffs)[0]
-    assert hobart(goal.deadline).time() == time(8)  # never later than the peak start
+    assert hobart(goal.deadline).time() == time(5, 30)
+    assert hobart(goal.hard_deadline).time() == time(6, 30)
+    with pytest.raises(ValueError):
+        owner(morning_preferred_time="07:30", morning_hard_time="07:00")
 
 
 @pytest.mark.parametrize(
@@ -95,7 +115,7 @@ def test_upcoming_goals_after_peak_roll_to_tomorrow():
     settings, tariffs = owner()
     goals = goals_mod.upcoming_goals(local(hour=18), settings, tariffs)
     assert [g.kind for g in goals[:2]] == ["morning", "afternoon"]
-    assert hobart(goals[0].deadline) == datetime(2026, 11, 11, 8, tzinfo=m.HOBART)
+    assert hobart(goals[0].deadline) == datetime(2026, 11, 11, 6, tzinfo=m.HOBART)
 
 
 # --- 2. Incremental economics -----------------------------------------------------

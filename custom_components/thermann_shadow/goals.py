@@ -1,15 +1,18 @@
 """Dynamic comfort deadlines and tariff boundaries. Pure functions, no I/O.
 
 Aurora Tariff 93 times are Australian Eastern Standard Time (fixed UTC+10), so
-in Hobart daylight time every boundary appears one hour later. Comfort deadlines
-default to the START of the applicable peak period (morning and evening), found
-by scanning the configured tariff table itself, so no 07:00/08:00/16:00/17:00
-clock time is hardcoded. Weekends (no peak) use separately configured household
-times. An optional weekday shower-ready time can make the morning deadline
-EARLIER, never later.
+in Hobart daylight time every boundary appears one hour later. The AFTERNOON
+deadline is the START of the evening peak, found by scanning the configured
+tariff table itself (no 16:00/17:00 clock time is hardcoded); weekends (no
+peak) use the configured household evening time.
+
+The MORNING goal (0.7.0) is a household comfort time, every day, Hobart local:
+the threshold should be reached by the preferred time (06:00 by default), and
+the hard deadline (07:00, showers) is never abandoned: once the preferred time
+passes unmet, the same goal moves to the hard deadline.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 
 from .model import HOBART, UTC, Settings, Tariff, tariff_at
@@ -20,8 +23,9 @@ class Goal:
     kind: str  # "morning" | "afternoon"
     deadline: datetime  # UTC
     target_c: float
-    basis: str  # "tariff_peak_start" | "shower_time" | "household_time"
+    basis: str  # "tariff_peak_start" | "household_time" | morning: see goals_for_day
     peak_start: datetime | None  # the related peak start, if any (UTC)
+    hard_deadline: datetime | None = None  # morning only: never abandoned (UTC)
 
 
 def peak_start(
@@ -57,16 +61,16 @@ def goals_for_day(day: date, settings: Settings, tariffs: tuple[Tariff, ...]) ->
     verified = settings.tariff_verified
     morning_peak = peak_start(day, tariffs, settings.tariff_clock, 0, 12) if verified else None
     evening_peak = peak_start(day, tariffs, settings.tariff_clock, 12, 24) if verified else None
-    if morning_peak is not None:
-        deadline, basis = morning_peak, "tariff_peak_start"
-    else:
-        deadline = datetime.combine(day, settings.morning, HOBART).astimezone(UTC)
-        basis = "household_time"
-    if settings.shower_time_enabled and morning_peak is not None:
-        shower = datetime.combine(day, settings.shower_time, HOBART).astimezone(UTC)
-        if shower < deadline:
-            deadline, basis = shower, "shower_time"
-    morning = Goal("morning", deadline, settings.morning_threshold_c, basis, morning_peak)
+    preferred = datetime.combine(day, settings.morning_preferred, HOBART).astimezone(UTC)
+    hard = datetime.combine(day, settings.morning_hard, HOBART).astimezone(UTC)
+    morning = Goal(
+        "morning",
+        preferred,
+        settings.morning_threshold_c,
+        "preferred_morning_time",
+        morning_peak,
+        hard,
+    )
     if evening_peak is not None:
         afternoon = Goal(
             "afternoon", evening_peak, settings.target_c, "tariff_peak_start", evening_peak
@@ -85,11 +89,17 @@ def goals_for_day(day: date, settings: Settings, tariffs: tuple[Tariff, ...]) ->
 def upcoming_goals(
     now: datetime, settings: Settings, tariffs: tuple[Tariff, ...], days: int = 2
 ) -> list[Goal]:
-    """Goals with deadlines after `now`, earliest first (today and tomorrow)."""
+    """Goals with deadlines after `now`, earliest first (today and tomorrow).
+
+    A morning goal whose preferred time has passed is NOT dropped: until its
+    hard deadline it stays, with the hard deadline as its deadline."""
     today = now.astimezone(HOBART).date()
     goals = []
     for offset in range(days):
-        goals.extend(goals_for_day(today + timedelta(days=offset), settings, tariffs))
+        for goal in goals_for_day(today + timedelta(days=offset), settings, tariffs):
+            if goal.hard_deadline is not None and goal.deadline <= now < goal.hard_deadline:
+                goal = replace(goal, deadline=goal.hard_deadline, basis="hard_morning_deadline")
+            goals.append(goal)
     return sorted((goal for goal in goals if goal.deadline > now), key=lambda g: g.deadline)
 
 
