@@ -256,7 +256,7 @@ async def upgrade_from(folder, fixture, version, customise):
     report_inputs(hass, DEFAULT_SOURCES)
     runtime.update(dt_util.utcnow())
     controller = hass.states.get("sensor.hot_water_shadow_controller")
-    assert controller.attributes["control_capable"] is False
+    assert controller.attributes["controller_active"] is False
     json.dumps(dict(controller.attributes), allow_nan=False)
     await flush_and_close(hass)
     return {
