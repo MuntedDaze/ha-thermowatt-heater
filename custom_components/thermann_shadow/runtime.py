@@ -1,5 +1,7 @@
 """Read HA states only, on a fixed local timer. Never call services or a transport."""
 
+import logging
+
 from dataclasses import asdict
 from collections import deque
 from datetime import timedelta
@@ -10,6 +12,7 @@ from .model import Plan, Reading, evaluate, number, timestamp, _fresh, _power
 from .config import DEFAULT_OPTIONS, DEFAULT_PV_AC
 from .native import parse_native, permitted_minutes, scheduled_permission
 from .forecast import build_forecast
+from .thermal import ThermalObserver
 from .advisor import Advisor, TickInputs
 from .goals import next_tariff_change
 from .model import TANK_KWH_PER_C, tariff_at
@@ -24,6 +27,9 @@ GATED = {
     "shadow_native_intervention",
     "shadow_awaiting_validation",
 }
+
+
+LOG = logging.getLogger(__name__)
 
 
 class ShadowRuntime:
@@ -53,6 +59,9 @@ class ShadowRuntime:
         self.controller_active = False
         self.executor = None
         self.planning_temperature = None
+        # 0.7.0 read-only thermal observer (diagnostics; never affects control).
+        self.thermal = ThermalObserver()
+        self.thermal_store = None
         self.set_native_reference({})
 
     def set_native_reference(self, options):
@@ -217,6 +226,7 @@ class ShadowRuntime:
         status_raw = mode_state.attributes.get("WaterHeaterSts") if mode_state else None
         executor = self.executor
         controlled = bool(executor is not None and self.controller_active)
+        raw_temperature = temperature
         if executor is not None and self.advisor.estimator is not None:
             previous = self.advice.heater.state if self.advice else "unknown"
             temperature = executor.session.update(now, temperature, previous)
@@ -253,6 +263,19 @@ class ShadowRuntime:
         )
         advice = self.advisor.tick(now, self.plan, self.settings, self.tariffs, inputs)
         self.advice = advice
+        try:
+            self.thermal.update(
+                now,
+                raw_temperature,
+                poll_at if status_ok else None,
+                advice.heater.state,
+                advice.heater.confidence,
+                mode_state.state if mode_state else None,
+            )
+            if self.thermal_store is not None and self.thermal.should_save(now):
+                self.hass.async_create_task(self.thermal_store.async_save(self.thermal.to_dict()))
+        except Exception:  # noqa: BLE001 - diagnostics must never disturb control
+            LOG.debug("Thermal observer update failed.")
         self._apply_advice(now, advice, pv_ac_now)
         self.values["controller"] = self.plan.state
         self.values["morning_threshold_c"] = self.settings.morning_threshold_c

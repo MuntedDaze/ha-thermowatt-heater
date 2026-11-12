@@ -39,6 +39,15 @@ async def async_setup_entry(hass, entry):
     runtime.set_native_reference(entry.options)
     executor = Executor(hass, entry, runtime)
     await executor.async_load()
+    from homeassistant.helpers.storage import Store
+
+    from .thermal import ThermalObserver
+
+    runtime.thermal_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.thermal")
+    try:
+        runtime.thermal = ThermalObserver.from_dict(await runtime.thermal_store.async_load())
+    except Exception:  # noqa: BLE001 - diagnostics only; start empty
+        runtime.thermal = ThermalObserver()
     runtime.executor = executor
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

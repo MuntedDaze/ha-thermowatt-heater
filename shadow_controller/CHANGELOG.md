@@ -1,5 +1,13 @@
 # Thermann Shadow Planner
 
+## 0.7.0 — economic permission, morning 45/42, guest and holiday modes, thermal observer (development)
+
+- **Economic heating permission** (`permission.py`): Manual stays permitted while heating now would be economical (meter-priced, excluding the element's own load), and parks when not. It stays on after thermostat satisfaction; solar-justified permission continues across the peak start; afternoon storage never buys peak-grid heat; an economic park during a peak bypasses minimum heating (not minimum rest).
+- **Morning:** preferred **45 °C by 06:00** and hard **42 °C by 07:00**, every day (new settings: preferred time, hard time, preferred reserve; the minimum stays `morning_threshold_c`). One cooling allowance protects the hard minimum. Fail-safe permit when the planner or meter is unavailable before 07:00. The legacy morning and shower settings are kept but hidden.
+- **Guest mode** (12 h) and **controller-managed holiday mode** (return-ready), with new buttons, datetimes and sensors. Native Thermann Holiday is not used.
+- **Read-only thermal observer:** tank state with confidence, suspected draws, cooling spans, heating performance and predicted versus actual. It never affects control.
+- **Unchanged:** 30-minute polling, the two commands, the bridge allowlist, command and request budgets, confirmation, owner override, disabled by default.
+
 ## 0.6.2 — bounded confirmation for a late cloud readback (bridge 1.3.11)
 
 - **Why.** T3b: the bridge's only read right after the POST still showed the

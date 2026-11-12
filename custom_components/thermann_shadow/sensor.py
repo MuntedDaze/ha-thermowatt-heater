@@ -115,6 +115,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         ControllerSensor(runtime, entry, key, name, unit)
         for key, (name, unit) in CONTROLLER_SENSORS.items()
     ]
+    entities.append(ThermalStateSensor(runtime, entry))
     async_add_entities(entities)
 
 
@@ -183,3 +184,30 @@ class ControllerSensor(ShadowSensor):
     @property
     def extra_state_attributes(self):
         return self.runtime.executor.details() if self.key == "controller_state" else None
+
+
+class ThermalStateSensor(ShadowSensor):
+    """0.7.0 read-only tank-state ESTIMATE from the bottom-of-tank reading,
+    the meter-detected element and the clock. Diagnostics only: it never
+    affects heater commands. Attributes separate measured, estimated and
+    inferred values, each with its basis and confidence."""
+
+    _attr_icon = "mdi:thermometer-water"
+
+    def __init__(self, runtime, entry):
+        super().__init__(
+            runtime, entry, "tank_thermal_state", "Tank thermal state (estimate)", None
+        )
+        from homeassistant.const import EntityCategory
+
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self):
+        return self.runtime.thermal.state
+
+    @property
+    def extra_state_attributes(self):
+        from homeassistant.util import dt as dt_util
+
+        return self.runtime.thermal.summary(dt_util.utcnow())
