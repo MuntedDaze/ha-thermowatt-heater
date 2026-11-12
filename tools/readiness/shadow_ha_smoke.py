@@ -58,8 +58,8 @@ def assert_entity_serialization(hass, sources):
 
     settings = sum(meta.kind != "form" and meta.group != "Retired" for meta in CATALOG.values())
     # + restore/undo buttons; 0.5.0: controller sensors, master switch, 3 owner buttons;
-    # 0.7.0: 3 guest/holiday buttons, the holiday departure and (0.9.0) return
-    # date, the thermal-state sensor.
+    # 0.7.0: 3 guest/holiday buttons, the holiday departure and return (dates
+    # since 0.9.0), the thermal-state sensor.
     expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3 + 3 + 2 + 1
     assert len(states) == expected, (len(states), expected)
     frames = []

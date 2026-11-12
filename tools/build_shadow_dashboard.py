@@ -183,6 +183,17 @@ def controller_card():
                 "show_header_toggle": False,
                 "entities": rows,
             },
+            {
+                "type": "entities",
+                "title": "Holiday (dates take effect at 00:00 Hobart)",
+                "show_header_toggle": False,
+                "entities": [
+                    sensor("Hot water operating mode"),
+                    "date.thermann_shadow_holiday_departure_date",
+                    "date.thermann_shadow_holiday_return_date",
+                    sensor("12hr Override ends"),
+                ],
+            },
             *[
                 {
                     "type": "button",

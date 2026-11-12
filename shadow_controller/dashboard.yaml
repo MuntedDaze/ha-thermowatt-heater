@@ -46,6 +46,14 @@ views:
       - sensor.thermann_shadow_commands_in_last_24_hours
       - sensor.thermann_shadow_cloud_requests_in_last_24_hours
       - sensor.thermann_shadow_controller_fault
+    - type: entities
+      title: Holiday (dates take effect at 00:00 Hobart)
+      show_header_toggle: false
+      entities:
+      - sensor.thermann_shadow_hot_water_operating_mode
+      - date.thermann_shadow_holiday_departure_date
+      - date.thermann_shadow_holiday_return_date
+      - sensor.thermann_shadow_guest_mode_ends
     - type: button
       entity: button.thermann_shadow_hold_heater_owner_override
       name: Hold heater

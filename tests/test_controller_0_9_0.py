@@ -440,7 +440,7 @@ def test_restart_recognises_an_expired_holiday_and_returns_to_normal():
     assert publishes(effects) == ["Manual:45@off"]
 
 
-def test_a_0_8_holiday_return_datetime_keeps_its_date():
+def test_a_0_8_holiday_departure_and_return_keep_their_dates():
     old = {
         "enabled": True,
         "state": "parked",
@@ -448,5 +448,47 @@ def test_a_0_8_holiday_return_datetime_keeps_its_date():
         "holiday_return": "2026-11-14T18:00:00+11:00",  # 0.8: date and arrival time
     }
     c = ctl.Controller.from_dict(old)
-    assert c.holiday_start == "2026-11-10T09:00:00+11:00"
+    assert c.holiday_start == "2026-11-10T00:00:00+11:00"
     assert c.holiday_return == "2026-11-14T00:00:00+11:00"
+    assert (c.holiday_start_date(), c.holiday_return_date()) == (
+        date(2026, 11, 10),
+        date(2026, 11, 14),
+    )
+
+
+def test_a_departure_date_of_today_starts_holiday_at_once():
+    now = local(day=13, hour=15, minute=20)
+    c = ready(now, "Manual", 45.0)
+    assert c.set_holiday(now, date(2026, 11, 13), date(2026, 11, 16))
+    assert c.holiday_start == "2026-11-13T00:00:00+11:00"
+    assert c.holiday_active(now) and c.operating_mode(now) == "holiday"
+    # The policy (holiday -> OFF) is applied through the normal guarded path.
+    assert publishes(c.step(obs(now, "Manual", 45.0), want("off", "holiday"), cfg())) == ["off@45"]
+
+
+def test_a_future_departure_date_starts_holiday_at_00_00_hobart_on_it():
+    now = local(day=13, hour=15)
+    c = ready(now, "Manual", 45.0)
+    assert c.set_holiday(now, date(2026, 11, 14), date(2026, 11, 16))
+    assert not c.holiday_active(local(day=13, hour=23, minute=59))
+    assert c.operating_mode(local(day=13, hour=23, minute=59)) == "automatic"
+    assert c.holiday_active(local(day=14, hour=0))
+    assert not c.holiday_active(local(day=16, hour=0))
+
+
+def test_departure_must_be_before_the_return_date():
+    now = local(day=13, hour=9)
+    c = ready(now)
+    assert not c.set_holiday(now, date(2026, 11, 15), date(2026, 11, 15))
+    assert c.refusal == "return_must_be_after_departure"
+
+
+def test_restart_before_the_departure_midnight_then_activates_on_time():
+    now = local(day=13, hour=20)
+    c = ready(now)
+    assert c.set_holiday(now, date(2026, 11, 14), date(2026, 11, 16))
+    restored = ctl.Controller.from_dict(c.to_dict())
+    restored.restored(local(day=13, hour=23))
+    assert not restored.holiday_active(local(day=13, hour=23))
+    assert restored.holiday_active(local(day=14, hour=0, minute=1))
+    assert restored.holiday_start_date() == date(2026, 11, 14)

@@ -39,7 +39,7 @@ Further rules:
 | Mode | What happens |
 | --- | --- |
 | **12hr Override** | Button: Manual 70 °C for 12 hours, regardless of price. Cancel at any time. |
-| **Holiday** | Set the departure and the **return date**. The heater stays OFF while you are away. At **00:00 Hobart time on the return date**, Holiday mode ends by itself and normal control resumes, so the tank usually reheats overnight on Manual 45 °C. A return date of 14 November ends Holiday mode at 00:00 on 14 November. There is no separate return target or pre-heating. |
+| **Holiday** | Set a **departure date** and a **return date**. Both take effect at **00:00 Hobart time**. Today's departure date starts Holiday mode at once; a later one starts it at 00:00 on that date. The heater is switched OFF through the normal guarded command and stays OFF. At 00:00 on the return date, Holiday mode ends by itself and normal control resumes, so the tank usually reheats overnight on Manual 45 °C. A return date of 14 November ends it at 00:00 on 14 November. There is no return target or pre-heating. |
 | **Hold** | Button: pauses all automatic commands until you press Resume. |
 
 **App changes win.** If you change the heater in the Thermann app, control

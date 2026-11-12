@@ -1,6 +1,7 @@
-"""Holiday return DATE (0.9.0). Owner input only: nothing here commands the
-heater. Holiday mode keeps the heater OFF and ends at 00:00 Hobart local on
-this date; the normal policy then resumes (usually Manual 45 °C overnight)."""
+"""Holiday departure and return DATES (0.9.0). Owner inputs only: nothing here
+commands the heater. Holiday mode starts at 00:00 Hobart local on the
+departure date (at once for today's date) and keeps the heater OFF; it ends at
+00:00 Hobart local on the return date, and the normal policy resumes."""
 
 from homeassistant.components.date import DateEntity
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -10,19 +11,26 @@ from .naming import device_info_fields, entity_id
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([HolidayReturnDate(entry, hass.data[DOMAIN][entry.entry_id])])
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(
+        [
+            HolidayDate(entry, runtime, "start", "Holiday departure date", "mdi:airplane-takeoff"),
+            HolidayDate(entry, runtime, "return", "Holiday return date", "mdi:airplane-landing"),
+        ]
+    )
 
 
-class HolidayReturnDate(DateEntity):
+class HolidayDate(DateEntity):
     _attr_has_entity_name = True
     _attr_should_poll = False
-    _attr_name = "Holiday return date"
-    _attr_icon = "mdi:airplane-landing"
 
-    def __init__(self, entry, runtime):
-        self.runtime = runtime
-        self._attr_unique_id = f"{entry.entry_id}_holiday_return_date"
-        self.entity_id = entity_id("date", self._attr_name)
+    def __init__(self, entry, runtime, which, name, icon):
+        self.runtime, self.which = runtime, which
+        self._attr_name = name
+        self._attr_icon = icon
+        suffix = "departure_date" if which == "start" else "return_date"
+        self._attr_unique_id = f"{entry.entry_id}_holiday_{suffix}"
+        self.entity_id = entity_id("date", name)
         self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
 
     async def async_added_to_hass(self):
@@ -30,12 +38,15 @@ class HolidayReturnDate(DateEntity):
 
     @property
     def native_value(self):
-        return self.runtime.executor.controller.holiday_return_date()
+        controller = self.runtime.executor.controller
+        if self.which == "start":
+            return controller.holiday_start_date()
+        return controller.holiday_return_date()
 
     async def async_set_value(self, value):
         from homeassistant.exceptions import HomeAssistantError
 
         executor = self.runtime.executor
-        if not await executor.async_set_holiday("return", value):
+        if not await executor.async_set_holiday(self.which, value):
             why = executor.controller.refusal or "invalid_holiday_dates"
             raise HomeAssistantError(f"Holiday dates not saved: {why.replace('_', ' ')}.")

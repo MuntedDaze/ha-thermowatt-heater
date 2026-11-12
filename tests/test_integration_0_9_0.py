@@ -87,9 +87,11 @@ def sunny_after(hour):
 
 
 class Rig:
-    def __init__(self, tmp_path, monkeypatch, start, reading=46.0, mode="Off", pv=None):
+    def __init__(
+        self, tmp_path, monkeypatch, start, reading=46.0, mode="Off", pv=None, setpoint=70
+    ):
         self.t = start.timestamp()
-        self.tank = Tank(reading, mode)
+        self.tank = Tank(reading, mode, setpoint)
         self.pv = pv or sunny_after(13)
         self.states = {}
         self.store = {}
@@ -476,3 +478,30 @@ def test_a_restart_after_the_return_date_resumes_normal_operation(rig):
     rig.run(hobart(TUE, 0, 30))
     assert rig.commands() == ["Manual:45@off"]
     assert rig.executor.controller.holiday_return is None
+
+
+def test_departure_today_commands_off_at_once_through_the_guarded_path(tmp_path, monkeypatch):
+    rig = Rig(tmp_path, monkeypatch, hobart(MON, 10, 50), mode="Manual", setpoint=45)
+    rig.enable()
+    rig.run(hobart(MON, 11, 10))  # running normally (waiting for the afternoon sun)
+    assert rig.commands() == [] and rig.executor.controller.state == "baseline_45"
+    today, back = hobart(MON, 12).date(), hobart(MON + 3, 12).date()
+    assert rig.executor.controller.set_holiday(rig.now(), today, back)
+    rig.run(hobart(MON, 11, 20))
+    assert rig.commands() == ["off@45"]
+    ((when, endpoint, _, data),) = rig.posts
+    assert endpoint == "off" and data == "" and local(when) == "11:11"  # the next minute
+    rig.run(hobart(MON, 14, 0))  # good solar, but on holiday: nothing more
+    assert rig.commands() == ["off@45"] and rig.tank.mode == "Off"
+
+
+def test_future_departure_keeps_normal_control_until_00_00_on_that_date(rig):
+    rig.enable()
+    controller = rig.executor.controller
+    assert controller.set_holiday(rig.now(), hobart(TUE, 12).date(), hobart(TUE + 2, 12).date())
+    rig.run(hobart(TUE, 0, 20))
+    commands = rig.commands()
+    assert commands[:3] == ["Manual:70@off", "off@70", "Manual:45@off"], commands  # Monday
+    assert commands[3:] == ["off@45"], commands  # 00:00 Tuesday: Holiday mode starts
+    assert local(rig.posts[-1][0]) in {"00:00", "00:01"}
+    assert controller.operating_mode(rig.now()) == "holiday"
