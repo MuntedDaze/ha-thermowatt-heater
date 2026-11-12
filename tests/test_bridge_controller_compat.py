@@ -87,6 +87,9 @@ def rig(tmp_path, monkeypatch):
         monotonic=clock,
     )
     bridge.mqtt_connected.set()
+    # The 1.3.11 request sequences scripted below; 1.3.13 defaults are covered in
+    # test_bridge_1_3_13.py, including this controller round trip.
+    bridge.proactive_refresh, bridge.immediate_confirmation_read = False, True
     session.request.side_effect = [response(body=TOKENS)]
     bridge.login()
     bridge.config["devices"] = {"TEST123": {"name": "Synthetic"}}
@@ -413,6 +416,7 @@ def test_follow_up_timeout_then_confirmation_and_a_bridge_restart_never_resends(
         monotonic=rig.clock,
     )
     restarted.mqtt_connected.set()
+    restarted.proactive_refresh, restarted.immediate_confirmation_read = False, True
     assert restarted.pending is not None
     rig.bridge = restarted
     follow(

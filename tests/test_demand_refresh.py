@@ -31,8 +31,9 @@ def baseline(factory, clock, enabled=True):
     return bridge
 
 
-def test_burst_coalesces_in_worker_and_suppresses_redundant_background(factory, clock):
+def test_burst_coalesces_in_worker_and_keeps_the_clock_schedule(factory, clock):
     bridge = baseline(factory, clock)
+    slot = bridge.next_poll  # the next :00/:30 slot (1.3.13)
     for _ in range(1000):
         publish(bridge)
     assert bridge.session.request.call_count == 1  # Callback did no HTTP.
@@ -41,14 +42,15 @@ def test_burst_coalesces_in_worker_and_suppresses_redundant_background(factory, 
     bridge.tick()
     assert bridge.session.request.call_count == 2
     assert bridge.refresh_requested == set()
-    assert bridge.next_poll == clock() + 1800
-    clock.advance(1500)  # Former background deadline; demand replaced it.
+    assert bridge.next_poll == slot  # an extra read never shifts the schedule
+    clock.now = slot - 1
     bridge.tick()
     assert bridge.session.request.call_count == 2
-    clock.advance(300)
+    clock.now = slot
     bridge.session.request.side_effect = [response(body=STATUS)]
     bridge.tick()
     assert bridge.session.request.call_count == 3
+    assert bridge.next_poll == slot + 1800
     assert all(c.args[0] == "GET" for c in bridge.session.request.call_args_list)
 
 
@@ -155,12 +157,19 @@ def test_multi_device_demand_does_not_poll_other_device_or_starve_its_background
     bridge.tick()
     assert bridge.session.request.call_count == 3
     assert bridge.session.request.call_args.kwargs["headers"]["seriale"] == "TEST123"
-    clock.advance(1500)
-    bridge.session.request.side_effect = [response(body=STATUS)]
+    # Both heaters stay on the clock schedule; the demand read moved neither.
+    assert (
+        bridge.next_poll == bridge.next_background["TEST456"] == bridge.next_background["TEST123"]
+    )
+    clock.now = bridge.next_poll
+    bridge.session.request.side_effect = [response(body=STATUS), response(body=STATUS)]
     bridge.tick()
-    assert bridge.session.request.call_count == 4
-    assert bridge.session.request.call_args.kwargs["headers"]["seriale"] == "TEST456"
-    assert bridge.next_poll == clock() + 300
+    assert bridge.session.request.call_count == 5
+    assert {c.kwargs["headers"]["seriale"] for c in bridge.session.request.call_args_list[-2:]} == {
+        "TEST123",
+        "TEST456",
+    }
+    assert bridge.next_poll == clock() + 1800
 
 
 def test_demand_refresh_preserves_401_refresh_contract_without_heater_commands(factory, clock):
