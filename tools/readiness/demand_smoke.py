@@ -52,6 +52,7 @@ with tempfile.TemporaryDirectory(dir=os.environ.get("THERMOWATT_SMOKE_TMP")) as 
         monotonic=lambda: clock.now,
     )
     bridge.guard.success("SYNTHETIC_ACCESS", "SYNTHETIC_REFRESH")  # Local seed, never auth.
+    bridge.token_obtained_at = clock.now  # a just-issued token: no proactive refresh (1.3.13)
     bridge.config["devices"] = {"TEST123": {"name": "Synthetic heater"}}
     bridge.active_devices = {"TEST123"}
     bridge.discovered = True
@@ -66,7 +67,7 @@ with tempfile.TemporaryDirectory(dir=os.environ.get("THERMOWATT_SMOKE_TMP")) as 
     session.request.side_effect = [response(status)]
     bridge.tick()
     assert session.request.call_count == 2
-    assert bridge.next_poll == clock.now + 1800
+    assert bridge.next_poll == 1800  # 1.3.13: the clock slot, not moved by the demand read
     clock.now += 300
     bridge.on_mqtt_message(None, None, message)
     session.request.side_effect = [
