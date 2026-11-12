@@ -102,7 +102,11 @@ RECOVERY = {
     "unexpected_mode_or_target": "The heater is not OFF or in Manual at 70 °C (for example it is in Schedule or Eco). Automatic control will not touch it. In the Thermann app choose Manual at 70 °C or turn it OFF, then press Resume automatic control.",
     "off_target_not_70": "While OFF the heater reports a usable target other than 70 °C. That may be your own setting, so automatic control will not change it. To hand control back, set Manual at 70 °C in the Thermann app (you may then turn it OFF again) and press Resume automatic control.",
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
+    "guest_mode_not_applied": "Guest mode wants Manual at 70 °C but the controller could not apply it (see the reason and gate failures). Check the Thermowatt add-on and the Thermann app; you can select Manual at 70 °C in the app yourself.",
 }
+GUEST_HOURS = 12.0
+GUEST_ALERT_AFTER = timedelta(minutes=10)
+HOLIDAY_MAX_DAYS = 60
 
 
 @dataclass(frozen=True)
@@ -238,6 +242,12 @@ class Controller:
     last_desire: dict | None = None
     gate_failures: list = field(default_factory=list)
     permitted_off_since: str | None = None
+    # 0.7.0 owner modes (persisted with the controller state).
+    guest_started: str | None = None
+    guest_until: str | None = None
+    holiday_start: str | None = None
+    holiday_return: str | None = None
+    refusal: str | None = None  # why the last owner mode request was refused
 
     # ------------------------------------------------------------------ persistence
     def to_dict(self) -> dict:
@@ -290,6 +300,107 @@ class Controller:
         self.inspect_after = _iso(now)
         return True
 
+    # ------------------------------------------------------------------ owner modes
+    def guest_active(self, now: datetime) -> bool:
+        until = _dt(self.guest_until)
+        return until is not None and now < until
+
+    def holiday_active(self, now: datetime) -> bool:
+        start, back = _dt(self.holiday_start), _dt(self.holiday_return)
+        return start is not None and back is not None and start <= now < back
+
+    def holiday_window(self, now: datetime) -> tuple[datetime, datetime] | None:
+        start, back = _dt(self.holiday_start), _dt(self.holiday_return)
+        if start is None or back is None or now >= back:
+            return None
+        return start, back
+
+    def operating_mode(self, now: datetime) -> str:
+        if not self.enabled:
+            return "disabled"
+        if self.guest_active(now):
+            return "guest"
+        if self.holiday_active(now):
+            return "holiday"
+        return "automatic"
+
+    def _reinspect(self, now: datetime, reason: str) -> None:
+        if self.state == CONFIRMING:
+            return  # the pending command resolves first; never interrupted
+        self.state = OBSERVING if self.enabled else DISABLED
+        self.reason = reason
+        self.inspect_after = _iso(now)
+
+    def start_guest(self, now: datetime, hours: float = GUEST_HOURS) -> bool:
+        """Owner: Manual 70 °C for `hours`, economics relaxed. An explicit owner
+        instruction, so it also releases Hold (the heater is re-inspected;
+        an app-selected mode other than OFF/Manual 70 still pauses control)."""
+        if not self.enabled:
+            self.refusal = "automatic_control_is_off"
+            return False
+        if self.state == FAULT_LOCKED:
+            self.refusal = "acknowledge_the_controller_fault_first"
+            return False
+        if self.holiday_active(now):
+            self.refusal = "cancel_holiday_mode_first"
+            return False
+        self.refusal = None
+        self.guest_started, self.guest_until = _iso(now), _iso(now + timedelta(hours=hours))
+        if self.hold or self.state == OWNER_OVERRIDE:
+            self.hold = False
+            self._reinspect(now, "guest_mode_started_reinspecting")
+        return True
+
+    def cancel_guest(
+        self, now: datetime, reason: str = "guest_mode_cancelled_reinspecting"
+    ) -> bool:
+        if self.guest_until is None:
+            self.refusal = "guest_mode_is_not_active"
+            return False
+        self.guest_started = self.guest_until = None
+        self.refusal = None
+        if self.enabled and self.state not in {FAULT_LOCKED, OWNER_OVERRIDE}:
+            self._reinspect(now, reason)
+        return True
+
+    def set_holiday(self, now: datetime, start: datetime | None, back: datetime | None) -> bool:
+        """Owner: away from `start` until `back`. Validated, never silently
+        adjusted; a refusal leaves the previous dates unchanged."""
+        if start is not None and back is not None:
+            if back <= start:
+                self.refusal = "return_must_be_after_departure"
+                return False
+            if back - start > timedelta(days=HOLIDAY_MAX_DAYS):
+                self.refusal = "holiday_longer_than_60_days"
+                return False
+        if back is not None and back <= now:
+            self.refusal = "return_must_be_in_the_future"
+            return False
+        if start is not None and self.guest_active(now) and start <= now:
+            self.refusal = "cancel_guest_mode_first"
+            return False
+        self.refusal = None
+        self.holiday_start, self.holiday_return = _iso(start), _iso(back)
+        return True
+
+    def cancel_holiday(self, now: datetime) -> bool:
+        if self.holiday_start is None and self.holiday_return is None:
+            self.refusal = "holiday_mode_is_not_set"
+            return False
+        self.holiday_start = self.holiday_return = None
+        self.refusal = None
+        return True
+
+    def _expire_modes(self, now: datetime) -> None:
+        until = _dt(self.guest_until)
+        if until is not None and now >= until:
+            self.cancel_guest(now, "guest_mode_ended_reinspecting")
+        back = _dt(self.holiday_return)
+        if back is not None and now >= back:
+            # Return time reached: normal goals resume (the heater state was
+            # never assumed; normal checks continue from observed status).
+            self.holiday_start = self.holiday_return = None
+
     def acknowledge(self, now: datetime) -> bool:
         if self.state != FAULT_LOCKED:
             return False
@@ -313,6 +424,7 @@ class Controller:
         }
         self.commands = [item for item in self.commands if now - _dt(item) <= timedelta(hours=24)]
         self.active_alerts = []
+        self._expire_modes(now)
         self._track_unexplained(obs)
 
         if self.state == CONFIRMING and self.intent:
@@ -789,6 +901,22 @@ class Controller:
                     f"The planner cannot decide ({desire.reason}). The controller holds the current mode.",
                 )
             )
+        started = _dt(self.guest_started)
+        if (
+            self.guest_active(now)
+            and started is not None
+            and now - started >= GUEST_ALERT_AFTER
+            and self.state not in {HEATING_PERMITTED, CONFIRMING}
+        ):
+            detail = ", ".join(self.gate_failures) or self.reason
+            alerts.append(
+                (
+                    "guest_mode_not_applied",
+                    "Hot water: guest mode not applied",
+                    f"Guest mode wants Manual at 70 °C but the controller could not apply it "
+                    f"({detail}). {RECOVERY['guest_mode_not_applied']}",
+                )
+            )
         if desire.comfort_risk and managed:
             alerts.append(
                 (
@@ -851,4 +979,9 @@ class Controller:
             "desire": self.last_desire,
             "last_confirmed_transition": self.last_transition_at,
             "unexplained_heating_since": self.unexplained_since,
+            "operating_mode": self.operating_mode(now),
+            "guest_until": self.guest_until,
+            "holiday_start": self.holiday_start,
+            "holiday_return": self.holiday_return,
+            "last_mode_refusal": self.refusal,
         }

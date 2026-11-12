@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 import statistics
 
-from .goals import upcoming_goals
+from .goals import upcoming_goals, holiday_goals
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Plan, Settings, Tariff
 from .model import HOBART
@@ -82,6 +82,8 @@ class TickInputs:
     # for command delay (bridge 1.3.10 normally carries it out within a minute).
     controlled: bool = False
     latency_minutes: float = 0.0
+    # 0.7.0 holiday window (departure, return), when holiday mode is set.
+    holiday: tuple | None = None
 
 
 @dataclass
@@ -173,7 +175,9 @@ class Advisor:
         heater = self.estimator.update(
             now, house, inputs.status_raw, inputs.status_at, window, inputs.heater_power_kw
         )
-        goals = upcoming_goals(now, settings, tariffs)[:2]
+        goals = holiday_goals(
+            upcoming_goals(now, settings, tariffs), inputs.holiday, settings, now
+        )[:2]
         self._track_satisfaction(now, heater, inputs, goals)
         low, high = base_load(house, heater)
         if low is not None:

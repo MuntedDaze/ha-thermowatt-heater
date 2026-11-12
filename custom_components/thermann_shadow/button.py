@@ -23,6 +23,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
             ControllerAction(
                 entry, runtime, "acknowledge", "Acknowledge controller fault", "mdi:check-decagram"
             ),
+            ControllerAction(
+                entry, runtime, "guest_start", "Start guest mode (12 h)", "mdi:account-group"
+            ),
+            ControllerAction(
+                entry, runtime, "guest_cancel", "Cancel guest mode", "mdi:account-cancel"
+            ),
+            ControllerAction(
+                entry, runtime, "holiday_cancel", "Cancel holiday mode", "mdi:airplane-off"
+            ),
         ]
     )
 
@@ -101,5 +110,11 @@ class ControllerAction(_LocalButton):
     async def async_press(self):
         from homeassistant.exceptions import HomeAssistantError
 
-        if not await self.runtime.executor.async_owner_action(self.action):
-            raise HomeAssistantError(f"Nothing to {self.action} in the current controller state.")
+        executor = self.runtime.executor
+        if not await executor.async_owner_action(self.action):
+            why = executor.controller.refusal
+            raise HomeAssistantError(
+                f"Not done: {why.replace('_', ' ')}."
+                if why
+                else f"Nothing to {self.action} in the current controller state."
+            )

@@ -36,6 +36,28 @@ MORNING_FAILSAFE_MARGIN_C = 5.0
 MORNING_FAILSAFE_HOURS = 4.0
 
 
+def holiday_desire(
+    now: datetime,
+    window: tuple[datetime, datetime],
+    advice,
+    permitted: bool,
+    latency_minutes: float,
+    next_peak_start: datetime | None,
+    element_state: str = "unknown",
+) -> Desire:
+    """Away (0.7.0): parked (Thermann OFF keeps its antibacterial and frost
+    protection) until the last 24 hours; then the planner prepares only the
+    return goal with the planner-only rules (no economic standby, no morning
+    goals). Owner app changes still pause control as usual."""
+    from .goals import HOLIDAY_PREPARATION
+
+    if now < window[1] - HOLIDAY_PREPARATION:
+        return Desire("park", "holiday_away")
+    return _planner_only_desire(
+        now, advice, permitted, latency_minutes, next_peak_start, element_state
+    )
+
+
 def morning_failsafe_window(now: datetime, settings, tariffs):
     """(opens, hard deadline, threshold) of the next morning goal: the hours
     before the hard deadline in which an unavailable planner or meter must

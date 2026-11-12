@@ -29,6 +29,7 @@ PLATFORMS = [
     Platform.SELECT,
     Platform.TEXT,
     Platform.BUTTON,
+    Platform.DATETIME,
 ]
 
 

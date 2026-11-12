@@ -1128,6 +1128,7 @@ def closed_loop(
     economic=False,
     extra_load=None,
     options=None,
+    holiday=None,
 ):
     """Minute-by-minute: bridge model -> HA-like observation -> advisor ->
     desire -> controller -> MQTT message -> bridge model. Returns the trace."""
@@ -1172,6 +1173,7 @@ def closed_loop(
             forecast_available=forecast,
             controlled=True,
             latency_minutes=30,
+            holiday=holiday if holiday and now < holiday[1] else None,
         )
         advice = advisor.tick(
             now, m.Plan(state="shadow_wait_for_window"), settings, tariffs, inputs
@@ -1179,7 +1181,8 @@ def closed_loop(
         previous = advice.heater.state
         change = goals_mod.next_tariff_change(now, tariffs, settings.tariff_clock)
         peak = change[0] if change and change[1].kind == "peak" else None
-        if economic:
+        away = holiday is not None and holiday[0] <= now < holiday[1]
+        if economic and not away:
             soon = peak is not None and now <= peak <= now + timedelta(minutes=35)
             econ = standby.assess(
                 now, advice, settings, tariffs, decision_at=peak if soon else None
@@ -1195,6 +1198,10 @@ def closed_loop(
                 economics=econ,
                 reading=reading,
                 morning_window=plan_mod.morning_failsafe_window(now, settings, tariffs),
+            )
+        elif away:
+            desire = plan_mod.holiday_desire(
+                now, holiday, advice, permitted, 30, peak, advice.heater.state
             )
         else:
             desire = plan_mod.desire_from_advice(

@@ -509,7 +509,10 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
         module.__path__ = []
         monkeypatch.setitem(sys.modules, name, module)
     sys.modules["homeassistant.const"].Platform = SimpleNamespace(
-        **{k: k.lower() for k in ("SENSOR", "NUMBER", "TIME", "SWITCH", "SELECT", "TEXT", "BUTTON")}
+        **{
+            k: k.lower()
+            for k in ("SENSOR", "NUMBER", "TIME", "SWITCH", "SELECT", "TEXT", "BUTTON", "DATETIME")
+        }
     )
     sys.modules["homeassistant.core"].callback = lambda f: f
     sys.modules["homeassistant.helpers.config_validation"].config_entry_only_config_schema = (

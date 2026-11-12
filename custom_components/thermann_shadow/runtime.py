@@ -249,6 +249,7 @@ class ShadowRuntime:
             forecast_available=bool(self.forecast.pv_series),
             controlled=controlled,
             latency_minutes=executor.latency_minutes if controlled else 0.0,
+            holiday=executor.controller.holiday_window(now) if controlled else None,
         )
         advice = self.advisor.tick(now, self.plan, self.settings, self.tariffs, inputs)
         self.advice = advice

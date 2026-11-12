@@ -103,6 +103,29 @@ def upcoming_goals(
     return sorted((goal for goal in goals if goal.deadline > now), key=lambda g: g.deadline)
 
 
+HOLIDAY_PREPARATION = timedelta(hours=24)
+
+
+def holiday_goals(
+    goals: list[Goal],
+    window: tuple[datetime, datetime] | None,
+    settings: Settings,
+    now: datetime | None = None,
+) -> list[Goal]:
+    """Holiday (0.7.0): no comfort goal while away. ONE goal at the return
+    time (full storage target) appears only in the last 24 hours (about the
+    forecast horizon), so the planner picks the cheapest feasible heating just
+    before the owner is back instead of heating days early and losing it.
+    Goals after the return are unchanged."""
+    if window is None:
+        return goals
+    start, back = window
+    kept = [goal for goal in goals if not start <= goal.deadline < back]
+    if now is None or now >= back - HOLIDAY_PREPARATION:
+        kept.append(Goal("return", back, settings.target_c, "holiday_return", None))
+    return sorted(kept, key=lambda goal: goal.deadline)
+
+
 def next_tariff_change(
     now: datetime,
     tariffs: tuple[Tariff, ...],

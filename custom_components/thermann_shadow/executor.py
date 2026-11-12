@@ -26,6 +26,7 @@ from .control_plan import (
     PEAK_GUARD_MARGIN,
     SessionTemperature,
     desire_from_advice,
+    holiday_desire,
     morning_failsafe_window,
 )
 from .controller import (
@@ -34,6 +35,7 @@ from .controller import (
     PARK_REQUESTED,
     Controller,
     ControllerConfig,
+    Desire,
     Observation,
 )
 from .goals import next_tariff_change
@@ -126,6 +128,30 @@ class Executor:
             await self._save()
         self._notify_listeners()
 
+    async def async_set_holiday(self, which: str, value: datetime | None) -> bool:
+        """Owner: set the holiday departure or return (datetime entities)."""
+        async with self.lock:
+            now = dt_util.utcnow()
+            controller = self.controller
+            start = (
+                dt_util.parse_datetime(controller.holiday_start)
+                if controller.holiday_start
+                else None
+            )
+            back = (
+                dt_util.parse_datetime(controller.holiday_return)
+                if controller.holiday_return
+                else None
+            )
+            if which == "start":
+                start = value
+            else:
+                back = value
+            done = controller.set_holiday(now, start, back)
+            await self._save()
+        self._notify_listeners()
+        return done
+
     async def async_owner_action(self, action: str) -> bool:
         async with self.lock:
             now = dt_util.utcnow()
@@ -133,6 +159,9 @@ class Executor:
                 "hold": lambda: (self.controller.set_hold(now), True)[1],
                 "resume": lambda: self.controller.resume(now),
                 "acknowledge": lambda: self.controller.acknowledge(now),
+                "guest_start": lambda: self.controller.start_guest(now),
+                "guest_cancel": lambda: self.controller.cancel_guest(now),
+                "holiday_cancel": lambda: self.controller.cancel_holiday(now),
             }[action]()
             await self._save()
         self._notify_listeners()
@@ -205,6 +234,25 @@ class Executor:
             now, advice, settings, tariffs, decision_at=peak if peak_soon else None
         )
         obs = self.last_observation
+        controller = self.controller
+        if controller.guest_active(now):
+            # Guest mode: Manual 70 °C for the whole period, economics relaxed;
+            # every controller gate, confirmation and owner rule still applies.
+            return Desire("permit", "guest_mode", comfort=True, standby=True)
+        if controller.holiday_active(now):
+            # Away: no comfort goals and no economic standby permission; the
+            # planner prepares only the return goal (cheapest feasible heat)
+            # and otherwise keeps the heater parked (OFF keeps antibacterial
+            # and frost protection active).
+            return holiday_desire(
+                now,
+                controller.holiday_window(now),
+                advice,
+                self.permitted(),
+                self.latency_minutes,
+                peak,
+                advice.heater.state if advice else "unknown",
+            )
         return desire_from_advice(
             now,
             advice,
@@ -321,6 +369,8 @@ class Executor:
             "commands_last_24h": summary["commands_last_24h"],
             "requests_last_24h": summary["requests_last_24h"],
             "fault": summary["fault"] or "none",
+            "operating_mode": summary["operating_mode"],
+            "guest_mode_ends": _parse(summary["guest_until"]),
         }
 
     def details(self) -> dict:

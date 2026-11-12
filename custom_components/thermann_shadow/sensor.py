@@ -95,8 +95,15 @@ CONTROLLER_SENSORS = {
     "commands_last_24h": ("Commands in last 24 hours", None),
     "requests_last_24h": ("Cloud requests in last 24 hours", None),
     "fault": ("Controller fault", None),
+    "operating_mode": ("Hot water operating mode", None),
+    "guest_mode_ends": ("Guest mode ends", None),
 }
-CONTROLLER_TIMESTAMPS = {"next_heating_start", "next_heating_stop", "last_command_time"}
+CONTROLLER_TIMESTAMPS = {
+    "next_heating_start",
+    "next_heating_stop",
+    "last_command_time",
+    "guest_mode_ends",
+}
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
