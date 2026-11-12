@@ -307,18 +307,17 @@ def build():
         {
             "type": "markdown",
             "content": (
-                "# Hot-water preferences\n"
-                "**Local shadow settings only.** These controls and the integration's "
-                "Configure dialog edit **one** saved configuration. Changes are validated "
-                "together (an invalid change saves nothing), recalculate locally at once and "
-                "never contact Thermann, restart the heater or change the native Schedule "
-                "or T-Comfort. Recommended values are experimental starting points, not "
-                "manufacturer limits."
+                "# Hot-water settings\n"
+                "These controls and **Configure** edit **one** saved configuration. Every "
+                "change is checked together with the rest (an invalid change saves nothing) "
+                "and applies at once, without a restart. **System** settings and the tariff "
+                "contract can only be changed while Automatic heater control is off. "
+                "Nothing here contacts Thermann or changes the heater's own settings."
             ),
         }
     ]
-    groups = ("Comfort", "Solar & Forecasting", "Heating Cycles", "Controller", "Advanced")
-    icons = ("mdi:home-thermometer", "mdi:solar-power", "mdi:sync", "mdi:robot", "mdi:tune")
+    groups = settings.GROUPS
+    icons = ("mdi:home-thermometer", "mdi:tune", "mdi:shield-check")
     for group, icon in zip(groups, icons, strict=True):
         keys = [
             key
@@ -377,11 +376,10 @@ def build():
                             "target": {"entity_id": RESTORE},
                             "confirmation": {
                                 "text": (
-                                    "Restore recommended comfort, solar, cycle and freshness "
-                                    "preferences? The tariff contract, entity mappings, "
-                                    "verifications, meter direction, pause state and native "
-                                    "references are kept. You can undo this once. No heater "
-                                    "command is sent."
+                                    "Restore the recommended comfort, forecast and planning "
+                                    "preferences? System settings, the tariff contract, "
+                                    "sensor mappings and verifications are kept. You can undo "
+                                    "this once. No heater command is sent."
                                 )
                             },
                         },
@@ -574,6 +572,46 @@ def templates(node):
     return found
 
 
+SOURCE_LABELS = {
+    "pv": "PV production (display and forecast correction)",
+    "forecast_pv": "Optional published PV forecast",
+    "forecast_load": "Optional household load forecast or measured baseline",
+    "import_energy": "Cumulative grid import (not used; kept for reference)",
+    "export_energy": "Cumulative grid export (not used; kept for reference)",
+    "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
+    "heater_power": "Optional heater power sensor (element detection)",
+}
+OPTIONS_STEPS = {
+    "init": (
+        "Settings",
+        "Choose what to change. Everyday comfort settings are also available as controls on "
+        "the device page. System settings, the tariff contract and the sensor mappings can "
+        "only be changed while Automatic heater control is off.",
+    ),
+    "sources": (
+        "Sensor mappings",
+        "Which Home Assistant entities the controller reads. Reading only: nothing here sends "
+        "a command or contacts the cloud. Changing a mapping restarts the planner's evidence; "
+        "it needs Automatic heater control off.",
+    ),
+    "preferences": (
+        "Comfort, tariff and forecast settings",
+        "Morning times are Hobart local and before noon; the weekend afternoon time is after "
+        "noon. Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later "
+        "in summer) and must increase. The tariff contract can only be changed while Automatic "
+        "heater control is off. Every change is checked together with the rest of the "
+        "configuration; an invalid combination saves nothing.",
+    ),
+    "system": (
+        "System and commissioning",
+        "Command destination, T3 qualification, safety timing, budgets, data freshness and "
+        "verification. Except for the notification service, these can only be changed while "
+        "Automatic heater control is off. The command topic must be the one the bridge "
+        "announced for your heater.",
+    ),
+}
+
+
 def main():
     (ROOT / "shadow_controller/dashboard.yaml").write_text(
         yaml.safe_dump(build(), sort_keys=False, allow_unicode=True, width=100),
@@ -581,37 +619,34 @@ def main():
     )
     for filename in (PACKAGE / "strings.json", PACKAGE / "translations/en.json"):
         data = json.loads(filename.read_text(encoding="utf-8"))
-        for step in (data["config"]["step"]["user"], data["options"]["step"]["init"]):
-            step["description"] = (
-                "Read local HA states only; no heater commands, MQTT writes or cloud requests. "
-                "Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered "
-                "Forecast.Solar watts) with forecast_generated_at, and a household load "
-                "forecast or measured baseline. Configure and dashboard controls share the "
-                "same stored preferences."
-            )
-            step["data"].update(
-                {
-                    "pv": "PV production (display and forecast correction)",
-                    "forecast_pv": "Optional published PV forecast",
-                    "forecast_load": "Optional household load forecast or measured baseline",
-                }
-            )
-        step = data["options"]["step"]["settings"]
-        step["description"] = (
-            "Local shadow preferences only; no setting enables execution. Dashboard controls "
-            "use these exact same saved values. Current/recommended/original values and "
-            "guidance are on the Settings dashboard. Morning is before noon; afternoon after "
-            "noon; tariff peak times must increase. Aurora 93 uses fixed AEST, weekends "
-            "off-peak. The stored custom weekly table is always validated and needs gap-free "
-            "coverage."
+        user = data["config"]["step"]["user"]
+        user["description"] = (
+            "Read local HA states only; no heater commands, MQTT writes or cloud requests. "
+            "Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered "
+            "Forecast.Solar watts) with forecast_generated_at, and a household load "
+            "forecast or measured baseline."
         )
-        step["data"] = {key: meta.name for key, meta in settings.CATALOG.items()}
-        data["options"]["error"]["invalid_settings"] = (
-            "Nothing saved. Check finite planning bounds; morning before noon and afternoon "
-            "after noon; increasing tariff times without overlaps; gap-free custom weekly "
-            "periods (validated in every tariff mode); T-Comfort reference not above expected "
-            "native target. No heater settings were changed."
-        )
+        user["data"].update(SOURCE_LABELS)
+        steps = {}
+        for step_id, (title, description) in OPTIONS_STEPS.items():
+            steps[step_id] = {"title": title, "description": description}
+        steps["init"]["menu_options"] = {
+            "preferences": OPTIONS_STEPS["preferences"][0],
+            "system": OPTIONS_STEPS["system"][0],
+            "sources": OPTIONS_STEPS["sources"][0],
+        }
+        steps["sources"]["data"] = dict(user["data"])
+        for step_id, groups in (("preferences", ("Everyday", "Advanced")), ("system", ("System",))):
+            steps[step_id]["data"] = {
+                key: meta.name for key, meta in settings.CATALOG.items() if meta.group in groups
+            }
+        data["options"] = {
+            "step": steps,
+            "error": {
+                "invalid_settings": "Nothing saved. {detail}",
+                "locked_while_active": "{detail}",
+            },
+        }
         filename.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

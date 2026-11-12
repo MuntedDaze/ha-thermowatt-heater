@@ -7,6 +7,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from .config import DOMAIN, parse_options, rejection_message, saved_options
 from .settings import (
     CATALOG,
+    RETIRED,
     apply_changes,
     describe,
     locked_changes,
@@ -87,5 +88,9 @@ class SettingEntity:
 def setup_controls(hass, entry, async_add_entities, kind, entity_class):
     runtime = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        [entity_class(entry, runtime, key) for key, meta in CATALOG.items() if meta.kind == kind]
+        [
+            entity_class(entry, runtime, key)
+            for key, meta in CATALOG.items()
+            if meta.kind == kind and key not in RETIRED
+        ]
     )

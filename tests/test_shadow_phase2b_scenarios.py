@@ -145,9 +145,9 @@ def test_dashboard_and_generated_setting_defaults_are_current_and_no_heater_acti
     content = json.dumps(dashboard)
     for key, meta in catalog.CATALOG.items():
         assert meta.explanation and key in c.DEFAULT_OPTIONS
-        if meta.kind != "form" and meta.group != "Legacy":
+        if meta.kind != "form" and meta.group != "Retired":
             assert builder.entity(key) in content
-        elif meta.group == "Legacy":
-            # 0.7.0: kept so saved settings are unchanged, never shown.
+        elif meta.group == "Retired":
+            # Kept so saved settings are unchanged, never shown (0.8.0: no control).
             assert builder.entity(key) not in content
     assert "recommended & original" in content and "confirmation" in content

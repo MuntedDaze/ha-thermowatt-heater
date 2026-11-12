@@ -152,6 +152,40 @@ RETIRED_IN_0_4_0 = (
 )
 
 
+def is_retired(entry_id, unique_id):
+    """Entities the CURRENT integration no longer provides (registry entry removed)."""
+    from custom_components.thermann_shadow import RETIRED_ENTITY_SUFFIXES
+
+    return (unique_id or "").removeprefix(f"{entry_id}_") in RETIRED_ENTITY_SUFFIXES
+
+
+def kept(entry_id, ids):
+    return {key: value for key, value in ids.items() if not is_retired(entry_id, key)}
+
+
+async def options_page(hass, entry, page, data):
+    """0.8.0 Configure: a menu (preferences / system / sources), one page per save."""
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    assert flow["type"] == "menu", flow
+    assert set(flow["menu_options"]) == {"preferences", "system", "sources"}, flow
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"next_step_id": page}
+    )
+    assert flow["type"] == "form" and flow["step_id"] == page, flow
+    return await hass.config_entries.options.async_configure(flow["flow_id"], data)
+
+
+def page_values(entry, groups):
+    from custom_components.thermann_shadow.config import DEFAULT_OPTIONS
+    from custom_components.thermann_shadow.settings import CATALOG
+
+    return {
+        key: entry.options.get(key, value)
+        for key, value in DEFAULT_OPTIONS.items()
+        if CATALOG[key].group in groups
+    }
+
+
 async def upgrade_from(folder, fixture, version, customise):
     """Install an older frozen component, save options + an entity rename to real
     HA storage, stop, then load the CURRENT component over the same storage."""
@@ -213,13 +247,12 @@ async def upgrade_from(folder, fixture, version, customise):
         item.unique_id: item.entity_id
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
-    assert {key: after[key] for key in before} == before  # identities and renames kept
+    # Identities and renames kept; retired entities' registry entries removed.
+    assert {key: after[key] for key in kept(entry_id, before)} == kept(entry_id, before)
+    assert not [key for key in after if is_retired(entry_id, key)], after
     retired = {f"{entry_id}_{key}" for key in RETIRED_IN_0_4_0}
-    for unique_id, entity_id in after.items():
-        if unique_id in retired:
-            assert hass.states.get(entity_id) is None, entity_id  # no longer provided
-        else:
-            assert hass.states.get(entity_id) is not None, entity_id
+    for entity_id in after.values():
+        assert hass.states.get(entity_id) is not None, entity_id
     report_inputs(hass, DEFAULT_SOURCES)
     runtime.update(dt_util.utcnow())
     controller = hass.states.get("sensor.hot_water_shadow_controller")
@@ -326,7 +359,7 @@ async def check_settings_services(hass, entry, runtime, entity_for):
 
     checked = 0
     for key, meta in CATALOG.items():
-        if meta.kind == "form":
+        if meta.kind == "form" or meta.group == "Retired":
             continue
         entity_id = entity_for(key)
         state = hass.states.get(entity_id)
@@ -357,11 +390,10 @@ async def check_settings_services(hass, entry, runtime, entity_for):
     # Cross-field and range validation through services: atomic, nothing saved.
     invalid = [
         ("time", "set_value", entity_for("peak_morning_end"), {"time": "17:00:00"}),
-        ("time", "set_value", entity_for("morning_time"), {"time": "12:30:00"}),
+        ("time", "set_value", entity_for("morning_hard_time"), {"time": "12:30:00"}),
+        ("time", "set_value", entity_for("morning_preferred_time"), {"time": "07:30:00"}),
         ("time", "set_value", entity_for("evening_time"), {"time": "11:00:00"}),
-        ("text", "set_value", entity_for("native_clock_check_date"), {"value": "2026-13-01"}),
         ("number", "set_value", entity_for("target_c"), {"value": 64}),
-        ("number", "set_value", entity_for("t_comfort_reference_c"), {"value": 74}),
         # 0.7.1 (settings audit): readable cross-field and format rejections.
         ("text", "set_value", entity_for("controller_notify_service"), {"value": "notify.x"}),
         ("number", "set_value", entity_for("controller_min_rest_minutes"), {"value": 75}),
@@ -461,20 +493,18 @@ def emhass_state(hass, entity_id, key, value, generated, unit="W"):
 
 
 async def check_forecasts(hass, entry, entity_for):
-    from custom_components.thermann_shadow.config import DEFAULT_OPTIONS, DEFAULT_SOURCES
+    from custom_components.thermann_shadow.config import DEFAULT_SOURCES
 
     pv_id, load_id = "sensor.thermann_test_pv_forecast", "sensor.thermann_test_load_forecast"
     now = dt_util.utcnow().isoformat()
     emhass_state(hass, pv_id, "p_pv_forecast", 4500, now)
     emhass_state(hass, load_id, "p_load_forecast", 600, now)
-    flow = await hass.config_entries.options.async_init(entry.entry_id)
     mapping = {**DEFAULT_SOURCES, "forecast_pv": pv_id, "forecast_load": load_id}
-    flow = await hass.config_entries.options.async_configure(flow["flow_id"], mapping)
-    assert flow["step_id"] == "settings"
-    values = {key: entry.options.get(key, value) for key, value in DEFAULT_OPTIONS.items()}
-    saved = await hass.config_entries.options.async_configure(
-        flow["flow_id"], {**values, "forecast_enabled": True}
-    )
+    saved = await options_page(hass, entry, "sources", mapping)
+    assert saved["type"] == "create_entry", saved
+    await hass.async_block_till_done()
+    values = page_values(entry, ("Everyday", "Advanced"))
+    saved = await options_page(hass, entry, "preferences", {**values, "forecast_enabled": True})
     assert saved["type"] == "create_entry", saved
     await hass.async_block_till_done()
     runtime = hass.data["thermann_shadow"][entry.entry_id]
@@ -821,7 +851,11 @@ async def _upgrade_from_0_6(folder, version):
             item.unique_id: item.entity_id
             for item in er.async_entries_for_config_entry(registry_of(hass), entry.entry_id)
         }
-        assert {key: after[key] for key in before} == before  # IDs and renames kept
+        # IDs and renames kept; retired entities' registry entries removed.
+        assert {key: after[key] for key in kept(entry.entry_id, before)} == kept(
+            entry.entry_id, before
+        )
+        assert not [key for key in after if is_retired(entry.entry_id, key)], after
         added = {key.removeprefix(f"{entry.entry_id}_") for key in set(after) - set(before)}
         assert added <= ADDED_IN_0_7_0, added
         for unique_id, entity_id in after.items():
@@ -921,7 +955,11 @@ async def upgrade_from_0_5_0(folder):
             item.unique_id: item.entity_id
             for item in er.async_entries_for_config_entry(registry_of(hass), entry.entry_id)
         }
-        assert {key: after[key] for key in before} == before  # identities and renames kept
+        # Identities and renames kept; retired entities' registry entries removed.
+        assert {key: after[key] for key in kept(entry.entry_id, before)} == kept(
+            entry.entry_id, before
+        )
+        assert not [key for key in after if is_retired(entry.entry_id, key)], after
         assert hass.states.get(before[removed]) is None  # orphaned, not provided
         for unique_id, entity_id in after.items():
             if unique_id != removed and unique_id in before:

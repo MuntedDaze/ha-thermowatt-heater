@@ -56,7 +56,7 @@ def assert_entity_serialization(hass, sources):
     from custom_components.thermann_shadow.sensor import CONTROLLER_SENSORS, SENSORS
     from custom_components.thermann_shadow.settings import CATALOG
 
-    settings = sum(meta.kind != "form" for meta in CATALOG.values())
+    settings = sum(meta.kind != "form" and meta.group != "Retired" for meta in CATALOG.values())
     # + restore/undo buttons; 0.5.0: controller sensors, master switch, 3 owner buttons;
     # 0.7.0: 3 guest/holiday buttons, 2 holiday datetimes, the thermal-state sensor.
     expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3 + 3 + 2 + 1
@@ -216,8 +216,11 @@ async def main():
         assert_entity_serialization(hass, runtime.sources)
         # Real config/options flows reject bad tariffs; owner can edit mappings.
         flow = await hass.config_entries.options.async_init(entry.entry_id)
-        flow = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_SOURCES)
-        assert flow["step_id"] == "settings"
+        assert flow["type"] == "menu", flow  # 0.8.0: preferences / system / sources
+        flow = await hass.config_entries.options.async_configure(
+            flow["flow_id"], {"next_step_id": "preferences"}
+        )
+        assert flow["step_id"] == "preferences"
         # The stored custom table is validated in BOTH profiles; an invalid
         # table must re-show the form with an error, never create an entry.
         for bad in (
@@ -226,7 +229,7 @@ async def main():
             {"peak_morning_end": "17:00:00"},
         ):
             flow = await hass.config_entries.options.async_configure(flow["flow_id"], bad)
-            assert flow["type"] == "form" and flow["step_id"] == "settings", flow
+            assert flow["type"] == "form" and flow["step_id"] == "preferences", flow
             assert flow["errors"] == {"base": "invalid_settings"}, flow
             assert entry.options == {}, entry.options
         # Explicit synthetic-only qualified settings exercise planning on real HA states.
@@ -286,7 +289,14 @@ async def main():
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
-        saved = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_OPTIONS)
+        from custom_components.thermann_shadow.settings import CATALOG as SETTINGS_CATALOG
+
+        preferences = {
+            key: value
+            for key, value in DEFAULT_OPTIONS.items()
+            if SETTINGS_CATALOG[key].group in ("Everyday", "Advanced")
+        }
+        saved = await hass.config_entries.options.async_configure(flow["flow_id"], preferences)
         assert saved["type"] == "create_entry"
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED

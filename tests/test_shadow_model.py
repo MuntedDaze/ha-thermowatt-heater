@@ -521,7 +521,13 @@ def test_custom_settings_and_dashboard_have_no_control_actions():
     import yaml
 
     translation = json.loads((PACKAGE / "strings.json").read_text(encoding="utf-8"))
-    assert set(translation["options"]["step"]["settings"]["data"]) == set(c.DEFAULT_OPTIONS)
+    steps = translation["options"]["step"]
+    shown = set(steps["preferences"]["data"]) | set(steps["system"]["data"])
+    catalog = importlib.import_module(f"{package.__name__}.settings")
+    # 0.8.0: every setting is on exactly one Configure page, except retired ones.
+    assert shown == set(c.DEFAULT_OPTIONS) - catalog.RETIRED
+    assert not set(steps["preferences"]["data"]) & set(steps["system"]["data"])
+    assert set(steps["init"]["menu_options"]) == {"preferences", "system", "sources"}
     dashboard = yaml.safe_load(
         (ROOT / "shadow_controller/dashboard.yaml").read_text(encoding="utf-8")
     )

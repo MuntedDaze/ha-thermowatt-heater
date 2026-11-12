@@ -20,6 +20,7 @@ import logging
 
 from .config import DOMAIN, LEGACY_MORNING_THRESHOLD_C, migrate_0_7_1, parse_options
 from .executor import Executor
+from .settings import RETIRED
 from .runtime import ShadowRuntime
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -35,8 +36,36 @@ PLATFORMS = [
 ]
 
 
+# Entities no longer provided (unique-id suffixes after the entry id): the
+# 0.3.0 simulation sensors, the 0.5.0 empty-Schedule confirmation and, since
+# 0.8.0, the controls of retired settings. Their registry entries are removed so
+# they do not linger as "unavailable"; stored option values are kept.
+RETIRED_ENTITY_SUFFIXES = frozenset(
+    {
+        "simulated_cycle_count",
+        "simulated_stop_count",
+        "suppressed_switching_episodes",
+        "simulated_cost_aud",
+        "setting_controller_empty_schedule_confirmed",
+        *(f"setting_{key}" for key in RETIRED),
+    }
+)
+
+
+def _remove_retired_entities(hass, entry) -> None:
+    from homeassistant.helpers import entity_registry as er
+
+    registry = er.async_get(hass)
+    prefix = f"{entry.entry_id}_"
+    for item in er.async_entries_for_config_entry(registry, entry.entry_id):
+        unique_id = item.unique_id or ""
+        if unique_id.startswith(prefix) and unique_id[len(prefix) :] in RETIRED_ENTITY_SUFFIXES:
+            registry.async_remove(item.entity_id)
+
+
 async def async_setup_entry(hass, entry):
     settings, tariffs = parse_options(entry.options)
+    _remove_retired_entities(hass, entry)
     runtime = ShadowRuntime(hass, entry.options.get("sources", entry.data), settings, tariffs)
     runtime.set_native_reference(entry.options)
     executor = Executor(hass, entry, runtime)
