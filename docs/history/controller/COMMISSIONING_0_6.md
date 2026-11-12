@@ -9,9 +9,9 @@ agent.
 
 | Stage | What | Needs |
 | --- | --- | --- |
-| A | Install the controller with control **off** | 0.6.1 installed 13 Nov 2026 (control off). Next: upgrade to 0.6.2 ([UPGRADE_0_6_1_TO_0_6_2.md](UPGRADE_0_6_1_TO_0_6_2.md)) |
+| A | Install the controller with control **off** | 0.6.1 installed 12 Nov 2026 (control off). Next: upgrade to 0.6.2 ([UPGRADE_0_6_1_TO_0_6_2.md](UPGRADE_0_6_1_TO_0_6_2.md)) |
 | B | **T3**: prove the bridge's `off` and `Manual:70` reproduce the app results | **Done 12 Nov 2026** with bridge 1.3.9; found OFF = `Cmd` 8 and the 60 s freshness problem |
-| B2 | **T3b**: repeat with bridge 1.3.10, from stale status | **Done 13 Nov 2026, stopped**: refresh worked, the app showed OFF, but the bridge reported `not_observed_in_immediate_status` |
+| B2 | **T3b**: repeat with bridge 1.3.10, from stale status | **Done 12 Nov 2026, stopped**: refresh worked, the app showed OFF, but the bridge reported `not_observed_in_immediate_status` |
 | B3 | **T3c**: bridge 1.3.11 bounded confirmation | Approval to merge the 1.3.11 PR, update the add-on and enable commands temporarily |
 | C | Supervised controller trial (limited cycles) | Approval to enable automatic control |
 | D | Production enablement | Approval after reviewing C |
@@ -66,7 +66,7 @@ OFF reports 70, so the OFF target rule allows the resume. `WaterHeaterSts`
 
 ---
 
-## Stage B2 result (13 Nov 2026)
+## Stage B2 result (12 Nov 2026)
 
 Controller 0.6.1 disabled, bridge 1.3.10. A stale-status `off` gave one
 pre-command read (`status_refresh: refreshed`, `command_refresh: 1`); the app

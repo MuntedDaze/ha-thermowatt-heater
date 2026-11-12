@@ -705,13 +705,13 @@ async def upgrade_from_0_6_0(folder):
 
 
 async def upgrade_from_0_6_2(folder):
-    """The owner's INSTALLED version since 13 Nov 2026 (0.6.2, control off;
+    """The owner's INSTALLED version since 12 Nov 2026 (0.6.2, control off;
     the installed files were compared and are identical to 5fe48e3)."""
     return await _upgrade_from_0_6(folder, "0.6.2")
 
 
 async def upgrade_from_0_6_1(folder):
-    """Installed for T3b on 13 Nov 2026 (0.6.1, control off)."""
+    """Installed for T3b on 12 Nov 2026 (0.6.1, control off)."""
     return await _upgrade_from_0_6(folder, "0.6.1")
 
 

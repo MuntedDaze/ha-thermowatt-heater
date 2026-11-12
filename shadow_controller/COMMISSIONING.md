@@ -7,9 +7,9 @@ Automatic control is switched on in stages, each with your approval. At any stag
 
 | Stage | What | Status |
 | --- | --- | --- |
-| A | Controller installed, control off | Done; 0.6.2 installed. 0.7.0 is in review |
-| B | Bridge command tests with the owner present (T3, T3b, T3c) | **Done 12–13 Nov 2026**; results below |
-| C | Supervised trial with automatic control on | Needs approval |
+| A | Controller installed, control off | Done; **0.7.0 installed 12 Nov 2026** (build `9dcf7fa`, control off). A corrected 0.7.0 build is needed before C; see the preflight below |
+| B | Bridge command tests with the owner present (T3, T3b, T3c) | **Done 12 Nov 2026**; results below |
+| C | Supervised trial with automatic control on | **Not begun.** Read-only preflight done 12 Nov 2026; needs the corrected build, three settings and your approval |
 | D | Normal operation | After reviewing C |
 
 ## Stage B results (bridge commands, owner present)
@@ -21,6 +21,31 @@ Automatic control is switched on in stages, each with your approval. At any stag
 | T3c | 1.3.11 | `off` and `Manual:70` each confirmed at the 60 s follow-up read; a repeat while awaiting was refused with no request; a repeat when already OFF sent nothing. 4 cloud requests per command |
 
 Measured: the cloud reports a change between about 2 s and 63 s after the command. The detailed procedures are in [docs/history/bridge/UPGRADING_1_3_11.md](../docs/history/bridge/UPGRADING_1_3_11.md).
+
+## Stage C preflight (12 Nov 2026, read-only)
+
+Nothing was changed and no command was sent. Automatic control stayed off.
+
+**Passed:**
+- **Bridge 1.3.11** (Settings → Apps → Thermowatt Smart Boiler): authorised, healthy, no failures or cooldown, 30-minute polling, on-demand refresh off. `commands_enabled` is still **on** from T3c, with `command_policy: automation`. No confirmation pending; the last command (`Manual:70`, T3c) was confirmed.
+- **Heater:** Manual 70 °C, which the controller accepts as its own permitted state.
+- **Tariff:** Aurora 93 rates and peaks on the fixed AEST clock, so peaks show at 08–11 and 17–22 during daylight saving; weekends off-peak.
+- **Meter and solar:** GoodWe/HK1000 readings under a minute old, with the meter sign consistent with PV minus house load.
+- **EMHASS:** forecasts a few minutes old, and the base load is measured only (the EMHASS load forecast includes past heater runs).
+- **Morning goals:** 45 °C by 06:00 preferred, 42 °C by 07:00 minimum.
+- **Limits:** defaults intact (6 commands a day, 30/30-minute dwell, 220 cloud requests a day).
+- **Conflicts:** no other automation, script or MQTT publisher targets the heater.
+
+**Found and fixed in the corrected build (`bbbc5f9`):** with control on, a heater in Manual or OFF still tripped the old shadow-planner check for the native Schedule. The planner would then have reported *owner review required*, and the controller would only ever have held, parked for peaks or used the morning fail-safe. It now waits for owner-approved reinstallation.
+
+**To set before C** (Settings → Devices & services → Integrations → Thermann Shadow Planner → Configure):
+- *Controller command topic*: `P/<serial>/CMD/MODE`; keep the serial private;
+- *Bridge commands qualified (T3)*: on;
+- *Notification service*: recommended, for faults and unconfirmed commands. Without it, alerts are persistent notifications only.
+
+**Notes:**
+- The default Overview dashboard shows the heater card. Choosing **off** there publishes a real `off`, which the controller treats as an owner override. Don't use the card during the trial.
+- The Home Assistant log (Settings → System → Logs) can't be read from outside Home Assistant, so it was not reviewed. Check it once after installing the corrected build.
 
 ## Stage C: supervised trial
 

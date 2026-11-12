@@ -42,7 +42,7 @@ The owner accepts this and recovers in the app: Manual at 70 °C, or ON.
 **0.6.2 needs bridge 1.3.11** (bounded confirmation, below). 1.3.10 (PR #15,
 deployed) added the `Cmd` 8 mapping and the pre-command refresh described here.
 
-**T3b (13 Nov 2026, bridge 1.3.10, controller disabled):** a stale-status `off`
+**T3b (12 Nov 2026, bridge 1.3.10, controller disabled):** a stale-status `off`
 refreshed once and was POSTed; the app then showed OFF, but 1.3.10 reported
 `not_observed_in_immediate_status`. Its only status read came milliseconds after
 the POST, before the cloud reported the change, and it never looked again. 1.3.11

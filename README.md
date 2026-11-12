@@ -4,7 +4,7 @@ Two parts, for a Thermann Smart Electric water heater (tested on a 315 L / 3 kW 
 
 | Part | What it does | Installed from |
 | --- | --- | --- |
-| **Thermowatt bridge** (add-on, `thermowatt-heater/`) | Reads the heater from the cloud every 30 minutes and publishes it to Home Assistant over MQTT. When commands are enabled, it accepts only two: `Manual:70` (heating allowed) and `off` (parked). | Home Assistant add-on store, from this repository |
+| **Thermowatt bridge** (Home Assistant app, `thermowatt-heater/`) | Reads the heater from the cloud every 30 minutes and publishes it to Home Assistant over MQTT. When commands are enabled, it accepts only two: `Manual:70` (heating allowed) and `off` (parked). | Settings → Apps, from this repository |
 | **Hot Water Controller** (integration, `custom_components/thermann_shadow`) | Plans when heating is cheapest using tariffs, solar, comfort deadlines and the GoodWe meter, and tells the bridge to allow or park heating. Off by default. | Copied into `custom_components/` |
 
 Thermann's own thermostat always decides when the element runs. The controller only allows heating (Manual at 70 °C) or parks the heater (Thermann OFF, which keeps the manufacturer's anti-bacterial and frost protection active). It never changes the temperature setting, the native Schedule or mains power.
@@ -20,7 +20,7 @@ This project is not affiliated with Thermowatt, Thermann, Reece or Ariston.
 ## Install
 
 **Bridge:**
-1. Settings → Add-ons → Add-on store → ⋮ → Repositories, then add `https://github.com/MuntedDaze/ha-thermowatt-heater`.
+1. Settings → Apps, open the app store, then ⋮ → Repositories, and add `https://github.com/MuntedDaze/ha-thermowatt-heater`.
 2. Install **Thermowatt Smart Boiler**. Set your account details, then `cloud_enabled: true` and `auth_retry_generation: 1`. Leave `commands_enabled: false` for now.
 3. Start it. The heater appears as an MQTT water heater, with diagnostic sensors.
 
@@ -50,7 +50,7 @@ Guide: [shadow_controller/README.md](shadow_controller/README.md).
 
 - **Hot water now:** in the Thermann app, choose **Manual at 70 °C**. To return to your normal programme, choose **Schedule**.
 - **Stop all automatic control:** turn off *Automatic heater control* in Home Assistant. That never changes the heater.
-- **Add-on authentication locked:** see "Clearing an authentication lock" in [DOCS.md](thermowatt-heater/DOCS.md). Never delete `/data/auth_state.json`.
+- **Bridge authentication locked:** see "Clearing an authentication lock" in [DOCS.md](thermowatt-heater/DOCS.md). Never delete `/data/auth_state.json`.
 
 ## Repository layout
 

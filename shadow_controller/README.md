@@ -2,7 +2,7 @@
 
 A Home Assistant integration that decides **when** a Thermann Smart Electric heater may heat, so hot water is ready when you need it and as cheap as possible. It works through the Thermowatt bridge and changes only one thing: whether heating is allowed (**Manual at 70 °C**) or parked (**Thermann OFF**). Thermann's own thermostat still decides when the element actually runs.
 
-Current version: **0.7.0** (in review, PR #20). Installed: **0.6.2**, automatic control off.
+Current version: **0.7.0** (in review, PR #20). Installed: **0.7.0** since 12 Nov 2026, automatic control off; the supervised trial (Stage C) has not begun. See [COMMISSIONING.md](COMMISSIONING.md).
 
 ## What it does
 
