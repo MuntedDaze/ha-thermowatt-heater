@@ -33,7 +33,8 @@ is "within the thermostat band", not "70 reached".
 ## The rules (precedence highest first)
 
 1. The heater's own protections are native, in every state; nothing to decide.
-2. **Owner:** an app change or Hold (send nothing), holiday (OFF), 12hr
+2. **Owner:** an app change or Hold (send nothing), holiday (OFF until
+   00:00 Hobart local on the return date, then the normal rules), 12hr
    Override (STORAGE).
 3. **Guards** (may only block): cloud, authentication and freshness;
    15-minute command spacing; the reserved park slot.

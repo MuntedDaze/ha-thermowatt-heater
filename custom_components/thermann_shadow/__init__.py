@@ -34,6 +34,7 @@ PLATFORMS = [
     Platform.TEXT,
     Platform.BUTTON,
     Platform.DATETIME,
+    Platform.DATE,
 ]
 
 
@@ -44,6 +45,7 @@ PLATFORMS = [
 RETIRED_ENTITY_SUFFIXES = frozenset(
     {
         *RETIRED_SENSORS,  # 0.3.0 simulation and, since 0.9.0, the planner's sensors
+        "holiday_return",  # 0.9.0: the return datetime became a date entity
         "setting_controller_empty_schedule_confirmed",
         *(f"setting_{key}" for key in RETIRED),
     }

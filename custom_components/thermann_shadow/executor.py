@@ -147,13 +147,13 @@ class Executor:
             await self._save()
         self._notify_listeners()
 
-    async def async_set_holiday(self, which: str, value: datetime | None) -> bool:
-        """Owner: set the holiday departure or return (datetime entities)."""
+    async def async_set_holiday(self, which: str, value) -> bool:
+        """Owner: the holiday departure (a datetime) or the return DATE."""
         async with self.lock:
             now = dt_util.utcnow()
             controller = self.controller
             start = dt_util.parse_datetime(controller.holiday_start or "") or None
-            back = dt_util.parse_datetime(controller.holiday_return or "") or None
+            back = controller.holiday_return_date()
             if which == "start":
                 start = value
             else:

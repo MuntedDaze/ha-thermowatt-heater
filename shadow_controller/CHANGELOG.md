@@ -16,7 +16,7 @@ Replaces the 0.4–0.8 planner, economic permission and morning fail-safe with t
 - **Setpoint versus achieved:** "70 °C reached" only at a reading of 70 °C.
 - **Shadow observation** while automatic control is off: the policy runs and records the command it would send. Nothing is published.
 - **Activation and restart** ask the bridge for one guarded status read (used only if the app's on-demand refresh is enabled).
-- **Holiday** now keeps the heater OFF until the return time. There is no return pre-heating; use the 12hr Override or an earlier return time.
+- **Holiday** uses a return **date**. The heater stays OFF until 00:00 Hobart local on that date, when Holiday mode ends by itself (also across a restart) and the normal policy resumes, usually with Manual 45 °C overnight. There is no return target or pre-heating. The *Holiday return* datetime entity is replaced by a *Holiday return date* entity (`date.thermann_shadow_holiday_return_date`). A saved 0.7–0.8 return keeps its date.
 - **Removed:**
   - `advisor`, `strategy`, `goals`, `permission`, `control_plan`, `cycles`, `economics` and `decision`;
   - the model's planner (`evaluate`);

@@ -1,5 +1,5 @@
-"""Holiday departure and return (0.7.0). Owner inputs only: nothing here
-commands the heater; the controller re-plans from these dates."""
+"""Holiday departure (0.7.0). Owner input only: nothing here commands the
+heater. The return is a DATE since 0.9.0 (date.py)."""
 
 from homeassistant.components.datetime import DateTimeEntity
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -14,7 +14,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(
         [
             HolidayDate(entry, runtime, "start", "Holiday departure", "mdi:airplane-takeoff"),
-            HolidayDate(entry, runtime, "return", "Holiday return", "mdi:airplane-landing"),
         ]
     )
 
@@ -36,8 +35,7 @@ class HolidayDate(DateTimeEntity):
 
     @property
     def native_value(self):
-        controller = self.runtime.executor.controller
-        value = controller.holiday_start if self.which == "start" else controller.holiday_return
+        value = self.runtime.executor.controller.holiday_start
         return dt_util.parse_datetime(value) if value else None
 
     async def async_set_value(self, value):

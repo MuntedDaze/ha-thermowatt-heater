@@ -3,7 +3,7 @@
 OFF / Manual 45 / Manual 70, guarded bridge payloads "<target>@<prior>",
 owner protection, gates, confirmation, owner modes and restart. Offline."""
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import importlib
 
 import pytest
@@ -382,3 +382,71 @@ def test_the_controller_enforces_the_spacing_itself():
     assert "command_spacing" in c.gate_failures
     c.commands = [(now - timedelta(minutes=15)).isoformat()]
     assert publishes(c.step(obs(now, "Manual", 70.0), want("off"), cfg())) == ["off@70"]
+
+
+# --- Holiday: a return DATE ends it at 00:00 Hobart local ----------------------------------
+
+
+def test_a_return_date_ends_holiday_at_midnight_hobart_not_at_the_end_of_the_day():
+    now = local(day=10, hour=9)
+    c = ready(now)
+    assert c.set_holiday(now, now, date(2026, 11, 14))
+    assert c.holiday_return == "2026-11-14T00:00:00+11:00"
+    assert c.holiday_return_date() == date(2026, 11, 14)
+    assert c.holiday_active(local(day=13, hour=23, minute=59))
+    assert not c.holiday_active(local(day=14, hour=0))
+    assert c.operating_mode(local(day=14, hour=0)) == "automatic"
+
+
+def test_a_return_datetime_is_reduced_to_its_hobart_date():
+    now = local(day=10, hour=9)
+    c = ready(now)
+    assert c.set_holiday(now, now, local(day=14, hour=18))
+    assert c.holiday_return_date() == date(2026, 11, 14)
+    assert not c.holiday_active(local(day=14, hour=1))
+
+
+def test_a_return_date_of_today_or_earlier_is_refused():
+    now = local(day=13, hour=10)
+    c = ready(now)
+    assert not c.set_holiday(now, now, date(2026, 11, 13))
+    assert c.refusal == "return_must_be_in_the_future"
+    assert c.holiday_return is None
+
+
+def test_expiry_clears_holiday_and_the_normal_policy_resumes_with_manual_45():
+    start = local(day=13, hour=22)
+    c = ready(start)
+    assert c.set_holiday(start, start, date(2026, 11, 14))
+    assert publishes(c.step(obs(start + timedelta(hours=1)), want("off", "holiday"), cfg())) == []
+    midnight = local(day=14, hour=0, minute=1)
+    effects = c.step(obs(midnight), want("baseline", "baseline"), cfg())
+    assert (c.holiday_start, c.holiday_return) == (None, None)
+    assert publishes(effects) == ["Manual:45@off"]
+
+
+def test_restart_recognises_an_expired_holiday_and_returns_to_normal():
+    start = local(day=13, hour=9)
+    c = ready(start)
+    assert c.set_holiday(start, start, date(2026, 11, 14))
+    saved = c.to_dict()
+    later = local(day=14, hour=6)
+    restored = ctl.Controller.from_dict(saved)
+    restored.restored(later)
+    assert not restored.holiday_active(later) and restored.operating_mode(later) == "automatic"
+    restored.step(obs(later + timedelta(minutes=1), poll_age=0), want("hold"), cfg())
+    assert restored.holiday_return is None and restored.state == ctl.PARKED
+    effects = restored.step(obs(later + timedelta(minutes=2)), want("baseline"), cfg())
+    assert publishes(effects) == ["Manual:45@off"]
+
+
+def test_a_0_8_holiday_return_datetime_keeps_its_date():
+    old = {
+        "enabled": True,
+        "state": "parked",
+        "holiday_start": "2026-11-10T09:00:00+11:00",
+        "holiday_return": "2026-11-14T18:00:00+11:00",  # 0.8: date and arrival time
+    }
+    c = ctl.Controller.from_dict(old)
+    assert c.holiday_start == "2026-11-10T09:00:00+11:00"
+    assert c.holiday_return == "2026-11-14T00:00:00+11:00"

@@ -31,7 +31,7 @@ Entity IDs were checked read-only against the live entity registry on 12 Nov 202
 | Estimated heating duration / cost | ✅ `sensor.thermann_shadow_heating_time_estimate` (+ plan cost attributes); 🆕 `permission_economics` in the controller state attributes (cost now, alternative, solar share) | Shown as estimates |
 | Fault / attention | ✅ `sensor.thermann_shadow_controller_fault`; persistent notifications | Conditional red card |
 | 12hr Override | 🆕 `button.thermann_shadow_start_guest_mode_12_h`, `button.thermann_shadow_cancel_guest_mode`, `sensor.thermann_shadow_guest_mode_ends` | Detail page only, with a confirmation dialog |
-| Holiday | 🆕 `datetime.thermann_shadow_holiday_departure`, `datetime.thermann_shadow_holiday_return`, `button.thermann_shadow_cancel_holiday_mode` | Detail page |
+| Holiday | 🆕 `datetime.thermann_shadow_holiday_departure`, `date.thermann_shadow_holiday_return_date` (0.9.0: ends at 00:00 Hobart on that date), `button.thermann_shadow_cancel_holiday_mode` | Detail page |
 | Thermal diagnostics | 🆕 `sensor.thermann_shadow_tank_thermal_state` (attributes listed below) | Separate "advanced" page |
 
 **Thermal-model fields**, all estimates or inferences, labelled as such, from the attributes of `sensor.thermann_shadow_tank_thermal_state`:

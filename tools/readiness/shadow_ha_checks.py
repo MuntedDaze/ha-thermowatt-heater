@@ -1055,4 +1055,5 @@ ADDED_IN_0_9_0 = {
     "measured_surplus_kw",
     "shadow_command",
     "setting_controller_three_state_qualified",
+    "holiday_return_date",
 }

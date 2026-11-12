@@ -129,7 +129,17 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
     sys.modules["homeassistant.const"].Platform = SimpleNamespace(
         **{
             k: k.lower()
-            for k in ("SENSOR", "NUMBER", "TIME", "SWITCH", "SELECT", "TEXT", "BUTTON", "DATETIME")
+            for k in (
+                "SENSOR",
+                "NUMBER",
+                "TIME",
+                "SWITCH",
+                "SELECT",
+                "TEXT",
+                "BUTTON",
+                "DATETIME",
+                "DATE",
+            )
         }
     )
     sys.modules["homeassistant.core"].callback = lambda f: f

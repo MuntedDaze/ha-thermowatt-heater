@@ -20,7 +20,8 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 OFF, BASELINE, STORAGE = "off", "baseline", "storage"  # simple_policy states
 TARGET_C = {BASELINE: 45.0, STORAGE: 70.0}
@@ -111,6 +112,7 @@ RECOVERY = {
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
     "guest_mode_not_applied": "The 12hr Override wants Manual at 70 °C but the controller could not apply it (see the reason and gate failures). Check the Thermann Hot Water app and the Thermann app; you can select Manual at 70 °C in the app yourself.",
 }
+HOBART = ZoneInfo("Australia/Hobart")
 GUEST_HOURS = 12.0
 GUEST_ALERT_AFTER = timedelta(minutes=10)
 HOLIDAY_MAX_DAYS = 60
@@ -245,6 +247,15 @@ def _dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
 
+def holiday_return_at(day: date | datetime) -> datetime:
+    """A holiday return DATE ends Holiday mode at 00:00 Hobart local that day
+    (a return of 14 November expires at 00:00 on 14 November). A datetime is
+    reduced to its Hobart date."""
+    if isinstance(day, datetime):
+        day = day.astimezone(HOBART).date()
+    return datetime.combine(day, time(0), HOBART)
+
+
 @dataclass
 class Controller:
     enabled: bool = False
@@ -285,6 +296,11 @@ class Controller:
         controller = cls(**known)
         if controller.state not in STATES:
             controller.state = OBSERVING
+        if controller.holiday_return:
+            # 0.7-0.8 stored a return date AND time; 0.9.0 keeps the date and
+            # ends Holiday mode at 00:00 Hobart local on it.
+            back = holiday_return_at(datetime.fromisoformat(controller.holiday_return))
+            controller.holiday_return = _iso(back)
         intent = controller.intent
         if intent is not None and (not isinstance(intent, dict) or "target" not in intent):
             # A 0.8.x permit/park intent: its outcome is decided by the next
@@ -404,9 +420,21 @@ class Controller:
             self._reinspect(now, reason)
         return True
 
-    def set_holiday(self, now: datetime, start: datetime | None, back: datetime | None) -> bool:
-        """Owner: away from ``start`` until ``back``. Validated, never silently
+    def holiday_return_date(self) -> date | None:
+        back = _dt(self.holiday_return)
+        return back.astimezone(HOBART).date() if back else None
+
+    def set_holiday(
+        self, now: datetime, start: datetime | None, back: date | datetime | None
+    ) -> bool:
+        """Owner: away from ``start`` until the return DATE ``back`` (Holiday
+        mode ends at 00:00 Hobart local on it). Validated, never silently
         adjusted; a refusal leaves the previous dates unchanged."""
+        if back is not None:
+            back = holiday_return_at(back)
+        if back is not None and back <= now:
+            self.refusal = "return_must_be_in_the_future"
+            return False
         if start is not None and back is not None:
             if back <= start:
                 self.refusal = "return_must_be_after_departure"
@@ -414,9 +442,6 @@ class Controller:
             if back - start > timedelta(days=HOLIDAY_MAX_DAYS):
                 self.refusal = "holiday_longer_than_60_days"
                 return False
-        if back is not None and back <= now:
-            self.refusal = "return_must_be_in_the_future"
-            return False
         if start is not None and self.guest_active(now) and start <= now:
             self.refusal = "cancel_guest_mode_first"
             return False

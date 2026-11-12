@@ -39,7 +39,7 @@ def hobart(day, hour, minute=0, month=11):
     return datetime(2026, month, day, hour, minute, tzinfo=m.HOBART).astimezone(timezone.utc)
 
 
-MON = 16  # 2026-11-16, AEDT: peaks 08-11 and 17-22
+MON, TUE = 16, 17  # 2026-11-16/17, AEDT: peaks 08-11 and 17-22
 
 
 class Tank:
@@ -433,7 +433,7 @@ def test_holiday_keeps_the_heater_off_and_12hr_override_heats(rig):
     rig.enable()
     controller = rig.executor.controller
     now = rig.now()
-    assert controller.set_holiday(now, now, now + timedelta(hours=3))
+    assert controller.set_holiday(now, now, hobart(TUE, 12).date())
     rig.run(hobart(MON, 13, 40))
     assert rig.commands() == []  # holiday: OFF, even with good solar
     controller.cancel_holiday(rig.now())
@@ -452,3 +452,27 @@ def test_dashboard_values_are_json_safe_and_complete(rig):
     json.dumps(rig.runtime.details, allow_nan=False, default=str)
     for key in ("policy_state", "policy_mode", "planned_start", "latest_start", "soft_target"):
         assert key in rig.runtime.values
+
+
+def test_holiday_ends_at_midnight_on_the_return_date_then_manual_45_overnight(rig):
+    rig.enable()
+    assert rig.executor.controller.set_holiday(rig.now(), rig.now(), hobart(TUE, 12).date())
+    rig.run(hobart(MON, 23, 58))
+    assert rig.commands() == [] and rig.tank.mode == "Off"  # OFF all Monday, even at 22:00
+    rig.run(hobart(TUE, 0, 20))
+    assert rig.commands() == ["Manual:45@off"]
+    ((when, endpoint, body, _),) = rig.posts
+    assert local(when) == "00:00" or local(when) == "00:01", local(when)
+    assert body == {"T_SetPoint": 45}
+    assert rig.executor.controller.operating_mode(rig.now()) == "automatic"
+
+
+def test_a_restart_after_the_return_date_resumes_normal_operation(rig):
+    rig.enable()
+    assert rig.executor.controller.set_holiday(rig.now(), rig.now(), hobart(TUE, 12).date())
+    rig.run(hobart(MON, 23, 30))
+    rig.executor = rig._executor()  # HA restarts; the holiday is restored from storage
+    assert rig.executor.controller.holiday_active(rig.now())
+    rig.run(hobart(TUE, 0, 30))
+    assert rig.commands() == ["Manual:45@off"]
+    assert rig.executor.controller.holiday_return is None
