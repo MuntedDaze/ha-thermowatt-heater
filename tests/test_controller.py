@@ -2067,3 +2067,86 @@ def test_safety_settings_are_locked_while_control_is_on_and_never_restored():
     assert restored["controller_max_requests_per_day"] == 300.0
     assert restored["target_c"] == c.DEFAULT_OPTIONS["target_c"]
     assert settings_mod.locked_changes(restored, settings_mod.undo_restore(restored)) == []
+
+
+def test_operational_setting_validation_and_readable_rejections():
+    ok = c.parse_options
+    for options in (
+        {"controller_notify_service": ""},
+        {"controller_notify_service": "mobile_app_pixel_10a"},
+        {"controller_min_rest_minutes": 60.0},  # latency 30 + 30
+        {"controller_min_rest_minutes": 90.0, "controller_execution_latency_minutes": 60.0},
+        {"status_max_age_minutes": 35.0},
+        {"forecast_max_age_minutes": 35.0},
+        {"peak_rate": 2.0, "off_peak_rate": 0.0},
+        {"controller_max_commands_per_day": 5},
+    ):
+        ok(options)
+    for options, code in (
+        ({"controller_notify_service": "notify.mobile_app_phone"}, "notify_service_invalid"),
+        ({"controller_notify_service": "Mobile App"}, "notify_service_invalid"),
+        ({"controller_max_commands_per_day": 5.5}, "whole_number_required"),
+        ({"controller_max_requests_per_day": 220.4}, "whole_number_required"),
+        ({"controller_min_rest_minutes": 61.0}, "rest_longer_than_latency_reserve"),
+        (
+            {"controller_min_rest_minutes": 45.0, "controller_execution_latency_minutes": 10.0},
+            "rest_longer_than_latency_reserve",
+        ),
+        ({"status_max_age_minutes": 30.0}, "settings_invalid"),
+        ({"forecast_max_age_minutes": 30.0}, "settings_invalid"),
+        ({"peak_rate": 2.1}, "tariff_invalid"),
+        ({"off_peak_rate": -0.01}, "tariff_invalid"),
+        ({"morning_preferred_c": 41.0}, "morning_preferred_below_minimum"),
+        (
+            {"morning_preferred_time": "07:30", "morning_hard_time": "07:00"},
+            "morning_times_order",
+        ),
+        ({"evening_time": "11:00"}, "afternoon_time_invalid"),
+    ):
+        with pytest.raises(ValueError) as error:
+            ok(options)
+        assert error.value.args[0] == code, (options, error.value.args)
+        message = c.rejection_message(error.value)
+        assert message and message != "The settings are not valid together.", code
+    assert "notify." in c.rejection_message(ValueError("notify_service_invalid"))
+    assert (
+        c.rejection_message(ValueError("something_new")) == "The settings are not valid together."
+    )
+
+
+def test_pause_shadow_planning_does_not_pause_an_active_controller():
+    now = local(hour=12)
+    settings, tariffs = c.parse_options({"paused": True})
+    readings = {
+        key: m.Reading(value, now, unit)
+        for key, value, unit in [
+            ("temperature", 60, "°C"),
+            ("target", 70, "°C"),
+            ("mode", "Manual", None),
+            ("last_poll", now.isoformat(), None),
+            ("cloud_health", "ok", None),
+            ("grid", 2000, "W"),
+        ]
+    }
+    boot = now - timedelta(hours=1)
+    assert m.evaluate(now, boot, readings, settings, tariffs).state == "shadow_paused"
+    active = m.evaluate(now, boot, readings, settings, tariffs, controlled=True)
+    assert active.state != "shadow_paused"
+
+
+def test_pricing_setting_changes_reset_economic_permission_evidence(runtime):  # noqa: F811
+    instance, _, clock = runtime
+    standby = permission_mod.StandbyPermission()
+    standby.samples.append((clock[0], 2.5))
+    standby.grant_since = clock[0]
+    instance.executor = SimpleNamespace(standby=standby, session=plan_mod.SessionTemperature())
+    sources = dict(instance.sources)
+    # A notification-only change does not reprice anything: evidence kept.
+    instance.apply_options(c.saved_options({"controller_notify_service": "mobile_app_x"}), sources)
+    assert standby.samples and standby.grant_since == clock[0]
+    # A price change does: samples and grant/withdraw timers are rebuilt.
+    instance.apply_options(c.saved_options({"peak_rate": 0.40}), sources)
+    assert not standby.samples and standby.grant_since is None and standby.last is None
+    standby.samples.append((clock[0], 2.5))
+    instance.apply_options(c.saved_options({"peak_rate": 0.40, "target_c": 66.0}), sources)
+    assert not standby.samples

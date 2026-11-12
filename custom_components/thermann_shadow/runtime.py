@@ -73,10 +73,15 @@ class ShadowRuntime:
 
         settings, tariffs = parse_options(options)
         changed_mapping = dict(sources) != dict(self.sources)
-        if changed_mapping or settings != self.settings or tariffs != self.tariffs:
+        replanned = changed_mapping or settings != self.settings or tariffs != self.tariffs
+        if replanned:
             self.advisor.reset()
             self.solar_samples.clear()
             self.pv_samples.clear()
+            if self.executor is not None:
+                # F5: economic-permission evidence was priced with the old
+                # settings; rebuild it (the controller holds meanwhile).
+                self.executor.standby.reset()
         if changed_mapping:
             self.boot = dt_util.utcnow()
             self.last_native = None

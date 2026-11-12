@@ -331,15 +331,18 @@ views:
   - type: markdown
     content: "### Heating Cycles — current, recommended and original values\n\n**Solar start qualification**\
       \ — current **{{ states('number.thermann_shadow_solar_start_qualification') }} min** · recommended\
-      \ & original **10 min** · *restored by Restore*  \nSustained economic advantage on fresh observations\
-      \ before a SIMULATED optional start.\n\n**Economic loss grace period** — current **{{ states('number.thermann_shadow_economic_loss_grace_period')\
+      \ & original **10 min** · *restored by Restore*  \nHow long the planner's choice between optional\
+      \ economic options (heat now, wait, no difference) must persist before it changes, so a passing\
+      \ cloud does not flip the plan. Comfort, data gates and peak decisions are never delayed by it.\n\
+      \n**Economic loss grace period** — current **{{ states('number.thermann_shadow_economic_loss_grace_period')\
       \ }} min** · recommended & original **20 min** · *restored by Restore*  \nSustained cost disadvantage\
       \ before a SIMULATED optional stop; short clouds do not stop a cycle.\n\n**Minimum optional cycle**\
       \ — current **{{ states('number.thermann_shadow_minimum_optional_cycle') }} min** · recommended\
-      \ & original **30 min** · *restored by Restore*  \nSIMULATION ONLY. Comfort, data gates, owner intervention\
-      \ and protections override dwell.\n\n**Minimum optional cycle gap** — current **{{ states('number.thermann_shadow_minimum_optional_cycle_gap')\
-      \ }} min** · recommended & original **30 min** · *restored by Restore*  \nSIMULATION ONLY. Comfort\
-      \ can start sooner. No physical On/resume contract is qualified.\n\n**Minimum economic switching\
+      \ & original **30 min** · *restored by Restore*  \nShortest heating block the planner schedules.\
+      \ The controller's own minimum heating and rest periods still apply on top.\n\n**Minimum optional\
+      \ cycle gap** — current **{{ states('number.thermann_shadow_minimum_optional_cycle_gap') }} min**\
+      \ · recommended & original **30 min** · *restored by Restore*  \nShortest gap the planner leaves\
+      \ between two scheduled heating blocks (it merges closer blocks).\n\n**Minimum economic switching\
       \ benefit** — current **{{ states('number.thermann_shadow_minimum_economic_switching_benefit') }}\
       \ AUD** · recommended & original **0.1 AUD** · *restored by Restore*  \nFUTURE CONTROL ONLY: minimum\
       \ benefit per heater switch. The 0.4.0 advisor uses the per-kWh waiting threshold instead.\n\n**Minimum\
@@ -376,11 +379,12 @@ views:
       \ **30 min** · *kept by Restore*  \nShortest time Manual (heating permitted) is kept before parking,\
       \ unless the thermostat has already stopped the element.\n\n**Minimum rest period** — current **{{\
       \ states('number.thermann_shadow_minimum_rest_period') }} min** · recommended & original **30 min**\
-      \ · *kept by Restore*  \nShortest time parked before heating is permitted again.\n\n**Maximum commands\
-      \ per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day') }}** · recommended\
-      \ & original **6** · *kept by Restore*  \nRolling 24 h limit on mode commands. A typical day needs\
-      \ 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved for a comfort start\
-      \ and its park.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
+      \ · *kept by Restore*  \nShortest time parked before heating is permitted again, comfort starts\
+      \ included. At most the execution latency reserve plus 30 minutes, so a comfort start is never delayed\
+      \ beyond what the planner reserves.\n\n**Maximum commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day')\
+      \ }}** · recommended & original **6** · *kept by Restore*  \nRolling 24 h limit on mode commands.\
+      \ A typical day needs 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved\
+      \ for a comfort start and its park.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
       \ }} min** · recommended & original **65 min** · *kept by Restore*  \nIf no status confirms a command\
       \ within this time, automatic control locks until you acknowledge. At least one poll interval plus\
       \ margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
@@ -391,8 +395,9 @@ views:
       \ this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command\
       \ normally reaches the heater within about a minute; the 30-minute default is a conservative margin\
       \ you may reduce after the supervised trial.\n\n**Notification service** — current **{{ states('text.thermann_shadow_notification_service')\
-      \ }}** · recommended & original **blank / unknown** · *kept by Restore*  \nOptional notify service\
-      \ name, e.g. mobile_app_phone (without notify.). Blank = Home Assistant notifications only."
+      \ }}** · recommended & original **blank / unknown** · *kept by Restore*  \nOptional phone notifications\
+      \ for faults, unconfirmed commands and comfort risks: the notify service name only, for example\
+      \ mobile_app_phone (no 'notify.' in front). Blank = Home Assistant notifications only."
   - type: entities
     title: Advanced
     icon: mdi:tune
@@ -447,24 +452,25 @@ views:
       \ · recommended & original **Off** · *kept by Restore*  \nOFF for confirmed Aurora 93, all weekend\
       \ off-peak.\n\n**Off-peak import price** — current **{{ states('number.thermann_shadow_off_peak_import_price')\
       \ }} AUD/kWh** · recommended & original **0.1702 AUD/kWh** · *kept by Restore*  \nAUD/kWh from your\
-      \ contract; includes all grid energy in the 3kW scenario.\n\n**Peak import price** — current **{{\
-      \ states('number.thermann_shadow_peak_import_price') }} AUD/kWh** · recommended & original **0.361878\
-      \ AUD/kWh** · *kept by Restore*  \nAUD/kWh; actual clock boundaries affect every candidate minute.\n\
-      \n**Shoulder import price** — current **{{ states('number.thermann_shadow_shoulder_import_price')\
-      \ }} AUD/kWh** · recommended & original **0.1702 AUD/kWh** · *kept by Restore*  \nUsed only by custom\
-      \ weekly periods with shoulder entries.\n\n**Export compensation** — current **{{ states('number.thermann_shadow_export_compensation')\
-      \ }} AUD/kWh** · recommended & original **0.09276 AUD/kWh** · *kept by Restore*  \nForegone feed-in\
-      \ revenue counts as a cost of solar self-consumption.\n\n**Maximum forecast generation age** — current\
-      \ **{{ states('number.thermann_shadow_maximum_forecast_generation_age') }} min** · recommended &\
-      \ original **120 min** · *restored by Restore*  \nRequire real generation time; republishing an\
-      \ old forecast does not freshen it.\n\n**Recent-export scenario horizon** — current **{{ states('number.thermann_shadow_recent_export_scenario_horizon')\
+      \ contract (0-2).\n\n**Peak import price** — current **{{ states('number.thermann_shadow_peak_import_price')\
+      \ }} AUD/kWh** · recommended & original **0.361878 AUD/kWh** · *kept by Restore*  \nAUD/kWh from\
+      \ your contract (0-2).\n\n**Shoulder import price** — current **{{ states('number.thermann_shadow_shoulder_import_price')\
+      \ }} AUD/kWh** · recommended & original **0.1702 AUD/kWh** · *kept by Restore*  \nAUD/kWh (0-2).\
+      \ Used only by custom weekly periods with shoulder entries.\n\n**Export compensation** — current\
+      \ **{{ states('number.thermann_shadow_export_compensation') }} AUD/kWh** · recommended & original\
+      \ **0.09276 AUD/kWh** · *kept by Restore*  \nForegone feed-in revenue counts as a cost of solar\
+      \ self-consumption.\n\n**Maximum forecast generation age** — current **{{ states('number.thermann_shadow_maximum_forecast_generation_age')\
+      \ }} min** · recommended & original **120 min** · *restored by Restore*  \nOlder forecasts are ignored\
+      \ (no future solar is assumed). EMHASS publishes every 30 minutes, so at least 35. Republishing\
+      \ an old forecast does not freshen it.\n\n**Recent-export scenario horizon** — current **{{ states('number.thermann_shadow_recent_export_scenario_horizon')\
       \ }} min** · recommended & original **15 min** · *restored by Restore*  \nBounded assumption for\
       \ current export, never a daily forecast or guaranteed solar.\n\n**Maximum cloud poll age** — current\
       \ **{{ states('number.thermann_shadow_maximum_cloud_poll_age') }} min** · recommended & original\
-      \ **45 min** · *kept by Restore*  \nOnly local freshness gate; does not alter bridge polling or\
-      \ issue refresh requests.\n\n**Maximum power reading age** — current **{{ states('number.thermann_shadow_maximum_power_reading_age')\
-      \ }} s** · recommended & original **120 s** · *kept by Restore*  \nMissing/stale observations reset\
-      \ economic holds; no cloud calls.\n\n**Expected native target** — current **{{ states('number.thermann_shadow_expected_native_target')\
+      \ **45 min** · *kept by Restore*  \nPlanner freshness gate for the heater status. Must exceed the\
+      \ bridge's 30-minute polling; does not change polling or request a refresh.\n\n**Maximum power reading\
+      \ age** — current **{{ states('number.thermann_shadow_maximum_power_reading_age') }} s** · recommended\
+      \ & original **120 s** · *kept by Restore*  \nMissing/stale observations reset economic holds; no\
+      \ cloud calls.\n\n**Expected native target** — current **{{ states('number.thermann_shadow_expected_native_target')\
       \ }} °C** · recommended & original **70 °C** · *kept by Restore*  \nReference only. Different observed\
       \ mode/target latches intervention; never sets the heater.\n\n**Native schedule clock reference**\
       \ — current **{{ states('select.thermann_shadow_native_schedule_clock_reference') }}** · recommended\

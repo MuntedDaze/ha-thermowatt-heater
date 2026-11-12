@@ -1,5 +1,20 @@
 # Thermann Shadow Planner
 
+## 0.7.1 — settings safety and validation (development)
+
+From the settings audit ([SETTINGS_AUDIT.md](SETTINGS_AUDIT.md)). No change to the two commands, the bridge allowlist or stored controller state.
+
+- **Locked while automatic control is on:** command topic, T3 qualification, dwell, command and request budgets, confirmation timeout, latency reserve, meter sign and verification, the tariff contract, freshness limits and sensor mappings. Turn control off to change them. Preferences, notifications and Restore recommended still apply at once.
+- **Command topic must match the mapped heater** (`command_topic_does_not_match_heater` otherwise).
+- **No command unless the bridge app's `command_policy` is `automation`.**
+- **Validation:** notification service name format; whole-number budgets; minimum rest at most latency + 30 min (max 90); poll age 35–90 min; forecast age 35–360 min; prices 0–2 $/kWh. Rejections now say which rule failed.
+- **Restore recommended** no longer changes dwell, budgets, timeouts or freshness limits.
+- Pricing or planning setting changes also reset the economic-permission samples and timers.
+- *Pause shadow planning* no longer affects an active controller (use Hold or the master switch).
+- Descriptions corrected for settings that do drive production planning (solar start qualification, minimum cycle and gap).
+- Config entry 1.2 → 1.3: values outside the new ranges move to the nearest allowed value, each logged. A 0.7.0 rollback still loads the entry.
+- The master switch shows whether the notification service exists.
+
 ## 0.7.0 — economic permission, morning 45/42, guest and holiday modes, thermal observer (development)
 
 - **Economic heating permission** (`permission.py`): Manual stays permitted while heating now would be economical (meter-priced, excluding the element's own load), and parks when not. It stays on after thermostat satisfaction; solar-justified permission continues across the peak start; afternoon storage never buys peak-grid heat; an economic park during a peak bypasses minimum heating (not minimum rest).

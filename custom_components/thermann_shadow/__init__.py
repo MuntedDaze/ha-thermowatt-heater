@@ -16,7 +16,9 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
-from .config import DOMAIN, LEGACY_MORNING_THRESHOLD_C, parse_options
+import logging
+
+from .config import DOMAIN, LEGACY_MORNING_THRESHOLD_C, migrate_0_7_1, parse_options
 from .executor import Executor
 from .runtime import ShadowRuntime
 
@@ -74,15 +76,25 @@ async def async_setup_entry(hass, entry):
 
 async def async_migrate_entry(hass, entry):
     """1.1 -> 1.2 (0.4.0): an untouched old 40 °C morning threshold becomes 42 °C.
+    1.2 -> 1.3 (0.7.1): values outside the tightened ranges are brought inside.
 
     Only the exact old default is moved; any value the owner chose is kept.
     Major version stays 1, so a 0.3.0 rollback can still load the entry.
     """
-    if entry.version == 1 and entry.minor_version < 2:
-        options = dict(entry.options)
-        if options.get("morning_threshold_c") == LEGACY_MORNING_THRESHOLD_C:
-            options["morning_threshold_c"] = 42.0
-        hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
+    if entry.version != 1 or entry.minor_version >= 3:
+        return True
+    options = dict(entry.options)
+    if entry.minor_version < 2 and options.get("morning_threshold_c") == LEGACY_MORNING_THRESHOLD_C:
+        options["morning_threshold_c"] = 42.0
+    # 1.2 -> 1.3 (0.7.1, settings audit): values outside the tightened ranges
+    # move to the nearest allowed value, and each is logged. A 0.7.0 rollback
+    # still loads a 1.3 entry (same major version).
+    options, changes = migrate_0_7_1(options)
+    for key, (old, new) in changes.items():
+        logging.getLogger(__name__).warning(
+            "Setting %s was %s, outside the range allowed since 0.7.1; now %s.", key, old, new
+        )
+    hass.config_entries.async_update_entry(entry, options=options, minor_version=3)
     return True
 
 

@@ -1,6 +1,7 @@
 """Shared configuration parsing, independent of Home Assistant."""
 
 import json
+import re
 from datetime import time
 
 from .model import Settings, Tariff, number, validate_tariffs, validate_settings
@@ -93,9 +94,48 @@ DEFAULT_OPTIONS = {
     "controller_execution_latency_minutes": 30.0,
     "controller_notify_service": "",
 }
+# 0.7.1 (settings audit): ranges a saved value must respect. Values saved by
+# older versions outside them are brought inside once, by the entry migration
+# (see __init__.async_migrate_entry), and the change is logged.
+RANGES_0_7_1 = {
+    "status_max_age_minutes": (35.0, 90.0),  # F7: 30 flaps with 30-minute polling
+    "forecast_max_age_minutes": (35.0, 360.0),  # F8: EMHASS publishes every 30 min
+    "off_peak_rate": (0.0, 2.0),
+    "shoulder_rate": (0.0, 2.0),
+    "peak_rate": (0.0, 2.0),
+}
+WHOLE_NUMBER_OPTIONS = ("controller_max_commands_per_day", "controller_max_requests_per_day")
+# F6: a rest longer than the latency reserve + this could delay a comfort start
+# beyond what the planner reserves.
+REST_BEYOND_LATENCY_MINUTES = 30.0
+NOTIFY_SERVICE_PATTERN = re.compile(r"^[a-z0-9_]{1,64}$")
+# Readable reasons for rejected settings (ValueError codes from parse_options).
+REJECTION_MESSAGES = {
+    "settings_invalid": "A value is outside its allowed range.",
+    "morning_preferred_below_minimum": "The morning preferred reserve cannot be below the morning minimum.",
+    "morning_times_order": "Morning times must be before noon, with the preferred time not after the hard deadline.",
+    "afternoon_time_invalid": "The weekend afternoon ready time must be after noon.",
+    "rest_longer_than_latency_reserve": "The minimum rest period can be at most the execution latency reserve plus 30 minutes; a longer rest could delay a comfort start beyond what the planner reserves.",
+    "whole_number_required": "Command and cloud-request budgets must be whole numbers.",
+    "notify_service_invalid": "Notification service: enter the service name only, for example mobile_app_phone (lower-case letters, digits and _; no 'notify.' in front).",
+    "controller_setting_out_of_range": "A controller setting is outside its allowed range.",
+    "controller_setting_invalid": "Command topic or notification service is too long or not text.",
+    "tariff_invalid": "Tariff prices must be between 0 and 2 $/kWh and custom periods must be valid.",
+    "tariff_times_must_increase": "Peak times must increase: morning start, morning end, evening start, evening end.",
+    "tariff_time_invalid": "A time is not a valid HH:MM.",
+    "native_clock_date_invalid": "The native clock check date must be YYYY-MM-DD or blank.",
+    "native_reference_invalid": "The T-Comfort reference must not exceed the expected native target.",
+}
+
+
+def rejection_message(error: Exception) -> str:
+    code = error.args[0] if error.args and isinstance(error.args[0], str) else ""
+    return REJECTION_MESSAGES.get(code, "The settings are not valid together.")
+
+
 CONTROLLER_BOUNDS = {
     "controller_min_heating_minutes": (30, 180),
-    "controller_min_rest_minutes": (30, 240),
+    "controller_min_rest_minutes": (30, 90),
     "controller_max_commands_per_day": (4, 10),
     "controller_confirmation_timeout_minutes": (35, 120),
     "controller_max_requests_per_day": (160, 400),
@@ -164,9 +204,20 @@ def parse_options(options):
     for key in ("controller_command_topic", "controller_notify_service"):
         if not isinstance(values[key], str) or len(values[key]) > 64:
             raise ValueError("controller_setting_invalid")
+    notify = values["controller_notify_service"].strip()
+    if notify and not NOTIFY_SERVICE_PATTERN.match(notify):
+        raise ValueError("notify_service_invalid")  # F4: was silently ignored
+    for key in WHOLE_NUMBER_OPTIONS:
+        if number(values[key]) != int(number(values[key])):
+            raise ValueError("whole_number_required")  # F10
+    if number(values["controller_min_rest_minutes"]) > (
+        number(values["controller_execution_latency_minutes"]) + REST_BEYOND_LATENCY_MINUTES
+    ):
+        raise ValueError("rest_longer_than_latency_reserve")  # F6
+    for key, (low, high) in RANGES_0_7_1.items():
+        if not low <= number(values[key]) <= high:
+            raise ValueError("tariff_invalid" if key.endswith("_rate") else "settings_invalid")
     rates = {kind: number(values[f"{kind}_rate"]) for kind in ("off_peak", "shoulder", "peak")}
-    if any(not -5 <= rate <= 10 for rate in rates.values()):
-        raise ValueError("tariff_invalid")
     profile = values["tariff_profile"]
     if (
         "tariff_profile" not in options
@@ -238,6 +289,13 @@ def parse_options(options):
         morning_preferred=time(*divmod(_minute(values["morning_preferred_time"]), 60)),
         morning_hard=time(*divmod(_minute(values["morning_hard_time"]), 60)),
     )
+    # Cross-field checks first, so the owner sees WHICH rule failed.
+    if not settings.morning_threshold_c <= settings.morning_preferred_c:
+        raise ValueError("morning_preferred_below_minimum")
+    if not time(0) <= settings.morning_preferred <= settings.morning_hard <= time(11, 59):
+        raise ValueError("morning_times_order")
+    if not time(12) <= settings.evening <= time(23, 59):
+        raise ValueError("afternoon_time_invalid")
     validate_settings(settings)
     from datetime import date
 
@@ -253,6 +311,71 @@ def parse_options(options):
     ):
         raise ValueError("native_reference_invalid")
     return settings, tariffs
+
+
+def migrate_0_7_1(options):
+    """Bring values saved by older versions inside the 0.7.1 ranges.
+
+    Returns (options, {key: (old, new)}). Only values that 0.7.1 would reject
+    are changed, each to the nearest allowed value; nothing else is touched.
+    Without this an entry with such a value could not load after the upgrade."""
+    result = dict(options)
+    changes = {}
+
+    def put(key, new):
+        old = result.get(key, DEFAULT_OPTIONS[key])
+        if old != new:
+            changes[key] = (old, new)
+            result[key] = new
+
+    for key, (low, high) in RANGES_0_7_1.items():
+        if key in result:
+            try:
+                value = number(result[key])
+            except (TypeError, ValueError, OverflowError):
+                continue
+            put(key, min(high, max(low, value)))
+    for key in WHOLE_NUMBER_OPTIONS:
+        if key in result:
+            try:
+                value = number(result[key])
+            except (TypeError, ValueError, OverflowError):
+                continue
+            put(key, float(int(value)))
+    try:
+        latency = number(
+            result.get(
+                "controller_execution_latency_minutes",
+                DEFAULT_OPTIONS["controller_execution_latency_minutes"],
+            )
+        )
+        rest = number(
+            result.get(
+                "controller_min_rest_minutes", DEFAULT_OPTIONS["controller_min_rest_minutes"]
+            )
+        )
+    except (TypeError, ValueError, OverflowError):
+        pass
+    else:
+        limit = min(
+            CONTROLLER_BOUNDS["controller_min_rest_minutes"][1],
+            latency + REST_BEYOND_LATENCY_MINUTES,
+        )
+        if rest > limit:
+            put(
+                "controller_min_rest_minutes",
+                float(max(CONTROLLER_BOUNDS["controller_min_rest_minutes"][0], limit)),
+            )
+    notify = result.get("controller_notify_service")
+    if (
+        isinstance(notify, str)
+        and notify.strip()
+        and not NOTIFY_SERVICE_PATTERN.match(notify.strip())
+    ):
+        name = notify.strip()
+        name = name[len("notify.") :] if name.startswith("notify.") else name
+        put("controller_notify_service", name if NOTIFY_SERVICE_PATTERN.match(name) else "")
+    return result, changes
 
 
 def saved_options(options):

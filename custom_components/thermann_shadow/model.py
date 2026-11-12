@@ -285,7 +285,7 @@ def validate_settings(settings: Settings) -> None:
         or not settings.morning_threshold_c <= settings.morning_preferred_c <= 60
         or not 20 <= settings.expected_native_target_c <= 75
         or not 0 <= settings.margin_minutes <= 120
-        or not 30 <= settings.status_max_age_minutes <= 90
+        or not 35 <= settings.status_max_age_minutes <= 90
         or not 30 <= settings.grid_max_age_seconds <= 300
         or not 0 <= settings.export_headroom_kw <= 3
         or not 0 <= settings.feed_in_rate <= 2
@@ -297,7 +297,7 @@ def validate_settings(settings: Settings) -> None:
         or not 0 <= settings.minimum_cycle_minutes <= 180
         or not 0 <= settings.minimum_gap_minutes <= 180
         or not 0 <= settings.forecast_uncertainty <= 0.9
-        or not 15 <= settings.forecast_max_age_minutes <= 360
+        or not 35 <= settings.forecast_max_age_minutes <= 360
         or not 0 <= settings.forecast_house_margin_kw <= 5
         or not isinstance(settings.morning, time)
         or settings.morning.tzinfo is not None
@@ -335,7 +335,9 @@ def evaluate(
     if not aware(now) or not aware(boot):
         plan.reasons.append("clock_invalid")
         return plan
-    if settings.paused:
+    if settings.paused and not controlled:
+        # F9: "Pause shadow planning" pauses the shadow display only; an active
+        # controller is paused with Hold or the Automatic heater control switch.
         plan.state = "shadow_paused"
         plan.reasons.append("owner_paused")
         return plan

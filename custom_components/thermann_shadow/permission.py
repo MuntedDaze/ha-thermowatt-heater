@@ -118,6 +118,12 @@ class StandbyPermission:
         self.withdraw_since: datetime | None = None
         self.last: Economics | None = None
 
+    def reset(self) -> None:
+        """Forget samples and timers (settings that price decisions changed):
+        grants and withdrawals again need sustained conditions under the NEW
+        settings. Until then the controller holds, and parks before a peak."""
+        self.__init__()
+
     def assess(
         self,
         now: datetime,

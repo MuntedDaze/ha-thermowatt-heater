@@ -4,7 +4,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .config import DOMAIN, parse_options, saved_options
+from .config import DOMAIN, parse_options, rejection_message, saved_options
 from .settings import (
     CATALOG,
     apply_changes,
@@ -37,12 +37,8 @@ async def save(hass, entry, changes=None, restore=False, undo=False):
         values = apply_changes(values, changes)
     try:
         parse_options(values)
-    except (ValueError, TypeError, KeyError, OverflowError):
-        raise HomeAssistantError(
-            "Invalid shadow preferences. Morning must be before noon, afternoon after noon; "
-            "tariff times must increase without overlaps; T-Comfort reference must not exceed "
-            "the expected native target. Check the displayed planning bounds. Nothing was saved."
-        ) from None
+    except (ValueError, TypeError, KeyError, OverflowError) as error:
+        raise HomeAssistantError(f"{rejection_message(error)} Nothing was saved.") from None
     locked = locked_changes(before, values)
     if locked and control_active(hass, entry):
         raise HomeAssistantError(locked_message(locked))

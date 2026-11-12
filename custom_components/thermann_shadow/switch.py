@@ -57,10 +57,16 @@ class AutomaticControl(SwitchEntity):
     @property
     def extra_state_attributes(self):
         executor = self.runtime.executor
+        service = executor.notify_service
         return {
             "commissioning_missing": executor.cfg.missing_commissioning(),
             "state": executor.controller.state,
             "turning_off_changes_heater_mode": False,
+            # 0.7.1 (audit F4): whether phone alerts can actually be delivered.
+            "notification_service": service or None,
+            "notification_service_found": (
+                self.hass.services.has_service("notify", service) if service else None
+            ),
         }
 
     async def async_turn_on(self, **kwargs):

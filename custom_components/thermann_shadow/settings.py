@@ -143,7 +143,7 @@ CATALOG = {
     "solar_hold_minutes": Setting(
         "Solar start qualification",
         "Heating Cycles",
-        "Sustained economic advantage on fresh observations before a SIMULATED optional start.",
+        "How long the planner's choice between optional economic options (heat now, wait, no difference) must persist before it changes, so a passing cloud does not flip the plan. Comfort, data gates and peak decisions are never delayed by it.",
         5,
         30,
         "min",
@@ -159,7 +159,7 @@ CATALOG = {
     "minimum_cycle_minutes": Setting(
         "Minimum optional cycle",
         "Heating Cycles",
-        "SIMULATION ONLY. Comfort, data gates, owner intervention and protections override dwell.",
+        "Shortest heating block the planner schedules. The controller's own minimum heating and rest periods still apply on top.",
         0,
         180,
         "min",
@@ -167,7 +167,7 @@ CATALOG = {
     "minimum_gap_minutes": Setting(
         "Minimum optional cycle gap",
         "Heating Cycles",
-        "SIMULATION ONLY. Comfort can start sooner. No physical On/resume contract is qualified.",
+        "Shortest gap the planner leaves between two scheduled heating blocks (it merges closer blocks).",
         0,
         180,
         "min",
@@ -235,25 +235,25 @@ CATALOG = {
     "off_peak_rate": Setting(
         "Off-peak import price",
         "Advanced",
-        "AUD/kWh from your contract; includes all grid energy in the 3kW scenario.",
-        -5,
-        10,
+        "AUD/kWh from your contract (0-2).",
+        0,
+        2,
         "AUD/kWh",
     ),
     "peak_rate": Setting(
         "Peak import price",
         "Advanced",
-        "AUD/kWh; actual clock boundaries affect every candidate minute.",
-        -5,
-        10,
+        "AUD/kWh from your contract (0-2).",
+        0,
+        2,
         "AUD/kWh",
     ),
     "shoulder_rate": Setting(
         "Shoulder import price",
         "Advanced",
-        "Used only by custom weekly periods with shoulder entries.",
-        -5,
-        10,
+        "AUD/kWh (0-2). Used only by custom weekly periods with shoulder entries.",
+        0,
+        2,
         "AUD/kWh",
     ),
     "feed_in_rate": Setting(
@@ -282,8 +282,8 @@ CATALOG = {
     "forecast_max_age_minutes": Setting(
         "Maximum forecast generation age",
         "Advanced",
-        "Require real generation time; republishing an old forecast does not freshen it.",
-        15,
+        "Older forecasts are ignored (no future solar is assumed). EMHASS publishes every 30 minutes, so at least 35. Republishing an old forecast does not freshen it.",
+        35,
         360,
         "min",
     ),
@@ -298,8 +298,8 @@ CATALOG = {
     "status_max_age_minutes": Setting(
         "Maximum cloud poll age",
         "Advanced",
-        "Only local freshness gate; does not alter bridge polling or issue refresh requests.",
-        30,
+        "Planner freshness gate for the heater status. Must exceed the bridge's 30-minute polling; does not change polling or request a refresh.",
+        35,
         90,
         "min",
     ),
@@ -381,9 +381,9 @@ CATALOG = {
     "controller_min_rest_minutes": Setting(
         "Minimum rest period",
         "Controller",
-        "Shortest time parked before heating is permitted again.",
+        "Shortest time parked before heating is permitted again, comfort starts included. At most the execution latency reserve plus 30 minutes, so a comfort start is never delayed beyond what the planner reserves.",
         30,
-        240,
+        90,
         "min",
     ),
     "controller_max_commands_per_day": Setting(
@@ -419,7 +419,7 @@ CATALOG = {
     "controller_notify_service": Setting(
         "Notification service",
         "Controller",
-        "Optional notify service name, e.g. mobile_app_phone (without notify.). Blank = Home Assistant notifications only.",
+        "Optional phone notifications for faults, unconfirmed commands and comfort risks: the notify service name only, for example mobile_app_phone (no 'notify.' in front). Blank = Home Assistant notifications only.",
         kind="text",
     ),
 }

@@ -35,6 +35,7 @@ from shadow_ha_checks import (
     upgrade_from_0_6_0,
     upgrade_from_0_6_1,
     upgrade_from_0_6_2,
+    upgrade_from_0_7_0,
     validate_dashboard,
 )
 
@@ -156,6 +157,8 @@ async def main():
         upgrade_061 = await upgrade_from_0_6_1(installed_061)
     with tempfile.TemporaryDirectory() as installed_062:
         upgrade_062 = await upgrade_from_0_6_2(installed_062)
+    with tempfile.TemporaryDirectory() as installed_070:
+        upgrade_070 = await upgrade_from_0_7_0(installed_070)
     with tempfile.TemporaryDirectory() as folder:
         hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
         assert "thermann_shadow" in await loader.async_get_config_flows(hass)
@@ -350,12 +353,13 @@ async def main():
                     "dashboard_entity_references_resolved": dashboard_refs,
                     "dashboard_templates_rendered": dashboard_templates,
                     "forecast_paths": forecast_paths,
-                    "upgrade_0_2_0_to_0_7_0": upgrade,
-                    "upgrade_0_3_0_to_0_7_0": upgrade_030,
-                    "upgrade_0_5_0_to_0_7_0": upgrade_050,
-                    "upgrade_0_6_0_to_0_7_0": upgrade_060,
-                    "upgrade_0_6_1_to_0_7_0": upgrade_061,
-                    "upgrade_0_6_2_to_0_7_0": upgrade_062,
+                    "upgrade_0_2_0_to_0_7_1": upgrade,
+                    "upgrade_0_3_0_to_0_7_1": upgrade_030,
+                    "upgrade_0_5_0_to_0_7_1": upgrade_050,
+                    "upgrade_0_6_0_to_0_7_1": upgrade_060,
+                    "upgrade_0_6_1_to_0_7_1": upgrade_061,
+                    "upgrade_0_6_2_to_0_7_1": upgrade_062,
+                    "upgrade_0_7_0_to_0_7_1": upgrade_070,
                     "unchanged_mqtt_payload_freshness": freshness,
                     "controller_0_7_0": controller,
                     "add_integration_hub_listing": "PASS",

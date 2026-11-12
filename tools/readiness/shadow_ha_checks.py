@@ -5,7 +5,7 @@ container with --network none. Never import this on the owner's Home Assistant.
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
 - forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
-- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0, 0.6.1 and 0.6.2 -> 0.7.0 upgrades over persisted HA storage;
+- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0, 0.6.1, 0.6.2 and 0.7.0 -> 0.7.1 upgrades over persisted HA storage;
 - unchanged MQTT payloads (no state write) stay fresh while polls succeed.
 """
 
@@ -29,6 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
+CURRENT_VERSION = "0.7.1"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -192,15 +193,16 @@ async def upgrade_from(folder, fixture, version, customise):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.7.0"
+    assert integration["thermann_shadow"].version.__str__() == CURRENT_VERSION
     (entry,) = hass.config_entries.async_entries("thermann_shadow")
     assert entry.entry_id == entry_id and dict(entry.options) == saved_options
     assert await async_setup_component(hass, "thermann_shadow", {})
     await hass.async_block_till_done()
     assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
     # The only rewrite is the documented 1.1 -> 1.2 migration of the untouched
-    # old 40 °C default to the 42 °C requirement; everything else is kept.
-    assert entry.minor_version == 2
+    # old 40 °C default to the 42 °C requirement; everything else is kept
+    # (the 1.2 -> 1.3 range check of 0.7.1 changes nothing in range).
+    assert entry.minor_version == 3
     assert dict(entry.options) == {**saved_options, "morning_threshold_c": 42.0}
     runtime = hass.data["thermann_shadow"][entry.entry_id]
     for key, value in customise.items():
@@ -268,7 +270,10 @@ def alternate(key, meta, default):
     if meta.kind == "select":
         return next(choice for choice in meta.choices if choice != default)
     if meta.kind == "text":
-        return "2026-10-05"
+        return {
+            "controller_notify_service": "mobile_app_test",  # 0.7.1: name validated
+            "controller_command_topic": "P/TEST999/CMD/MODE",
+        }.get(key, "2026-10-05")
     if meta.kind == "time":
         hour, minute = int(default[:2]), int(default[3:5])
         later = {"peak_morning_start": -30, "peak_evening_end": 30}.get(key, 30)
@@ -357,6 +362,10 @@ async def check_settings_services(hass, entry, runtime, entity_for):
         ("text", "set_value", entity_for("native_clock_check_date"), {"value": "2026-13-01"}),
         ("number", "set_value", entity_for("target_c"), {"value": 64}),
         ("number", "set_value", entity_for("t_comfort_reference_c"), {"value": 74}),
+        # 0.7.1 (settings audit): readable cross-field and format rejections.
+        ("text", "set_value", entity_for("controller_notify_service"), {"value": "notify.x"}),
+        ("number", "set_value", entity_for("controller_min_rest_minutes"), {"value": 75}),
+        ("number", "set_value", entity_for("morning_preferred_c"), {"value": 41}),
     ]
     for domain, service, entity_id, data in invalid:
         await rejected(hass, entry, drive(hass, domain, service, entity_id, **data))
@@ -733,6 +742,12 @@ async def upgrade_from_0_6_2(folder):
     return await _upgrade_from_0_6(folder, "0.6.2")
 
 
+async def upgrade_from_0_7_0(folder):
+    """The owner's INSTALLED version since 12 Nov 2026 (0.7.0 build bbbc5f9,
+    control off; the installed files were compared and are identical)."""
+    return await _upgrade_from_0_6(folder, "0.7.0")
+
+
 async def upgrade_from_0_6_1(folder):
     """Installed for T3b on 12 Nov 2026 (0.6.1, control off)."""
     return await _upgrade_from_0_6(folder, "0.6.1")
@@ -783,7 +798,7 @@ async def _upgrade_from_0_6(folder, version):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.7.0"
+    assert integration["thermann_shadow"].version.__str__() == CURRENT_VERSION
     captured = []
 
     async def record(*args, **kwargs):
@@ -796,7 +811,8 @@ async def _upgrade_from_0_6(folder, version):
         assert await async_setup_component(hass, "thermann_shadow", {})
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
-        assert dict(entry.options) == saved_options  # nothing rewritten, no migration
+        assert dict(entry.options) == saved_options  # nothing rewritten (all in range)
+        assert entry.minor_version == 3  # 0.7.1 range check ran and changed nothing
         runtime = hass.data["thermann_shadow"][entry.entry_id]
         assert runtime.settings.target_c == 68.0
         assert runtime.executor.cfg.max_commands_per_day == 5
@@ -882,7 +898,7 @@ async def upgrade_from_0_5_0(folder):
 
     hass = await start_hass(folder, ROOT / "custom_components/thermann_shadow")
     integration = await loader.async_get_custom_components(hass)
-    assert integration["thermann_shadow"].version.__str__() == "0.7.0"
+    assert integration["thermann_shadow"].version.__str__() == CURRENT_VERSION
     captured = []
 
     async def record(*args, **kwargs):
@@ -895,7 +911,8 @@ async def upgrade_from_0_5_0(folder):
         assert await async_setup_component(hass, "thermann_shadow", {})
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
-        assert dict(entry.options) == saved_options  # nothing rewritten, no migration
+        assert dict(entry.options) == saved_options  # nothing rewritten (all in range)
+        assert entry.minor_version == 3  # 0.7.1 range check ran and changed nothing
         runtime = hass.data["thermann_shadow"][entry.entry_id]
         assert runtime.settings.target_c == 68.0
         assert runtime.executor.cfg.max_commands_per_day == 5

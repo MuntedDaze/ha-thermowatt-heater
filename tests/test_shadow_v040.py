@@ -551,8 +551,35 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
 
     assert run({"morning_threshold_c": 40.0})["options"]["morning_threshold_c"] == 42.0
     assert run({"morning_threshold_c": 45.0})["options"]["morning_threshold_c"] == 45.0
-    assert run({})["minor_version"] == 2
-    assert run({"morning_threshold_c": 40.0}, minor=2) == {}
+    assert run({})["minor_version"] == 3
+    # 1.2 entries keep their threshold and only get the 0.7.1 range check.
+    assert run({"morning_threshold_c": 40.0}, minor=2)["options"]["morning_threshold_c"] == 40.0
+    assert run({"morning_threshold_c": 40.0}, minor=3) == {}
+    # 0.7.1: out-of-range values move to the nearest allowed value; others stay.
+    moved = run(
+        {
+            "status_max_age_minutes": 30.0,
+            "forecast_max_age_minutes": 15.0,
+            "peak_rate": 3.0,
+            "controller_max_commands_per_day": 5.5,
+            "controller_min_rest_minutes": 240.0,
+            "controller_notify_service": "notify.mobile_app_phone",
+            "target_c": 66.0,
+        },
+        minor=2,
+    )["options"]
+    assert moved == {
+        "status_max_age_minutes": 35.0,
+        "forecast_max_age_minutes": 35.0,
+        "peak_rate": 2.0,
+        "controller_max_commands_per_day": 5.0,
+        "controller_min_rest_minutes": 60.0,
+        "controller_notify_service": "mobile_app_phone",
+        "target_c": 66.0,
+    }
+    c.parse_options(moved)  # the migrated entry loads
+    untouched = c.saved_options({})
+    assert run(dict(untouched), minor=2)["options"] == untouched
 
 
 def test_schedule_advisor_compares_native_windows_without_changing_them():
