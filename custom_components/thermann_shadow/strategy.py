@@ -30,6 +30,7 @@ NEAR_TERM = timedelta(minutes=30)  # measured PV persistence horizon
 MEASURED_BASE_HORIZON = timedelta(hours=2)
 BLOCK_PENALTY_AUD = 0.01  # tie-breaker against fragmented plans, not a real cost
 MAX_BLOCKS = 3
+PREFERRED_DEADBAND_C = 1.0
 
 
 @dataclass
@@ -184,7 +185,14 @@ def requirements(
             other.kind == "morning" and now < other.deadline < goal.deadline for other in goals
         ):
             effective -= settings.expected_morning_draw_c
-        result.append((goal, TANK_KWH_PER_C * max(0.0, goal.target_c - effective)))
+        shortfall = max(0.0, goal.target_c - effective)
+        if goal.hard_deadline is not None and goal.deadline < goal.hard_deadline:
+            # 0.7.0 preferred morning reserve (soft): a shortfall under one
+            # whole degree (the reading's resolution) starts no heating. The
+            # hard minimum, after the preferred time, has no such deadband.
+            if shortfall < PREFERRED_DEADBAND_C:
+                shortfall = 0.0
+        result.append((goal, TANK_KWH_PER_C * shortfall))
     return result
 
 

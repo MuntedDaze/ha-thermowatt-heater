@@ -20,9 +20,17 @@ class Setting:
 
 CATALOG = {
     "morning_threshold_c": Setting(
-        "Morning comfort threshold",
+        "Morning minimum (hard)",
         "Comfort",
-        "Required reading (T_Avg) by the preferred morning time, and at the latest by the hard morning deadline, every day. A planning threshold, NEVER a heater setpoint or hygiene temperature.",
+        "Minimum reading (bottom-of-tank T_Avg) by the hard morning deadline, every day. Protected over savings when at risk. A planning threshold, NEVER a heater setpoint or hygiene temperature.",
+        30,
+        60,
+        "°C",
+    ),
+    "morning_preferred_c": Setting(
+        "Morning preferred reserve",
+        "Comfort",
+        "Preferred reading by the preferred morning time, every day: extra reserve before showers, aimed for when reasonably achievable. Once that time passes unmet, only the hard minimum is pursued. Not lower than the minimum.",
         30,
         60,
         "°C",

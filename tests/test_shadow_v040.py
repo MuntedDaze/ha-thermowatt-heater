@@ -62,7 +62,8 @@ def test_afternoon_follows_actual_peak_and_morning_is_06_00_preferred_07_00_hard
     assert morning_goal.basis == "preferred_morning_time"
     assert hobart(afternoon_goal.deadline).time() == afternoon
     assert afternoon_goal.basis == basis
-    assert morning_goal.target_c == 42 and afternoon_goal.target_c == 70
+    assert morning_goal.target_c == 45 and morning_goal.hard_target_c == 42
+    assert afternoon_goal.target_c == 70
     # Aurora's 2026-27 schedule has no public-holiday exception: a weekday
     # public holiday (Eight Hours Day, 9 Mar) follows weekday periods.
 
@@ -77,6 +78,7 @@ def test_missed_preferred_morning_moves_to_the_hard_deadline_never_dropped():
         goals = goals_mod.upcoming_goals(local(hour=hour, minute=minute), settings, tariffs)
         assert goals[0].kind == "morning" and goals[1].kind == "afternoon"
         assert hobart(goals[0].deadline).time() == expected and goals[0].basis == basis
+        assert goals[0].target_c == (45 if basis == "preferred_morning_time" else 42)
     after = goals_mod.upcoming_goals(local(hour=7), settings, tariffs)
     assert after[0].kind == "afternoon"  # today's morning is over at 07:00
 

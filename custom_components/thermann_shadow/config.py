@@ -33,6 +33,7 @@ DEFAULT_OPTIONS = {
     "tariff_clock": "standard",
     "target_c": 70.0,
     "morning_threshold_c": 42.0,
+    "morning_preferred_c": 45.0,
     "expected_native_target_c": 70.0,
     "margin_minutes": 30.0,
     "feed_in_rate": 0.092760,

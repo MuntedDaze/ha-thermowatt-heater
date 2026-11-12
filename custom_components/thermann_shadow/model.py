@@ -48,7 +48,8 @@ class Settings:
     import_positive: bool = True
     tariff_clock: str = "local"
     target_c: float = 70.0  # model target only; never a heater setpoint
-    morning_threshold_c: float = 42.0  # comfort decision, NEVER a storage setpoint
+    morning_threshold_c: float = 42.0  # HARD morning minimum; NEVER a storage setpoint
+    morning_preferred_c: float = 45.0  # preferred morning reserve (soft); NEVER a setpoint
     expected_native_target_c: float = 70.0
     margin_minutes: float = 30.0
     feed_in_rate: float = 0.08
@@ -281,6 +282,7 @@ def validate_settings(settings: Settings) -> None:
         or not time(0) <= settings.shower_time <= time(11, 59)
         or not 65 <= settings.target_c <= 70
         or not 30 <= settings.morning_threshold_c <= 60
+        or not settings.morning_threshold_c <= settings.morning_preferred_c <= 60
         or not 20 <= settings.expected_native_target_c <= 75
         or not 0 <= settings.margin_minutes <= 120
         or not 30 <= settings.status_max_age_minutes <= 90

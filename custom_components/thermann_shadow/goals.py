@@ -7,9 +7,10 @@ tariff table itself (no 16:00/17:00 clock time is hardcoded); weekends (no
 peak) use the configured household evening time.
 
 The MORNING goal (0.7.0) is a household comfort time, every day, Hobart local:
-the threshold should be reached by the preferred time (06:00 by default), and
-the hard deadline (07:00, showers) is never abandoned: once the preferred time
-passes unmet, the same goal moves to the hard deadline.
+a preferred reserve (45 °C by 06:00 by default) and a hard minimum (42 °C by
+07:00, showers). They are not equally mandatory: once the preferred time has
+passed, the same goal becomes the hard minimum by the hard deadline; the
+missed preferred reserve is not chased.
 """
 
 from dataclasses import dataclass, replace
@@ -26,6 +27,7 @@ class Goal:
     basis: str  # "tariff_peak_start" | "household_time" | morning: see goals_for_day
     peak_start: datetime | None  # the related peak start, if any (UTC)
     hard_deadline: datetime | None = None  # morning only: never abandoned (UTC)
+    hard_target_c: float | None = None  # morning only: the minimum by the hard deadline
 
 
 def peak_start(
@@ -66,10 +68,11 @@ def goals_for_day(day: date, settings: Settings, tariffs: tuple[Tariff, ...]) ->
     morning = Goal(
         "morning",
         preferred,
-        settings.morning_threshold_c,
+        settings.morning_preferred_c,
         "preferred_morning_time",
         morning_peak,
         hard,
+        settings.morning_threshold_c,
     )
     if evening_peak is not None:
         afternoon = Goal(
@@ -98,7 +101,16 @@ def upcoming_goals(
     for offset in range(days):
         for goal in goals_for_day(today + timedelta(days=offset), settings, tariffs):
             if goal.hard_deadline is not None and goal.deadline <= now < goal.hard_deadline:
-                goal = replace(goal, deadline=goal.hard_deadline, basis="hard_morning_deadline")
+                # The preferred reserve is not chased after its time: only the
+                # hard minimum remains (expected cooling is in `requirements`).
+                goal = replace(
+                    goal,
+                    deadline=goal.hard_deadline,
+                    target_c=goal.hard_target_c
+                    if goal.hard_target_c is not None
+                    else goal.target_c,
+                    basis="hard_morning_deadline",
+                )
             goals.append(goal)
     return sorted((goal for goal in goals if goal.deadline > now), key=lambda g: g.deadline)
 

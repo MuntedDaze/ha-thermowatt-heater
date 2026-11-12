@@ -22,7 +22,7 @@ def test_configurable_comfort_and_targets_at_dst_weekends(month, day, target):
     )
     result = m.evaluate(now, now - timedelta(minutes=1), readings(now, 35, 0), settings, tariffs)
     assert result.deadline == local(month=month, day=day, hour=6, minute=30)
-    assert result.planning_target_c == 42 and settings.target_c == target  # 0.4.0: 42 °C
+    assert result.planning_target_c == 45 and settings.target_c == target  # 0.7.0 preferred
     assert settings.morning_preferred == time(6, 30) and settings.evening == time(16, 30)
 
 

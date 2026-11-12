@@ -777,8 +777,8 @@ async def _upgrade_from_0_6(folder, version):
             for item in er.async_entries_for_config_entry(registry_of(hass), entry.entry_id)
         }
         assert {key: after[key] for key in before} == before  # IDs and renames kept
-        added = {key.removeprefix(f"{entry.entry_id}_setting_") for key in set(after) - set(before)}
-        assert added <= {"morning_preferred_time", "morning_hard_time"}, added  # 0.7.0 only
+        added = {key.removeprefix(f"{entry.entry_id}_") for key in set(after) - set(before)}
+        assert added <= ADDED_IN_0_7_0, added
         for unique_id, entity_id in after.items():
             if not unique_id.endswith(RETIRED_SUFFIXES):
                 assert hass.states.get(entity_id) is not None, entity_id
@@ -911,3 +911,17 @@ def registry_of(hass):
 
 
 RETIRED_SUFFIXES = tuple(f"_{key}" for key in RETIRED_IN_0_4_0)
+# Entities new in 0.7.0 (unique-id suffixes after the entry id).
+ADDED_IN_0_7_0 = {
+    "setting_morning_preferred_time",
+    "setting_morning_hard_time",
+    "setting_morning_preferred_c",
+    "controller_guest_start",
+    "controller_guest_cancel",
+    "controller_holiday_cancel",
+    "holiday_start",
+    "holiday_return",
+    "operating_mode",
+    "guest_mode_ends",
+    "tank_thermal_state",
+}

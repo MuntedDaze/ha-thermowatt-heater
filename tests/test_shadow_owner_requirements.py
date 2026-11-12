@@ -14,23 +14,23 @@ def owner_plan(now, temperature=50, export=0, **options):
     )
 
 
-@pytest.mark.parametrize("temperature", [42, 43, 63, 70])
+@pytest.mark.parametrize("temperature", [45, 46, 63, 70])
 def test_morning_ready_does_not_heat_just_because_native_schedule_permits_it(temperature):
     result = owner_plan(local(hour=5), temperature)
-    assert result.planning_target_c == 42  # 0.4.0 owner requirement (was 40)
+    assert result.planning_target_c == 45  # 0.7.0 preferred reserve by 06:00
     assert result.state == "shadow_no_modelled_topup"
     assert result.reasons == ["morning_threshold_met_no_morning_heat_required"]
     assert result.mixed_model_energy_kwh == result.modelled_heating_minutes == 0
     assert result.windows == [] and result.grid_fallback_start is None
 
 
-def test_morning_shortage_uses_42_threshold_and_preferred_morning_deadline():
+def test_morning_shortage_uses_45_preferred_reserve_by_06_00():
     now = local(hour=3)  # Tue 10 Nov 2026, Hobart daylight time
     result = owner_plan(now, 35)
-    assert result.mixed_model_energy_kwh == pytest.approx(2.564, abs=0.001)  # 35 -> 42
-    assert result.modelled_heating_minutes == pytest.approx(81.3, abs=0.1)
+    assert result.mixed_model_energy_kwh == pytest.approx(3.663, abs=0.001)  # 35 -> 45
+    assert result.modelled_heating_minutes == pytest.approx(103.3, abs=0.1)
     assert result.deadline == local(hour=6)  # 0.7.0: preferred 06:00 local, every day
-    expected = result.deadline - timedelta(hours=(2.5641 + 1.5) / 3)
+    expected = result.deadline - timedelta(hours=(3.6628 + 1.5) / 3)
     assert abs((result.grid_fallback_start - expected).total_seconds()) < 1
     assert result.state == "shadow_wait_for_window"
     assert all(w["source"] == "off_peak" for w in result.windows)

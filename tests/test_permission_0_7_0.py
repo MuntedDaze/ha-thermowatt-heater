@@ -134,11 +134,13 @@ def test_unknown_meter_never_assumes_solar_and_parks_before_a_peak():
 def test_planner_unavailable_morning_failsafe_permits_before_the_hard_deadline():
     window = plan_mod.morning_failsafe_window(local(hour=4), SETTINGS, TARIFFS)
     assert window[1] == local(hour=7) and window[0] == local(hour=3)
+    assert window[2] == 42 and window[3] == 0.5  # hard minimum, cooling allowance
     policy = permission.StandbyPermission()
     for hour, reading, expected in (
         (4, 40.0, "permit"),
         (4, None, "permit"),
-        (6, 46.0, "permit"),  # 46 < 42 + 5 margin
+        (6, 42.5, "permit"),  # 42.0 expected at 07:00 < 42 + 1 allowance
+        (6, 44.0, "hold"),  # 43.5 expected: the minimum is safe
         (4, 60.0, "hold"),
         (2, 30.0, "hold"),  # outside the 4-hour window: no blind heating at night
     ):
@@ -283,16 +285,35 @@ def test_cold_morning_heats_for_06_00_and_never_abandons_07_00():
     assert posts(sim)[0][1] == "Manual:70" and posts(sim)[0][0] <= "04:35"
     assert rows["06:00"][2] < 42  # 06:00 missed (not enough time from 28 °C)
     assert rows["06:20"][0] == "Manual" and rows["06:20"][3] == "permit"  # continues
-    assert rows["07:00"][2] >= 45 and controller.fault is None  # 42 plus margin
+    assert rows["07:00"][2] >= 42 and controller.fault is None
 
 
-def test_winter_morning_comfort_continues_into_the_07_00_morning_peak():
+def test_winter_morning_minimum_is_protected_into_the_07_00_morning_peak():
     start = local(month=6, day=9, hour=5)  # Tue, AEST: the morning peak starts 07:00
     sim, controller, trace = tc.closed_loop(start, 125, 30, pv=lambda at: 0.0, economic=True)
     rows = by_time(trace)
-    assert rows["06:45"][0] == "Manual" and rows["06:45"][3] == "permit"
-    assert rows["06:45"][5].startswith("morning_comfort")
-    assert rows["07:00"][2] >= 42
+    # Inside the peak-guard window the minimum is still at risk: keep heating.
+    assert rows["06:35"][0] == "Manual" and rows["06:35"][5] == "morning_minimum_at_risk"
+    # Parked before the peak only once 42 °C + allowance is expected at 07:00.
+    park = [at for at, payload in posts(sim) if payload == "off"]
+    assert park and rows[park[0]][2] >= 43
+    assert rows["07:00"][2] >= 42 and controller.fault is None
+
+
+def test_morning_examples_from_the_owner_requirements():
+    # 43 °C at 06:00: the minimum is safe (expected 42.5 at 07:00): no heating.
+    sim, _, _ = tc.closed_loop(local(hour=6), 60, 43, economic=True)
+    assert sim.posts == []
+    # 39 °C at 06:00: the hard 07:00 minimum is at risk: heating at once.
+    sim, controller, trace = tc.closed_loop(local(hour=6), 61, 39, economic=True)
+    assert posts(sim)[0] == ("06:00", "Manual:70")
+    assert by_time(trace)["07:00"][2] >= 42
+    # 45 °C reached before 06:00: preferred reserve met, nothing more at night.
+    sim, _, _ = tc.closed_loop(local(hour=4), 120, 46, economic=True)
+    assert sim.posts == []
+    # Preferred missed (44 °C just after 06:00): not chased (minimum is safe).
+    sim, _, _ = tc.closed_loop(local(hour=6, minute=5), 50, 44, economic=True)
+    assert sim.posts == []
 
 
 def test_weekend_morning_uses_the_same_06_00_and_07_00_deadlines():

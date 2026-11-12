@@ -246,7 +246,8 @@ views:
     show_header_toggle: false
     state_color: true
     entities:
-    - number.thermann_shadow_morning_comfort_threshold
+    - number.thermann_shadow_morning_minimum_hard
+    - number.thermann_shadow_morning_preferred_reserve
     - time.thermann_shadow_morning_ready_preferred
     - time.thermann_shadow_morning_ready_hard_deadline
     - number.thermann_shadow_expected_morning_hot_water_use
@@ -254,17 +255,21 @@ views:
     - time.thermann_shadow_afternoon_comfort_preference
     - number.thermann_shadow_heating_time_allowance
   - type: markdown
-    content: "### Comfort — current, recommended and original values\n\n**Morning comfort threshold**\
-      \ — current **{{ states('number.thermann_shadow_morning_comfort_threshold') }} °C** · recommended\
-      \ **42 °C** · original **40 °C** · *restored by Restore*  \nRequired reading (T_Avg) by the preferred\
-      \ morning time, and at the latest by the hard morning deadline, every day. A planning threshold,\
-      \ NEVER a heater setpoint or hygiene temperature.\n\n**Morning ready (preferred)** — current **{{\
-      \ states('time.thermann_shadow_morning_ready_preferred') }}** · recommended & original **06:00**\
-      \ · *restored by Restore*  \nHobart local, every day. Aim to reach the morning threshold by this\
-      \ time.\n\n**Morning ready (hard deadline)** — current **{{ states('time.thermann_shadow_morning_ready_hard_deadline')\
-      \ }}** · recommended & original **07:00** · *restored by Restore*  \nHobart local, every day (showers).\
-      \ If the preferred time is missed, heating continues for this deadline; it is never abandoned. Must\
-      \ not be earlier than the preferred time.\n\n**Expected morning hot-water use** — current **{{ states('number.thermann_shadow_expected_morning_hot_water_use')\
+    content: "### Comfort — current, recommended and original values\n\n**Morning minimum (hard)** — current\
+      \ **{{ states('number.thermann_shadow_morning_minimum_hard') }} °C** · recommended **42 °C** · original\
+      \ **40 °C** · *restored by Restore*  \nMinimum reading (bottom-of-tank T_Avg) by the hard morning\
+      \ deadline, every day. Protected over savings when at risk. A planning threshold, NEVER a heater\
+      \ setpoint or hygiene temperature.\n\n**Morning preferred reserve** — current **{{ states('number.thermann_shadow_morning_preferred_reserve')\
+      \ }} °C** · recommended & original **45 °C** · *restored by Restore*  \nPreferred reading by the\
+      \ preferred morning time, every day: extra reserve before showers, aimed for when reasonably achievable.\
+      \ Once that time passes unmet, only the hard minimum is pursued. Not lower than the minimum.\n\n\
+      **Morning ready (preferred)** — current **{{ states('time.thermann_shadow_morning_ready_preferred')\
+      \ }}** · recommended & original **06:00** · *restored by Restore*  \nHobart local, every day. Aim\
+      \ to reach the morning threshold by this time.\n\n**Morning ready (hard deadline)** — current **{{\
+      \ states('time.thermann_shadow_morning_ready_hard_deadline') }}** · recommended & original **07:00**\
+      \ · *restored by Restore*  \nHobart local, every day (showers). If the preferred time is missed,\
+      \ heating continues for this deadline; it is never abandoned. Must not be earlier than the preferred\
+      \ time.\n\n**Expected morning hot-water use** — current **{{ states('number.thermann_shadow_expected_morning_hot_water_use')\
       \ }} °C** · recommended & original **10 °C** · *restored by Restore*  \nReading drop assumed for\
       \ morning showers when planning the afternoon target. An assumption (about 11 °C was seen on 11\
       \ Nov), not a measurement.\n\n**Afternoon storage target** — current **{{ states('number.thermann_shadow_afternoon_storage_target')\
