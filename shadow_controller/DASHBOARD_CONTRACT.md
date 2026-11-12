@@ -28,7 +28,7 @@ Entity IDs were checked read-only against the live entity registry on 12 Nov 202
 | Morning / afternoon readiness | ✅ `sensor.thermann_shadow_morning_readiness`, `…_afternoon_readiness` (attributes: required kWh, deadline) | 0.7.0: morning is 45 °C by 06:00 (preferred) / 42 °C by 07:00 (hard) |
 | Estimated heating duration / cost | ✅ `sensor.thermann_shadow_heating_time_estimate` (+ plan cost attributes); 🆕 `permission_economics` in the controller state attributes (cost now, alternative, solar share) | Shown as estimates |
 | Fault / attention | ✅ `sensor.thermann_shadow_controller_fault`; persistent notifications | Conditional red card |
-| Guest mode | 🆕 `button.thermann_shadow_start_guest_mode_12_h`, `button.thermann_shadow_cancel_guest_mode`, `sensor.thermann_shadow_guest_mode_ends` | Detail page only, with a confirmation dialog |
+| 12hr Override | 🆕 `button.thermann_shadow_start_guest_mode_12_h`, `button.thermann_shadow_cancel_guest_mode`, `sensor.thermann_shadow_guest_mode_ends` | Detail page only, with a confirmation dialog |
 | Holiday | 🆕 `datetime.thermann_shadow_holiday_departure`, `datetime.thermann_shadow_holiday_return`, `button.thermann_shadow_cancel_holiday_mode` | Detail page |
 | Thermal diagnostics | 🆕 `sensor.thermann_shadow_tank_thermal_state` (attributes listed below) | Separate "advanced" page |
 
@@ -112,7 +112,7 @@ Notes:
 | --- | --- |
 | Automatic control on/off | ✅ `switch.thermann_shadow_automatic_heater_control` |
 | Hold / Resume / Acknowledge fault | ✅ `button.thermann_shadow_hold_heater_owner_override`, `…_resume_automatic_control`, `…_acknowledge_controller_fault` |
-| Guest mode start / cancel | 🆕 buttons as above |
+| 12hr Override start / cancel | 🆕 buttons as above |
 | Holiday dates / cancel | 🆕 datetime entities and button as above |
 
 ## Helpers and integrations to add later (owner approval each)

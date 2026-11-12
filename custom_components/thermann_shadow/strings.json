@@ -1,10 +1,10 @@
 {
-  "title": "Thermann Shadow Planner",
+  "title": "Thermann Controller",
   "config": {
     "step": {
       "user": {
-        "title": "Read-only entity mapping",
-        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered Forecast.Solar watts) with forecast_generated_at, and a household load forecast or measured baseline.",
+        "title": "Thermann Controller: sensor mappings",
+        "description": "Unofficial community integration, not a Thermann product. Automatic control stays off until you commission it. Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered Forecast.Solar watts) with forecast_generated_at, and a household load forecast or measured baseline.",
         "data": {
           "heater": "Water heater (temperature attributes only)",
           "mode": "Native vendor mode",
@@ -24,7 +24,7 @@
       }
     },
     "abort": {
-      "already_configured": "This shadow planner is already configured."
+      "already_configured": "Thermann Controller is already set up."
     }
   },
   "options": {

@@ -20,6 +20,7 @@ import logging
 
 from .config import DOMAIN, LEGACY_MORNING_THRESHOLD_C, migrate_0_7_1, parse_options
 from .executor import Executor
+from .naming import ENTRY_TITLE, OLD_ENTRY_TITLES
 from .settings import RETIRED
 from .runtime import ShadowRuntime
 
@@ -66,6 +67,9 @@ def _remove_retired_entities(hass, entry) -> None:
 async def async_setup_entry(hass, entry):
     settings, tariffs = parse_options(entry.options)
     _remove_retired_entities(hass, entry)
+    if entry.title in OLD_ENTRY_TITLES:
+        # 0.8.0 display name; the domain, entry, entities and IDs are unchanged.
+        hass.config_entries.async_update_entry(entry, title=ENTRY_TITLE)
     runtime = ShadowRuntime(hass, entry.options.get("sources", entry.data), settings, tariffs)
     runtime.set_native_reference(entry.options)
     executor = Executor(hass, entry, runtime)

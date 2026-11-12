@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.12] - Display name "Thermann Hot Water"
+
+- The app is now shown as **Thermann Hot Water**, with a description that
+  states it is unofficial community software, not a Thermann product.
+- Nothing else changes: same slug (`thermowatt_boiler`), options, credentials,
+  authentication guard, MQTT topics and payloads, entity IDs and command
+  behaviour. The bridge code is identical to 1.3.11.
+- Listed in `breaking_versions` like every release, so Home Assistant never
+  updates it automatically.
+
 ## [1.3.11] - Bounded command confirmation for a delayed cloud readback (owner review required)
 
 - **Why.** In T3b (1.3.10) a stale-status `off` was refreshed once and POSTed,

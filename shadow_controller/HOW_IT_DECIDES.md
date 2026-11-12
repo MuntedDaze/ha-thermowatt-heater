@@ -37,9 +37,9 @@ Manual 70 °C only *permits* heating; Thermann's own thermostat decides when the
 - Morning heating continues into a morning peak (winter: peak and hard deadline both at 07:00).
 - **Fail-safe:** if the planner or meter is unavailable in that window, it permits rather than risk cold showers. Off-peak hours.
 
-## Guest mode and holiday mode
+## 12hr Override and holiday mode
 
-- **Guest (12 h, button):**
+- **12hr Override (button; formerly guest mode):**
   - Manual 70 °C for the period, with economics relaxed;
   - all gates, confirmation and owner rules still apply;
   - starting it releases Hold;
@@ -68,4 +68,4 @@ Manual 70 °C only *permits* heating; Thermann's own thermostat decides when the
 | Thermann status stale (> one poll + 5 min) | No commands (`heater_status_too_old`) |
 | Cloud backoff, quota or auth lock | No commands; alerts. Never retried |
 | Command not confirmed | Fault, owner acknowledges (bridge 1.3.11 bounded confirmation) |
-| HA restart | Re-inspects; guest and holiday persisted; permission timers restart (10 min) |
+| HA restart | Re-inspects; 12hr Override and holiday persisted; permission timers restart (10 min) |

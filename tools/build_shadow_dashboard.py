@@ -21,6 +21,7 @@ package.__path__ = [str(PACKAGE)]
 sys.modules[package.__name__] = package
 config = importlib.import_module(f"{package.__name__}.config")
 settings = importlib.import_module(f"{package.__name__}.settings")
+naming = importlib.import_module(f"{package.__name__}.naming")
 
 CONTROLLER = "sensor.thermann_shadow_controller"
 RESTORE = "button.thermann_shadow_restore_recommended_preferences"
@@ -69,12 +70,12 @@ def slug(value):
 
 
 def sensor(name):
-    return f"sensor.thermann_shadow_{slug(name)}"
+    return naming.entity_id("sensor", name)
 
 
 def entity(key):
     meta = settings.CATALOG[key]
-    return f"{meta.kind}.thermann_shadow_{slug(meta.name)}"
+    return naming.entity_id(meta.kind, meta.name)
 
 
 def tile(name, icon, **extra):
@@ -406,10 +407,12 @@ def build():
         {
             "type": "markdown",
             "content": (
-                "## Shadow mode\n**Commands disabled · control capable: "
+                "## Planner\n**Automatic control active: "
                 "{{ state_attr('" + CONTROLLER + "','control_capable') }} · extra cloud "
                 "requests: {{ state_attr('" + CONTROLLER + "','additional_cloud_requests') }}**. "
-                "Physical heating is estimated, never commanded."
+                "The planner only estimates; heater commands come from the controller alone "
+                "(Automatic heater control). Thermann Controller is unofficial community "
+                "software, not a Thermann product."
             ),
         },
         {
@@ -524,7 +527,7 @@ def build():
         },
     ]
     return {
-        "title": "Thermann Hot Water",
+        "title": "Hot Water",
         "views": [
             {
                 "title": "Hot Water",
@@ -621,6 +624,8 @@ def main():
         data = json.loads(filename.read_text(encoding="utf-8"))
         user = data["config"]["step"]["user"]
         user["description"] = (
+            "Unofficial community integration, not a Thermann product. Automatic control "
+            "stays off until you commission it. "
             "Read local HA states only; no heater commands, MQTT writes or cloud requests. "
             "Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered "
             "Forecast.Solar watts) with forecast_generated_at, and a household load "

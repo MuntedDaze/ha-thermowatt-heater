@@ -1,5 +1,14 @@
 # Thermann Shadow Planner
 
+## 0.8.0 — names and a simpler settings interface (development)
+
+- **Thermann Controller** is the integration's display name (was Thermann Shadow Planner / Hot Water Controller); the app is **Thermann Hot Water** (app 1.3.12). Both are labelled unofficial community software, not Thermann products.
+- **12hr Override** replaces "guest mode" in every label and alert. Behaviour unchanged: Manual 70 °C for 12 hours regardless of price, end time shown, cancel any time, normal control afterwards, every safety rule kept.
+- **Nothing to reinstall:** same domain (`thermann_shadow`), device, entry, entity IDs (renamed entities keep their old IDs; fresh installs get the same IDs), MQTT topics, saved settings and stored controller state. The config entry and device are renamed in place.
+- **Settings in three groups:** Everyday, Advanced, System. 15 settings with no production effect are retired from the interface; their stored values stay. Their entities and the long-orphaned 0.3.0/0.5.0 entities are removed from the registry instead of showing as unavailable.
+- **Configure is a menu:** Comfort, tariff and forecast settings / System and commissioning / Sensor mappings.
+- The dashboard is titled **Hot Water**.
+
 ## 0.7.1 — settings safety and validation (development)
 
 From the settings audit ([SETTINGS_AUDIT.md](SETTINGS_AUDIT.md)). No change to the two commands, the bridge allowlist or stored controller state.

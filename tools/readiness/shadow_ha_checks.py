@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.7.1"
+CURRENT_VERSION = "0.8.0"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -847,6 +847,20 @@ async def _upgrade_from_0_6(folder, version):
         assert runtime.settings.target_c == 68.0
         assert runtime.executor.cfg.max_commands_per_day == 5
         assert runtime.executor.controller.enabled is False
+        # 0.8.0 display names: entry and device renamed in place; the domain,
+        # device identity and every entity ID stay (12hr Override keeps the
+        # guest-mode IDs automations may use).
+        from homeassistant.helpers import device_registry as dr
+
+        assert entry.title == "Thermann Controller", entry.title
+        device = dr.async_get(hass).async_get_device({("thermann_shadow", entry.entry_id)})
+        assert device is not None and device.name == "Thermann Controller", device
+        assert "Unofficial" in device.manufacturer, device.manufacturer
+        if version == "0.7.0":
+            override = hass.states.get("button.thermann_shadow_start_guest_mode_12_h")
+            assert override.attributes["friendly_name"] == "Thermann Controller Start 12hr Override"
+            ends = hass.states.get("sensor.thermann_shadow_guest_mode_ends")
+            assert ends.attributes["friendly_name"] == "Thermann Controller 12hr Override ends"
         after = {
             item.unique_id: item.entity_id
             for item in er.async_entries_for_config_entry(registry_of(hass), entry.entry_id)
@@ -951,6 +965,15 @@ async def upgrade_from_0_5_0(folder):
         assert runtime.settings.target_c == 68.0
         assert runtime.executor.cfg.max_commands_per_day == 5
         assert runtime.executor.controller.enabled is False
+        # 0.8.0 display names: entry and device renamed in place; the domain,
+        # device identity and every entity ID stay (12hr Override keeps the
+        # guest-mode IDs automations may use).
+        from homeassistant.helpers import device_registry as dr
+
+        assert entry.title == "Thermann Controller", entry.title
+        device = dr.async_get(hass).async_get_device({("thermann_shadow", entry.entry_id)})
+        assert device is not None and device.name == "Thermann Controller", device
+        assert "Unofficial" in device.manufacturer, device.manufacturer
         after = {
             item.unique_id: item.entity_id
             for item in er.async_entries_for_config_entry(registry_of(hass), entry.entry_id)

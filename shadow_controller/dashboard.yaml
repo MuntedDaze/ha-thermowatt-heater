@@ -1,4 +1,4 @@
-title: Thermann Hot Water
+title: Hot Water
 views:
 - title: Hot Water
   path: thermann-shadow
@@ -251,7 +251,7 @@ views:
     - time.thermann_shadow_morning_ready_preferred
     - time.thermann_shadow_morning_ready_hard_deadline
     - number.thermann_shadow_afternoon_storage_target
-    - time.thermann_shadow_weekend_afternoon_ready_time
+    - time.thermann_shadow_afternoon_comfort_preference
   - type: markdown
     content: "### Everyday — current, recommended and original values\n\n**Morning minimum (hard)** —\
       \ current **{{ states('number.thermann_shadow_morning_minimum_hard') }} °C** · recommended **42\
@@ -270,7 +270,7 @@ views:
       \ not be earlier than the preferred time.\n\n**Afternoon storage target** — current **{{ states('number.thermann_shadow_afternoon_storage_target')\
       \ }} °C** · recommended & original **70 °C** · *restored by Restore*  \nSelected model target is\
       \ never silently reduced. 65–70°C is a planning range, not a newly qualified command limit.\n\n\
-      **Weekend afternoon ready time** — current **{{ states('time.thermann_shadow_weekend_afternoon_ready_time')\
+      **Weekend afternoon ready time** — current **{{ states('time.thermann_shadow_afternoon_comfort_preference')\
       \ }}** · recommended & original **16:00** · *restored by Restore*  \nWeekend (no-peak) afternoon\
       \ ready time, Hobart local, after noon. Weekdays use the evening peak start automatically: 16:00\
       \ standard time, 17:00 daylight time."
@@ -490,11 +490,12 @@ views:
   icon: mdi:information-outline
   cards:
   - type: markdown
-    content: '## Shadow mode
+    content: '## Planner
 
-      **Commands disabled · control capable: {{ state_attr(''sensor.thermann_shadow_controller'',''control_capable'')
+      **Automatic control active: {{ state_attr(''sensor.thermann_shadow_controller'',''control_capable'')
       }} · extra cloud requests: {{ state_attr(''sensor.thermann_shadow_controller'',''additional_cloud_requests'')
-      }}**. Physical heating is estimated, never commanded.'
+      }}**. The planner only estimates; heater commands come from the controller alone (Automatic heater
+      control). Thermann Controller is unofficial community software, not a Thermann product.'
   - type: markdown
     content: '### Heater state evidence
 

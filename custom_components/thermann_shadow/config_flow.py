@@ -14,6 +14,7 @@ from .config import (
     rejection_message,
     saved_options,
 )
+from .naming import ENTRY_TITLE
 from .settings import CATALOG, apply_changes, locked_changes, locked_message
 
 
@@ -80,7 +81,7 @@ class ShadowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             for entity in user_input.values():
                 cv.entity_id(entity)
-            return self.async_create_entry(title="Thermann Shadow", data=user_input)
+            return self.async_create_entry(title=ENTRY_TITLE, data=user_input)
         return self.async_show_form(step_id="user", data_schema=sources_schema(DEFAULT_SOURCES))
 
     @staticmethod

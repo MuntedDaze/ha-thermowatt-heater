@@ -1,6 +1,6 @@
-name: "Thermowatt Smart Boiler"
-description: "Opt-in MyThermowatt cloud bridge with persistent authentication protection."
-version: "1.3.11"
+name: "Thermann Hot Water"
+description: "Unofficial community app (not a Thermann product): connects a Thermann smart electric water heater to Home Assistant through the Thermowatt cloud."
+version: "1.3.12"
 slug: "thermowatt_boiler"
 arch:
   - aarch64
@@ -17,6 +17,7 @@ breaking_versions:
   - "1.3.9"
   - "1.3.10"
   - "1.3.11"
+  - "1.3.12"
 options:
   email: ""
   password: ""

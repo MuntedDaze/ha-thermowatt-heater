@@ -103,7 +103,7 @@ RECOVERY = {
     "unexpected_mode_or_target": "The heater is not OFF or in Manual at 70 °C (for example it is in Schedule or Eco). Automatic control will not touch it. In the Thermann app choose Manual at 70 °C or turn it OFF, then press Resume automatic control.",
     "off_target_not_70": "While OFF the heater reports a usable target other than 70 °C. That may be your own setting, so automatic control will not change it. To hand control back, set Manual at 70 °C in the Thermann app (you may then turn it OFF again) and press Resume automatic control.",
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
-    "guest_mode_not_applied": "Guest mode wants Manual at 70 °C but the controller could not apply it (see the reason and gate failures). Check the Thermowatt add-on and the Thermann app; you can select Manual at 70 °C in the app yourself.",
+    "guest_mode_not_applied": "The 12hr Override wants Manual at 70 °C but the controller could not apply it (see the reason and gate failures). Check the Thermowatt add-on and the Thermann app; you can select Manual at 70 °C in the app yourself.",
 }
 GUEST_HOURS = 12.0
 GUEST_ALERT_AFTER = timedelta(minutes=10)
@@ -952,8 +952,8 @@ class Controller:
             alerts.append(
                 (
                     "guest_mode_not_applied",
-                    "Hot water: guest mode not applied",
-                    f"Guest mode wants Manual at 70 °C but the controller could not apply it "
+                    "Hot water: 12hr Override not applied",
+                    f"The 12hr Override wants Manual at 70 °C but the controller could not apply it "
                     f"({detail}). {RECOVERY['guest_mode_not_applied']}",
                 )
             )

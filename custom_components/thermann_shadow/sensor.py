@@ -3,6 +3,7 @@
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.helpers.device_registry import DeviceInfo
 
+from .naming import device_info_fields, entity_id
 from .config import DOMAIN
 
 SENSORS = {
@@ -96,7 +97,7 @@ CONTROLLER_SENSORS = {
     "requests_last_24h": ("Cloud requests in last 24 hours", None),
     "fault": ("Controller fault", None),
     "operating_mode": ("Hot water operating mode", None),
-    "guest_mode_ends": ("Guest mode ends", None),
+    "guest_mode_ends": ("12hr Override ends", None),
 }
 CONTROLLER_TIMESTAMPS = {
     "next_heating_start",
@@ -129,13 +130,9 @@ class ShadowSensor(SensorEntity):
         self.key = key
         self._attr_name = name
         self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self.entity_id = entity_id("sensor", name)
         self._attr_native_unit_of_measurement = unit
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Thermann Shadow",
-            manufacturer="Community shadow planner",
-            model="315 L / 3 kW scenario",
-        )
+        self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
         if key in {
             "deadline",
             "comfort_deadline",

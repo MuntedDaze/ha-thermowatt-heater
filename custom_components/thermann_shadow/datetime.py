@@ -5,6 +5,7 @@ from homeassistant.components.datetime import DateTimeEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import dt as dt_util
 
+from .naming import device_info_fields, entity_id
 from .config import DOMAIN
 
 
@@ -27,12 +28,8 @@ class HolidayDate(DateTimeEntity):
         self._attr_name = name
         self._attr_icon = icon
         self._attr_unique_id = f"{entry.entry_id}_holiday_{which}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Thermann Shadow",
-            manufacturer="Community shadow planner",
-            model="315 L / 3 kW scenario",
-        )
+        self.entity_id = entity_id("datetime", name)
+        self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.runtime.executor.subscribe(self.async_write_ha_state))

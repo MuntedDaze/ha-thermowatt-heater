@@ -4,12 +4,14 @@ Two parts, for a Thermann Smart Electric water heater (tested on a 315 L / 3 kW 
 
 | Part | What it does | Installed from |
 | --- | --- | --- |
-| **Thermowatt bridge** (Home Assistant app, `thermowatt-heater/`) | Reads the heater from the cloud every 30 minutes and publishes it to Home Assistant over MQTT. When commands are enabled, it accepts only two: `Manual:70` (heating allowed) and `off` (parked). | Settings → Apps, from this repository |
-| **Hot Water Controller** (integration, `custom_components/thermann_shadow`) | Plans when heating is cheapest using tariffs, solar, comfort deadlines and the GoodWe meter, and tells the bridge to allow or park heating. Off by default. | Copied into `custom_components/` |
+| **Thermann Hot Water** (Home Assistant app, `thermowatt-heater/`) | Reads the heater from the cloud every 30 minutes and publishes it to Home Assistant over MQTT. When commands are enabled, it accepts only two: `Manual:70` (heating allowed) and `off` (parked). | Settings → Apps, from this repository |
+| **Thermann Controller** (integration, `custom_components/thermann_shadow`) | Plans when heating is cheapest using tariffs, solar, comfort deadlines and the GoodWe meter, and tells the bridge to allow or park heating. Off by default. | Copied into `custom_components/` |
 
 Thermann's own thermostat always decides when the element runs. The controller only allows heating (Manual at 70 °C) or parks the heater (Thermann OFF, which keeps the manufacturer's anti-bacterial and frost protection active). It never changes the temperature setting, the native Schedule or mains power.
 
-This project is not affiliated with Thermowatt, Thermann, Reece or Ariston.
+Both are **unofficial community software**, not Thermann products. This project is not affiliated with Thermowatt, Thermann, Reece or Ariston.
+
+*Names:* the app was called "Thermowatt Smart Boiler" and the integration "Thermann Shadow Planner" / "Hot Water Controller" before 0.8.0 / 1.3.12. Only the display names changed: the app slug, the integration domain (`thermann_shadow`), MQTT topics, entity IDs and saved settings are the same, and no reinstall is needed.
 
 ## Requirements
 
@@ -21,7 +23,7 @@ This project is not affiliated with Thermowatt, Thermann, Reece or Ariston.
 
 **Bridge:**
 1. Settings → Apps, open the app store, then ⋮ → Repositories, and add `https://github.com/MuntedDaze/ha-thermowatt-heater`.
-2. Install **Thermowatt Smart Boiler**. Set your account details, then `cloud_enabled: true` and `auth_retry_generation: 1`. Leave `commands_enabled: false` for now.
+2. Install **Thermann Hot Water**. Set your account details, then `cloud_enabled: true` and `auth_retry_generation: 1`. Leave `commands_enabled: false` for now.
 3. Start it. The heater appears as an MQTT water heater, with diagnostic sensors.
 
 Full options, the authentication safety rules and troubleshooting: [thermowatt-heater/DOCS.md](thermowatt-heater/DOCS.md).

@@ -1,6 +1,8 @@
-# Hot Water Controller (`thermann_shadow`)
+# Thermann Controller (`thermann_shadow`)
 
-A Home Assistant integration that decides **when** a Thermann Smart Electric heater may heat, so hot water is ready when you need it and as cheap as possible. It works through the Thermowatt bridge and changes only one thing: whether heating is allowed (**Manual at 70 °C**) or parked (**Thermann OFF**). Thermann's own thermostat still decides when the element actually runs.
+*Unofficial community software, not a Thermann product.*
+
+A Home Assistant integration that decides **when** a Thermann Smart Electric heater may heat, so hot water is ready when you need it and as cheap as possible. It works through the Thermann Hot Water app and changes only one thing: whether heating is allowed (**Manual at 70 °C**) or parked (**Thermann OFF**). Thermann's own thermostat still decides when the element actually runs.
 
 Current version: **0.7.0** (in review, PR #20). Installed: **0.7.0** since 12 Nov 2026, automatic control off; the supervised trial (Stage C) has not begun. See [COMMISSIONING.md](COMMISSIONING.md).
 
@@ -23,7 +25,7 @@ Current version: **0.7.0** (in review, PR #20). Installed: **0.7.0** since 12 No
 
 | Mode | What happens |
 | --- | --- |
-| **Guest** | Button; Manual at 70 °C for 12 hours, regardless of price. Cancel early with the cancel button. |
+| **12hr Override** | Button; Manual at 70 °C for 12 hours, regardless of price. Thermann's thermostat still decides when to heat. The end time is shown; cancel at any time. Normal control resumes automatically afterwards. |
 | **Holiday** | Set departure and return. The heater stays parked while you're away, and the tank is heated in the cheapest way during the last 24 hours before you return. You are told if heating is blocked or the tank isn't ready when you get back. |
 | **Hold** | Button; pauses all automatic commands until you press Resume. |
 
@@ -33,7 +35,7 @@ Current version: **0.7.0** (in review, PR #20). Installed: **0.7.0** since 12 No
 
 1. Copy the package's `custom_components/thermann_shadow` folder into `/config/custom_components/`. When upgrading, delete the old folder first. Do not remove the integration in Home Assistant.
 2. Restart Home Assistant once.
-3. **First install:** add *Thermann Shadow* under Settings → Devices & services and map your entities: heater, vendor mode, bridge diagnostics, GoodWe PV / house / grid and, optionally, the EMHASS forecast sensors.
+3. **First install:** add *Thermann Controller* under Settings → Devices & services and map your entities: heater, vendor mode, bridge diagnostics, GoodWe PV / house / grid and, optionally, the EMHASS forecast sensors.
 4. **Check:**
    - no `thermann_shadow` errors in the log;
    - *Automatic heater control* is **off**.
@@ -52,7 +54,7 @@ See [COMMISSIONING.md](COMMISSIONING.md).
 | Entity | Shows |
 | --- | --- |
 | *Automatic heater control* (switch) | Master on/off. Turning it off never changes the heater. |
-| *Hot water operating mode* | automatic / guest / holiday / disabled |
+| *Hot water operating mode* | automatic / guest (the 12hr Override) / holiday / disabled |
 | *Automatic control state* / *reason* | parked, heating permitted, owner override, fault, … and why |
 | *Next heating start* / *stop* | the planned heating times |
 | *Morning readiness*, *Afternoon readiness* | whether each goal is on track |

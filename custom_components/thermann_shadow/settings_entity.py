@@ -4,6 +4,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
+from .naming import device_info_fields, entity_id
 from .config import DOMAIN, parse_options, rejection_message, saved_options
 from .settings import (
     CATALOG,
@@ -56,12 +57,8 @@ class SettingEntity:
         self.meta = CATALOG[key]
         self._attr_name = self.meta.name
         self._attr_unique_id = f"{entry.entry_id}_setting_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Thermann Shadow",
-            manufacturer="Community shadow planner",
-            model="315 L / 3 kW scenario",
-        )
+        self.entity_id = entity_id(self.meta.kind, self.meta.name)
+        self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.runtime.subscribe(self.async_write_ha_state))

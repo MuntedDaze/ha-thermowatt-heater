@@ -1,4 +1,6 @@
-# Thermowatt Smart Boiler bridge
+# Thermann Hot Water
+
+*Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
 Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts two heater commands from the Hot Water Controller.
 
