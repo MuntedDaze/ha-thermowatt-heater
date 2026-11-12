@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.8.0"
+CURRENT_VERSION = "0.9.0"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -391,30 +391,26 @@ async def check_settings_services(hass, entry, runtime, entity_for):
     # Cross-field and range validation through services: atomic, nothing saved.
     invalid = [
         ("time", "set_value", entity_for("peak_morning_end"), {"time": "17:00:00"}),
-        ("time", "set_value", entity_for("morning_hard_time"), {"time": "12:30:00"}),
-        ("time", "set_value", entity_for("morning_preferred_time"), {"time": "07:30:00"}),
-        ("time", "set_value", entity_for("evening_time"), {"time": "11:00:00"}),
-        ("number", "set_value", entity_for("target_c"), {"value": 64}),
         # 0.7.1 (settings audit): readable cross-field and format rejections.
         ("text", "set_value", entity_for("controller_notify_service"), {"value": "notify.x"}),
-        ("number", "set_value", entity_for("controller_min_rest_minutes"), {"value": 75}),
-        ("number", "set_value", entity_for("morning_preferred_c"), {"value": 41}),
     ]
     for domain, service, entity_id, data in invalid:
         await rejected(hass, entry, drive(hass, domain, service, entity_id, **data))
     # Restore and undo, through confirmed-dashboard button services.
-    await set_setting(hass, entity_for("target_c"), "number", 66)
+    await set_setting(hass, entity_for("forecast_uncertainty"), "number", 0.3)
     await set_setting(hass, entity_for("peak_rate"), "number", 0.4)
     await set_setting(hass, entity_for("forecast_enabled"), "switch", True)
     await drive(hass, "button", "press", "button.thermann_shadow_restore_recommended_preferences")
-    assert entry.options["target_c"] == 70 and entry.options["forecast_enabled"] is False
+    assert entry.options["forecast_uncertainty"] == 0.25
+    assert entry.options["forecast_enabled"] is False
     assert entry.options["peak_rate"] == 0.4  # tariff contract preserved
-    assert entry.options[BACKUP_KEY] == {"target_c": 66, "forecast_enabled": True}
-    assert runtime.settings.target_c == 70
+    assert entry.options[BACKUP_KEY] == {"forecast_uncertainty": 0.3, "forecast_enabled": True}
+    assert runtime.settings.forecast_uncertainty == 0.25
     assert hass.states.get("button.thermann_shadow_undo_last_restore").state != "unavailable"
     await drive(hass, "button", "press", "button.thermann_shadow_undo_last_restore")
-    assert entry.options["target_c"] == 66 and entry.options["forecast_enabled"] is True
-    assert BACKUP_KEY not in entry.options and runtime.settings.target_c == 66
+    assert entry.options["forecast_uncertainty"] == 0.3
+    assert entry.options["forecast_enabled"] is True
+    assert BACKUP_KEY not in entry.options and runtime.settings.forecast_uncertainty == 0.3
     assert hass.states.get("button.thermann_shadow_undo_last_restore").state == "unavailable"
     assert set(RESTORED) & {"peak_rate", "meter_verified", "import_positive"} == set()
     await drive(hass, "button", "press", "button.thermann_shadow_restore_recommended_preferences")
@@ -523,13 +519,11 @@ async def check_forecasts(hass, entry, entity_for):
     assert runtime.forecast.load_basis == "published_household_load_forecast"
     assert runtime.details["forecast"]["intervals"] > 0
     surplus = hass.states.get("sensor.thermann_shadow_forecast_net_surplus")
-    base = float(
-        hass.states.get("sensor.thermann_shadow_base_household_load_excluding_hot_water").state
-    )
-    # 0.4.0: forecast AC PV (clipped at 5 kW) minus de-embedded measured base load.
-    assert abs(float(surplus.state) - (4.5 - base)) < 0.01, (surplus.state, base)
+    # 0.9.0: the forecast NET export now (EMHASS PV minus household load, with the
+    # configured uncertainty margins), which the policy prices slot by slot.
+    assert 0 < float(surplus.state) <= 4.5, surplus.state
     assert float(hass.states.get("sensor.thermann_shadow_forecast_age").state) < 5
-    results["emhass"] = runtime.values["decision"]
+    results["emhass"] = runtime.values.get("decision")
     validate_dashboard(hass, "forecast_present")
     # Forecast.Solar trigger-template buffer shape plus a Statistics-style baseline.
     start = dt_util.as_local(dt_util.utcnow()).replace(minute=0, second=0, microsecond=0)
@@ -544,7 +538,7 @@ async def check_forecasts(hass, entry, entity_for):
     runtime.update(dt_util.utcnow())
     assert runtime.forecast.source == "published_pv_and_house_load", runtime.forecast.warnings
     assert runtime.forecast.load_basis == "flat_measured_household_baseline"
-    results["forecast_solar_flat_load"] = runtime.values["decision"]
+    results["forecast_solar_flat_load"] = runtime.values.get("decision")
     # Stale generation, invalid units and missing entities fall back safely.
     stale = (dt_util.utcnow() - timedelta(hours=3)).isoformat()
     for label, change in (
@@ -557,10 +551,8 @@ async def check_forecasts(hass, entry, entity_for):
         runtime.update(dt_util.utcnow())
         assert runtime.forecast.source == "unavailable", label
         assert not runtime.forecast.slots, label
-        assert runtime.plan.grid_fallback_start is not None, (label, runtime.plan)
         assert runtime.values["forecast_net_surplus_kw"] is None
-        assert runtime.values["decision"] != "wait_for_forecast_solar", label
-        results[label] = runtime.values["decision"]
+        results[label] = runtime.forecast.source
         validate_dashboard(hass, f"forecast_{label}")
     # Switch back off through the settings entity; mappings stay saved.
     await set_setting(hass, entity_for("forecast_enabled"), "switch", False)
@@ -590,19 +582,20 @@ async def check_unchanged_mqtt_payload_freshness(hass, entry):
         hass.states.async_set(DEFAULT_SOURCES[key], value, {"unit_of_measurement": "W"})
     now = dt_util.utcnow()  # after the meter writes, so they are not "from the future"
     runtime.update(now)
-    assert runtime.plan.state == "shadow_advising", runtime.plan.reasons
     assert runtime.values["temperature"] == 55
-    # A genuinely old poll still blocks.
+    assert runtime.details["status_fresh"] is True
+    # A genuinely old poll is not used.
     hass.states.async_set(DEFAULT_SOURCES["last_poll"], (now - timedelta(minutes=50)).isoformat())
     runtime.update(now)
-    assert runtime.plan.state == "shadow_blocked"
+    assert runtime.values["temperature"] is None
+    assert runtime.details["status_fresh"] is False
     hass.states.async_set(DEFAULT_SOURCES["last_poll"], (now - timedelta(minutes=5)).isoformat())
     runtime.update(now)
-    return {"cloud_entities_last_written_minutes_ago": 50, "planner_available": True}
+    return {"cloud_entities_last_written_minutes_ago": 50, "reading_available": True}
 
 
 async def check_controller(hass, entry, entity_for):
-    """Production controller (0.7.0: Manual 70 permit / software OFF park) on REAL HA Core.
+    """Production controller (0.9.0: OFF / Manual 45 / Manual 70) on REAL HA Core.
 
     Fresh install refuses to enable; after commissioning, one poll produces
     exactly one guarded MQTT message (captured here, never sent: the network is
@@ -613,7 +606,7 @@ async def check_controller(hass, entry, entity_for):
     from homeassistant.components import mqtt
     from homeassistant.exceptions import HomeAssistantError
 
-    from custom_components.thermann_shadow import controller as ctl
+    from custom_components.thermann_shadow import simple_policy as sp
     from custom_components.thermann_shadow.config import DEFAULT_SOURCES
     from custom_components.thermann_shadow.settings import CATALOG
 
@@ -647,6 +640,14 @@ async def check_controller(hass, entry, entity_for):
                 "command_status_refresh_limit_24h": 24,
                 "command_confirmation_followups_seconds": [60, 300],  # bridge 1.3.11
                 "command_confirmation_pending": False,
+                "command_transitions": [  # bridge 1.3.13
+                    "Manual:45@70",
+                    "Manual:45@off",
+                    "Manual:70@45",
+                    "Manual:70@off",
+                    "off@45",
+                    "off@70",
+                ],
                 "poll_interval_seconds": 1800,
             },
         )
@@ -689,7 +690,7 @@ async def check_controller(hass, entry, entity_for):
         assert hass.states.get(master).state == "off"
         for key, value in (
             ("controller_command_topic", "P/TEST123/CMD/MODE"),
-            ("controller_bridge_qualified", True),
+            ("controller_three_state_qualified", True),
         ):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
         await drive(hass, "switch", "turn_on", master)
@@ -700,7 +701,7 @@ async def check_controller(hass, entry, entity_for):
         # notifications and Restore recommended still apply at once.
         for key, value in (
             ("controller_command_topic", "P/OTHER99/CMD/MODE"),
-            ("controller_bridge_qualified", False),
+            ("controller_three_state_qualified", False),
             ("controller_max_commands_per_day", 8),
             ("import_positive", True),
             ("peak_rate", 0.40),
@@ -708,44 +709,51 @@ async def check_controller(hass, entry, entity_for):
             await rejected(
                 hass, entry, set_setting(hass, entity_for(key), CATALOG[key].kind, value)
             )
-        await set_setting(hass, entity_for("target_c"), "number", 66)
-        assert hass.data["thermann_shadow"][entry.entry_id].settings.target_c == 66
+        await set_setting(hass, entity_for("forecast_uncertainty"), "number", 0.3)
+        assert hass.data["thermann_shadow"][entry.entry_id].settings.forecast_uncertainty == 0.3
         await set_setting(hass, entity_for("controller_notify_service"), "text", "mobile_app_x")
         await drive(
             hass, "button", "press", "button.thermann_shadow_restore_recommended_preferences"
         )
-        assert entry.options["target_c"] == 70
+        assert entry.options["forecast_uncertainty"] == 0.25
         assert entry.options["controller_command_topic"] == "P/TEST123/CMD/MODE"
         await set_setting(hass, entity_for("controller_notify_service"), "text", "")
         executor = hass.data["thermann_shadow"][entry.entry_id].executor
-        executor.desire = lambda now: ctl.Desire("permit", "real_ha_wiring_check")
+        wanted = sp.Decision("storage", "real_ha_wiring_check", 5)
+        executor.decide = lambda now, obs: (wanted, executor.controller.heater)
         hass.config.components.add("mqtt")
-        # Parked OFF (Cmd 8) keeping 70, as observed in T3: the guarded resume goes.
+        # Parked OFF (Cmd 8) keeping 70, as observed in T3: the guarded transition goes.
         bridge("Off", dt_util.utcnow(), setpoint=70)
         await hass.async_block_till_done()
-        assert captured == [("P/TEST123/CMD/MODE", "Manual:70", 1, False)], captured
+        commands = [item for item in captured if item[0].endswith("/CMD/MODE")]
+        assert commands == [("P/TEST123/CMD/MODE", "Manual:70@off", 1, False)], captured
+        # Activation also asked the bridge for ONE guarded status read.
+        assert ("P/TEST123/refresh", "refresh", 0, False) in captured, captured
         assert hass.states.get(status).state == "confirming"
         for _ in range(5):
             await executor.async_step()
-        assert len(captured) == 1, "duplicate command"
+        commands = [item for item in captured if item[0].endswith("/CMD/MODE")]
+        assert len(commands) == 1, "duplicate command"
         bridge("Manual", dt_util.utcnow(), total=202)
         await hass.async_block_till_done()
-        assert hass.states.get(status).state == "heating_permitted"
+        assert hass.states.get(status).state == "storage_70"
         assert hass.states.get("sensor.thermann_shadow_last_command_result").state == "confirmed"
         assert hass.states.get("sensor.thermann_shadow_commands_in_last_24_hours").state == "1"
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done()
         assert hass.states.get(master).state == "on"  # persisted with controller state
         assert hass.states.get(status).state == "observing"  # never assumed after restart
-        assert len(captured) == 1
+        commands = [item for item in captured if item[0].endswith("/CMD/MODE")]
+        assert len(commands) == 1
         await drive(hass, "switch", "turn_off", master)
         assert hass.states.get(status).state == "disabled"
         bridge("Off", dt_util.utcnow(), total=204)
         await hass.async_block_till_done()
-        assert len(captured) == 1, "a disabled controller published"
+        commands = [item for item in captured if item[0].endswith("/CMD/MODE")]
+        assert len(commands) == 1, "a disabled controller published"
         for key, value in (
             ("controller_command_topic", ""),
-            ("controller_bridge_qualified", False),
+            ("controller_three_state_qualified", False),
         ):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
     finally:
@@ -755,7 +763,9 @@ async def check_controller(hass, entry, entity_for):
             mqtt.async_publish = original
     return {
         "fresh_install_refused_enable": True,
-        "guarded_messages_captured_not_sent": len(captured),
+        "guarded_messages_captured_not_sent": len(
+            [item for item in captured if item[0].endswith("/CMD/MODE")]
+        ),
         "duplicates": 0,
         "confirmed_from_observed_manual": True,
         "reinspects_after_reload": True,
@@ -807,9 +817,9 @@ async def _upgrade_from_0_6(folder, version):
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_SOURCES)
     customise = {"target_c": 68.0, "controller_max_commands_per_day": 5.0}
-    saved = await hass.config_entries.options.async_configure(
-        flow["flow_id"], {**DEFAULT_OPTIONS, **customise}
-    )
+    old_options = {**DEFAULT_OPTIONS, **customise}
+    old_options.pop("controller_three_state_qualified", None)  # new in 0.9.0
+    saved = await hass.config_entries.options.async_configure(flow["flow_id"], old_options)
     assert saved["type"] == "create_entry", saved
     await hass.async_block_till_done()
     runtime = hass.data["thermann_shadow"][entry.entry_id]
@@ -873,7 +883,7 @@ async def _upgrade_from_0_6(folder, version):
         )
         assert not [key for key in after if is_retired(entry.entry_id, key)], after
         added = {key.removeprefix(f"{entry.entry_id}_") for key in set(after) - set(before)}
-        assert added <= ADDED_IN_0_7_0, added
+        assert added <= ADDED_IN_0_7_0 | ADDED_IN_0_9_0, added
         for unique_id, entity_id in after.items():
             if not unique_id.endswith(RETIRED_SUFFIXES):
                 assert hass.states.get(entity_id) is not None, entity_id
@@ -886,7 +896,7 @@ async def _upgrade_from_0_6(folder, version):
         missing = hass.states.get("switch.thermann_shadow_automatic_heater_control").attributes[
             "commissioning_missing"
         ]
-        assert missing == ["command_topic_not_configured", "bridge_commands_not_qualified_t3"]
+        assert missing == ["command_topic_not_configured", "three_state_commands_not_qualified"]
         assert captured == []
     finally:
         if original is not None:
@@ -923,9 +933,9 @@ async def upgrade_from_0_5_0(folder):
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     flow = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_SOURCES)
     customise = {"target_c": 68.0, "controller_max_commands_per_day": 5.0}
-    saved = await hass.config_entries.options.async_configure(
-        flow["flow_id"], {**DEFAULT_OPTIONS, **customise}
-    )
+    old_options = {**DEFAULT_OPTIONS, **customise}
+    old_options.pop("controller_three_state_qualified", None)  # new in 0.9.0
+    saved = await hass.config_entries.options.async_configure(flow["flow_id"], old_options)
     assert saved["type"] == "create_entry", saved
     await hass.async_block_till_done()
     assert "controller_empty_schedule_confirmed" in entry.options  # 0.5.0 key saved
@@ -1000,7 +1010,7 @@ async def upgrade_from_0_5_0(folder):
         missing = hass.states.get("switch.thermann_shadow_automatic_heater_control").attributes[
             "commissioning_missing"
         ]
-        assert missing == ["command_topic_not_configured", "bridge_commands_not_qualified_t3"]
+        assert missing == ["command_topic_not_configured", "three_state_commands_not_qualified"]
         assert captured == []
     finally:
         if original is not None:
@@ -1034,4 +1044,15 @@ ADDED_IN_0_7_0 = {
     "operating_mode",
     "guest_mode_ends",
     "tank_thermal_state",
+}
+# Entities new in 0.9.0: the policy sensors and the three-state qualification.
+ADDED_IN_0_9_0 = {
+    "policy_state",
+    "policy_mode",
+    "soft_target",
+    "target_reached",
+    "heating_hours_needed",
+    "measured_surplus_kw",
+    "shadow_command",
+    "setting_controller_three_state_qualified",
 }

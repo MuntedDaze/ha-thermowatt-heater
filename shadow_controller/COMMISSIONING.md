@@ -1,5 +1,7 @@
 # Commissioning
 
+> **Superseded for 0.9.0** by [COMMISSIONING_SIMPLIFIED.md](COMMISSIONING_SIMPLIFIED.md) (app 1.3.13, three-state commands). This page records the 0.6–0.7 stages and the Stage C history.
+
 Automatic control is switched on in stages, each with your approval. At any stage, recovery is the same:
 - **Thermann app:** Manual at 70 °C for hot water now, OFF to park, or Schedule for your normal programme.
 - **Home Assistant:** turning off *Automatic heater control* never changes the heater.

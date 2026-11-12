@@ -1,5 +1,7 @@
 # Main dashboard: entity and data contract (Phase 3, not built yet)
 
+> **0.9.0:** the planner sensors listed below are retired. That includes morning and afternoon readiness, the ready deadlines, *Heating time estimate*, plan costs and `permission_economics`; their registry entries are removed on upgrade. Use the policy sensors instead: *Policy wanted state*, *Policy mode*, *Decision code*, *Hypothetical heating start*, *Latest continuous heating start*, *Soft target time*, *Storage target reached*, *Heating time needed*, *Measured surplus excluding element* and *Shadow command*. Controller, measurement, tariff, owner-mode and thermal entities are unchanged. The generated `dashboard.yaml` already uses them.
+
 Entity IDs were checked read-only against the live entity registry on 12 Nov 2026. The tables use these markers:
 
 | Marker | Meaning |

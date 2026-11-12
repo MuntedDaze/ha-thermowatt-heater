@@ -1,4 +1,34 @@
-# Thermann Shadow Planner
+# Thermann Controller (formerly Thermann Shadow Planner)
+
+## 0.9.0 — the simplified three-state controller (owner approval required)
+
+Replaces the 0.4–0.8 planner, economic permission and morning fail-safe with the agreed policy (`simple_policy.py`, [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md)). Requires Thermann Hot Water **1.3.13**.
+
+- **Three heater states:** OFF, Manual 45 °C (weekday nights and weekends) and Manual 70 °C. Each command is a guarded bridge payload naming the state it leaves (`<target>@<prior>`), so an app change is never overwritten.
+- **Weekday:**
+  - EMHASS full-window cost optimisation to reach 70 °C by the soft target (peak − 30 min);
+  - starts at once when waiting would miss it, and keeps heating until the peak;
+  - pauses only for a later window saving at least $0.30.
+- **Peaks:**
+  - OFF 2 minutes before every peak, with the command slot before it reserved;
+  - measured solar only: 3.3 kW for 10 minutes to start; withdrawal after 5 minutes of import over 0.2 kW or of too little surplus.
+- **Weekends:** Manual 45 °C, plus solar Manual 70 °C when at least 1 kW of measured surplus makes it worth it.
+- **Setpoint versus achieved:** "70 °C reached" only at a reading of 70 °C.
+- **Shadow observation** while automatic control is off: the policy runs and records the command it would send. Nothing is published.
+- **Activation and restart** ask the bridge for one guarded status read (used only if the app's on-demand refresh is enabled).
+- **Holiday** now keeps the heater OFF until the return time. There is no return pre-heating; use the 12hr Override or an earlier return time.
+- **Removed:**
+  - `advisor`, `strategy`, `goals`, `permission`, `control_plan`, `cycles`, `economics` and `decision`;
+  - the model's planner (`evaluate`);
+  - minimum heating and rest;
+  - the comfort reserve and latency reserve;
+  - the unexplained-heating hold.
+- **New setting:** *Three-state commands qualified (1.3.13)* (System, locked while control is on). Automatic control cannot be enabled until it is on.
+- **Retired** (values kept, entities removed): the morning and afternoon planning settings, storage target, margins, cycle and gap timers, base-load source, minimum heating and rest, latency reserve, and the T3 qualification switch. The planner's sensors are removed from the registry; measurement, tariff and controller entity IDs are unchanged. New policy sensors are added.
+- **Fixed during integration testing:** while a command awaited confirmation, the policy planned from the old state and could ask for it back straight after the confirmation. It now plans from the requested state, and the controller enforces the 15-minute spacing itself as a backstop.
+- **Tests:**
+  - `test_controller_0_9_0.py`;
+  - `test_integration_0_9_0.py`: HA states, EMHASS and the GoodWe meter → runtime → policy → controller → real bridge 1.3.13 → mocked cloud → confirmation. It covers shadow, live, owner change, restart, commissioning, holiday, 12hr Override and the dashboard values.
 
 ## 0.8.0 — names and a simpler settings interface (development)
 

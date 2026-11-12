@@ -31,16 +31,16 @@
     "step": {
       "init": {
         "title": "Settings",
-        "description": "Choose what to change. Everyday comfort settings are also available as controls on the device page. System settings, the tariff contract and the sensor mappings can only be changed while Automatic heater control is off.",
+        "description": "Choose what to change. Settings are also available as controls on the device page. System settings, the tariff contract and the sensor mappings can only be changed while Automatic heater control is off.",
         "menu_options": {
-          "preferences": "Comfort, tariff and forecast settings",
+          "preferences": "Tariff and forecast settings",
           "system": "System and commissioning",
           "sources": "Sensor mappings"
         }
       },
       "sources": {
         "title": "Sensor mappings",
-        "description": "Which Home Assistant entities the controller reads. Reading only: nothing here sends a command or contacts the cloud. Changing a mapping restarts the planner's evidence; it needs Automatic heater control off.",
+        "description": "Which Home Assistant entities the controller reads. Reading only: nothing here sends a command or contacts the cloud. Changing a mapping restarts the meter evidence; it needs Automatic heater control off.",
         "data": {
           "heater": "Water heater (temperature attributes only)",
           "mode": "Native vendor mode",
@@ -59,25 +59,12 @@
         }
       },
       "preferences": {
-        "title": "Comfort, tariff and forecast settings",
-        "description": "Morning times are Hobart local and before noon; the weekend afternoon time is after noon. Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later in summer) and must increase. The tariff contract can only be changed while Automatic heater control is off. Every change is checked together with the rest of the configuration; an invalid combination saves nothing.",
+        "title": "Tariff and forecast settings",
+        "description": "Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later in summer) and must increase. The tariff contract can only be changed while Automatic heater control is off. Every change is checked together with the rest of the configuration; an invalid combination saves nothing.",
         "data": {
-          "morning_threshold_c": "Morning minimum (hard)",
-          "morning_preferred_c": "Morning preferred reserve",
-          "morning_preferred_time": "Morning ready (preferred)",
-          "morning_hard_time": "Morning ready (hard deadline)",
-          "expected_morning_draw_c": "Expected morning hot-water use",
-          "standing_loss_c_per_hour": "Assumed standing heat loss",
-          "target_c": "Afternoon storage target",
-          "evening_time": "Weekend afternoon ready time",
-          "margin_minutes": "Heating time allowance",
           "forecast_enabled": "Use published forecasts",
           "forecast_uncertainty": "Forecast uncertainty margin",
           "forecast_house_margin_kw": "Extra forecast household load",
-          "solar_hold_minutes": "Solar start qualification",
-          "minimum_cycle_minutes": "Minimum optional cycle",
-          "minimum_gap_minutes": "Minimum optional cycle gap",
-          "wait_benefit_aud_per_kwh": "Minimum saving to recommend waiting",
           "tariff_clock": "Tariff clock",
           "tariff_profile": "Tariff periods mode",
           "weekend_peak": "Use peak periods on weekends",
@@ -86,7 +73,6 @@
           "shoulder_rate": "Shoulder import price",
           "feed_in_rate": "Export compensation",
           "pv_ac_limit_kw": "Inverter AC output limit",
-          "base_load_source": "Household load basis",
           "forecast_max_age_minutes": "Maximum forecast generation age",
           "tariff_periods": "Custom weekly tariff periods",
           "peak_morning_start": "Peak morning start",
@@ -97,7 +83,7 @@
       },
       "system": {
         "title": "System and commissioning",
-        "description": "Command destination, T3 qualification, safety timing, budgets, data freshness and verification. Except for the notification service, these can only be changed while Automatic heater control is off. The command topic must be the one the bridge announced for your heater.",
+        "description": "Command destination, three-state qualification, budgets, data freshness and verification. Except for the notification service, these can only be changed while Automatic heater control is off. The command topic must be the one the bridge announced for your heater.",
         "data": {
           "meter_verified": "Meter sign and units verified",
           "tariff_verified": "Tariff contract verified",
@@ -105,13 +91,10 @@
           "status_max_age_minutes": "Maximum cloud poll age",
           "grid_max_age_seconds": "Maximum power reading age",
           "controller_command_topic": "Controller command topic",
-          "controller_bridge_qualified": "Bridge commands qualified (T3)",
-          "controller_min_heating_minutes": "Minimum heating period",
-          "controller_min_rest_minutes": "Minimum rest period",
+          "controller_three_state_qualified": "Three-state commands qualified (1.3.13)",
           "controller_max_commands_per_day": "Maximum commands per day",
           "controller_confirmation_timeout_minutes": "Command confirmation timeout",
           "controller_max_requests_per_day": "Cloud request budget per day",
-          "controller_execution_latency_minutes": "Execution latency reserve",
           "controller_notify_service": "Notification service"
         }
       }

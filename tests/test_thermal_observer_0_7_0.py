@@ -5,10 +5,10 @@ import ast
 from datetime import timedelta
 from pathlib import Path
 
-import test_controller as tc
-from test_controller import local, m
+import importlib
+from test_controller_0_9_0 import local, m
 
-thermal = tc.importlib.import_module(f"{m.__package__}.thermal")
+thermal = importlib.import_module(f"{m.__package__}.thermal")
 PACKAGE = Path(thermal.__file__).parent
 
 
@@ -102,7 +102,7 @@ def test_unknown_without_readings_and_labels_on_every_output():
 
 
 def test_no_control_module_imports_the_thermal_observer():
-    for name in ("controller.py", "control_plan.py", "permission.py", "executor.py", "strategy.py"):
+    for name in ("controller.py", "simple_policy.py", "executor.py"):
         tree = ast.parse((PACKAGE / name).read_text(encoding="utf-8"))
         imported = {
             node.module
