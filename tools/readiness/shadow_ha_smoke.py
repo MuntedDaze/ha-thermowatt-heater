@@ -274,7 +274,9 @@ async def main():
         ]
         from custom_components.thermann_shadow.sensor import CONTROLLER_SENSORS, SENSORS
 
-        assert len(sensor_ids) == len(SENSORS) + len(CONTROLLER_SENSORS), sensor_ids
+        # + the 0.7.0 read-only thermal-state sensor.
+        assert len(sensor_ids) == len(SENSORS) + len(CONTROLLER_SENSORS) + 1, sensor_ids
+        assert "sensor.thermann_shadow_tank_thermal_state_estimate" in sensor_ids
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
