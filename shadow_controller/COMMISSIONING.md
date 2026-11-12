@@ -7,9 +7,9 @@ Automatic control is switched on in stages, each with your approval. At any stag
 
 | Stage | What | Status |
 | --- | --- | --- |
-| A | Controller installed, control off | Done; **0.7.0 installed 12 Nov 2026** (build `9dcf7fa`, control off). A corrected 0.7.0 build is needed before C; see the preflight below |
+| A | Controller installed, control off | Done; **0.7.0 installed 12 Nov 2026**, control off. The corrected build `bbbc5f9` replaced `9dcf7fa` the same afternoon |
 | B | Bridge command tests with the owner present (T3, T3b, T3c) | **Done 12 Nov 2026**; results below |
-| C | Supervised trial with automatic control on | **Not begun.** Read-only preflight done 12 Nov 2026; needs the corrected build, three settings and your approval |
+| C | Supervised trial with automatic control on | **Not begun.** Read-only preflight done and corrected build installed 12 Nov 2026; needs three settings and your approval |
 | D | Normal operation | After reviewing C |
 
 ## Stage B results (bridge commands, owner present)
@@ -36,7 +36,7 @@ Nothing was changed and no command was sent. Automatic control stayed off.
 - **Limits:** defaults intact (6 commands a day, 30/30-minute dwell, 220 cloud requests a day).
 - **Conflicts:** no other automation, script or MQTT publisher targets the heater.
 
-**Found and fixed in the corrected build (`bbbc5f9`):** with control on, a heater in Manual or OFF still tripped the old shadow-planner check for the native Schedule. The planner would then have reported *owner review required*, and the controller would only ever have held, parked for peaks or used the morning fail-safe. It now waits for owner-approved reinstallation.
+**Found and fixed in the corrected build (`bbbc5f9`):** with control on, a heater in Manual or OFF still tripped the old shadow-planner check for the native Schedule. The planner would then have reported *owner review required*, and the controller would only ever have held, parked for peaks or used the morning fail-safe. The corrected build was installed on 12 Nov 2026 (only `model.py` and `runtime.py` changed; settings, entities and the bridge unchanged). A read-only replay of the installed code on recorded live readings, with control simulated on, gave normal advice in both Manual 70 and OFF; with control off the old shadow review state is unchanged, as intended.
 
 **To set before C** (Settings → Devices & services → Integrations → Thermann Shadow Planner → Configure):
 - *Controller command topic*: `P/<serial>/CMD/MODE`; keep the serial private;
@@ -45,7 +45,7 @@ Nothing was changed and no command was sent. Automatic control stayed off.
 
 **Notes:**
 - The default Overview dashboard shows the heater card. Choosing **off** there publishes a real `off`, which the controller treats as an owner override. Don't use the card during the trial.
-- The Home Assistant log (Settings → System → Logs) can't be read from outside Home Assistant, so it was not reviewed. Check it once after installing the corrected build.
+- The Home Assistant log (Settings → System → Logs) can't be read from outside Home Assistant, so it was not reviewed. Check it before starting C.
 
 ## Stage C: supervised trial
 
