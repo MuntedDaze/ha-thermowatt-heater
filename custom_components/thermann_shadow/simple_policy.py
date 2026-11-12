@@ -266,6 +266,10 @@ class SimplePolicy:
 
     # --- the decision ----------------------------------------------------------------------
 
+    def setpoint(self, state: str | None) -> int | None:
+        """The Manual setpoint a policy state requests (None for OFF/unknown)."""
+        return {BASELINE: self.s.baseline_c, STORAGE: self.s.storage_c}.get(state)
+
     def decide(self, snap: Snapshot) -> Decision:
         # 1. The heater's own protections are native in every state: nothing to decide.
         # 2. The owner.
@@ -325,7 +329,19 @@ class SimplePolicy:
         would_heat = reading <= s.storage_c - s.hysteresis_c
         in_peak = self._kind(now) == "peak"
         peak = None if in_peak else self.next_peak(now)
-        plan = {"reading_c": reading, "reading_fresh": fresh, "next_peak": peak}
+        # The REQUESTED setpoint is not the ACHIEVED temperature. Manual 70 holds
+        # the tank between about 62 and 70 °C (Thermann's 8 °C hysteresis); a
+        # reading inside that band has not reached 70, but the thermostat will
+        # not heat until 62 and nothing here forces it to.
+        plan = {
+            "reading_c": reading,
+            "reading_fresh": fresh,
+            "next_peak": peak,
+            "setpoint_c": self.setpoint(state),
+            "storage_target_c": s.storage_c,
+            "target_reached": fresh and reading >= s.storage_c,
+            "thermostat_would_heat_at_storage": would_heat,
+        }
 
         # 4. Peak (and the short lead before it): measured solar only.
         if in_peak or (peak is not None and now >= peak - s.peak_lead):
@@ -368,7 +384,14 @@ class SimplePolicy:
             latest = soft - timedelta(hours=hours)
             plan.update(soft_target=soft, latest_start=latest)
             if not would_heat:
-                return state, "storage_satisfied", 5, plan
+                # Inside the thermostat band (or at 70): no heat would flow now,
+                # so no command. Reported as reached only at the setpoint itself.
+                reason = (
+                    "storage_target_reached"
+                    if plan["target_reached"]
+                    else "storage_within_thermostat_band"
+                )
+                return state, reason, 5, plan
             if now >= latest:
                 # Running late (or a draw): heat now and keep heating to the peak.
                 if state == STORAGE:

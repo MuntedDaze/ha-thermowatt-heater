@@ -204,6 +204,13 @@ solar from 13:00, so the policy waits until 13:00. If the sun only arrives at
 **After a big draw.** If the target can no longer be met, it heats at once and
 keeps heating until the peak boundary.
 
+**Setpoint is not achievement.** Manual 70 °C is the *requested* setpoint. The
+thermostat holds the tank between about 62 and 70 °C (8 °C hysteresis), so a
+reading of 65 °C is reported as "within the thermostat band", not as 70 °C
+reached (`target_reached` needs a fresh reading of at least 70 °C). The
+decision is unchanged: in that band no heat would flow, so the policy sends
+nothing and never forces the element to cycle.
+
 ### 4.2 Once weekday heating has started
 
 Storage normally continues until the peak. Clouds, falling surplus or higher
