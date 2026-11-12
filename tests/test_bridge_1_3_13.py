@@ -319,3 +319,15 @@ def test_a_day_of_30_minute_polls_costs_two_requests_each(factory, clock):
     assert bridge.request_counts["token_refresh"] == 48
     assert bridge.request_counts["password_login"] == 1  # the test's initial login
     assert sum(bridge.request_counts.values()) - 1 == 96  # was 144 with the reactive 401
+
+
+def test_diagnostics_advertise_the_transitions_for_the_controller(factory, clock):
+    bridge = bridge_1_3_13(factory)
+    bridge.publish_diagnostics(force=True)
+    payload = json.loads(
+        [c for c in bridge.mqtt_client.publish.call_args_list if "DIAGNOSTICS" in c.args[0]][
+            -1
+        ].args[1]
+    )
+    assert payload["command_transitions"] == sorted(t[0] for t in TRANSITIONS)
+    assert payload["poll_schedule"] == "clock_aligned"

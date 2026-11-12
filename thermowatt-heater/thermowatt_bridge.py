@@ -823,6 +823,10 @@ class MyThermowattBridge:
                 "command_status_refresh_limit_24h": self.COMMAND_REFRESH_DAILY_LIMIT,
                 "command_confirmation_pending": self.pending is not None,
                 "command_confirmation_followups_seconds": list(CONFIRM_FOLLOWUPS),
+                # 1.3.13: the three-state transitions this bridge accepts (the
+                # controller requires them) and the polling schedule.
+                "command_transitions": sorted(TRANSITIONS),
+                "poll_schedule": "clock_aligned",
                 "refused_while_pending": dict(self.refused_while_pending)
                 if self.refused_while_pending
                 else None,
