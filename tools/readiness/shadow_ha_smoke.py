@@ -55,8 +55,9 @@ def assert_entity_serialization(hass, sources):
     from custom_components.thermann_shadow.settings import CATALOG
 
     settings = sum(meta.kind != "form" for meta in CATALOG.values())
-    # + restore/undo buttons; 0.5.0: controller sensors, master switch, 3 owner buttons.
-    expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3
+    # + restore/undo buttons; 0.5.0: controller sensors, master switch, 3 owner buttons;
+    # 0.7.0: 3 guest/holiday buttons, 2 holiday datetimes, the thermal-state sensor.
+    expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3 + 3 + 2 + 1
     assert len(states) == expected, (len(states), expected)
     frames = []
     connection = SimpleNamespace(
