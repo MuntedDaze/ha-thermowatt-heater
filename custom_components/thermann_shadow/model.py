@@ -323,8 +323,14 @@ def evaluate(
     forecast: tuple[Forecast, ...] = (),
     intervention: bool = False,
     solar_confirmed: bool = False,
+    controlled: bool = False,
 ) -> Plan:
-    """Local planning only. Never enact a window or request a cloud update."""
+    """Local planning only. Never enact a window or request a cloud update.
+
+    ``controlled``: the production controller is active. It supervises the
+    heater mode itself (Manual 70 / OFF are its own states; anything else is
+    owner override), so the shadow-era "native Schedule expected" check and
+    the intervention latch must not gate the planner then."""
     plan = Plan()
     if not aware(now) or not aware(boot):
         plan.reasons.append("clock_invalid")
@@ -355,7 +361,7 @@ def evaluate(
             raise ValueError("temperature_unit_invalid")
         if not 0 <= temperature <= 100 or not 20 <= target <= 75:
             raise ValueError("temperature_out_of_range")
-        if (
+        if not controlled and (
             readings["mode"].value != "Schedule"
             or target != settings.expected_native_target_c
             or intervention

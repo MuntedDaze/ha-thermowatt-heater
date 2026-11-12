@@ -200,6 +200,7 @@ class ShadowRuntime:
             forecast=self.forecast.slots,
             intervention=self.intervention,
             solar_confirmed=solar_confirmed,
+            controlled=bool(self.executor is not None and self.controller_active),
         )
         self.plan.warnings.extend(self.forecast.warnings)
         poll_at = None

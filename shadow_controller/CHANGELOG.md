@@ -6,6 +6,7 @@
 - **Morning:** preferred **45 °C by 06:00** and hard **42 °C by 07:00**, every day (new settings: preferred time, hard time, preferred reserve; the minimum stays `morning_threshold_c`). One cooling allowance protects the hard minimum. Fail-safe permit when the planner or meter is unavailable before 07:00. The legacy morning and shower settings are kept but hidden.
 - **Guest mode** (12 h) and **controller-managed holiday mode** (return-ready), with new buttons, datetimes and sensors. Native Thermann Holiday is not used.
 - **Read-only thermal observer:** tank state with confidence, suspected draws, cooling spans, heating performance and predicted versus actual. It never affects control.
+- **Fix found in the Stage C preflight (present since 0.5.0):** with automatic control on, the shadow-era "native Schedule expected" check still ran, so a heater in Manual or OFF (the controller's own states) gated the planner as *owner review required* and the controller would only ever have held, parked for peaks or used the morning fail-safe. The check and the intervention latch now apply only while control is off. Closed-loop tests had supplied the plan directly, so they did not see it; a runtime-level regression test now covers it.
 - **Unchanged:** 30-minute polling, the two commands, the bridge allowlist, command and request budgets, confirmation, owner override, disabled by default.
 
 ## 0.6.2 — bounded confirmation for a late cloud readback (bridge 1.3.11)
