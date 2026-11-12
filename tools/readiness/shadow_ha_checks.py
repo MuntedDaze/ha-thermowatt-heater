@@ -289,7 +289,8 @@ async def upgrade_from_0_3_0(folder):
     result = await upgrade_from(
         folder, ROOT / "tools/readiness/fixtures/thermann_shadow_0_3_0", "0.3.0", {}
     )
-    assert result["retired_still_registered"] == len(RETIRED_IN_0_4_0)
+    # 0.8.0: the retired 0.3.0 simulation sensors are removed from the registry.
+    assert result["retired_still_registered"] == 0
     return result
 
 
