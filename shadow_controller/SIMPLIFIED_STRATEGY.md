@@ -1,4 +1,4 @@
-# Simplified heating strategy: review and proposal (12 Nov 2026)
+# Simplified heating strategy: review and proposal (12 Nov 2026, revised after the owner's clarification)
 
 **Status: proposal for owner review.** The installed controller (0.7.1) and the
 bridge (1.3.11) are unchanged. This branch adds only a pure, unwired policy
@@ -102,61 +102,31 @@ water, a fully mixed tank holds roughly:
 | 37 °C | lukewarm |
 
 The bottom sensor reads well below the top after draws, so actual availability
-is better than the reading suggests. A 45 °C baseline holds roughly half the reserve. That is why weekday
+is better than the reading suggests. A 45 °C baseline holds roughly half the
+reserve. That is why weekday
 evenings start from 70 °C.
 
-## 3. Safety, antibacterial protection and an open compliance note
 
-### 3.1 How the design keeps the antibacterial cycle working
+## 3. Safety, the heater's own protections and an open compliance note
 
-The Thermann guide (p10) describes the antibacterial cycle: it heats the water
-above 62 °C for 32 minutes every 7 days if that has not otherwise happened,
-"regardless of the mode", and blocks app setting changes while it runs. The
-design keeps it working as follows:
+### 3.1 Native protections
 
-- **The cycle stays native.** The policy never schedules, imitates,
-  suppresses or replaces it. Ordinary storage heating is a separate state
-  (Manual 70 °C), and the cycle is never counted as economic heating.
-- **Protective heating overrides everything (precedence layer 1).** The policy
-  recognises it locally and then sends nothing, even in a peak:
-  - **In OFF:** any element heating. The thermostat cannot run in OFF.
-  - **In Manual 45:** element heating after a fresh poll above 47 °C. The
-    thermostat stops at 45 °C.
+The Thermann guide (p10) says the antibacterial cycle heats the water above
+62 °C for 32 minutes every 7 days if that has not otherwise happened,
+"regardless of the mode". OFF keeps both antibacterial and frost protection.
+The heater manages these itself, so the policy has **no antibacterial
+subsystem**:
 
-  The element signal is the house-load step on the GoodWe meter, so this needs
-  no cloud request. In a peak, that heating is the manufacturer's: the
-  simulations count it apart from economic heating, and it is allowed.
-- **Recognition takes up to one poll in Manual 45.** A cycle that starts in
-  Manual 45 is recognised only once a poll shows the reading above 47 °C.
-  Before then, a scheduled command can still be sent, for example the 07:45
-  park; the simulations cover that case. The guide says OFF keeps the cycle
-  active, and the app blocks changes while it runs. So such a command either
-  leaves the cycle running, or the heater does not accept it, in which case it
-  is recorded as not confirmed and never retried.
-- **Weekdays reach the exposure temperatures anyway.** The weekday plan heats
-  to 62–70 °C (bottom reading) every weekday, so the cycle should seldom be
-  needed ("if not otherwise reached"). On a 45 °C weekend, or during holiday
-  mode or an outage, the cycle is the protection.
+- no detection;
+- no exposure tracking;
+- no overdue warning;
+- no hold for protective heating.
 
-### 3.2 Observing that the cycle has run, without extra cloud traffic
+It never commands anything that disables them: every state it uses (OFF,
+Manual 45, Manual 70) keeps them active. The weekday 70 °C storage reaches the
+cycle's temperature most weekdays anyway.
 
-| Signal | Cost | What it shows |
-| --- | --- | --- |
-| Ordinary 30-minute polls: consecutive polls at 62 °C or above spanning at least 32 minutes (`observe_poll`, `hygiene`) | None | **Evidence** of the exposure, whether from storage heating or the cycle. The bottom sensor reads the coolest water, so this is conservative. A short cycle can fall between polls, so missing evidence is not proof that the cycle did not run. |
-| Local element signal (GoodWe house-load step) while OFF or in Manual 45 above 47 °C | None | The cycle is **running**, with its start and duration from minute samples |
-| Reading falling after protective heating | None | The cycle has **ended** |
-| Days since the last evidence; overdue after 7 days | None | Alert only, never a reason to heat. The native cycle remains the mechanism. |
-| `WaterHeaterSts` (opaque cloud value, already in every poll) | None | Unknown. Worth recording during a recognised cycle to learn whether it carries a flag. Until then, it is not used. |
-| App notifications for the cycle (guide) | – | Not available to the bridge; the owner can see them in the app |
-
-**Not proposed:** extra status reads to watch a cycle.
-
-**A caution about evidence while OFF.** In OFF the cloud reading stays
-reliable, but with polls 30 minutes apart, a 32-minute hold may show up in
-only one poll. The local element signal covers it: about 32 minutes of
-element cycling near 62 °C after a heat-up.
-
-### 3.3 Open compliance note (for review; it does not change the design)
+### 3.2 Open compliance note (for review; it does not change the design)
 
 - **Tasmania.** The building regulator's guidance (CBOS, citing AS/NZS 3500.4)
   says the temperature setting for stored heated water must not be less than
@@ -168,99 +138,177 @@ element cycling near 62 °C after a heat-up.
   - 66 °C for 2 minutes;
   - 70 °C for 1 second.
 
-  Thermann's cycle (above 62 °C for 32 minutes within 7 days) appears designed
-  around that kind of criterion. The weekday 70 °C storage reaches the
-  exposure temperatures far more often.
+  Thermann's cycle appears designed around that kind of criterion.
 - **Thermann's guide** recommends a Manual minimum of 50 °C.
-- **Still open:** whether a 45 °C Manual setting, relying on the antibacterial
-  cycle and weekday 70 °C heating, is acceptable for this installation.
-  Thermann or a licensed plumber (or CBOS) can confirm that; this review
-  cannot.
+- **Still open:** whether a 45 °C Manual setting, with the native cycle and
+  weekday 70 °C heating, is acceptable for this installation. Thermann or a
+  licensed plumber (or CBOS) can confirm that; this review cannot.
 - **Scald protection** at outlets (the tempering valve) is unaffected.
 
 **Cloud limitations:**
 
-- No API field reports the antibacterial cycle, the element's state or the
-  active schedule (see 3.2).
-- Token lifetime is under 30 minutes (see section 7).
+- No API field reports the element's state or the active schedule.
+- The access token lasts under 30 minutes (see section 7).
 
-## 4. The simplest coordinated policy
+## 4. The policy
 
-There are three heater states, and the tariff calendar decides which applies:
+There are three heater states:
 
 | State | Heater setting |
 | --- | --- |
-| **OFF** | Software OFF (antibacterial and frost protection stay active) |
+| **OFF** | Software OFF |
 | **BASELINE** | Manual 45 °C |
-| **STORAGE** | Manual at 70 °C |
+| **STORAGE** | Manual 70 °C |
 
-| When (from the Aurora 93 calendar) | State |
+The tariff calendar decides which rule applies:
+
+| When (from the Aurora 93 calendar) | Rule |
 | --- | --- |
-| Weekday peak, and the 15 minutes before one | **OFF**. STORAGE only while *measured* surplus has been at least 3.3 kW for 10 minutes. Withdraw after 5 minutes of grid import above 0.2 kW. Forecasts never qualify. |
-| Weekday daytime before the evening peak (from 09:00, or the end of the morning peak) | Stay as you are (no command), then **STORAGE until the peak**. On Aurora 93 the heater comes out of the morning peak OFF, so it stays OFF; 45 °C is not used in weekday daytime. See below for when storage starts. |
+| Any peak, morning or evening, and the 2 minutes before it | **OFF**, unless measured surplus allows STORAGE (section 4.3). |
+| Weekday off-peak before the evening peak | Heat to 70 °C in the **cheapest window that finishes by the soft target** (section 4.1). |
 | Weekday night after the evening peak | **Manual 45 °C**. The native thermostat handles comfort, including recovery after evening showers. |
-| Weekend (all off-peak) | **Manual 45 °C**, plus STORAGE while solar heating is worth it (section 5) and can finish before the next peak |
+| Weekend (all off-peak) | **Manual 45 °C**, plus STORAGE when solar heating is worth it (section 4.4). There is no weekend deadline. |
 
-Storage starts at the **latest start** that still finishes 30 minutes before
-the peak. The heating time comes from the reading and the observed heating
-rate, and a stale reading is assumed cold. It starts **earlier** when any of
-these holds:
+### 4.1 Weekday: EMHASS chooses the cheapest window
 
-- measured solar of at least 1 kW is no dearer than the best forecast hour
-  before the latest start;
-- no solar is forecast before then (start on off-peak at once);
-- the tank is at or below the baseline's reheat point.
+| Target | Winter | Summer |
+| --- | --- | --- |
+| Soft target: 70 °C, preferred by | 15:30 | 16:30 |
+| Hard boundary: evening peak starts | 16:00 | 17:00 |
 
-Once started on a weekday, storage runs until the peak. Stopping and
-restarting later at the same off-peak price would only add commands. A target
-that cannot be met is reported, and the heater still parks for the peak.
+**How the plan is made.** The policy recalculates every minute, locally, with
+no cloud request:
 
-**A typical weekday** has four commands, the same number as today:
+1. **Heating time.** It comes from the reading and the observed heating rate,
+   about 8.2 °C an hour. A stale reading is assumed cold (37 °C), so the plan
+   starts earlier, never later.
+2. **Expected surplus, slot by slot.** The day is split into 5-minute slots up
+   to the soft target:
+   - for the first 30 minutes, the **measured** GoodWe surplus (actual solar
+     minus actual household load, excluding the element);
+   - after that, the **EMHASS** net-export forecast;
+   - a slot the forecast does not cover counts as no surplus, so a missing
+     forecast never makes waiting look cheaper.
+3. **Cost of each window.** Each candidate window lasts the full heating time.
+   Its cost per kWh of heat mixes surplus at the feed-in rate with grid import
+   at the tariff rate.
+4. **Choice.** It picks the earliest start that no later start beats by more
+   than 0.5 c/kWh. If that is now, it starts. Otherwise it waits.
+5. **Latest start.** At the latest start (soft target minus heating time) it
+   starts regardless.
 
-| Time | Command |
-| --- | --- |
-| 07:45 | Park (OFF) |
-| About 11:00–14:00 | Start STORAGE (or during the morning peak, on measured solar) |
-| 16:45 | Park (OFF) |
-| 22:00 | Manual 45 °C |
+**Example.** At 45 °C, 3 hours of heating are needed. EMHASS forecasts strong
+solar from 13:00, so the policy waits until 13:00. If the sun only arrives at
+15:00, it starts at the latest start, about 13:30, on off-peak grid.
 
-**A weekend day** has 0–2 commands.
+**After a big draw.** If the target can no longer be met, it heats at once and
+keeps heating until the peak boundary.
 
-**Day changes need no special case.** The calendar handles Friday → Saturday
-(BASELINE carries on) and Sunday → Monday (park at 07:45 for Monday's 08:00
-peak).
+### 4.2 Once weekday heating has started
+
+Storage normally continues until the peak. Clouds, falling surplus or higher
+household imports do **not** stop it, and the thermostat stops the element at
+70 °C.
+
+It pauses only when all of these hold:
+
+- EMHASS shows a later window that saves at least **$0.30** over the remaining
+  heat;
+- that window starts at least 15 minutes from now (the command spacing);
+- it still finishes by the soft target.
+
+A cloud alone can never trigger a pause. Measured surplus stands in for the
+forecast for only 30 minutes, which is worth at most about $0.12 of heat.
+
+When it is running late, it never pauses.
+
+**The soft target is a planning buffer, not a shutdown.** Heating that has not
+finished by 15:30 or 16:30 continues until the peak boundary.
+
+### 4.3 Peaks: one rule, morning and evening
+
+- **Start:** Manual 70 °C only after at least **3.3 kW** of measured surplus
+  for about **10 minutes** (80 % of samples). The element's own load is
+  excluded, and forecasts never count.
+- **Withdraw:** after **5 minutes** in which either:
+  - grid import is above **0.2 kW**; or
+  - the surplus is below the element's 3 kW (less the 0.2 kW tolerance). This
+    check also applies while the thermostat has the element off.
+- **Restart:** a new 10-minute qualification, and the 15-minute command
+  spacing.
+- **Park lead: 2 minutes.** That is one decision tick plus the bridge's
+  pre-command refresh and POST (seconds), plus the measured cloud readback
+  (about 2–63 s in T3c). So the park lands before the boundary without
+  stopping 15 minutes early.
+- **Reserved command slot:** for the 15 minutes before the park, the policy
+  sends nothing except OFF. Nothing it sends can then push the park past the
+  boundary through the spacing rule.
+
+### 4.4 Weekends and weekday nights
+
+**Manual 45 °C** is the baseline. It switches to Manual 70 °C when all of
+these hold:
+
+- at least **1 kW** of measured surplus for 10 minutes;
+- the heating window now saves at least 2 c/kWh against off-peak grid;
+- EMHASS shows no cheaper window later that day;
+- the heating can finish before the next peak.
+
+A session ends only when **both** of these are true:
+
+- the measured surplus has been below 1 kW for 5 minutes;
+- the next hour's forecast is below 1 kW.
+
+So a passing cloud does not interrupt a worthwhile session.
+
+### 4.5 Precedence and examples
 
 **Precedence,** highest first. Layer 3 can only block a command; it never
 chooses a state.
 
-1. Manufacturer protective heating (antibacterial, frost): hold, never a command.
-2. Owner: an app change or hold (hold), holiday mode (OFF), 12hr Override (STORAGE).
-3. Cloud, authentication, freshness and command spacing.
-4. The weekday peak import restriction.
-5. Hot-water comfort and economical heating.
-6. Forecast optimisation, which can only move an off-peak start earlier or later.
+1. The heater's own protections: native, in every state.
+2. Owner: an app change or hold (hold), holiday mode (OFF), 12hr Override
+   (STORAGE).
+3. Cloud, authentication, freshness, command spacing and the reserved park
+   slot.
+4. The peak import restriction.
+5. Hot water before the evening peak, and the baseline.
+6. Forecast economics, which can only move an off-peak start or pause for a
+   clearly cheaper window.
+
+**A typical weekday has four commands,** the same number as today:
+
+| Time (summer) | Command |
+| --- | --- |
+| 07:58 | Park (OFF) |
+| The cheapest window, often 11:00–14:00, or during the morning peak on measured solar | Start STORAGE |
+| 16:58 | Park (OFF) |
+| 22:00 | Manual 45 °C |
+
+**A weekend day** has 0–2 commands.
+
+**Day changes need no special case.** Friday → Saturday stays on Manual 45 °C,
+and Sunday → Monday parks at 07:58.
 
 **Invariant, tested in every simulation:** the heater is never in Manual 45 °C
-during a peak minute, except while the manufacturer's own cycle is being left
-alone. A separate test checks that every Manual 45 °C command falls in an
-off-peak baseline period across a summer week, a cloudy working week and two
-winter weekdays. Tonight's case is also tested: Manual 45, reading 35 °C,
-heating at 21:09 in the peak. The policy parks it, because the 37–45 °C band is
-the thermostat, not protective heating.
+during a peak minute. A separate test checks that every Manual 45 °C command
+falls in an off-peak baseline period.
 
 **Simulation results** (`tests/test_simple_policy.py`):
 
 | Scenario | Commands | Grid heating | Peak grid heating | Outcome |
 | --- | --- | --- | --- | --- |
-| Summer weekday, sunny | 4 | 0 kWh | 0 | Storage started on peak solar at 09:12 |
-| Summer weekday, overcast | 4 | 4.0 kWh | 0 | Started at 11:00 |
-| Sunny forecast, cloudy day | 4 | 6.2 kWh | 0 | Started at the latest start, 14:19; reached 70 °C by 16:44 |
-| Winter weekday | 4 | 0.1 kWh | 0 | Target met before 16:00 |
-| Monday 18:30 showers (68 → 25 °C) | 3 | 9.0 kWh | 0 | No peak reheat; Manual 45 °C at 22:00 recovered it overnight; no 70 °C overnight |
-| Friday noon → Monday 18:00 | 7 | 0 kWh | 0 | Weekend solar opportunity on Sunday |
+| Summer weekday, sunny | 4 | 0 kWh | 0 | Storage started on peak solar at 09:12; 69 °C by 16:30 |
+| Summer weekday, overcast | 4 | 4.0 kWh | 0 | Started at 11:00, when every window cost the same |
+| Cloud until 13:00, then sun (forecast) | 4 | 0 kWh | 0 | Waited; started at 13:00; 70 °C by 16:30 |
+| The same day without that forecast | 4 | 5.2 kWh | 0 | Started at 11:00: shows the forecast's value |
+| Sunny forecast, cloudy day | 4 | 6.1 kWh | 0 | Waited for the promised sun; started at 14:10; 70 °C by 16:30 |
+| An hour of cloud after starting | 4 | 2.6 kWh | 0 | Not paused |
+| Winter weekday | 4 | 0.3 kWh | 0 | Started at 10:38; 69.5 °C by 15:30 |
+| Monday 18:30 showers (68 → 25 °C) | 3 | 9.0 kWh | 0 | No peak reheat; Manual 45 °C recovered it overnight |
+| Friday noon → Monday 18:00 | 7 | 0 kWh | 0 | One Sunday solar session |
+| Saturday with a 15-minute cloud at noon | 2 | 0.4 kWh | 0 | One session, not interrupted |
 | Cloudy weekend | 0 | – | – | Manual 45 °C only |
-| Antibacterial cycle at 03:00 on a 45 °C Saturday | 0 | – | – | Held from the first poll above 47 °C until it ended; exposure evidenced |
-| Cycle starting 07:20, before the Monday morning peak | 1 (the 07:45 park) | – | 0 economic | Nothing sent from recognition until the end; 5.3 kWh of protective heating counted separately |
 
 ## 5. Is 1 kW a sensible weekend solar threshold?
 
@@ -276,43 +324,35 @@ against 17.02 c off-peak:
 
 Storing at 70 °C rather than the baseline also loses roughly 0.5–1 kWh more
 over the following day, worth about 8–17 c. So 1 kW is close to break-even.
-The policy therefore starts weekend storage only when all of these hold:
+That is why the weekend rule also needs a 2 c/kWh saving over the whole
+window, and waits when EMHASS shows a cheaper window later.
 
-- at least 1 kW has been measured for 10 minutes;
-- no better hour is forecast later today ("wait for the 3–4 kW at noon");
-- it saves at least 2 c/kWh against off-peak grid power (heat that is not
-  otherwise needed);
-- the heating can finish before the next peak.
+## 6. Shared safeguards
 
-Weekend storage ends after 5 minutes below 0.5 kW. On a cloudy weekend nothing
-forces 70 °C.
+The guide's 8 °C hysteresis governs the **element**, and the native thermostat
+does that switching. The guide gives no limit on mode or target changes. So
+the policy has no minimum heating, minimum rest or fallback timers.
 
-## 6. Which delays and safeguards are needed
+| Safeguard | Used for |
+| --- | --- |
+| 10-minute solar qualification (80 % of samples) | Peak starts (3.3 kW) and weekend starts (1 kW) |
+| 5-minute withdrawal | Peak: import above 0.2 kW, or surplus below the element. Weekend: surplus below 1 kW, together with a faded forecast. |
+| 15-minute command spacing | Every command. One command is outstanding until confirmed. |
+| 2-minute park lead and the reserved slot before it | Every peak |
+| 30-minute soft target | A planning buffer before the evening peak |
+| $0.30 pause threshold | The only reason to stop committed weekday heating early |
+| 6 commands and 220 requests a day | Backstop only. A normal weekday uses 4 commands. |
+| Bridge freshness (≤ 60 s), one pending command, bounded confirmation, no retries | Unchanged |
 
-**Manufacturer switching guidance:**
+**Dropped:**
 
-- The guide's 8 °C hysteresis governs the **element**. The native thermostat
-  does that switching. It micro-cycled 4 times in 8 minutes near cut-off on
-  10 Nov, without any command.
-- The guide gives no limit on **mode or target changes** or on **cloud
-  commands**.
-- So the 30-minute minimum heating and 30-minute minimum rest have no
-  manufacturer basis. Neither are they needed for stability once one
-  qualification rule and one withdrawal rule exist.
+- minimum heating and minimum rest;
+- command-slot rounding;
+- the session settle;
+- the morning fail-safe window and cooling allowance;
+- the 15-minute park lead.
 
-| Safeguard | Keep? | Why |
-| --- | --- | --- |
-| 10-minute solar qualification (80 % of samples) | Keep: one rule, used for peak and off-peak | Passing clouds and kettles |
-| 5-minute import withdrawal (above 0.2 kW in a peak) | Keep | Owner's rule. The element's own load is excluded, so starting the element does not look like lost solar. |
-| 15-minute minimum between commands | Keep: one rule | One command is outstanding until confirmed (up to about 6 minutes), and the next decision should use the confirmed state. This limit is ours, not the manufacturer's. |
-| 15-minute park lead before a peak | Keep. It equals the spacing. | A command just before the lead window can then never push the peak OFF into the peak. |
-| 30-minute finish margin | Keep | Covers a late start and the uncertainty in the heating rate |
-| Minimum heating / minimum rest | **Drop** | No basis (see above); covered by qualification, withdrawal and spacing |
-| Command slot rounding, session settle, morning fail-safe window and cooling allowance | **Drop** | Replaced by the native thermostat and the latest-start rule |
-| 6 commands a day, 220 requests a day | Keep, as a backstop only | Bugs. A normal weekday uses 4. |
-| Bridge freshness (≤ 60 s), one pending command, bounded confirmation, no retries | Keep unchanged | Cloud safety |
-
-## 7. How much cloud traffic can be reduced
+## 7. Cloud traffic and polling
 
 The 26 hours to 21:09 on 12 Nov included installs, restarts, the supervised
 tests and the first Stage C command. They used 198 requests:
@@ -329,31 +369,66 @@ tests and the first Stage C command. They used 198 requests:
 **Where the steady 141–147 a day comes from:** every 30-minute poll is `GET`
 (401) → token refresh → `GET`. That is **3 requests per poll, or 144 a day**,
 before any command. The access token lasts less than 30 minutes, and the bridge
-refreshes it only after a 401. Discovery happens only after a restart or an
-MQTT reconnect.
+refreshes it only after a 401.
+
+**The policy itself adds no cloud traffic.** It evaluates the plan and the
+GoodWe samples locally every minute. It needs a Thermann reading only for the
+plan (one up to 75 minutes old is accepted), and the bridge's fresh read only
+when it sends a command.
+
+### 7.1 Evaluation: aligning polls to :00 and :30
+
+**Today** (bridge 1.3.11):
+
+- the bridge polls 30 minutes after its last background poll, so the times
+  drift with every restart;
+- an on-demand refresh resets that timer
+  (`next_background = now + interval`), so it shifts the schedule;
+- a command's own reads count as the due poll only if they happen in the same
+  tick.
+
+**Proposed for bridge 1.3.13 (needs approval):**
+
+- **Clock-aligned polls** at :00 and :30 local time. After a restart or an
+  extra read, the next poll is still the next :00 or :30, so the schedule never
+  shifts.
+- **Reuse.** Skip a scheduled poll if a status read, or a command's refresh
+  or confirmation read, finished or is in progress within the last 5 minutes.
+  The next slot stays on the grid. Never run two reads at once.
+- **Guarded extra reads,** each still through the existing authentication,
+  backoff, quota and accounting gates:
+  - one at startup, or when control is activated;
+  - the existing pre-command refresh when the status is more than 60 s old;
+  - the bounded confirmation reads.
+
+**Benefits:**
+
+- A reading lands at the tariff boundaries and at the soft targets (15:30 and
+  16:30), and EMHASS's 30-minute slots line up with the readings.
+- Restarts no longer move the schedule.
+- The park at 16:58 brings its own reads (refresh, then confirmations at about
+  16:59 and 17:03), so the 17:00 poll is reused rather than repeated. That saves
+  1–2 requests a day.
+
+**The same 48 polls a day.** Alignment does not change the token cost: each
+poll still costs 3 requests until the token is refreshed before the poll.
+
+**Risk:** small. It changes only when the existing reads happen, not how many
+are allowed or how they are guarded. A bridge release still needs the usual
+mocked tests and approval.
+
+### 7.2 Other reductions
 
 | Change | Saving | Needs |
 | --- | --- | --- |
 | Refresh the token *before* the poll when it is known to have expired | 48 a day (−33 %) | Owner approval: an authentication change, the same area as PR #3 |
-| Drop the immediate confirmation read. It showed the old mode in T3b and in Stage C, and the 60-second read confirmed. | 1 per command (about 4 a day) | Owner approval: command confirmation |
-| Weekend commands (0–2 a day, against 2–4 with the afternoon goal) | 2–8 a weekend | This policy |
-| Never command a state that is already active | Already done by both the policy and the bridge | – |
+| Drop the immediate confirmation read. It showed the old mode in T3b and T3c, and the 60-second read confirmed. | 1 per command (about 4 a day) | Owner approval: command confirmation |
+| Clock-aligned polling with reuse | 1–2 a day | Bridge 1.3.13 (section 7.1) |
+| Fewer weekend commands (0–2 a day, against 2–4 with the afternoon goal) | 2–8 a weekend | This policy |
 
-**Realistic result:** about 100 requests a day with the first two changes, at
-the same 30-minute polling. Without the authentication change, about 140.
-
-**Switching between Manual 45 and Manual 70 adds no traffic,** because the
-number of commands stays at four a weekday.
-
-**On-demand refresh:** the bridge already has a guarded one (MQTT
-`P/<serial>/refresh`). It is limited to one read per 5 minutes, it reuses a
-recent poll, and it honours the cloud health, authentication and accounting
-gates. It is **disabled** on the live bridge (`on_demand_refresh_enabled:
-false`), and the controller never requests it. Using it once when automatic
-control is enabled, after a restart and after a recovery would cost about 3
-requests each time. In return, the first decision would not wait up to
-30 minutes: Stage C waited 26 minutes on 12 Nov. This needs a bridge option
-change and a small controller change, both with approval.
+**Realistic result:** about 100 requests a day with the token and confirmation
+changes, at the same 30-minute polling. Without the authentication change,
+about 140.
 
 ## 8. What stays unchanged
 
@@ -366,7 +441,7 @@ change and a small controller change, both with approval.
   unconfirmed command;
 - an exact command allowlist (extended to three states with a stated prior
   state);
-- 30-minute polling.
+- 30-minute polling (aligned to :00 and :30 if 1.3.13 is approved).
 
 **Controller:**
 
@@ -381,23 +456,26 @@ change and a small controller change, both with approval.
 **Elsewhere:**
 
 - the read-only thermal observer;
-- OFF as the park state, which keeps the manufacturer's protections.
+- OFF as the park state; the heater keeps its own protections in every state.
+
 
 ## 9. Next steps, each needing owner approval
 
-1. **Compliance confirmation** (section 3.3), at the owner's discretion. The
+1. **Compliance confirmation** (section 3.2), at the owner's discretion. The
    design stays at Manual 45 °C.
-2. **Bridge 1.3.13:** guarded commands for exactly OFF, `Manual:45` and
-   `Manual:70`, each stating its prior state. Then a supervised qualification
-   of `Manual:45` from OFF, of 45 ↔ 70 target changes and of `off` from
-   Manual 45.
+2. **Bridge 1.3.13:**
+   - guarded commands for exactly OFF, `Manual:45` and `Manual:70`, each
+     stating its prior state;
+   - clock-aligned polling with reuse (section 7.1);
+   - a supervised qualification of `Manual:45` from OFF, of 45 ↔ 70 target
+     changes, and of `off` from Manual 45.
 3. **Controller:** run `simple_policy` in shadow first, as a read-only
-   "would do" sensor alongside the live controller. Then wire it into the
-   executor and delete the planner, goals, permission and morning fail-safe
-   code and their settings.
-4. **Optional traffic changes:** token pre-refresh, dropping the immediate
-   confirmation read, and on-demand refresh when control is enabled or after a
-   restart or recovery.
+   "would do" sensor alongside the live controller, fed by the existing EMHASS
+   forecast and GoodWe samples. Then wire it into the executor and delete the
+   planner, goals, permission and morning fail-safe code and their settings.
+4. **Optional traffic changes:**
+   - token pre-refresh;
+   - dropping the immediate confirmation read.
 
 Sources: [CBOS heated water](https://cbos.tas.gov.au/topics/technical-regulation/plumbing-standards/heated-water),
 [NCC 2022 Volume Three, Part B2](https://ncc.abcb.gov.au/editions/ncc-2022/adopted/volume-three/b-water-services/part-b2-heated-water-services),

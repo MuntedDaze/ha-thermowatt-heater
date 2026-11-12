@@ -2,9 +2,10 @@
 
 Offline and deterministic. The simulated heater is a mixed 315 L tank with the
 Thermann Manual thermostat (reheats 8 °C below its target), a 3 kW element,
-0.2 °C/h standing loss, 30-minute Thermann polls in whole degrees and local
-meter samples once a minute. It is a test bench for the policy's rules, not a
-claim about the real tank (whose bottom sensor reads lower after draws)."""
+0.2 °C/h standing loss, 30-minute Thermann polls in whole degrees, local meter
+samples once a minute and an EMHASS-style forecast refreshed every 30 minutes.
+It is a test bench for the policy's rules, not a claim about the real tank
+(whose bottom sensor reads lower after draws)."""
 
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -20,6 +21,7 @@ SETTINGS, TARIFFS = c.parse_options({})
 S = sp.PolicySettings(feed_in_rate=SETTINGS.feed_in_rate, tariff_clock=SETTINGS.tariff_clock)
 OFF, BASE, STORE, HOLD = sp.OFF, sp.BASELINE, sp.STORAGE, sp.HOLD
 MIN = timedelta(minutes=1)
+RATE = S.element_kw / S.kwh_per_c  # about 8.2 °C/h
 
 
 def at(day, hour, minute=0, month=11):
@@ -41,10 +43,22 @@ def snap(now, state, reading=60.0, **kw):
 
 
 def fc(start, hours, export_kw):
+    """Half-hour forecast slots from ``start``; ``export_kw(i)`` for slot i."""
     return tuple(
         m.Forecast(start + timedelta(minutes=30 * i), start + timedelta(minutes=30 * (i + 1)), kw)
         for i in range(hours * 2)
         for kw in [export_kw(i) if callable(export_kw) else export_kw]
+    )
+
+
+def from_hour(start, sunny_from, kw=4.0, before=0.1):
+    """Forecast from ``start``: ``before`` kW until local hour ``sunny_from``, then ``kw``."""
+    return fc(
+        start,
+        12,
+        lambda i: kw
+        if (start + timedelta(minutes=30 * i)).astimezone(m.HOBART).hour >= sunny_from
+        else before,
     )
 
 
@@ -58,12 +72,21 @@ def fc(start, hours, export_kw):
         {"storage_c": 75},
         {"baseline_c": 65},
         {"peak_start_kw": 2.5},
-        {"peak_lead": timedelta(minutes=5)},
+        {"peak_lead": timedelta(0)},
+        {"peak_lead": timedelta(minutes=20)},
+        {"soft_target_margin": timedelta(minutes=1)},
     ],
 )
 def test_unsafe_or_contradictory_settings_are_rejected(change):
     with pytest.raises(ValueError):
         replace(S, **change)
+
+
+def test_agreed_design_values():
+    assert (S.baseline_c, S.storage_c) == (45, 70)
+    assert sp.PolicySettings().baseline_c == 45
+    assert S.peak_lead == 2 * MIN and S.soft_target_margin == 30 * MIN
+    assert (S.qualify, S.withdraw, S.command_spacing) == (10 * MIN, 5 * MIN, 15 * MIN)
 
 
 def test_commands_are_the_three_states_only():
@@ -74,19 +97,14 @@ def test_commands_are_the_three_states_only():
     assert p60.decide(snap(now, OFF)).command == "Manual:60"
 
 
-# --- precedence ------------------------------------------------------------------------
-
-
-def test_manufacturer_heating_beats_everything_even_at_a_peak():
+def test_no_antibacterial_or_exposure_subsystem():
     p = sp.SimplePolicy(S, TARIFFS)
-    now = at(MON, 18)
-    d = p.decide(snap(now, STORE, manufacturer_heating=True, holiday=True, override_12h=True))
-    assert (d.state, d.reason, d.layer, d.command) == (
-        HOLD,
-        "manufacturer_protective_heating",
-        1,
-        None,
-    )
+    for name in ("observe_poll", "hygiene", "protective_heating_suspected", "last_exposure_at"):
+        assert not hasattr(p, name)
+    assert "manufacturer_heating" not in sp.Snapshot.__dataclass_fields__
+
+
+# --- precedence ------------------------------------------------------------------------
 
 
 def test_owner_layer_then_cloud_gate_then_spacing():
@@ -109,7 +127,7 @@ def test_no_command_when_the_desired_state_is_already_active():
         assert p.decide(snap(now, state)).command is None
 
 
-# --- weekday peaks: measured solar only --------------------------------------------------
+# --- peaks: measured solar only, one rule for morning and evening ------------------------
 
 
 def test_peak_never_heats_from_the_grid_and_forecast_cannot_qualify():
@@ -161,7 +179,22 @@ def test_sustained_import_withdraws_after_five_minutes_not_four():
     assert p.decide(snap(now, STORE)).state == STORE
     now = feed(p, now + MIN, 2, 1.2, element=True)
     d = p.decide(snap(now, STORE))
-    assert (d.state, d.reason, d.command) == (OFF, "peak_import_sustained", "off")
+    assert (d.state, d.reason, d.command) == (OFF, "peak_solar_withdrawn", "off")
+
+
+def test_lost_solar_withdraws_even_while_the_thermostat_has_the_element_off():
+    # Tank at 70: the element is off, so there is no import to see. The surplus
+    # falls from 3.5 to 1.0 kW, which would not cover the element.
+    p = sp.SimplePolicy(S, TARIFFS)
+    t0 = feed(p, at(MON, 18), 10, -3.5)
+    now = feed(p, t0 + MIN, 4, -1.0)
+    assert p.decide(snap(now, STORE, reading=70)).state == STORE
+    now = feed(p, now + MIN, 2, -1.0)
+    d = p.decide(snap(now, STORE, reading=70))
+    assert (d.state, d.reason) == (OFF, "peak_solar_withdrawn")
+    q = sp.SimplePolicy(S, TARIFFS)
+    now = feed(q, at(MON, 18), 20, -3.0)  # 3.0 kW still covers the element
+    assert q.decide(snap(now, STORE, reading=70)).state == STORE
 
 
 def test_appliance_load_during_peak_solar_heating_withdraws():
@@ -169,6 +202,16 @@ def test_appliance_load_during_peak_solar_heating_withdraws():
     t0 = feed(p, at(MON, 18), 10, -0.4, element=True)
     now = feed(p, t0 + MIN, 6, 1.6, element=True)  # oven on: 2 kW extra
     assert p.decide(snap(now, STORE)).state == OFF
+
+
+def test_after_withdrawal_peak_solar_must_requalify():
+    p = sp.SimplePolicy(S, TARIFFS)
+    withdrawn = at(MON, 18)
+    now = feed(p, withdrawn + MIN, 16, lambda i: 1.0 if i < 8 else -3.6)  # 8 min back
+    assert p.decide(snap(now, OFF, reading=55, last_command_at=withdrawn)).state == OFF
+    now = feed(p, now + MIN, 3, -3.6)  # 11 minutes qualified
+    d = p.decide(snap(now, OFF, reading=55, last_command_at=withdrawn))
+    assert (d.state, d.command) == (STORE, "Manual:70")
 
 
 def test_stale_meter_withdraws_and_never_qualifies():
@@ -187,86 +230,139 @@ def test_after_a_restart_peak_solar_needs_a_fresh_qualification():
 
 
 @pytest.mark.parametrize(
-    ("month", "day", "lead_hour", "lead_minute"),
-    [(11, MON, 16, 45), (7, 14, 15, 45)],
+    ("month", "day", "hour", "state"),
+    [
+        (11, MON, 17, STORE),  # summer evening peak 17:00
+        (7, 14, 16, STORE),  # winter evening peak 16:00
+        (11, MON, 8, BASE),  # summer morning peak 08:00
+        (7, 14, 7, BASE),  # winter morning peak 07:00
+    ],
 )
-def test_park_lead_before_evening_peak_in_summer_and_winter(month, day, lead_hour, lead_minute):
+def test_park_is_sent_two_minutes_before_every_peak(month, day, hour, state):
     p = sp.SimplePolicy(S, TARIFFS)
-    before = at(day, lead_hour, lead_minute, month) - MIN
+    before = at(day, hour, 0, month) - 3 * MIN
     p.add_meter(before, 2.5, True)
-    assert p.decide(snap(before, STORE, reading=62)).state == STORE
+    assert p.decide(snap(before, state, reading=62)).state == state
     lead = before + MIN
     p.add_meter(lead, 2.5, True)
-    d = p.decide(snap(lead, STORE, reading=62))
-    assert (d.state, d.plan["mode"]) == (OFF, "peak")
+    d = p.decide(snap(lead, state, reading=62))
+    assert (d.state, d.command, d.plan["mode"]) == (OFF, "off", "peak")
 
 
-# --- weekday daytime: storage before the evening peak -------------------------------------
-
-
-def test_latest_start_finishes_before_the_peak_with_margin():
+def test_the_park_command_slot_is_reserved():
+    # A draw at 16:40 leaves the tank needing heat: start storage, which still
+    # allows the 16:58 park 18 minutes later. From 16:43 nothing but OFF may
+    # be sent, so the park can never be blocked by the spacing rule.
     p = sp.SimplePolicy(S, TARIFFS)
-    sunny = fc(at(MON, 11), 8, 4.0)
-    d = p.decide(snap(at(MON, 11, 30), OFF, reading=50, forecast=sunny))
-    assert (d.state, d.reason) == (OFF, "storage_waiting")
-    hours = (70 - 50) / (S.element_kw / S.kwh_per_c)
-    expected = at(MON, 17) - timedelta(minutes=30) - timedelta(hours=hours)
+    d = p.decide(snap(at(MON, 16, 40), OFF, reading=55))
+    assert (d.state, d.command) == (STORE, "Manual:70")
+    d = p.decide(snap(at(MON, 16, 43), OFF, reading=55))
+    assert (d.state, d.reason, d.command, d.plan["wanted"]) == (
+        OFF,
+        "peak_command_reserved",
+        None,
+        STORE,
+    )
+    park = p.decide(snap(at(MON, 16, 58), STORE, reading=58, last_command_at=at(MON, 16, 40)))
+    assert park.command == "off"
+
+
+# --- weekday off-peak: 70 °C by the soft target, cheapest window ---------------------------
+
+
+def test_waits_for_better_solar_later_when_that_is_feasible():
+    # Needs about 3 hours (45 -> 70). Overcast now; EMHASS forecasts excellent
+    # solar from 13:00. The soft target is 16:30, so waiting is feasible.
+    p = sp.SimplePolicy(S, TARIFFS)
+    now = feed(p, at(MON, 11, 0), 12, 0.3)
+    d = p.decide(snap(now, OFF, reading=45, forecast=from_hour(now, 13)))
+    assert (d.state, d.reason, d.command) == (OFF, "storage_waiting_for_cheaper_window", None)
+    assert at(MON, 12, 55) <= d.plan["best_start"] <= at(MON, 13, 15)
+    assert d.plan["cost_best"] < d.plan["cost_now"]
+
+
+def test_starts_on_off_peak_when_waiting_would_miss_the_soft_target():
+    p = sp.SimplePolicy(S, TARIFFS)
+    forecast = from_hour(at(MON, 11), 15)  # sun only from 15:00: too late for 3 h
+    d = p.decide(snap(at(MON, 11, 30), OFF, reading=50, forecast=forecast))
+    assert d.reason == "storage_waiting_for_cheaper_window"
+    hours = (70 - 50) / RATE
+    expected = at(MON, 16, 30) - timedelta(hours=hours)
     assert abs((d.plan["latest_start"] - expected).total_seconds()) < 1
-    late = p.decide(snap(expected + MIN, OFF, reading=50, forecast=sunny))
+    late = p.decide(snap(expected + MIN, OFF, reading=50, forecast=forecast))
     assert (late.state, late.reason, late.command) == (STORE, "storage_latest_start", "Manual:70")
 
 
-def test_overcast_forecast_starts_storage_on_off_peak_at_once():
+def test_overcast_or_missing_forecast_starts_storage_at_once():
     p = sp.SimplePolicy(S, TARIFFS)
     now = at(MON, 11, 5)
-    d = p.decide(snap(now, OFF, reading=55, forecast=fc(now, 8, 0.3)))
-    assert (d.state, d.reason, d.layer) == (STORE, "storage_now_no_solar_forecast", 6)
+    for forecast in (fc(now, 8, 0.3), ()):
+        d = p.decide(snap(now, OFF, reading=55, forecast=forecast))
+        assert (d.state, d.reason, d.layer) == (STORE, "storage_cheapest_now", 6)
 
 
-def test_sunny_forecast_waits_and_measured_solar_starts_when_no_worse():
+def test_measured_solar_now_as_good_as_the_forecast_later_starts_now():
     p = sp.SimplePolicy(S, TARIFFS)
-    now = feed(p, at(MON, 11), 12, -1.2)
-    forecast = fc(now, 8, lambda i: 4.0 if 2 <= i <= 6 else 1.0)
-    d = p.decide(snap(now, OFF, reading=55, forecast=forecast))
-    assert (d.reason, d.plan["waiting_for"]) == ("storage_waiting", "better_solar_forecast_later")
-    q = sp.SimplePolicy(S, TARIFFS)
-    now = feed(q, at(MON, 12), 12, -3.4)
-    d = q.decide(snap(now, OFF, reading=55, forecast=forecast))
-    assert (d.state, d.reason) == (STORE, "storage_now_solar")
+    now = feed(p, at(MON, 12), 12, -3.4)
+    d = p.decide(snap(now, OFF, reading=55, forecast=fc(now, 8, 3.5)))
+    assert (d.state, d.reason) == (STORE, "storage_cheapest_now")
 
 
-def test_low_tank_starts_storage_immediately_and_satisfied_tank_waits():
+def test_satisfied_tank_waits_and_stale_reading_plans_from_a_cold_assumption():
     p = sp.SimplePolicy(S, TARIFFS)
-    assert p.decide(snap(at(MON, 11, 5), OFF, reading=36)).reason == "storage_now_tank_low"
     d = p.decide(snap(at(MON, 13), OFF, reading=65))
     assert (d.state, d.reason, d.command) == (OFF, "storage_satisfied", None)
-
-
-def test_stale_reading_plans_from_a_cold_assumption_and_says_so():
-    p = sp.SimplePolicy(S, TARIFFS)
     now = at(MON, 11, 30)
-    fresh = p.decide(snap(now, OFF, reading=60, forecast=fc(now, 8, 4.0)))
+    sunny_later = from_hour(now, 14)
+    fresh = p.decide(snap(now, OFF, reading=60, forecast=sunny_later))
     stale = p.decide(
-        snap(now, OFF, reading=60, reading_at=now - timedelta(hours=2), forecast=fc(now, 8, 4.0))
+        snap(now, OFF, reading=60, reading_at=now - timedelta(hours=2), forecast=sunny_later)
     )
     assert stale.plan["reading_fresh"] is False and stale.plan["reading_c"] == 37
     assert stale.plan["latest_start"] < fresh.plan["latest_start"]
 
 
-def test_infeasible_target_heats_off_peak_reports_and_still_parks_at_the_peak():
+def test_target_out_of_reach_heats_off_peak_until_the_peak_boundary():
     p = sp.SimplePolicy(S, TARIFFS)
     d = p.decide(snap(at(MON, 15), OFF, reading=30))
     assert (d.state, d.reason) == (STORE, "storage_target_may_be_missed")
-    assert d.plan["expected_reading_at_peak"] < 65
-    lead = at(MON, 16, 45)
-    p.add_meter(lead, 3.4, True)
-    assert p.decide(snap(lead, STORE, reading=45)).state == OFF
+    # The soft target is a planning buffer, not a shutdown.
+    d = p.decide(snap(at(MON, 16, 45), STORE, reading=48, last_command_at=at(MON, 15)))
+    assert (d.state, d.command) == (STORE, None)
+    park = p.decide(snap(at(MON, 16, 58), STORE, reading=50, last_command_at=at(MON, 15)))
+    assert (park.state, park.command) == (OFF, "off")
 
 
-def test_storage_started_on_a_weekday_continues_until_the_peak():
+def test_committed_heating_continues_through_clouds_and_imports():
+    # Started on solar; a cloud now gives 2.8 kW grid import. The forecast is
+    # sunny again later, but a cloud alone can never justify a pause: the
+    # measured span is 30 minutes, worth at most about $0.12 of heat.
     p = sp.SimplePolicy(S, TARIFFS)
-    now = feed(p, at(MON, 13), 12, 2.8, element=True)  # clouds: mostly grid
-    assert p.decide(snap(now, STORE, reading=58)).state == STORE
+    now = feed(p, at(MON, 12), 12, 2.8, element=True)
+    for forecast in ((), fc(now, 8, 0.2), fc(now, 8, 4.0)):
+        d = p.decide(snap(now, STORE, reading=50, forecast=forecast))
+        assert (d.state, d.reason, d.command) == (STORE, "storage_until_peak", None)
+
+
+def test_committed_heating_pauses_only_for_a_clearly_cheaper_window_with_time_to_finish():
+    # Started at 11:00 on an overcast forecast; the 11:30 EMHASS update now
+    # shows strong solar from 13:00. Heating 2.4 h then would save about $0.57.
+    p = sp.SimplePolicy(S, TARIFFS)
+    now = feed(p, at(MON, 11, 30), 12, 2.9, element=True)
+    better = from_hour(now, 13)
+    d = p.decide(snap(now, STORE, reading=50, forecast=better, last_command_at=at(MON, 11)))
+    assert (d.state, d.reason, d.command) == (OFF, "storage_paused_for_cheaper_window", "off")
+    assert d.plan["pause_saving"] >= S.pause_min_saving
+    # Only a little solar later: not worth another command.
+    q = sp.SimplePolicy(S, TARIFFS)
+    now = feed(q, at(MON, 11, 30), 12, 2.9, element=True)
+    d = q.decide(snap(now, STORE, reading=50, forecast=from_hour(now, 13, kw=0.8)))
+    assert (d.state, d.reason) == (STORE, "storage_until_peak")
+    # Running late: the same solar is not reachable in time, so keep heating.
+    r = sp.SimplePolicy(S, TARIFFS)
+    now = feed(r, at(MON, 12, 30), 12, 2.9, element=True)
+    d = r.decide(snap(now, STORE, reading=40, forecast=from_hour(now, 13)))
+    assert (d.state, d.reason) == (STORE, "storage_until_peak")
 
 
 # --- weekends ------------------------------------------------------------------------------
@@ -277,6 +373,7 @@ def test_weekend_baseline_without_solar_and_no_forced_storage():
     now = feed(p, at(SAT, 14), 30, 0.3)
     d = p.decide(snap(now, BASE, reading=44, forecast=fc(now, 6, 0.2)))
     assert (d.state, d.reason) == (BASE, "baseline")
+    assert p.decide(snap(at(SUN, 15, 30), BASE, reading=40)).state == BASE  # no deadline
 
 
 def test_weekend_one_kilowatt_qualifies_only_without_a_better_forecast():
@@ -288,9 +385,9 @@ def test_weekend_one_kilowatt_qualifies_only_without_a_better_forecast():
     assert (d.state, d.reason, d.command) == (STORE, "solar_opportunity", "Manual:70")
     q = sp.SimplePolicy(S, TARIFFS)
     feed(q, now - 11 * MIN, 12, -1.1)
-    brighter = fc(now, 14, lambda i: 3.5 if 3 <= i <= 8 else 1.0)
+    brighter = fc(now, 14, lambda i: 3.5 if 3 <= i <= 10 else 1.0)
     d = q.decide(snap(now, BASE, reading=44, forecast=brighter))
-    assert (d.state, d.plan["waiting_for"]) == (BASE, "better_solar_forecast_later")
+    assert (d.state, d.plan["waiting_for"]) == (BASE, "cheaper_window_later")
 
 
 def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
@@ -304,16 +401,18 @@ def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
     # A dearer margin would make 1 kW not worth it.
     strict = sp.SimplePolicy(replace(S, optional_heat_margin=0.03), TARIFFS)
     feed(strict, now - 11 * MIN, 12, -1.1)
-    assert strict.decide(snap(now, BASE, reading=44)).state == BASE
+    d = strict.decide(snap(now, BASE, reading=44, forecast=fc(now, 14, 1.1)))
+    assert (d.state, d.plan["waiting_for"]) == (BASE, "more_solar")
 
 
-def test_weekend_opportunity_ends_when_solar_fades_not_on_a_short_cloud():
+def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():
     p = sp.SimplePolicy(S, TARIFFS)
     t0 = feed(p, at(SAT, 13), 10, -0.5, element=True)  # heating: available 3.5 kW
-    now = feed(p, t0 + MIN, 3, 2.7, element=True)  # short cloud
-    assert p.decide(snap(now, STORE, reading=55)).state == STORE
-    now = feed(p, now + MIN, 6, 2.7, element=True)  # available 0.3 kW for 5+ min
-    d = p.decide(snap(now, STORE, reading=55))
+    now = feed(p, t0 + MIN, 8, 2.7, element=True)  # cloud: available 0.3 kW for 8 min
+    sun_returns = fc(now, 4, 2.5)
+    d = p.decide(snap(now, STORE, reading=55, forecast=sun_returns))
+    assert (d.state, d.reason) == (STORE, "solar_opportunity_continues")
+    d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 0.3)))
     assert (d.state, d.reason, d.command) == (BASE, "solar_opportunity_ended", "Manual:45")
 
 
@@ -324,33 +423,27 @@ def test_opportunity_never_starts_what_cannot_finish_before_monday_peak():
     assert p.decide(snap(now, BASE, reading=44)).state == BASE
 
 
+def test_tonights_state_manual_45_heating_in_the_peak_is_parked():
+    # 12 Nov 21:09 (Thursday, evening peak): Manual 45, reading 35, heating
+    # from the grid.
+    p = sp.SimplePolicy(S, TARIFFS)
+    now = feed(p, at(12, 20, 58), 12, 4.5, element=True)
+    d = p.decide(snap(now, BASE, reading=35))
+    assert (d.state, d.reason, d.command) == (OFF, "peak_no_grid_heating", "off")
+
+
 # --- simulations ---------------------------------------------------------------------------
 
 
 class Tank:
-    """Manual thermostat plus the manufacturer's antibacterial cycle, which (per
-    the guide) runs regardless of the mode: heat above 62 °C, hold 32 minutes."""
+    """The Thermann Manual thermostat: on at target - 8 °C, off at the target."""
 
-    def __init__(self, reading, state, settings=S, antibacterial_at=None):
+    def __init__(self, reading, state, settings=S):
         self.t, self.state, self.element, self.s = reading, state, False, settings
-        self.antibacterial_at, self.cycle, self.cycle_done_at = antibacterial_at, None, None
 
-    def minute(self, now=None):
-        if (
-            self.cycle is None
-            and self.antibacterial_at is not None
-            and now == self.antibacterial_at
-        ):
-            self.cycle = ["heat", None]
-        if self.cycle is not None:
-            if self.cycle[0] == "heat" and self.t >= 63:
-                self.cycle = ["hold", now + timedelta(minutes=32)]
-            if self.cycle[0] == "hold" and now >= self.cycle[1]:
-                self.cycle, self.cycle_done_at = None, now
+    def minute(self):
         target = {OFF: None, BASE: self.s.baseline_c, STORE: self.s.storage_c}[self.state]
-        if self.cycle is not None:
-            self.element = self.cycle[0] == "heat" or self.t < 62.5
-        elif target is None:
+        if target is None:
             self.element = False
         elif not self.element and self.t <= target - self.s.hysteresis_c:
             self.element = True
@@ -375,31 +468,28 @@ def sunny_winter(loc):
     return 3.5 * max(0.0, math.sin(math.pi * (h - 8) / 8.5))
 
 
+def sunny_after(hour):
+    def pv(loc):
+        return sunny_summer(loc) if loc.hour >= hour else cloudy(loc)
+
+    return pv
+
+
 def simulate(
-    start,
-    hours,
-    reading,
-    state,
-    pv,
-    forecast_pv=None,
-    draws=None,
-    loads=None,
-    settings=S,
-    antibacterial_at=None,
+    start, hours, reading, state, pv, forecast_pv=None, draws=None, loads=None, settings=S
 ):
-    policy = sp.SimplePolicy(settings, TARIFFS)
-    tank = Tank(reading, state, settings, antibacterial_at)
+    policy, tank = sp.SimplePolicy(settings, TARIFFS), Tank(reading, state, settings)
     forecast_pv = forecast_pv or pv
     draws, loads = draws or {}, loads or {}
     seen, last_cmd, forecast, times = (reading, start), None, (), []
     log = {"commands": [], "peak_grid_kwh": 0.0, "grid_heat_kwh": 0.0, "at": {}, "reasons": set()}
-    log.update(protective_peak_kwh=0.0, baseline_peak_minutes=0, holds=[])
+    log["baseline_peak_minutes"] = 0
     for i in range(hours * 60):
         now = start + i * MIN
         loc = now.astimezone(m.HOBART)
         key = (loc.day, loc.strftime("%H:%M"))
         tank.t -= draws.get(key, 0.0)
-        tank.minute(now)
+        tank.minute()
         house = 0.5 + loads.get(key[1], 0.0)
         grid = house + (settings.element_kw if tank.element else 0.0) - pv(loc)
         policy.add_meter(now, grid, tank.element)
@@ -419,21 +509,14 @@ def simulate(
             log["commands"].append((loc.strftime("%a %H:%M"), d.state, d.reason))
             tank.state, last_cmd = d.state, now
             times.append(now)
-        if d.layer == 1:
-            log["holds"].append(loc.strftime("%a %H:%M"))
         heat_grid = min(settings.element_kw, max(0.0, grid)) if tank.element else 0.0
         log["grid_heat_kwh"] += heat_grid / 60
         if m.tariff_at(now, TARIFFS, settings.tariff_clock).kind == "peak":
-            if tank.cycle is not None:
-                log["protective_peak_kwh"] += heat_grid / 60  # the manufacturer's heat
-            else:
-                log["peak_grid_kwh"] += heat_grid / 60
-            if tank.state == BASE and d.layer != 1:
+            log["peak_grid_kwh"] += heat_grid / 60
+            if tank.state == BASE:
                 log["baseline_peak_minutes"] += 1
         log["at"][key] = tank.t
-    log["exposure"], log["cycle_done_at"] = policy.last_exposure_at, tank.cycle_done_at
-    # Agreed design: Manual 45 only in off-peak baseline periods, never in a peak
-    # (except while the manufacturer's own cycle is being left alone).
+    # Agreed design: Manual 45 only in off-peak baseline periods, never in a peak.
     assert log["baseline_peak_minutes"] == 0, log["commands"]
     gaps = [b - a for a, b in zip(times, times[1:], strict=False)]
     assert all(gap >= settings.command_spacing for gap in gaps), log["commands"]
@@ -441,41 +524,69 @@ def simulate(
 
 
 def test_sim_summer_weekday_sunny_heats_on_solar_without_peak_grid():
-    log, tank = simulate(at(MON, 0), 24, 60, BASE, sunny_summer)
+    log, _ = simulate(at(MON, 0), 24, 60, BASE, sunny_summer)
     assert log["peak_grid_kwh"] == 0
-    assert log["at"][(MON, "16:44")] >= 62
-    assert len(log["commands"]) <= 4, log["commands"]
-    assert [c[1] for c in log["commands"]] == [OFF, STORE, OFF, BASE], log["commands"]
+    assert log["at"][(MON, "16:30")] >= 62
+    assert [c[1] for c in log["commands"]][:3] == [OFF, STORE, OFF], log["commands"]
+    assert log["commands"][0][0] == "Mon 07:58"  # the morning park, two minutes ahead
+    assert len(log["commands"]) <= 5, log["commands"]
     assert log["grid_heat_kwh"] < 1.0  # stored almost entirely from solar
 
 
 def test_sim_summer_weekday_overcast_uses_off_peak_and_meets_target():
     log, _ = simulate(at(MON, 0), 24, 60, BASE, cloudy)
     assert log["peak_grid_kwh"] == 0
-    assert log["at"][(MON, "16:44")] >= 62
+    assert log["at"][(MON, "16:30")] >= 62
     storage = [c for c in log["commands"] if c[1] == STORE]
-    assert storage and storage[0][2] == "storage_now_no_solar_forecast"
+    assert storage == [("Mon 11:00", STORE, "storage_cheapest_now")]
     assert len(log["commands"]) == 4
 
 
+def test_sim_emhass_waits_for_afternoon_sun_instead_of_heating_at_11():
+    # 45 °C at the end of the morning peak needs about 3 hours. Cloud until
+    # 13:00, then sun, and EMHASS forecasts it: heat on the sun, not the grid.
+    log, _ = simulate(at(MON, 0), 24, 46, BASE, sunny_after(13))
+    storage = [c for c in log["commands"] if c[1] == STORE]
+    assert len(storage) == 1 and "Mon 12:45" <= storage[0][0] <= "Mon 13:30", log["commands"]
+    assert log["at"][(MON, "16:30")] >= 62
+    assert log["peak_grid_kwh"] == 0
+    early, _ = simulate(at(MON, 0), 24, 46, BASE, sunny_after(13), forecast_pv=cloudy)
+    assert log["grid_heat_kwh"] < early["grid_heat_kwh"] - 3  # several kWh off the grid
+
+
 def test_sim_forecast_error_sunny_forecast_cloudy_day_still_meets_target():
+    # It waits for the promised sun, then heats from the grid in time anyway.
     log, _ = simulate(at(MON, 0), 24, 55, BASE, cloudy, forecast_pv=sunny_summer)
     assert log["peak_grid_kwh"] == 0
-    assert log["at"][(MON, "16:44")] >= 62
-    assert "storage_latest_start" in {c[2] for c in log["commands"]}
+    assert log["at"][(MON, "16:30")] >= 62
+    storage = [c for c in log["commands"] if c[1] == STORE]
+    assert len(storage) == 1 and storage[0][0] >= "Mon 13:00", log["commands"]
+    park = [c for c in log["commands"] if c[0] == "Mon 16:58"]
+    assert park == [("Mon 16:58", OFF, "peak_ahead_no_qualified_solar")]
+
+
+def test_sim_committed_heating_rides_through_an_hour_of_cloud():
+    def cloud_at_noon(loc):
+        return cloudy(loc) if 12 <= loc.hour < 13 else sunny_summer(loc)
+
+    log, _ = simulate(at(MON, 0), 24, 40, BASE, cloud_at_noon)
+    storage = [c for c in log["commands"] if c[1] == STORE]
+    assert len(storage) == 1, log["commands"]
+    assert log["at"][(MON, "16:30")] >= 62
+    assert "storage_paused_for_cheaper_window" not in log["reasons"]
 
 
 def test_sim_winter_weekday_target_before_16_00():
     start = datetime(2026, 7, 14, 0, 0, tzinfo=m.HOBART).astimezone(m.UTC)
     log, _ = simulate(start, 24, 58, BASE, sunny_winter)
     assert log["peak_grid_kwh"] == 0
-    assert log["at"][(14, "15:44")] >= 62
-    assert len(log["commands"]) <= 4
+    assert log["at"][(14, "15:30")] >= 62
+    assert len(log["commands"]) <= 5
 
 
 def test_sim_big_evening_shower_recovers_on_baseline_overnight_not_in_the_peak():
     # Monday 18:30: reading 68 -> 25 after showers.
-    log, tank = simulate(at(MON, 12), 20, 66, STORE, sunny_summer, draws={(MON, "18:30"): 43.0})
+    log, _ = simulate(at(MON, 12), 20, 66, STORE, sunny_summer, draws={(MON, "18:30"): 43.0})
     assert log["peak_grid_kwh"] == 0
     assert log["at"][(MON, "21:59")] < 37  # no reheat in the evening peak
     assert log["at"][(TUE, "06:00")] >= 37  # native Manual 45 recovered it overnight
@@ -490,7 +601,7 @@ def test_sim_big_evening_shower_recovers_on_baseline_overnight_not_in_the_peak()
 
 
 def test_sim_manual_45_hysteresis_leaves_a_warm_tank_alone_overnight():
-    log, tank = simulate(at(MON, 22), 9, 64, OFF, sunny_summer)
+    log, _ = simulate(at(MON, 22), 9, 64, OFF, sunny_summer)
     assert [c[1] for c in log["commands"]] == [BASE]
     assert log["grid_heat_kwh"] == 0  # 64 -> about 62 by morning: no reheat at all
 
@@ -498,17 +609,26 @@ def test_sim_manual_45_hysteresis_leaves_a_warm_tank_alone_overnight():
 def test_sim_friday_to_monday_weekend_then_weekday():
     log, _ = simulate(at(FRI, 12), 24 * 3 + 18, 60, OFF, sunny_summer)
     assert log["peak_grid_kwh"] == 0
-    assert log["at"][(FRI, "16:44")] >= 62 and log["at"][(MON, "16:44")] >= 62
+    assert log["at"][(FRI, "16:30")] >= 62 and log["at"][(MON, "16:30")] >= 62
     weekend = [c for c in log["commands"] if c[0][:3] in ("Sat", "Sun")]
     assert len(weekend) <= 4, weekend
     monday = [c for c in log["commands"] if c[0].startswith("Mon")]
-    assert monday[0][1] == OFF and monday[0][0] <= "Mon 07:50"  # parked for the 08:00 peak
+    assert monday[0][1] == OFF and monday[0][0] == "Mon 07:58"  # parked for the 08:00 peak
 
 
 def test_sim_cloudy_weekend_stays_on_baseline():
     log, _ = simulate(at(SAT, 0), 48, 50, BASE, cloudy)
     assert log["commands"] == []
     assert log["at"][(SUN, "20:00")] >= 37
+
+
+def test_sim_weekend_solar_session_is_not_interrupted_by_a_passing_cloud():
+    def cloud_at_noon(loc):
+        return cloudy(loc) if loc.hour == 12 and loc.minute < 15 else sunny_summer(loc)
+
+    log, _ = simulate(at(SAT, 6), 14, 44, BASE, cloud_at_noon, forecast_pv=sunny_summer)
+    assert [c[1] for c in log["commands"]] == [STORE, BASE], log["commands"]
+    assert log["at"][(SAT, "16:00")] >= 62
 
 
 def test_sim_no_command_pairs_closer_than_the_spacing_and_no_flapping():
@@ -518,23 +638,8 @@ def test_sim_no_command_pairs_closer_than_the_spacing_and_no_flapping():
 
     log, _ = simulate(at(SAT, 6), 14, 44, BASE, patchy)
     assert len(log["commands"]) <= 4, log["commands"]
-
-
-# --- the agreed 45 °C baseline -------------------------------------------------------------
-
-
-def test_agreed_baseline_is_45_and_storage_70():
-    assert (S.baseline_c, S.storage_c) == (45, 70)
-    assert sp.PolicySettings().baseline_c == 45
-
-
-def test_tonights_state_manual_45_heating_in_the_peak_is_parked():
-    # 12 Nov 21:09 (Thursday, evening peak): Manual 45, reading 35, heating
-    # from the grid. The thermostat explains it (35 <= 45 - 8): not protective.
-    p = sp.SimplePolicy(S, TARIFFS)
-    now = feed(p, at(12, 20, 58), 12, 4.5, element=True)
-    d = p.decide(snap(now, BASE, reading=35))
-    assert (d.state, d.reason, d.command) == (OFF, "peak_no_grid_heating", "off")
+    log, _ = simulate(at(MON, 6), 14, 44, BASE, patchy)
+    assert len(log["commands"]) <= 5, log["commands"]
 
 
 def test_baseline_is_commanded_only_off_peak_on_aurora_93():
@@ -553,75 +658,3 @@ def test_baseline_is_commanded_only_off_peak_on_aurora_93():
                 day, hhmm = label.split()
                 weekend = day in ("Sat", "Sun")
                 assert weekend or hhmm >= "21:00" or hhmm < "07:00", (label, reason)
-
-
-# --- the manufacturer's antibacterial cycle --------------------------------------------------
-
-
-def test_heating_while_off_is_protective_and_held_even_in_a_peak():
-    p = sp.SimplePolicy(S, TARIFFS)
-    now = feed(p, at(MON, 18), 4, 3.4, element=True)
-    d = p.decide(snap(now, OFF, reading=50, holiday=True))
-    assert (d.state, d.reason, d.layer, d.command) == (
-        HOLD,
-        "manufacturer_protective_heating",
-        1,
-        None,
-    )
-
-
-def test_heating_above_the_baseline_target_is_protective_but_thermostat_heating_is_not():
-    p = sp.SimplePolicy(S, TARIFFS)
-    now = feed(p, at(MON, 18), 4, 3.4, element=True)
-    assert p.decide(snap(now, BASE, reading=50)).layer == 1  # 50 > 45: not the thermostat
-    q = sp.SimplePolicy(S, TARIFFS)
-    now = feed(q, at(MON, 18), 4, 3.4, element=True)
-    assert q.decide(snap(now, BASE, reading=40)).state == OFF  # 37-45 band: thermostat
-
-
-def test_exposure_evidence_needs_32_minutes_at_62_from_ordinary_polls():
-    p = sp.SimplePolicy(S, TARIFFS)
-    t0 = at(MON, 14)
-    p.observe_poll(t0, 63)
-    p.observe_poll(t0 + 30 * MIN, 64)
-    assert p.last_exposure_at is None  # 30 minutes is not 32
-    p.observe_poll(t0 + 60 * MIN, 61)  # a draw breaks the run
-    p.observe_poll(t0 + 90 * MIN, 66)
-    p.observe_poll(t0 + 120 * MIN, 66)
-    assert p.last_exposure_at is None
-    p.observe_poll(t0 + 150 * MIN, 65)
-    assert p.last_exposure_at == t0 + 150 * MIN
-    assert p.hygiene(t0 + timedelta(days=6))["exposure_overdue"] is False
-    assert p.hygiene(t0 + timedelta(days=8))["exposure_overdue"] is True
-
-
-def test_hygiene_status_never_changes_the_decision():
-    p = sp.SimplePolicy(S, TARIFFS)
-    now = at(SAT, 12)
-    d = p.decide(snap(now, BASE, reading=44))
-    assert d.plan["hygiene"]["exposure_overdue"] is True
-    assert (d.state, d.command) == (BASE, None)
-
-
-def test_sim_weekday_storage_evidences_exposure_every_weekday():
-    log, _ = simulate(at(MON, 0), 17, 60, BASE, cloudy)  # to the evening peak
-    assert log["exposure"] is not None
-
-
-def test_sim_antibacterial_cycle_on_a_45_weekend_completes_untouched():
-    log, tank = simulate(at(SAT, 0), 24, 44, BASE, cloudy, antibacterial_at=at(SAT, 3))
-    assert tank.cycle_done_at is not None
-    assert log["commands"] == []  # no command before, during or after it
-    assert log["holds"] and log["exposure"] is not None
-
-
-def test_sim_antibacterial_cycle_across_the_morning_peak_is_not_interrupted():
-    # Starts in Manual 45 at 07:20. The 07:45 park may still be sent before the
-    # cycle is recognised (OFF keeps the cycle running, guide p10); once it is
-    # recognised, nothing more is sent until it has finished.
-    log, tank = simulate(at(MON, 4), 8, 44, BASE, cloudy, antibacterial_at=at(MON, 7, 20))
-    assert tank.cycle_done_at is not None
-    assert log["holds"]
-    during = [c for c in log["commands"] if "Mon 07:50" <= c[0] <= "Mon 09:59"]
-    assert during == []
-    assert log["peak_grid_kwh"] == 0  # all peak heating there was the manufacturer's
