@@ -854,8 +854,9 @@ async def _upgrade_from_0_6(folder, version):
         from homeassistant.helpers import device_registry as dr
 
         assert entry.title == "Thermann Controller", entry.title
-        device = dr.async_get(hass).async_get_device({("thermann_shadow", entry.entry_id)})
-        assert device is not None and device.name == "Thermann Controller", device
+        (device,) = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+        assert ("thermann_shadow", entry.entry_id) in device.identifiers, device
+        assert device.name == "Thermann Controller", device
         assert "Unofficial" in device.manufacturer, device.manufacturer
         if version == "0.7.0":
             override = hass.states.get("button.thermann_shadow_start_guest_mode_12_h")
@@ -972,8 +973,9 @@ async def upgrade_from_0_5_0(folder):
         from homeassistant.helpers import device_registry as dr
 
         assert entry.title == "Thermann Controller", entry.title
-        device = dr.async_get(hass).async_get_device({("thermann_shadow", entry.entry_id)})
-        assert device is not None and device.name == "Thermann Controller", device
+        (device,) = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+        assert ("thermann_shadow", entry.entry_id) in device.identifiers, device
+        assert device.name == "Thermann Controller", device
         assert "Unofficial" in device.manufacturer, device.manufacturer
         after = {
             item.unique_id: item.entity_id
