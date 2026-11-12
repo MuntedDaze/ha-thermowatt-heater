@@ -9,7 +9,9 @@ Three heater states, chosen from the tariff calendar, the Thermann reading and
 LOCAL meter samples (GoodWe, about once a minute; never a cloud request):
 
   OFF       Thermann software OFF. Antibacterial and frost protection stay active.
-  BASELINE  Manual at the baseline target. The native thermostat keeps comfort.
+  BASELINE  Manual 45 °C (the owner's agreed baseline). The native thermostat
+            keeps comfort. Commanded only in off-peak baseline periods: weekday
+            nights after the evening peak, and weekends. Never in a peak.
   STORAGE   Manual at the storage target (70 °C). Stores heat or uses solar.
 
 The tariff calendar decides the mode:
@@ -25,7 +27,8 @@ The tariff calendar decides the mode:
                BASELINE, plus STORAGE while solar heating is worth it and can
                finish before the next peak.
 
-Precedence, highest first (the caller supplies layers 1-3):
+Precedence, highest first (the caller supplies layers 2-3; layer 1 is also
+recognised locally, see ``protective_heating_suspected``):
 
   1. Manufacturer protective heating (antibacterial, frost): HOLD, never a command.
   2. Owner: app change / hold (HOLD), holiday (OFF), 12hr Override (STORAGE).
@@ -61,7 +64,7 @@ SCAN_HORIZON = timedelta(days=4)
 
 @dataclass(frozen=True)
 class PolicySettings:
-    baseline_c: int = 45  # owner decision pending: see SIMPLIFIED_STRATEGY.md, section 3
+    baseline_c: int = 45  # owner's agreed baseline (compliance note: SIMPLIFIED_STRATEGY.md §3)
     storage_c: int = 70
     hysteresis_c: float = 8.0  # Thermann guide p9: reheats about 8 °C below the target
     element_kw: float = ELEMENT_KW
@@ -82,6 +85,12 @@ class PolicySettings:
     evening_peak_from_hour: int = 12  # a peak starting at/after this is an evening peak
     reading_max_age: timedelta = timedelta(minutes=75)
     meter_max_age: timedelta = timedelta(minutes=3)
+    # Manufacturer antibacterial cycle (guide p10): above 62 °C for 32 minutes
+    # within 7 days. Used only to OBSERVE it; this policy never schedules it.
+    exposure_c: float = 62.0
+    exposure_duration: timedelta = timedelta(minutes=32)
+    exposure_interval: timedelta = timedelta(days=7)
+    protective_margin_c: float = 2.0  # above the baseline target: not the thermostat
 
     def __post_init__(self) -> None:
         if not 40 <= self.baseline_c <= 65 or not 60 <= self.storage_c <= 70:
@@ -128,9 +137,13 @@ class SimplePolicy:
     def __init__(self, settings: PolicySettings, tariffs: tuple[Tariff, ...]):
         self.s = settings
         self.tariffs = tariffs
-        # (at, import_kw, available_kw); available EXCLUDES the element's own draw.
-        self.samples: deque[tuple[datetime, float, float]] = deque()
+        # (at, import_kw, available_kw, element_on); available EXCLUDES the element.
+        self.samples: deque[tuple[datetime, float, float, bool]] = deque()
         self._peak_cache: tuple[datetime, datetime | None, datetime] | None = None
+        # Exposure evidence from the ordinary 30-minute polls (no extra request).
+        self.last_poll: tuple[datetime, float] | None = None
+        self._exposure_run_start: datetime | None = None
+        self.last_exposure_at: datetime | None = None
 
     # --- local meter ---------------------------------------------------------------
 
@@ -139,7 +152,7 @@ class SimplePolicy:
         is the caller's element estimate (house-load step); None counts as off,
         which can only make solar look SMALLER (never a costly start)."""
         available = -grid_kw + (self.s.element_kw if element_on else 0.0)
-        self.samples.append((at, max(0.0, grid_kw), available))
+        self.samples.append((at, max(0.0, grid_kw), available, bool(element_on)))
         cutoff = at - 2 * max(self.s.qualify, self.s.withdraw)
         while self.samples and self.samples[0][0] < cutoff:
             self.samples.popleft()
@@ -164,6 +177,48 @@ class SimplePolicy:
         ):
             return False
         return sum(1 for smp in recent if test(smp)) >= 0.8 * len(recent)
+
+    def observe_poll(self, at: datetime, reading: float) -> None:
+        """Record one Thermann poll. Exposure is EVIDENCED when consecutive polls
+        stay at or above 62 °C for at least 32 minutes. The bottom sensor reads
+        the coolest water, so this is conservative; a missing record does not
+        prove the cycle did not run (it may fall between polls)."""
+        if self.last_poll is not None and at <= self.last_poll[0]:
+            return
+        self.last_poll = (at, reading)
+        if reading < self.s.exposure_c:
+            self._exposure_run_start = None
+            return
+        if self._exposure_run_start is None:
+            self._exposure_run_start = at
+        if at - self._exposure_run_start >= self.s.exposure_duration:
+            self.last_exposure_at = at
+
+    def hygiene(self, now: datetime) -> dict:
+        """Observation only: never a reason to heat or to command."""
+        last = self.last_exposure_at
+        return {
+            "last_exposure_evidence": last,
+            "exposure_overdue": last is None or now - last > self.s.exposure_interval,
+        }
+
+    def protective_heating_suspected(self, now: datetime, state: str | None) -> bool:
+        """The element runs where the native thermostat would not: any heating
+        while OFF, or heating in BASELINE after a fresh poll above the baseline
+        target. That is the manufacturer's antibacterial or frost protection
+        (or an unknown native function): hold, never interrupt it."""
+        recent = self._window(now, timedelta(minutes=3))
+        if len(recent) < 3 or not all(smp[3] for smp in recent[-3:]):
+            return False
+        if state == OFF:
+            return True
+        if state == BASELINE and self.last_poll is not None:
+            at, reading = self.last_poll
+            return (
+                now - at <= self.s.reading_max_age
+                and reading >= self.s.baseline_c + self.s.protective_margin_c
+            )
+        return False
 
     def typical_available(self, now: datetime) -> float | None:
         recent = self._window(now, self.s.qualify)
@@ -227,20 +282,26 @@ class SimplePolicy:
     # --- the decision ----------------------------------------------------------------------
 
     def decide(self, snap: Snapshot) -> Decision:
-        # 1. Manufacturer protective heating: never interrupt or confuse it.
-        if snap.manufacturer_heating:
-            return Decision(HOLD, "manufacturer_protective_heating", 1)
+        if snap.reading_c is not None and snap.reading_at is not None:
+            self.observe_poll(snap.reading_at, snap.reading_c)
+        base = {"hygiene": self.hygiene(snap.now)}
+        # 1. Manufacturer protective heating: never interrupt or confuse it, even
+        # in a peak (its grid use is the manufacturer's, not economic heating).
+        if snap.manufacturer_heating or self.protective_heating_suspected(
+            snap.now, snap.heater_state
+        ):
+            return Decision(HOLD, "manufacturer_protective_heating", 1, None, base)
         # 2. The owner.
         if snap.owner_override:
-            return Decision(HOLD, "owner_override", 2)
+            return Decision(HOLD, "owner_override", 2, None, base)
         if snap.heater_state not in STATES:
-            return Decision(HOLD, "heater_state_not_controlled", 2)
+            return Decision(HOLD, "heater_state_not_controlled", 2, None, base)
         if snap.holiday:
-            return self._send(snap, OFF, "holiday", 2, {})
+            return self._send(snap, OFF, "holiday", 2, base)
         if snap.override_12h:
-            return self._send(snap, STORAGE, "12hr_override", 2, {})
+            return self._send(snap, STORAGE, "12hr_override", 2, base)
         desired, reason, layer, plan = self._policy(snap)
-        return self._send(snap, desired, reason, layer, plan)
+        return self._send(snap, desired, reason, layer, {**base, **plan})
 
     def _send(self, snap, desired, reason, layer, plan) -> Decision:
         if desired == snap.heater_state:

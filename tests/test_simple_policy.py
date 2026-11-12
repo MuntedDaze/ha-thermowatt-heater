@@ -328,12 +328,29 @@ def test_opportunity_never_starts_what_cannot_finish_before_monday_peak():
 
 
 class Tank:
-    def __init__(self, reading, state, settings=S):
-        self.t, self.state, self.element, self.s = reading, state, False, settings
+    """Manual thermostat plus the manufacturer's antibacterial cycle, which (per
+    the guide) runs regardless of the mode: heat above 62 °C, hold 32 minutes."""
 
-    def minute(self):
+    def __init__(self, reading, state, settings=S, antibacterial_at=None):
+        self.t, self.state, self.element, self.s = reading, state, False, settings
+        self.antibacterial_at, self.cycle, self.cycle_done_at = antibacterial_at, None, None
+
+    def minute(self, now=None):
+        if (
+            self.cycle is None
+            and self.antibacterial_at is not None
+            and now == self.antibacterial_at
+        ):
+            self.cycle = ["heat", None]
+        if self.cycle is not None:
+            if self.cycle[0] == "heat" and self.t >= 63:
+                self.cycle = ["hold", now + timedelta(minutes=32)]
+            if self.cycle[0] == "hold" and now >= self.cycle[1]:
+                self.cycle, self.cycle_done_at = None, now
         target = {OFF: None, BASE: self.s.baseline_c, STORE: self.s.storage_c}[self.state]
-        if target is None:
+        if self.cycle is not None:
+            self.element = self.cycle[0] == "heat" or self.t < 62.5
+        elif target is None:
             self.element = False
         elif not self.element and self.t <= target - self.s.hysteresis_c:
             self.element = True
@@ -359,19 +376,30 @@ def sunny_winter(loc):
 
 
 def simulate(
-    start, hours, reading, state, pv, forecast_pv=None, draws=None, loads=None, settings=S
+    start,
+    hours,
+    reading,
+    state,
+    pv,
+    forecast_pv=None,
+    draws=None,
+    loads=None,
+    settings=S,
+    antibacterial_at=None,
 ):
-    policy, tank = sp.SimplePolicy(settings, TARIFFS), Tank(reading, state, settings)
+    policy = sp.SimplePolicy(settings, TARIFFS)
+    tank = Tank(reading, state, settings, antibacterial_at)
     forecast_pv = forecast_pv or pv
     draws, loads = draws or {}, loads or {}
     seen, last_cmd, forecast, times = (reading, start), None, (), []
     log = {"commands": [], "peak_grid_kwh": 0.0, "grid_heat_kwh": 0.0, "at": {}, "reasons": set()}
+    log.update(protective_peak_kwh=0.0, baseline_peak_minutes=0, holds=[])
     for i in range(hours * 60):
         now = start + i * MIN
         loc = now.astimezone(m.HOBART)
         key = (loc.day, loc.strftime("%H:%M"))
         tank.t -= draws.get(key, 0.0)
-        tank.minute()
+        tank.minute(now)
         house = 0.5 + loads.get(key[1], 0.0)
         grid = house + (settings.element_kw if tank.element else 0.0) - pv(loc)
         policy.add_meter(now, grid, tank.element)
@@ -391,11 +419,22 @@ def simulate(
             log["commands"].append((loc.strftime("%a %H:%M"), d.state, d.reason))
             tank.state, last_cmd = d.state, now
             times.append(now)
+        if d.layer == 1:
+            log["holds"].append(loc.strftime("%a %H:%M"))
         heat_grid = min(settings.element_kw, max(0.0, grid)) if tank.element else 0.0
         log["grid_heat_kwh"] += heat_grid / 60
         if m.tariff_at(now, TARIFFS, settings.tariff_clock).kind == "peak":
-            log["peak_grid_kwh"] += heat_grid / 60
+            if tank.cycle is not None:
+                log["protective_peak_kwh"] += heat_grid / 60  # the manufacturer's heat
+            else:
+                log["peak_grid_kwh"] += heat_grid / 60
+            if tank.state == BASE and d.layer != 1:
+                log["baseline_peak_minutes"] += 1
         log["at"][key] = tank.t
+    log["exposure"], log["cycle_done_at"] = policy.last_exposure_at, tank.cycle_done_at
+    # Agreed design: Manual 45 only in off-peak baseline periods, never in a peak
+    # (except while the manufacturer's own cycle is being left alone).
+    assert log["baseline_peak_minutes"] == 0, log["commands"]
     gaps = [b - a for a, b in zip(times, times[1:], strict=False)]
     assert all(gap >= settings.command_spacing for gap in gaps), log["commands"]
     return log, tank
@@ -479,3 +518,110 @@ def test_sim_no_command_pairs_closer_than_the_spacing_and_no_flapping():
 
     log, _ = simulate(at(SAT, 6), 14, 44, BASE, patchy)
     assert len(log["commands"]) <= 4, log["commands"]
+
+
+# --- the agreed 45 °C baseline -------------------------------------------------------------
+
+
+def test_agreed_baseline_is_45_and_storage_70():
+    assert (S.baseline_c, S.storage_c) == (45, 70)
+    assert sp.PolicySettings().baseline_c == 45
+
+
+def test_tonights_state_manual_45_heating_in_the_peak_is_parked():
+    # 12 Nov 21:09 (Thursday, evening peak): Manual 45, reading 35, heating
+    # from the grid. The thermostat explains it (35 <= 45 - 8): not protective.
+    p = sp.SimplePolicy(S, TARIFFS)
+    now = feed(p, at(12, 20, 58), 12, 4.5, element=True)
+    d = p.decide(snap(now, BASE, reading=35))
+    assert (d.state, d.reason, d.command) == (OFF, "peak_no_grid_heating", "off")
+
+
+def test_baseline_is_commanded_only_off_peak_on_aurora_93():
+    """Every BASELINE command in a summer week, a cloudy working week and two
+    winter weekdays falls in an off-peak baseline period: a weekday night after
+    the evening peak, or a weekend."""
+    winter = datetime(2026, 7, 13, tzinfo=m.HOBART).astimezone(m.UTC)
+    runs = [
+        simulate(at(MON, 0), 24 * 7, 60, BASE, sunny_summer)[0],
+        simulate(at(MON, 0), 24 * 5, 60, BASE, cloudy)[0],
+        simulate(winter, 48, 58, BASE, sunny_winter)[0],
+    ]
+    for log in runs:
+        for label, state, reason in log["commands"]:
+            if state == BASE:
+                day, hhmm = label.split()
+                weekend = day in ("Sat", "Sun")
+                assert weekend or hhmm >= "21:00" or hhmm < "07:00", (label, reason)
+
+
+# --- the manufacturer's antibacterial cycle --------------------------------------------------
+
+
+def test_heating_while_off_is_protective_and_held_even_in_a_peak():
+    p = sp.SimplePolicy(S, TARIFFS)
+    now = feed(p, at(MON, 18), 4, 3.4, element=True)
+    d = p.decide(snap(now, OFF, reading=50, holiday=True))
+    assert (d.state, d.reason, d.layer, d.command) == (
+        HOLD,
+        "manufacturer_protective_heating",
+        1,
+        None,
+    )
+
+
+def test_heating_above_the_baseline_target_is_protective_but_thermostat_heating_is_not():
+    p = sp.SimplePolicy(S, TARIFFS)
+    now = feed(p, at(MON, 18), 4, 3.4, element=True)
+    assert p.decide(snap(now, BASE, reading=50)).layer == 1  # 50 > 45: not the thermostat
+    q = sp.SimplePolicy(S, TARIFFS)
+    now = feed(q, at(MON, 18), 4, 3.4, element=True)
+    assert q.decide(snap(now, BASE, reading=40)).state == OFF  # 37-45 band: thermostat
+
+
+def test_exposure_evidence_needs_32_minutes_at_62_from_ordinary_polls():
+    p = sp.SimplePolicy(S, TARIFFS)
+    t0 = at(MON, 14)
+    p.observe_poll(t0, 63)
+    p.observe_poll(t0 + 30 * MIN, 64)
+    assert p.last_exposure_at is None  # 30 minutes is not 32
+    p.observe_poll(t0 + 60 * MIN, 61)  # a draw breaks the run
+    p.observe_poll(t0 + 90 * MIN, 66)
+    p.observe_poll(t0 + 120 * MIN, 66)
+    assert p.last_exposure_at is None
+    p.observe_poll(t0 + 150 * MIN, 65)
+    assert p.last_exposure_at == t0 + 150 * MIN
+    assert p.hygiene(t0 + timedelta(days=6))["exposure_overdue"] is False
+    assert p.hygiene(t0 + timedelta(days=8))["exposure_overdue"] is True
+
+
+def test_hygiene_status_never_changes_the_decision():
+    p = sp.SimplePolicy(S, TARIFFS)
+    now = at(SAT, 12)
+    d = p.decide(snap(now, BASE, reading=44))
+    assert d.plan["hygiene"]["exposure_overdue"] is True
+    assert (d.state, d.command) == (BASE, None)
+
+
+def test_sim_weekday_storage_evidences_exposure_every_weekday():
+    log, _ = simulate(at(MON, 0), 17, 60, BASE, cloudy)  # to the evening peak
+    assert log["exposure"] is not None
+
+
+def test_sim_antibacterial_cycle_on_a_45_weekend_completes_untouched():
+    log, tank = simulate(at(SAT, 0), 24, 44, BASE, cloudy, antibacterial_at=at(SAT, 3))
+    assert tank.cycle_done_at is not None
+    assert log["commands"] == []  # no command before, during or after it
+    assert log["holds"] and log["exposure"] is not None
+
+
+def test_sim_antibacterial_cycle_across_the_morning_peak_is_not_interrupted():
+    # Starts in Manual 45 at 07:20. The 07:45 park may still be sent before the
+    # cycle is recognised (OFF keeps the cycle running, guide p10); once it is
+    # recognised, nothing more is sent until it has finished.
+    log, tank = simulate(at(MON, 4), 8, 44, BASE, cloudy, antibacterial_at=at(MON, 7, 20))
+    assert tank.cycle_done_at is not None
+    assert log["holds"]
+    during = [c for c in log["commands"] if "Mon 07:50" <= c[0] <= "Mon 09:59"]
+    assert during == []
+    assert log["peak_grid_kwh"] == 0  # all peak heating there was the manufacturer's

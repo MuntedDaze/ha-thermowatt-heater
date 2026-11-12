@@ -4,7 +4,13 @@
 bridge (1.3.11) are unchanged. This branch adds only a pure, unwired policy
 module (`custom_components/thermann_shadow/simple_policy.py`) and its tests
 (`tests/test_simple_policy.py`). Nothing imports the module. Using it needs the
-owner's decisions in section 3 and the approvals in section 9.
+approvals in section 9.
+
+**Design requirement (owner, 12 Nov 2026): the baseline is Manual 45 °C.** It
+applies during weekday overnight off-peak and throughout weekends, and never
+in a weekday peak. The policy, tests and simulations all use 45 °C. Section 3
+records an open compliance concern for review. It does not change the
+requirement.
 
 ## 1. What is unnecessarily complicated today
 
@@ -96,67 +102,86 @@ water, a fully mixed tank holds roughly:
 | 37 °C | lukewarm |
 
 The bottom sensor reads well below the top after draws, so actual availability
-is better than the reading suggests. Even so, a 45 °C baseline roughly halves
-the reserve.
+is better than the reading suggests. A 45 °C baseline holds roughly half the reserve. That is why weekday
+evenings start from 70 °C.
 
-## 3. Safety, compliance and cloud limitations (unresolved: owner decision)
+## 3. Safety, antibacterial protection and an open compliance note
 
-**Tasmania.** The building regulator's guidance (CBOS, citing AS/NZS 3500.4)
-says the *temperature setting* for stored heated water must not be less than
-60 °C, to control Legionella. A Manual 45 °C target (or 50 °C) is below that
-setting, so a 45 °C baseline does **not** follow the stated rule.
+### 3.1 How the design keeps the antibacterial cycle working
 
-**NCC Volume Three.** The verification method B2V1 (formerly BV2.2) is
-satisfied when all stored water is held at one of the following within 7 days
-before it reaches an outlet:
+The Thermann guide (p10) describes the antibacterial cycle: it heats the water
+above 62 °C for 32 minutes every 7 days if that has not otherwise happened,
+"regardless of the mode", and blocks app setting changes while it runs. The
+design keeps it working as follows:
 
-- 60 °C for 32 minutes;
-- 66 °C for 2 minutes;
-- 70 °C for 1 second.
+- **The cycle stays native.** The policy never schedules, imitates,
+  suppresses or replaces it. Ordinary storage heating is a separate state
+  (Manual 70 °C), and the cycle is never counted as economic heating.
+- **Protective heating overrides everything (precedence layer 1).** The policy
+  recognises it locally and then sends nothing, even in a peak:
+  - **In OFF:** any element heating. The thermostat cannot run in OFF.
+  - **In Manual 45:** element heating after a fresh poll above 47 °C. The
+    thermostat stops at 45 °C.
 
-**Thermann.** The owner's guide gives a recommended Manual minimum of 50 °C. It
-describes an antibacterial cycle that heats the water above 62 °C for
-32 minutes every 7 days if that has not otherwise happened, "regardless of the
-mode", and blocks app setting changes while it runs.
+  The element signal is the house-load step on the GoodWe meter, so this needs
+  no cloud request. In a peak, that heating is the manufacturer's: the
+  simulations count it apart from economic heating, and it is allowed.
+- **Recognition takes up to one poll in Manual 45.** A cycle that starts in
+  Manual 45 is recognised only once a poll shows the reading above 47 °C.
+  Before then, a scheduled command can still be sent, for example the 07:45
+  park; the simulations cover that case. The guide says OFF keeps the cycle
+  active, and the app blocks changes while it runs. So such a command either
+  leaves the cycle running, or the heater does not accept it, in which case it
+  is recorded as not confirmed and never retried.
+- **Weekdays reach the exposure temperatures anyway.** The weekday plan heats
+  to 62–70 °C (bottom reading) every weekday, so the cycle should seldom be
+  needed ("if not otherwise reached"). On a 45 °C weekend, or during holiday
+  mode or an outage, the cycle is the protection.
 
-**What follows:**
+### 3.2 Observing that the cycle has run, without extra cloud traffic
 
-- The antibacterial cycle looks designed for the 7-day criterion. Whether a
-  45 °C setting relying on it is acceptable for this installation is for
-  Thermann and a licensed plumber (or CBOS) to confirm. This review cannot
-  certify it.
-- The proposed weekday plan heats to 62–70 °C (bottom reading) every weekday.
-  That reaches the exposure temperatures far more often than every 7 days. The
-  longest routine gap is a weekend, about 3 days.
-- The antibacterial cycle remains the backstop for holidays, outages and missed
-  targets.
-- No controller-scheduled hygiene heating is proposed. The controller must
-  never block, interrupt or misread the manufacturer's cycle (precedence
-  layer 1).
-- A command sent while the cycle is running may be refused, or may not take
-  effect. The bridge records it as not confirmed and never retries it.
-- Scald protection at outlets (the tempering valve) is unaffected.
+| Signal | Cost | What it shows |
+| --- | --- | --- |
+| Ordinary 30-minute polls: consecutive polls at 62 °C or above spanning at least 32 minutes (`observe_poll`, `hygiene`) | None | **Evidence** of the exposure, whether from storage heating or the cycle. The bottom sensor reads the coolest water, so this is conservative. A short cycle can fall between polls, so missing evidence is not proof that the cycle did not run. |
+| Local element signal (GoodWe house-load step) while OFF or in Manual 45 above 47 °C | None | The cycle is **running**, with its start and duration from minute samples |
+| Reading falling after protective heating | None | The cycle has **ended** |
+| Days since the last evidence; overdue after 7 days | None | Alert only, never a reason to heat. The native cycle remains the mechanism. |
+| `WaterHeaterSts` (opaque cloud value, already in every poll) | None | Unknown. Worth recording during a recognised cycle to learn whether it carries a flag. Until then, it is not used. |
+| App notifications for the cycle (guide) | – | Not available to the bridge; the owner can see them in the app |
 
-**Options for the baseline.** It is a single setting, and the design is the
-same for any value:
+**Not proposed:** extra status reads to watch a cycle.
 
-| Baseline | Tasmanian 60 °C setting | Manufacturer 50 °C minimum | Notes |
-| --- | --- | --- | --- |
-| **60 °C** | Meets it | Meets it | Reheats at about 52 °C, overnight only after draws; most comfort; recommended |
-| 50 °C | Below it | At the minimum | Reheats at about 42 °C |
-| 45 °C | Below it | Below it | Reheats at about 37 °C; owner's proposal; needs Thermann/plumber confirmation first |
+**A caution about evidence while OFF.** In OFF the cloud reading stays
+reliable, but with polls 30 minutes apart, a 32-minute hold may show up in
+only one poll. The local element signal covers it: about 32 minutes of
+element cycling near 62 °C after a heat-up.
 
-**Recommendation: start at 60 °C.** The cost difference is small. Extra
-overnight heating happens only after large draws, at 17 c, and most of that
-heat would be bought the next day anyway. On sunny days some of it would
-otherwise have come from solar at 9 c, a difference of up to about 40 c on a
-day after heavy use.
+### 3.3 Open compliance note (for review; it does not change the design)
+
+- **Tasmania.** The building regulator's guidance (CBOS, citing AS/NZS 3500.4)
+  says the temperature setting for stored heated water must not be less than
+  60 °C. A Manual 45 °C setting is below that wording.
+- **NCC.** NCC Volume Three's verification method B2V1 (formerly BV2.2) is
+  satisfied when all stored water is held at one of the following within
+  7 days before it reaches an outlet:
+  - 60 °C for 32 minutes;
+  - 66 °C for 2 minutes;
+  - 70 °C for 1 second.
+
+  Thermann's cycle (above 62 °C for 32 minutes within 7 days) appears designed
+  around that kind of criterion. The weekday 70 °C storage reaches the
+  exposure temperatures far more often.
+- **Thermann's guide** recommends a Manual minimum of 50 °C.
+- **Still open:** whether a 45 °C Manual setting, relying on the antibacterial
+  cycle and weekday 70 °C heating, is acceptable for this installation.
+  Thermann or a licensed plumber (or CBOS) can confirm that; this review
+  cannot.
+- **Scald protection** at outlets (the tempering valve) is unaffected.
 
 **Cloud limitations:**
 
 - No API field reports the antibacterial cycle, the element's state or the
-  active schedule. The controller infers protective heating, for example
-  heating while OFF or a rise above the target.
+  active schedule (see 3.2).
 - Token lifetime is under 30 minutes (see section 7).
 
 ## 4. The simplest coordinated policy
@@ -166,15 +191,15 @@ There are three heater states, and the tariff calendar decides which applies:
 | State | Heater setting |
 | --- | --- |
 | **OFF** | Software OFF (antibacterial and frost protection stay active) |
-| **BASELINE** | Manual at the baseline target |
+| **BASELINE** | Manual 45 °C |
 | **STORAGE** | Manual at 70 °C |
 
 | When (from the Aurora 93 calendar) | State |
 | --- | --- |
 | Weekday peak, and the 15 minutes before one | **OFF**. STORAGE only while *measured* surplus has been at least 3.3 kW for 10 minutes. Withdraw after 5 minutes of grid import above 0.2 kW. Forecasts never qualify. |
-| Weekday daytime before the evening peak (from 09:00, or the end of the morning peak) | Stay as you are (no command), then **STORAGE until the peak**. See below for when storage starts. |
-| Weekday night after the evening peak | **BASELINE**. The native thermostat handles comfort, including recovery after evening showers. |
-| Weekend (all off-peak) | **BASELINE**, plus STORAGE while solar heating is worth it (section 5) and can finish before the next peak |
+| Weekday daytime before the evening peak (from 09:00, or the end of the morning peak) | Stay as you are (no command), then **STORAGE until the peak**. On Aurora 93 the heater comes out of the morning peak OFF, so it stays OFF; 45 °C is not used in weekday daytime. See below for when storage starts. |
+| Weekday night after the evening peak | **Manual 45 °C**. The native thermostat handles comfort, including recovery after evening showers. |
+| Weekend (all off-peak) | **Manual 45 °C**, plus STORAGE while solar heating is worth it (section 5) and can finish before the next peak |
 
 Storage starts at the **latest start** that still finishes 30 minutes before
 the peak. The heating time comes from the reading and the observed heating
@@ -197,7 +222,7 @@ that cannot be met is reported, and the heater still parks for the peak.
 | 07:45 | Park (OFF) |
 | About 11:00–14:00 | Start STORAGE (or during the morning peak, on measured solar) |
 | 16:45 | Park (OFF) |
-| 22:00 | BASELINE |
+| 22:00 | Manual 45 °C |
 
 **A weekend day** has 0–2 commands.
 
@@ -215,6 +240,14 @@ chooses a state.
 5. Hot-water comfort and economical heating.
 6. Forecast optimisation, which can only move an off-peak start earlier or later.
 
+**Invariant, tested in every simulation:** the heater is never in Manual 45 °C
+during a peak minute, except while the manufacturer's own cycle is being left
+alone. A separate test checks that every Manual 45 °C command falls in an
+off-peak baseline period across a summer week, a cloudy working week and two
+winter weekdays. Tonight's case is also tested: Manual 45, reading 35 °C,
+heating at 21:09 in the peak. The policy parks it, because the 37–45 °C band is
+the thermostat, not protective heating.
+
 **Simulation results** (`tests/test_simple_policy.py`):
 
 | Scenario | Commands | Grid heating | Peak grid heating | Outcome |
@@ -223,9 +256,11 @@ chooses a state.
 | Summer weekday, overcast | 4 | 4.0 kWh | 0 | Started at 11:00 |
 | Sunny forecast, cloudy day | 4 | 6.2 kWh | 0 | Started at the latest start, 14:19; reached 70 °C by 16:44 |
 | Winter weekday | 4 | 0.1 kWh | 0 | Target met before 16:00 |
-| Monday 18:30 showers (68 → 25 °C) | 3 | 9.0 kWh | 0 | No peak reheat; BASELINE at 22:00 recovered it overnight; no 70 °C overnight |
+| Monday 18:30 showers (68 → 25 °C) | 3 | 9.0 kWh | 0 | No peak reheat; Manual 45 °C at 22:00 recovered it overnight; no 70 °C overnight |
 | Friday noon → Monday 18:00 | 7 | 0 kWh | 0 | Weekend solar opportunity on Sunday |
-| Cloudy weekend | 0 | – | – | BASELINE only |
+| Cloudy weekend | 0 | – | – | Manual 45 °C only |
+| Antibacterial cycle at 03:00 on a 45 °C Saturday | 0 | – | – | Held from the first poll above 47 °C until it ended; exposure evidenced |
+| Cycle starting 07:20, before the Monday morning peak | 1 (the 07:45 park) | – | 0 economic | Nothing sent from recognition until the end; 5.3 kWh of protective heating counted separately |
 
 ## 5. Is 1 kW a sensible weekend solar threshold?
 
@@ -350,11 +385,12 @@ change and a small controller change, both with approval.
 
 ## 9. Next steps, each needing owner approval
 
-1. **Choose the baseline:** 60 °C is recommended. 45 °C should wait for
-   Thermann and plumber confirmation.
-2. **Bridge 1.3.13:** three-state guarded commands with a stated prior state,
-   then a supervised qualification of Manual:<baseline> and of Manual → Manual
-   target changes.
+1. **Compliance confirmation** (section 3.3), at the owner's discretion. The
+   design stays at Manual 45 °C.
+2. **Bridge 1.3.13:** guarded commands for exactly OFF, `Manual:45` and
+   `Manual:70`, each stating its prior state. Then a supervised qualification
+   of `Manual:45` from OFF, of 45 ↔ 70 target changes and of `off` from
+   Manual 45.
 3. **Controller:** run `simple_policy` in shadow first, as a read-only
    "would do" sensor alongside the live controller. Then wire it into the
    executor and delete the planner, goals, permission and morning fail-safe
