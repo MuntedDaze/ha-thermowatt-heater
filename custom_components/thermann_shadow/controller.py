@@ -17,6 +17,7 @@ needs no particular configuration.
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
@@ -124,14 +125,36 @@ class ControllerConfig:
     max_requests_per_day: int = 220
     poll_interval_minutes: float = 30.0
     notification_cooldown_hours: float = 6.0
+    # 0.7.1: the mode command topic the bridge announced for the MAPPED heater
+    # (derived from its registry unique ID); None when it cannot be derived.
+    expected_command_topic: str | None = None
 
     def missing_commissioning(self) -> list[str]:
         missing = []
         if not valid_topic(self.command_topic):
             missing.append("command_topic_not_configured")
+        elif self.expected_command_topic and self.command_topic != self.expected_command_topic:
+            # A valid-looking topic for another (or mistyped) serial would send
+            # every command nowhere; the controller must never publish there.
+            missing.append("command_topic_does_not_match_heater")
         if not self.bridge_commands_qualified:
             missing.append("bridge_commands_not_qualified_t3")
         return missing
+
+
+HEATER_UNIQUE_ID = re.compile(r"^thermowatt_([A-Za-z0-9]{4,40})_v314$")
+
+
+def expected_command_topic(unique_id: object) -> str | None:
+    """The bridge's mode command topic for a heater entity unique ID.
+
+    The Thermowatt bridge registers its water heater as
+    ``thermowatt_<serial>_v314`` and announces ``P/<serial>/CMD/MODE`` as its
+    mode command topic. Anything else: unknown (no extra check)."""
+    if not isinstance(unique_id, str):
+        return None
+    match = HEATER_UNIQUE_ID.match(unique_id)
+    return f"P/{match.group(1)}/CMD/MODE" if match else None
 
 
 def valid_topic(topic: object) -> bool:
@@ -167,6 +190,9 @@ class Observation:
     # Bridge >= 1.3.11: bounded confirmation (follow-up schedule; None = older).
     bridge_confirmation_followups: list | None = None
     bridge_confirmation_pending: bool | None = None
+    # 0.7.1: the bridge app's command policy; only "automation" keeps the
+    # bridge's own Manual 70 / OFF state checks (None = not reported).
+    bridge_command_policy: str | None = None
     requests_total: int | None = None
     mqtt_ready: bool = False
 
@@ -695,6 +721,10 @@ class Controller:
             failures.append("bridge_unavailable")
         if obs.bridge_commands_enabled is not True:
             failures.append("bridge_commands_disabled_or_unknown")
+        if obs.bridge_command_policy != "automation":
+            # "legacy" accepts every 1.3.8 command and skips the bridge's own
+            # mode and target re-checks: never command through it.
+            failures.append("bridge_policy_not_automation")
         if obs.cloud_health != "ok":
             failures.append(f"cloud_health_{obs.cloud_health or 'unknown'}")
         if obs.auth_mode != "authorized":

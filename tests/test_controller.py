@@ -53,6 +53,7 @@ def obs(now, **kw):
         "bridge_refreshes_24h": 0,
         "bridge_confirmation_followups": [60, 300],  # bridge >= 1.3.11
         "bridge_confirmation_pending": False,
+        "bridge_command_policy": "automation",  # bridge app option (0.7.1 gate)
     }
     values.update(kw)
     if values["mode"] == "Manual" and "target_c" not in kw:
@@ -1981,3 +1982,88 @@ def test_ha_restart_while_the_bridge_awaits_confirmation_never_resends():
         cfg(),
     )
     assert restored.state == ctl.HEATING_PERMITTED
+
+
+# --- 0.7.1 settings safety (audit F1-F3, F11) -------------------------------------
+
+
+def test_command_topic_must_match_the_mapped_heater():
+    expected = ctl.expected_command_topic("thermowatt_TEST123_v314")
+    assert expected == TOPIC
+    for unknown in (None, "", "other_TEST123_v314", "thermowatt_x_v314", 42):
+        assert ctl.expected_command_topic(unknown) is None
+    assert cfg(expected_command_topic=TOPIC).missing_commissioning() == []
+    assert cfg(expected_command_topic=None).missing_commissioning() == []  # no extra check
+    wrong = cfg(command_topic="P/TEST124/CMD/MODE", expected_command_topic=TOPIC)
+    assert wrong.missing_commissioning() == ["command_topic_does_not_match_heater"]
+    # A mismatching topic is a commissioning gate: nothing is ever published.
+    now = local(hour=12)
+    controller = parked_controller(now)
+    effects = controller.step(obs(now, temperature_c=40), PERMIT, wrong)
+    assert not publishes(effects)
+    assert "command_topic_does_not_match_heater" in controller.gate_failures
+
+
+@pytest.mark.parametrize("policy", ["legacy", None, "Automation"])
+def test_no_command_unless_the_bridge_policy_is_automation(policy):
+    now = local(hour=12)
+    controller = parked_controller(now)
+    effects = controller.step(
+        obs(now, temperature_c=40, bridge_command_policy=policy), PERMIT, cfg()
+    )
+    assert not publishes(effects)
+    assert "bridge_policy_not_automation" in controller.gate_failures
+    effects = controller.step(obs(now + timedelta(seconds=30), temperature_c=40), PERMIT, cfg())
+    assert publishes(effects)  # the same request goes ahead under "automation"
+
+
+def test_safety_settings_are_locked_while_control_is_on_and_never_restored():
+    settings_mod = importlib.import_module(f"{m.__package__}.settings")
+    base = c.saved_options({"sources": dict(c.DEFAULT_SOURCES)})
+    assert settings_mod.locked_changes(base, dict(base)) == []
+    for key, value in {
+        "controller_command_topic": "P/OTHER/CMD/MODE",
+        "controller_bridge_qualified": True,
+        "controller_max_commands_per_day": 8.0,
+        "controller_min_rest_minutes": 45.0,
+        "controller_execution_latency_minutes": 10.0,
+        "import_positive": True,
+        "meter_verified": False,
+        "tariff_verified": False,
+        "peak_rate": 0.40,
+        "feed_in_rate": 0.05,
+        "peak_evening_start": "15:00",
+        "tariff_clock": "local",
+        "status_max_age_minutes": 60.0,
+    }.items():
+        assert settings_mod.locked_changes(base, {**base, key: value}) == [key], key
+    moved = {**base, "sources": {**c.DEFAULT_SOURCES, "grid": "sensor.other_meter"}}
+    assert settings_mod.locked_changes(base, moved) == ["sources"]
+    # Same value in another numeric type is not a change (60 vs 60.0).
+    assert settings_mod.locked_changes(base, {**base, "grid_max_age_seconds": 120}) == []
+    # Everyday preferences, notifications and legacy values stay editable.
+    for key, value in {
+        "target_c": 66.0,
+        "morning_preferred_c": 48.0,
+        "morning_hard_time": "07:30",
+        "controller_notify_service": "mobile_app_phone",
+        "forecast_enabled": True,
+    }.items():
+        assert settings_mod.locked_changes(base, {**base, key: value}) == [], key
+    message = settings_mod.locked_message(["controller_command_topic", "sources"])
+    assert "Turn off Automatic heater control" in message
+    assert "Controller command topic" in message and "Sensor mappings" in message
+    # Restore and Undo only ever touch preferences: never a locked key.
+    changed = {
+        **base,
+        "controller_min_heating_minutes": 60.0,
+        "controller_max_requests_per_day": 300.0,
+        "status_max_age_minutes": 60.0,
+        "target_c": 66.0,
+    }
+    restored = settings_mod.recommended_options(changed)
+    assert settings_mod.locked_changes(changed, restored) == []
+    assert restored["controller_min_heating_minutes"] == 60.0
+    assert restored["controller_max_requests_per_day"] == 300.0
+    assert restored["target_c"] == c.DEFAULT_OPTIONS["target_c"]
+    assert settings_mod.locked_changes(restored, settings_mod.undo_restore(restored)) == []

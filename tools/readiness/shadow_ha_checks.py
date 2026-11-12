@@ -654,6 +654,29 @@ async def check_controller(hass, entry, entity_for):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
         await drive(hass, "switch", "turn_on", master)
         assert hass.states.get(master).state == "on"
+        # 0.7.1 (audit F1): with control ON, settings that decide where
+        # commands go, whether they may be sent or what a price or measurement
+        # means are refused through the real service path; preferences,
+        # notifications and Restore recommended still apply at once.
+        for key, value in (
+            ("controller_command_topic", "P/OTHER99/CMD/MODE"),
+            ("controller_bridge_qualified", False),
+            ("controller_max_commands_per_day", 8),
+            ("import_positive", True),
+            ("peak_rate", 0.40),
+        ):
+            await rejected(
+                hass, entry, set_setting(hass, entity_for(key), CATALOG[key].kind, value)
+            )
+        await set_setting(hass, entity_for("target_c"), "number", 66)
+        assert hass.data["thermann_shadow"][entry.entry_id].settings.target_c == 66
+        await set_setting(hass, entity_for("controller_notify_service"), "text", "mobile_app_x")
+        await drive(
+            hass, "button", "press", "button.thermann_shadow_restore_recommended_preferences"
+        )
+        assert entry.options["target_c"] == 70
+        assert entry.options["controller_command_topic"] == "P/TEST123/CMD/MODE"
+        await set_setting(hass, entity_for("controller_notify_service"), "text", "")
         executor = hass.data["thermann_shadow"][entry.entry_id].executor
         executor.desire = lambda now: ctl.Desire("permit", "real_ha_wiring_check")
         hass.config.components.add("mqtt")

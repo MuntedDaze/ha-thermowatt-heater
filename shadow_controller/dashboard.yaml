@@ -373,21 +373,21 @@ views:
       \ the supervised T3 test showed the bridge's Manual:70 (from OFF) and off (from Manual 70) reproduce\
       \ the app results. Requires Thermowatt add-on 1.3.9 or later.\n\n**Minimum heating period** — current\
       \ **{{ states('number.thermann_shadow_minimum_heating_period') }} min** · recommended & original\
-      \ **30 min** · *restored by Restore*  \nShortest time Manual (heating permitted) is kept before\
-      \ parking, unless the thermostat has already stopped the element.\n\n**Minimum rest period** — current\
-      \ **{{ states('number.thermann_shadow_minimum_rest_period') }} min** · recommended & original **30\
-      \ min** · *restored by Restore*  \nShortest time parked before heating is permitted again.\n\n**Maximum\
-      \ commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day') }}**\
-      \ · recommended & original **6** · *restored by Restore*  \nRolling 24 h limit on mode commands.\
-      \ A typical day needs 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved\
-      \ for a comfort start and its park.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
-      \ }} min** · recommended & original **65 min** · *restored by Restore*  \nIf no status confirms\
-      \ a command within this time, automatic control locks until you acknowledge. At least one poll interval\
-      \ plus margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
-      \ }}** · recommended & original **220** · *restored by Restore*  \nNo command is sent once the bridge's\
+      \ **30 min** · *kept by Restore*  \nShortest time Manual (heating permitted) is kept before parking,\
+      \ unless the thermostat has already stopped the element.\n\n**Minimum rest period** — current **{{\
+      \ states('number.thermann_shadow_minimum_rest_period') }} min** · recommended & original **30 min**\
+      \ · *kept by Restore*  \nShortest time parked before heating is permitted again.\n\n**Maximum commands\
+      \ per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day') }}** · recommended\
+      \ & original **6** · *kept by Restore*  \nRolling 24 h limit on mode commands. A typical day needs\
+      \ 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved for a comfort start\
+      \ and its park.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
+      \ }} min** · recommended & original **65 min** · *kept by Restore*  \nIf no status confirms a command\
+      \ within this time, automatic control locks until you acknowledge. At least one poll interval plus\
+      \ margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
+      \ }}** · recommended & original **220** · *kept by Restore*  \nNo command is sent once the bridge's\
       \ local request count over 24 h reaches this. Normal 30-minute polling uses about 150/day.\n\n**Execution\
       \ latency reserve** — current **{{ states('number.thermann_shadow_execution_latency_reserve') }}\
-      \ min** · recommended & original **30 min** · *restored by Restore*  \nComfort deadlines are planned\
+      \ min** · recommended & original **30 min** · *kept by Restore*  \nComfort deadlines are planned\
       \ this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command\
       \ normally reaches the heater within about a minute; the 30-minute default is a conservative margin\
       \ you may reduce after the supervised trial.\n\n**Notification service** — current **{{ states('text.thermann_shadow_notification_service')\
@@ -461,10 +461,10 @@ views:
       \ }} min** · recommended & original **15 min** · *restored by Restore*  \nBounded assumption for\
       \ current export, never a daily forecast or guaranteed solar.\n\n**Maximum cloud poll age** — current\
       \ **{{ states('number.thermann_shadow_maximum_cloud_poll_age') }} min** · recommended & original\
-      \ **45 min** · *restored by Restore*  \nOnly local freshness gate; does not alter bridge polling\
-      \ or issue refresh requests.\n\n**Maximum power reading age** — current **{{ states('number.thermann_shadow_maximum_power_reading_age')\
-      \ }} s** · recommended & original **120 s** · *restored by Restore*  \nMissing/stale observations\
-      \ reset economic holds; no cloud calls.\n\n**Expected native target** — current **{{ states('number.thermann_shadow_expected_native_target')\
+      \ **45 min** · *kept by Restore*  \nOnly local freshness gate; does not alter bridge polling or\
+      \ issue refresh requests.\n\n**Maximum power reading age** — current **{{ states('number.thermann_shadow_maximum_power_reading_age')\
+      \ }} s** · recommended & original **120 s** · *kept by Restore*  \nMissing/stale observations reset\
+      \ economic holds; no cloud calls.\n\n**Expected native target** — current **{{ states('number.thermann_shadow_expected_native_target')\
       \ }} °C** · recommended & original **70 °C** · *kept by Restore*  \nReference only. Different observed\
       \ mode/target latches intervention; never sets the heater.\n\n**Native schedule clock reference**\
       \ — current **{{ states('select.thermann_shadow_native_schedule_clock_reference') }}** · recommended\

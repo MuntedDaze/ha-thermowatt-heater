@@ -5,11 +5,27 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .config import DOMAIN, parse_options, saved_options
-from .settings import CATALOG, apply_changes, describe, recommended_options, undo_restore
+from .settings import (
+    CATALOG,
+    apply_changes,
+    describe,
+    locked_changes,
+    locked_message,
+    recommended_options,
+    undo_restore,
+)
+
+
+def control_active(hass, entry) -> bool:
+    """Whether automatic heater control is currently ON for this entry."""
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    executor = getattr(runtime, "executor", None)
+    return bool(executor is not None and executor.controller.enabled)
 
 
 async def save(hass, entry, changes=None, restore=False, undo=False):
     values = saved_options(entry.options)
+    before = dict(values)
     if undo:
         try:
             values = undo_restore(values)
@@ -27,6 +43,9 @@ async def save(hass, entry, changes=None, restore=False, undo=False):
             "tariff times must increase without overlaps; T-Comfort reference must not exceed "
             "the expected native target. Check the displayed planning bounds. Nothing was saved."
         ) from None
+    locked = locked_changes(before, values)
+    if locked and control_active(hass, entry):
+        raise HomeAssistantError(locked_message(locked))
     hass.config_entries.async_update_entry(entry, options=values)
 
 

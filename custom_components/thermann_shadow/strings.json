@@ -113,6 +113,7 @@
       }
     },
     "error": {
+      "locked_while_active": "{locked}",
       "invalid_settings": "Nothing saved. Check finite planning bounds; morning before noon and afternoon after noon; increasing tariff times without overlaps; gap-free custom weekly periods (validated in every tariff mode); T-Comfort reference not above expected native target. No heater settings were changed."
     }
   }

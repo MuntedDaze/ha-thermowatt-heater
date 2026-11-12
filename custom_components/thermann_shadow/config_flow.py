@@ -13,7 +13,7 @@ from .config import (
     parse_options,
     saved_options,
 )
-from .settings import CATALOG, apply_changes
+from .settings import CATALOG, apply_changes, locked_changes, locked_message
 
 
 def sources_schema(values):
@@ -94,13 +94,25 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
         errors = {}
         values = saved_options(self._entry.options)
         if user_input is not None:
+            before = {**values, "sources": self._entry.options.get("sources", self._entry.data)}
             values = apply_changes(values, user_input)
             try:
                 parse_options(values)
             except (ValueError, TypeError, KeyError, OverflowError):
                 errors["base"] = "invalid_settings"
             else:
-                return self.async_create_entry(title="", data={**values, "sources": self._sources})
+                result = {**values, "sources": self._sources}
+                from .settings_entity import control_active
+
+                locked = locked_changes(before, result)
+                if locked and control_active(self.hass, self._entry):
+                    errors["base"] = "locked_while_active"
+                    self._locked = locked_message(locked)
+                else:
+                    return self.async_create_entry(title="", data=result)
         return self.async_show_form(
-            step_id="settings", data_schema=options_schema(values), errors=errors
+            step_id="settings",
+            data_schema=options_schema(values),
+            errors=errors,
+            description_placeholders={"locked": getattr(self, "_locked", "")},
         )

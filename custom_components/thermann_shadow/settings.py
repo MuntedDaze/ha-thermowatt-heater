@@ -477,9 +477,91 @@ PRESERVE_ON_RESTORE = frozenset(
         "controller_command_topic",
         "controller_bridge_qualified",
         "controller_notify_service",
+        # 0.7.1: command safety timing, budgets and data-freshness limits are
+        # system settings, not preferences; a restore never changes them.
+        "controller_min_heating_minutes",
+        "controller_min_rest_minutes",
+        "controller_max_commands_per_day",
+        "controller_confirmation_timeout_minutes",
+        "controller_max_requests_per_day",
+        "controller_execution_latency_minutes",
+        "status_max_age_minutes",
+        "grid_max_age_seconds",
+    }
+)
+# 0.7.1: settings that change WHERE commands go, WHETHER they may be sent, HOW
+# often, or what a measurement or a price MEANS. Changing one while automatic
+# control is on could silently bypass a commissioning gate, redirect commands,
+# invert the meter or reprice decisions mid-run, so it is accepted only while
+# automatic control is OFF. ("sources" is the sensor-mapping page of Configure.)
+LOCKED_WHILE_ACTIVE = frozenset(
+    {
+        "controller_command_topic",
+        "controller_bridge_qualified",
+        "controller_min_heating_minutes",
+        "controller_min_rest_minutes",
+        "controller_max_commands_per_day",
+        "controller_confirmation_timeout_minutes",
+        "controller_max_requests_per_day",
+        "controller_execution_latency_minutes",
+        "meter_verified",
+        "import_positive",
+        "tariff_verified",
+        "tariff_profile",
+        "tariff_clock",
+        "tariff_periods",
+        "weekend_peak",
+        "off_peak_rate",
+        "shoulder_rate",
+        "peak_rate",
+        "feed_in_rate",
+        "peak_morning_start",
+        "peak_morning_end",
+        "peak_evening_start",
+        "peak_evening_end",
+        "status_max_age_minutes",
+        "grid_max_age_seconds",
+        "sources",
     }
 )
 RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
+assert not set(RESTORED) & LOCKED_WHILE_ACTIVE  # restore/undo never need control off
+
+
+def _same(a, b) -> bool:
+    if a == b:
+        return True
+    try:
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and float(a) == float(b)
+    except (TypeError, ValueError):
+        return False
+
+
+def locked_changes(before: dict, after: dict) -> list[str]:
+    """Locked keys whose value differs between two complete option sets."""
+    from .config import DEFAULT_OPTIONS
+
+    changed = []
+    for key in sorted(LOCKED_WHILE_ACTIVE):
+        default = DEFAULT_OPTIONS.get(key)
+        old, new = before.get(key, default), after.get(key, default)
+        if key == "sources":
+            old, new = dict(old or {}), dict(new or {})
+        if not _same(old, new):
+            changed.append(key)
+    return changed
+
+
+def locked_message(keys) -> str:
+    names = [CATALOG[key].name if key in CATALOG else "Sensor mappings" for key in keys]
+    return (
+        "Turn off Automatic heater control before changing: "
+        + ", ".join(names)
+        + ". These settings decide where commands go, whether they may be sent or what "
+        "a measurement or price means. Nothing was saved."
+    )
+
+
 BACKUP_KEY = "restore_backup"
 
 

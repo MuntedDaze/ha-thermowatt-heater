@@ -37,6 +37,7 @@ from .controller import (
     ControllerConfig,
     Desire,
     Observation,
+    expected_command_topic,
 )
 from .goals import next_tariff_change
 from .model import tariff_at
@@ -48,7 +49,9 @@ NOTIFY_SERVICE = re.compile(r"^[a-z0-9_]{1,64}$")
 VENDOR_MODES = {"Manual", "Schedule", "Eco", "Off", "Holiday", "Unknown"}
 
 
-def controller_config(options: dict, poll_minutes: float = 30.0) -> ControllerConfig:
+def controller_config(
+    options: dict, poll_minutes: float = 30.0, expected_topic: str | None = None
+) -> ControllerConfig:
     from .config import DEFAULT_OPTIONS
 
     values = {**DEFAULT_OPTIONS, **options}
@@ -61,6 +64,7 @@ def controller_config(options: dict, poll_minutes: float = 30.0) -> ControllerCo
         confirmation_timeout_minutes=float(values["controller_confirmation_timeout_minutes"]),
         max_requests_per_day=int(values["controller_max_requests_per_day"]),
         poll_interval_minutes=poll_minutes,
+        expected_command_topic=expected_topic,
     )
 
 
@@ -83,7 +87,7 @@ class Executor:
         from .config import DEFAULT_OPTIONS
 
         values = {**DEFAULT_OPTIONS, **options}
-        self.cfg = controller_config(values, self._poll_minutes())
+        self.cfg = controller_config(values, self._poll_minutes(), self._expected_topic())
         self.latency_minutes = float(values["controller_execution_latency_minutes"])
         self.notify_service = str(values["controller_notify_service"]).strip()
 
@@ -93,6 +97,16 @@ class Executor:
         self._saved = data if isinstance(data, dict) else None
         self.controller.restored(dt_util.utcnow())
         self.runtime.controller_active = self.controller.enabled
+
+    def _expected_topic(self) -> str | None:
+        """Command topic of the MAPPED heater, from its entity registry entry."""
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            entry = er.async_get(self.hass).async_get(self.runtime.sources.get("heater", ""))
+        except Exception:  # noqa: BLE001 - no registry: no extra check
+            return None
+        return expected_command_topic(entry.unique_id if entry else None)
 
     def _poll_minutes(self) -> float:
         state = self.hass.states.get(self.runtime.sources.get("cloud_health", ""))
@@ -204,6 +218,8 @@ class Executor:
             )
             pending = attrs.get("command_confirmation_pending")
             obs.bridge_confirmation_pending = pending if isinstance(pending, bool) else None
+            policy = attrs.get("command_policy")
+            obs.bridge_command_policy = policy if isinstance(policy, str) else None
         obs.bridge_available = (
             mode is not None and mode.state != "unavailable" and obs.cloud_health is not None
         )
@@ -276,7 +292,9 @@ class Executor:
     async def async_step(self, now: datetime | None = None) -> None:
         async with self.lock:
             now = now or dt_util.utcnow()
-            self.cfg = controller_config(self.entry.options, self._poll_minutes())
+            self.cfg = controller_config(
+                self.entry.options, self._poll_minutes(), self._expected_topic()
+            )
             obs = self.observe(now)
             self.last_observation = obs
             desire = self.desire(now)

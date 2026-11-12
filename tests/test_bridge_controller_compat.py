@@ -136,6 +136,7 @@ class HA:
             bridge_refreshes_24h=d.get("command_status_refreshes_24h"),
             bridge_confirmation_followups=d.get("command_confirmation_followups_seconds"),
             bridge_confirmation_pending=d.get("command_confirmation_pending"),
+            bridge_command_policy=d.get("command_policy"),
         )
 
 
