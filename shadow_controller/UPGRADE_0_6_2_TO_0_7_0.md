@@ -21,7 +21,19 @@
 - The morning goal is now 06:00/07:00 every day, no longer the weekday morning peak start.
 - The three legacy morning/shower settings keep their values but no longer affect control; they are hidden from the settings dashboard.
 
-**Steps (when approved):** the same as UPGRADE_0_6_1_TO_0_6_2.md, using the 0.7.0 package: verify the checksum, replace the folder, restart once, check the log, and confirm the controller is still disabled.
+**Steps (when approved):**
+1. Check the package checksum (`Get-FileHash <zip> -Algorithm SHA256`), unzip it, and confirm `manifest.json` says 0.7.0.
+2. Delete `\<your-HA-host>\config\custom_components	hermann_shadow`. Don't remove the integration in Home Assistant.
+3. Copy in the package's `thermann_shadow` folder.
+4. Restart Home Assistant once.
+5. Check the log for `thermann_shadow` errors.
+6. Check:
+   - *Automatic heater control* is **off**;
+   - the state is `disabled`;
+   - the operating mode is `disabled`;
+   - the three new morning settings show 06:00, 07:00 and 45 °C.
+
+**Rollback:** delete the folder, copy in the 0.6.2 package (`thermann_shadow-0.6.2-5fe48e3.zip`), restart once.
 
 ## Physical verification needed before enabling
 

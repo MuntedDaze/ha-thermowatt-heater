@@ -3,7 +3,7 @@
 **Not yet approved; nothing has been done to your Home Assistant.** The upgrade
 is code only. It sends no heater command and changes no Thermann mode, target,
 Schedule or T-Comfort. *Automatic heater control* stays **off**. The Thermowatt
-add-on is a separate update ([UPGRADING_1_3_11.md](../UPGRADING_1_3_11.md)).
+add-on is a separate update ([UPGRADING_1_3_11.md](../bridge/UPGRADING_1_3_11.md)).
 
 **What changes:**
 - 0.6.2 needs bridge **1.3.11** to command; until then it reports
@@ -28,8 +28,8 @@ No backup preparation is required. Rollback uses the 0.6.1 package below.
 
 1. This upgrade (control off). It works with bridge 1.3.10 or 1.3.11.
 2. Bridge 1.3.11, after its PR is approved and merged
-   ([UPGRADING_1_3_11.md](../UPGRADING_1_3_11.md)).
-3. T3c, then the supervised trial ([COMMISSIONING.md](COMMISSIONING.md)).
+   ([UPGRADING_1_3_11.md](../bridge/UPGRADING_1_3_11.md)).
+3. T3c, then the supervised trial ([COMMISSIONING.md](COMMISSIONING_0_6.md)).
 
 ## Steps
 

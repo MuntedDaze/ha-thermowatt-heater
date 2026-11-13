@@ -1,35 +1,52 @@
-"""Read HA states only, on a fixed local timer. Never call services or a transport."""
+"""Read HA states only, on a fixed local timer. Never call services or a transport.
+
+0.9.0: the runtime gathers MEASUREMENTS for the one coordinated policy
+(``simple_policy``) and the read-only displays:
+
+* the Thermann reading, target, mode and poll time (bridge entities);
+* the GoodWe grid power (signed by the owner's verified convention), PV and
+  house load, and the local element estimate (``heater_state``);
+* the EMHASS PV and household-load forecasts as net-export slots (``forecast``);
+* the tariff calendar.
+
+It does not decide anything: the executor runs the policy every minute and the
+controller supervises any command. The 0.4-0.8 planner (goals, strategies,
+economic permission) is gone.
+"""
 
 import logging
-
-from dataclasses import asdict
 from collections import deque
 from datetime import timedelta
 
 from homeassistant.util import dt as dt_util
 
-from .model import Plan, Reading, evaluate, number, timestamp, _fresh, _power
 from .config import DEFAULT_OPTIONS, DEFAULT_PV_AC
-from .native import parse_native, permitted_minutes, scheduled_permission
 from .forecast import build_forecast
-from .thermal import ThermalObserver
-from .advisor import Advisor, TickInputs
-from .goals import next_tariff_change
-from .model import TANK_KWH_PER_C, tariff_at
+from .heater_state import HeaterState, HeaterStateEstimator, base_load
+from .model import Reading, _fresh, _power, number, tariff_at, timestamp
 from .settings import BACKUP_KEY, describe
+from .thermal import ThermalObserver
 
 # Measured-vs-forecast PV correction uses a short rolling mean, so one passing
 # cloud sample cannot discard the whole horizon. Window is deliberately fixed.
 PV_AVERAGE_MINUTES = 15
-GATED = {
-    "shadow_blocked",
-    "shadow_paused",
-    "shadow_native_intervention",
-    "shadow_awaiting_validation",
-}
-
+CLOUD_HEALTH = {"ok", "disabled", "auth_locked", "quota_limited", "backoff", "unavailable"}
 
 LOG = logging.getLogger(__name__)
+
+
+def next_tariff_change(now, tariffs, clock):
+    """(time, tariff) of the next change of tariff kind within 8 days, or None."""
+    current = tariff_at(now, tariffs, clock)
+    at = now.replace(second=0, microsecond=0)
+    for _ in range(8 * 24 * 4):
+        at += timedelta(minutes=15)
+        candidate = tariff_at(at, tariffs, clock)
+        if candidate.kind != current.kind:
+            while tariff_at(at - timedelta(minutes=1), tariffs, clock).kind != current.kind:
+                at -= timedelta(minutes=1)
+            return at, candidate
+    return None
 
 
 class ShadowRuntime:
@@ -39,34 +56,30 @@ class ShadowRuntime:
         self.settings = settings
         self.tariffs = tariffs
         self.boot = dt_util.utcnow()
-        self.plan = Plan(reasons=["awaiting_post_restart_inputs"])
         self.values = {}
         self.details = {}
         self.listeners = set()
-        self.last_native = None
-        self.intervention = False
         self.first_count = None
         self.last_count = None
         self.count_started = None
-        self.solar_samples = deque(maxlen=121)
         self.pv_samples = deque(maxlen=64)  # (observed_at, kW), fresh distinct reports
-        self.advisor = Advisor()
-        self.advice = None
-        self._status_ok = False
-        # 0.5.0: set by the Executor. While the production controller is enabled
-        # it supervises mode changes itself (own commands are expected; foreign
-        # ones put it in OWNER_OVERRIDE), so the shadow latch is not used.
+        self.estimator = HeaterStateEstimator()
+        self.heater = HeaterState()
+        self.forecast = None
+        self.grid_import_kw = None  # signed: import positive; None when stale/unverified
+        self.temperature_c = None
+        self.poll_at = None
+        self.warnings = []
+        # Set by the Executor (it publishes; this module never does).
         self.controller_active = False
         self.executor = None
-        self.planning_temperature = None
         # 0.7.0 read-only thermal observer (diagnostics; never affects control).
         self.thermal = ThermalObserver()
         self.thermal_store = None
-        self.set_native_reference({})
+        self.native_options = dict(DEFAULT_OPTIONS)
 
     def set_native_reference(self, options):
         self.native_options = {**DEFAULT_OPTIONS, **options}
-        self.native_periods = parse_native(self.native_options["native_schedule_periods"])
 
     def apply_options(self, options, sources):
         from .config import parse_options
@@ -74,12 +87,13 @@ class ShadowRuntime:
         settings, tariffs = parse_options(options)
         changed_mapping = dict(sources) != dict(self.sources)
         if changed_mapping or settings != self.settings or tariffs != self.tariffs:
-            self.advisor.reset()
-            self.solar_samples.clear()
             self.pv_samples.clear()
+            self.estimator.reset()
+            if self.executor is not None:
+                # Meter evidence was gathered under the old mapping or sign.
+                self.executor.reset_policy()
         if changed_mapping:
             self.boot = dt_util.utcnow()
-            self.last_native = None
         self.sources, self.settings, self.tariffs = sources, settings, tariffs
         self.set_native_reference(options)
         self.update(dt_util.utcnow())
@@ -89,8 +103,6 @@ class ShadowRuntime:
         if not isinstance(entity_id, str) or not entity_id:
             return None
         state = self.hass.states.get(entity_id)
-        # Schedule is deliberately Unknown on the water_heater entity. Its
-        # numeric attributes remain useful; mode comes from the vendor sensor.
         if (
             state is None
             or state.state == "unavailable"
@@ -107,83 +119,93 @@ class ShadowRuntime:
             bool(state.attributes.get("restored", False)),
         )
 
-    def update(self, now):
-        readings = {}
-        for key in ("grid", "mode", "last_poll", "cloud_health"):
-            if reading := self._reading(key):
-                readings[key] = reading
-        for key, attribute in (("temperature", "current_temperature"), ("target", "temperature")):
-            if reading := self._reading("heater", attribute):
-                readings[key] = reading
-        # New mode/target on a new cloud sample is an owner/native intervention,
-        # never an invitation to acquire control. Latch until configuration review.
-        native = tuple(
-            readings[key].value if key in readings else None for key in ("mode", "target")
-        )
+    def _kw(self, key, now, entity_id=None):
+        reading = self._reading(key, entity_id=entity_id)
         try:
-            native = (native[0], number(native[1]))
-        except (ValueError, TypeError, OverflowError):
-            native = (None, None)
-        if all(item is not None for item in native):
-            if (
-                self.last_native is not None
-                and self.last_native != native
-                and not self.controller_active
-            ):
-                self.intervention = True
-            self.last_native = native
-        solar_confirmed = False
-        try:
-            grid = readings["grid"]
-            _fresh(grid, now, self.boot, self.settings.grid_max_age_seconds)
-            export = _power(grid) * (-1 if self.settings.import_positive else 1)
-            if (
-                not self.settings.meter_verified
-                or export < self.settings.min_solar_kw + self.settings.export_headroom_kw
-            ):
-                self.solar_samples.clear()
-            else:
-                if self.solar_samples and (
-                    grid.observed_at < self.solar_samples[-1]
-                    or (grid.observed_at - self.solar_samples[-1]).total_seconds()
-                    > self.settings.grid_max_age_seconds
-                ):
-                    self.solar_samples.clear()
-                if not self.solar_samples or grid.observed_at > self.solar_samples[-1]:
-                    self.solar_samples.append(grid.observed_at)
-                solar_confirmed = (
-                    self.solar_samples[-1] - self.solar_samples[0]
-                ).total_seconds() >= self.settings.solar_hold_minutes * 60
-        except (KeyError, ValueError, TypeError, OverflowError):
-            self.solar_samples.clear()
-        # AC-side inverter output: consistent with the AC meter and GoodWe house
-        # load. The DC "pv" mapping stays display-only (Stage 1 F6).
-        measured_pv = pv_ac_now = None
-        pv_ac_entity = self.sources.get("pv_ac") or DEFAULT_PV_AC
-        try:
-            pv = self._reading("pv_ac", entity_id=pv_ac_entity)
-            if pv:
-                _fresh(pv, now, self.boot, self.settings.grid_max_age_seconds)
-                value = _power(pv)
-                if value < 0:
-                    raise ValueError("pv_negative")
-                pv_ac_now = value
-                if not self.pv_samples or pv.observed_at > self.pv_samples[-1][0]:
-                    self.pv_samples.append((pv.observed_at, value))
+            if reading and not reading.restored:
+                _fresh(reading, now, self.boot, self.settings.grid_max_age_seconds)
+                return _power(reading)
         except (ValueError, TypeError, OverflowError):
             pass
+        return None
+
+    # ------------------------------------------------------------------ the tick
+    def update(self, now):
+        settings = self.settings
+        self.warnings = []
+        # Thermann status (bridge entities).
+        poll = self._reading("last_poll")
+        try:
+            self.poll_at = timestamp(poll.value) if poll else None
+        except (ValueError, TypeError):
+            self.poll_at = None
+        status_ok = (
+            self.poll_at is not None
+            and 0 <= (now - self.poll_at).total_seconds() <= settings.status_max_age_minutes * 60
+        )
+        temperature = target = None
+        for key, attribute in (("temperature", "current_temperature"), ("target", "temperature")):
+            reading = self._reading("heater", attribute)
+            try:
+                value = number(reading.value) if reading and status_ok else None
+                if reading and reading.unit != "°C":
+                    value = None
+            except (ValueError, TypeError, OverflowError):
+                value = None
+            if key == "temperature":
+                temperature = value
+            else:
+                target = value
+        self.temperature_c = temperature
+        mode_state = self.hass.states.get(self.sources.get("mode", ""))
+        mode = mode_state.state if mode_state else None
+
+        # GoodWe meter (local, about every minute). Signed import only when the
+        # owner has verified the meter's direction; otherwise no solar evidence.
+        grid = self._kw("grid", now)
+        export_kw = None if grid is None else grid * (-1 if settings.import_positive else 1)
+        self.grid_import_kw = (
+            None if export_kw is None or not settings.meter_verified else -export_kw
+        )
+        if not settings.meter_verified:
+            self.warnings.append("meter_direction_not_verified_no_measured_solar_used")
+        pv_ac_now = None
+        pv_ac_entity = self.sources.get("pv_ac") or DEFAULT_PV_AC
+        value = self._kw("pv_ac", now, entity_id=pv_ac_entity)
+        if value is not None and value >= 0:
+            pv_ac_now = value
+            reading = self._reading("pv_ac", entity_id=pv_ac_entity)
+            if reading and (not self.pv_samples or reading.observed_at > self.pv_samples[-1][0]):
+                self.pv_samples.append((reading.observed_at, value))
         while self.pv_samples and now - self.pv_samples[0][0] > timedelta(
             minutes=PV_AVERAGE_MINUTES
         ):
             self.pv_samples.popleft()
-        if self.pv_samples and now - self.pv_samples[-1][0] <= timedelta(
-            seconds=self.settings.grid_max_age_seconds
-        ):
-            measured_pv = sum(value for _, value in self.pv_samples) / len(self.pv_samples)
+        measured_pv = (
+            sum(item for _, item in self.pv_samples) / len(self.pv_samples)
+            if self.pv_samples
+            and now - self.pv_samples[-1][0] <= timedelta(seconds=settings.grid_max_age_seconds)
+            else None
+        )
+        house_kw = self._kw("house", now)
+        if house_kw is None and pv_ac_now is not None and export_kw is not None:
+            house_kw = max(0.0, pv_ac_now - export_kw)
+        heater_power = self._kw("heater_power", now) if self.sources.get("heater_power") else None
+        status_raw = mode_state.attributes.get("WaterHeaterSts") if mode_state else None
+        self.heater = self.estimator.update(
+            now,
+            house_kw,
+            status_raw,
+            self.poll_at if status_ok else None,
+            mode == "Manual",
+            heater_power,
+        )
+
+        # EMHASS forecasts as net-export slots.
         self.forecast = build_forecast(
             now,
             self.boot,
-            self.settings,
+            settings,
             self.hass.states.get(self.sources.get("forecast_pv", "")),
             self.hass.states.get(self.sources.get("forecast_load", "")),
             measured_pv,
@@ -191,564 +213,149 @@ class ShadowRuntime:
         self.forecast.measured_pv_average_kw = (
             None if measured_pv is None else round(measured_pv, 3)
         )
-        self.plan = evaluate(
-            now,
-            self.boot,
-            readings,
-            self.settings,
-            self.tariffs,
-            forecast=self.forecast.slots,
-            intervention=self.intervention,
-            solar_confirmed=solar_confirmed,
-            controlled=bool(self.executor is not None and self.controller_active),
-        )
-        self.plan.warnings.extend(self.forecast.warnings)
-        poll_at = None
-        try:
-            poll_at = timestamp(readings["last_poll"].value)
-        except (KeyError, ValueError, TypeError):
-            pass
-        status_ok = (
-            poll_at is not None
-            and 0 <= (now - poll_at).total_seconds() <= self.settings.status_max_age_minutes * 60
-        )
-        self._status_ok = status_ok
-        temperature = None
-        if status_ok and "temperature" in readings:
-            try:
-                temperature = number(readings["temperature"].value)
-            except (ValueError, TypeError):
-                temperature = None
-        export_kw = self.plan.net_export_kw
-        house_kw = self._kw("house", now)
-        if house_kw is None and pv_ac_now is not None and export_kw is not None:
-            house_kw = max(0.0, pv_ac_now - export_kw)
-        mode_state = self.hass.states.get(self.sources.get("mode", ""))
-        status_raw = mode_state.attributes.get("WaterHeaterSts") if mode_state else None
-        executor = self.executor
-        controlled = bool(executor is not None and self.controller_active)
-        raw_temperature = temperature
-        if executor is not None and self.advisor.estimator is not None:
-            previous = self.advice.heater.state if self.advice else "unknown"
-            temperature = executor.session.update(now, temperature, previous)
-        self.planning_temperature = temperature
+        self.warnings.extend(self.forecast.warnings)
 
-        def in_window(at):
-            if controlled:
-                return executor.permitted()
-            return (
-                scheduled_permission(
-                    at, self.native_periods, self.native_options["native_schedule_clock"]
-                )
-                == "within_reported_window"
-            )
-
-        heater_power = self._kw("heater_power", now) if self.sources.get("heater_power") else None
-        inputs = TickInputs(
-            temperature=temperature,
-            house_kw=house_kw,
-            pv_ac_kw=pv_ac_now,
-            export_kw=export_kw,
-            status_raw=status_raw,
-            status_at=poll_at if status_ok else None,
-            in_window=in_window,
-            heater_power_kw=heater_power,
-            native_periods=self.native_periods,
-            native_clock=self.native_options["native_schedule_clock"],
-            pv_series=self.forecast.pv_series,
-            load_series=self.forecast.load_series,
-            forecast_available=bool(self.forecast.pv_series),
-            controlled=controlled,
-            latency_minutes=executor.latency_minutes if controlled else 0.0,
-            holiday=executor.controller.holiday_window(now) if controlled else None,
-        )
-        advice = self.advisor.tick(now, self.plan, self.settings, self.tariffs, inputs)
-        self.advice = advice
         try:
             self.thermal.update(
                 now,
-                raw_temperature,
-                poll_at if status_ok else None,
-                advice.heater.state,
-                advice.heater.confidence,
-                mode_state.state if mode_state else None,
+                temperature,
+                self.poll_at if status_ok else None,
+                self.heater.state,
+                self.heater.confidence,
+                mode,
             )
             if self.thermal_store is not None and self.thermal.should_save(now):
                 self.hass.async_create_task(self.thermal_store.async_save(self.thermal.to_dict()))
         except Exception:  # noqa: BLE001 - diagnostics must never disturb control
             LOG.debug("Thermal observer update failed.")
-        self._apply_advice(now, advice, pv_ac_now)
-        self.values["controller"] = self.plan.state
-        self.values["morning_threshold_c"] = self.settings.morning_threshold_c
-        self.values["storage_target_c"] = self.settings.target_c
-        health = readings.get("cloud_health", Reading("unavailable", now)).value
-        self.values["cloud_health"] = (
-            health
-            if health
-            in {"ok", "disabled", "auth_locked", "quota_limited", "backoff", "unavailable"}
-            else "unrecognised"
-        )
-        for key in ("temperature", "target", "pv", "house", "grid"):
-            reading = (
-                readings.get(key)
-                if key in {"temperature", "target", "grid"}
-                else self._reading(key)
-            )
-            value = None
-            try:
-                max_age = (
-                    self.settings.status_max_age_minutes * 60
-                    if key in {"temperature", "target"}
-                    else self.settings.grid_max_age_seconds
-                )
-                cloud = key in {"temperature", "target"}
-                if (
-                    reading
-                    and not reading.restored
-                    and (
-                        self._status_ok
-                        if cloud
-                        else reading.observed_at >= self.boot
-                        and 0 <= (now - reading.observed_at).total_seconds() <= max_age
-                    )
-                ):
-                    value = number(reading.value)
-                    if key in {"pv", "house", "grid"}:
-                        value = (
-                            value / 1000
-                            if reading.unit == "W"
-                            else value
-                            if reading.unit == "kW"
-                            else None
-                        )
-                    if key in {"temperature", "target"} and reading.unit != "°C":
-                        value = None
-            except (ValueError, TypeError, OverflowError):
-                pass
-            self.values[key] = value
-        # Signed raw grid is displayed unchanged. Derived export/import explicitly
-        # uses the owner's editable, provisionally identified sign convention.
-        grid = self.values.get("grid")
-        self.values["measured_net_export_kw"] = (
-            None if grid is None else grid * (-1 if self.settings.import_positive else 1)
-        )
-        net = self.values["measured_net_export_kw"]
-        self.values["measured_import_kw"] = None if net is None else max(0, -net)
-        self.values["measured_export_kw"] = None if net is None else max(0, net)
-        self.values["requests_since_start"] = None
-        self.values["observed_requests_per_hour"] = None
-        count_reading = self._reading("requests")
-        count_warning = None
-        if count_reading and not count_reading.restored:
-            try:
-                count = number(count_reading.value)
-                if (
-                    count < 0
-                    or count != int(count)
-                    or not 0 <= (now - count_reading.observed_at).total_seconds() <= 300
-                ):
-                    raise ValueError
-                if self.last_count is not None and count < self.last_count:
-                    self.first_count = self.count_started = None
-                    count_warning = "request_counter_reset_history_incomplete"
-                if self.first_count is None:
-                    self.first_count, self.count_started = count, now
-                self.last_count = count
-                self.values["requests_since_start"] = count - self.first_count
-                hours = (now - self.count_started).total_seconds() / 3600
-                if hours >= 0.5:
-                    self.values["observed_requests_per_hour"] = round(
-                        (count - self.first_count) / hours, 2
-                    )
-            except (ValueError, TypeError, OverflowError):
-                count_warning = "request_accounting_unavailable"
-        else:
-            count_warning = "request_accounting_unavailable"
-        if count_warning:
-            self.plan.warnings.append(count_warning)
-        self.values["native_schedule_window"] = (
-            scheduled_permission(
-                now, self.native_periods, self.native_options["native_schedule_clock"]
-            )
-            if readings.get("mode") and readings["mode"].value == "Schedule"
-            else "unknown_not_schedule"
-        )
-        self.values["t_comfort_reference_c"] = self.native_options["t_comfort_reference_c"]
-        temperature = self.values.get("temperature")
-        if (
-            self.values["native_schedule_window"] == "within_reported_window"
-            and temperature is not None
-            and temperature < self.settings.expected_native_target_c - 8
-        ):
-            # The native thermostat may already be calling for heat, so the
-            # measured grid can include the REAL 3 kW element. The planner does not
-            # de-embed an unverified load: solar economics are then understated.
-            self.plan.warnings.append("measured_grid_may_already_include_native_element_load")
-        # The heater's own clock only matters while its weekly programme has
-        # heating windows. With the owner-approved EMPTY programme (the
-        # controller's park) there are no native windows to mistime and no
-        # native comfort fallback; Home Assistant time (Australia/Hobart) and
-        # the fixed-AEST tariff decide everything.
-        empty_programme = not self.native_periods
-        observed_mode = readings["mode"].value if readings.get("mode") else None
-        # While the controller owns the heater it is in Manual or OFF, where the
-        # weekly programme has no effect (only Schedule mode uses it).
-        native_unused = empty_programme or (self.controller_active and observed_mode != "Schedule")
-        self.plan.warnings.extend(
-            [
-                "schedule_permission_is_not_element_power",
-                "t_comfort_not_assumed_in_manual_or_off",
-            ]
-        )
-        if native_unused:
-            # Never hide that the manufacturer's protective functions can still
-            # heat while parked, or that nothing else heats with control off.
-            self.plan.warnings.append(
-                "manufacturer_antibacterial_and_frost_protection_may_heat_while_parked"
-            )
-            if empty_programme and not self.controller_active:
-                self.plan.warnings.append(
-                    "empty_native_schedule_and_automatic_control_off_no_normal_heating"
-                )
-            self.values["device_clock_check"] = (
-                "not_applicable_empty_schedule"
-                if empty_programme
-                else "not_applicable_native_schedule_unused"
-            )
-        else:
-            self.plan.warnings.append("native_programme_is_primary_comfort_fallback")
-            if not self.native_options["native_schedule_clock_verified"]:
-                self.plan.warnings.append("native_schedule_times_approximate_clock_unverified")
-            from .native import clock_check_required
 
-            clock_check = clock_check_required(now, self.native_options["native_clock_check_date"])
-            self.values["device_clock_check"] = (
-                "check_required"
-                if clock_check or not self.native_options["native_schedule_clock_verified"]
-                else "checked_this_dst_period"
-            )
-            if self.values["device_clock_check"] == "check_required":
-                self.plan.warnings.append("check_thermann_clock_manual_dst_adjustment_required")
-        if self.native_options["t_comfort_reference_c"] == 10:
-            self.plan.warnings.append("t_comfort_10C_not_practical_hot_water_reserve")
-        else:
-            self.plan.warnings.append("higher_t_comfort_can_heat_outside_schedule_including_peak")
-        native_minutes = None
-        if self.plan.comfort_deadline is not None and not native_unused:
-            native_minutes = permitted_minutes(
-                now,
-                self.plan.comfort_deadline,
-                self.native_periods,
-                self.native_options["native_schedule_clock"],
-            )
-            if (
-                self.plan.modelled_heating_minutes is not None
-                and native_minutes < self.plan.modelled_heating_minutes
-            ):
-                self.plan.warnings.append(
-                    "reported_native_windows_may_not_fit_depleted_tank_scenario"
-                )
-        counter = self.hass.states.get(self.sources["requests"])
-        categories = {}
-        if counter is not None:
-            raw = counter.attributes.get("request_categories", {})
-            if isinstance(raw, dict):
-                categories = {
-                    key: raw[key]
-                    for key in (
-                        "password_login",
-                        "token_refresh",
-                        "discovery",
-                        "status",
-                        "command",
-                        "confirmation",
-                    )
-                    if type(raw.get(key)) is int and 0 <= raw[key] < 2**63
-                }
-            if (
-                counter.attributes.get("accounting_complete") is not True
-                or counter.attributes.get("accounting_persistent") is not True
-            ):
-                self.plan.warnings.append("request_accounting_incomplete_or_unverified")
+        self._display(now, temperature, target, grid, export_kw, house_kw, pv_ac_now, status_ok)
+        for listener in tuple(self.listeners):
+            listener()
+
+    # ------------------------------------------------------------------ displays
+    def forecast_export_now(self, now):
+        for slot in self.forecast.slots if self.forecast else ():
+            if slot.start <= now < slot.end:
+                return slot.export_kw
+        return None
+
+    def _display(self, now, temperature, target, grid, export_kw, house_kw, pv_ac_now, status_ok):
+        values = self.values
+        pv = self._kw("pv", now)
+        values.update(
+            temperature=temperature,
+            target=target,
+            pv=pv,
+            house=house_kw,
+            grid=grid,
+            measured_net_export_kw=export_kw,
+            measured_import_kw=None if export_kw is None else max(0.0, -export_kw),
+            measured_export_kw=None if export_kw is None else max(0.0, export_kw),
+            measured_pv_ac_kw=None if pv_ac_now is None else round(pv_ac_now, 3),
+            status_age_minutes=round((now - self.poll_at).total_seconds() / 60, 1)
+            if self.poll_at
+            else None,
+            heater_element_state=self.heater.state,
+            heater_state_confidence=self.heater.confidence,
+            storage_target_c=70,
+        )
+        base, _ = base_load(house_kw, self.heater)
+        values["base_load_kw"] = None if base is None else round(base, 3)
+        health = self._reading("cloud_health")
+        values["cloud_health"] = (
+            health.value if health and health.value in CLOUD_HEALTH else "unrecognised"
+        )
+        try:
+            current = tariff_at(now, self.tariffs, self.settings.tariff_clock)
+            change = next_tariff_change(now, self.tariffs, self.settings.tariff_clock)
+        except ValueError:
+            current = change = None
+        values.update(
+            current_tariff=current.kind if current else None,
+            current_price_aud=current.rate if current else None,
+            current_tariff_rate_aud=current.rate if current else None,
+            next_tariff_change=change[0] if change else None,
+            next_tariff_kind=change[1].kind if change else None,
+        )
+        export_now = self.forecast_export_now(now)
+        values["forecast_net_surplus_kw"] = (
+            None if export_now is None else round(max(0.0, export_now), 3)
+        )
+        values["forecast_age_minutes"] = self.forecast.age_minutes if self.forecast else None
+        self._requests(now)
+        executor = self.executor
+        policy = executor.policy_values() if executor is not None else {}
+        values.update(policy)
+        values["controller"] = (
+            "automatic_control" if self.controller_active else "shadow_observation"
+        )
         self.details = {
             "shadow_mode": not self.controller_active,
-            "control_capable": self.controller_active,
             "controller_active": self.controller_active,
-            "planning_temperature_c": self.planning_temperature,
+            "policy": "simplified_three_state (SIMPLIFIED_STRATEGY.md)",
             "additional_cloud_requests": 0,
-            "nominal_status_cycles_per_day": 48,
-            "observed_refresh_pattern_attempts_per_day": 144,
-            "request_estimates_are_not_vendor_quota_or_upper_bound": True,
-            "request_counter_basis": "local_lifetime_attempts_excludes_official_app",
-            "request_categories_local_lifetime": categories,
-            "controller_observation_started": self.boot.isoformat(),
+            "local_evaluation_seconds": 60,
             "grid_sign": "import_positive" if self.settings.import_positive else "export_positive",
             "meter_sign_load_test_verified": self.settings.meter_verified,
             "tariff_contract_verified": self.settings.tariff_verified,
             "tariff_clock": self.settings.tariff_clock,
-            "weekend_morning_time": self.settings.morning.isoformat() + " Australia/Hobart",
-            "weekend_afternoon_time": self.settings.evening.isoformat() + " Australia/Hobart",
-            "weekday_deadlines": "start of the actual morning/evening peak (fixed AEST tariff)",
-            "shower_time": self.settings.shower_time.isoformat()
-            if self.settings.shower_time_enabled
-            else None,
-            "planning_goal": self.plan.deadline_kind,
-            "morning_threshold_is_not_a_setpoint": True,
-            "manual_recovery_risk_accepted_by_owner": True,
-            "estimate_basis": "uniform_315L_3kW_scenario_not_measured_reserve",
-            "comparison_basis": "incremental_cost_vs_not_heating_same_energy_all_plans",
-            "reasons": self.plan.reasons,
-            "warnings": self.plan.warnings,
-            "windows": self.plan.windows,
-            "native_schedule_reference": self.native_options["native_schedule_periods"],
-            "native_schedule_clock": self.native_options["native_schedule_clock"],
-            "native_clock_reference_date": self.native_options["native_clock_check_date"],
-            "device_clock_not_read_by_api": True,
-            "solar_hold_satisfied": solar_confirmed,
-            "local_evaluation_seconds": 60,
-            "t_comfort_setting_is_reference_only": True,
-            "native_permitted_minutes_before_comfort_deadline": native_minutes,
-            "native_window_capacity_is_not_measured_energy": True,
+            "status_fresh": status_ok,
+            "warnings": list(self.warnings),
             "sources": dict(self.sources),
-            **self._advice_details(),
-            "forecast": {
-                "source": self.forecast.source,
-                "age_minutes": self.forecast.age_minutes,
-                "pv_error_kw": self.forecast.pv_error_kw,
-                "pv_correction_now": self.forecast.correction,
-                "pv_correction_fades_to_none_after_hours": self.forecast.correction_hours,
-                "measured_pv_average_kw": self.forecast.measured_pv_average_kw,
-                "load_basis": self.forecast.load_basis,
-                "intervals": len(self.forecast.slots),
+            "heater_state": {
+                "state": self.heater.state,
+                "confidence": self.heater.confidence,
+                "basis": self.heater.basis,
+                "status_bit0": self.heater.status_bit,
+                "status_raw": self.heater.status_raw,
+                "status_semantics": "empirical_32_33_correlation_not_manufacturer_contract",
             },
+            "forecast": {
+                "source": self.forecast.source if self.forecast else None,
+                "age_minutes": self.forecast.age_minutes if self.forecast else None,
+                "pv_error_kw": self.forecast.pv_error_kw if self.forecast else None,
+                "measured_pv_average_kw": self.forecast.measured_pv_average_kw
+                if self.forecast
+                else None,
+                "load_basis": self.forecast.load_basis if self.forecast else None,
+                "intervals": len(self.forecast.slots) if self.forecast else 0,
+            },
+            "policy_plan": executor.plan_details() if executor is not None else None,
             "advanced_form_settings": {
-                key: describe(key, self.native_options[key])
-                for key in ("tariff_periods", "native_schedule_periods")
+                key: describe(key, self.native_options[key]) for key in ("tariff_periods",)
             },
             "restore_undo_available": isinstance(self.native_options.get(BACKUP_KEY), dict),
         }
-        for listener in tuple(self.listeners):
-            listener()
 
-    def _kw(self, key, now):
-        reading = self._reading(key)
+    def _requests(self, now):
+        values = self.values
+        values["requests_since_start"] = values["observed_requests_per_hour"] = None
+        reading = self._reading("requests")
+        if not reading or reading.restored:
+            self.warnings.append("request_accounting_unavailable")
+            return
         try:
-            if reading:
-                _fresh(reading, now, self.boot, self.settings.grid_max_age_seconds)
-                value = _power(reading)
-                return value if value >= 0 else None
+            count = number(reading.value)
+            if (
+                count < 0
+                or count != int(count)
+                or not 0 <= (now - reading.observed_at).total_seconds() <= 300
+            ):
+                raise ValueError
         except (ValueError, TypeError, OverflowError):
-            pass
-        return None
-
-    def _apply_advice(self, now, advice, pv_ac_now):
-        """Map the advice onto existing sensor keys (stable unique IDs) and new ones."""
-        result = advice.assessment
-        best = result.plans.get("best_overall") if result else None
-        plan = self.plan
-        if (
-            plan.state not in GATED
-            and not advice.meter_suspect
-            and advice.code not in {"data_unavailable"}
-        ):
-            plan.state = "shadow_advising"
-            plan.reasons = [advice.code]
-            plan.windows = []
-            if result:
-                first = result.requirements[0] if result.requirements else None
-                plan.mixed_model_energy_kwh = round(first[1], 3) if first else None
-                plan.modelled_heating_minutes = (
-                    round(first[1] / 3 * 60 + self.settings.margin_minutes, 1)
-                    if first and first[1] > 0
-                    else 0.0
-                )
-                fallback = result.fallback
-                plan.grid_fallback_start = min(fallback.values()) if fallback else None
-                plan.latest_start = fallback.get(first[0].kind) if first else None
-                target = best or result.plans.get("heat_now_continuous")
-                plan.planned_start = target.start if target else None
-                plan.estimated_cost_aud = round(target.cost_aud, 3) if target else 0
-                plan.estimated_solar_kwh = round(target.solar_kwh, 3) if target else 0
-                plan.estimated_import_kwh = round(target.import_kwh, 3) if target else 0
-                now_plan = result.plans.get("heat_now_continuous")
-                plan.unmet_model_energy_kwh = round(now_plan.shortfall_kwh, 3) if now_plan else 0
-                if target and target.energy_kwh:
-                    share = target.solar_kwh / target.energy_kwh
-                    plan.recommended_energy_source = (
-                        "net_solar" if share > 0.99 else "mixed" if share > 0.01 else "grid"
-                    )
-                    plan.comparison_cost_difference_aud = round(
-                        target.energy_kwh * min(item.rate for item in self.tariffs)
-                        - target.cost_aud,
-                        3,
-                    )
-                else:
-                    plan.recommended_energy_source = "none"
-                    plan.comparison_cost_difference_aud = 0
-                plan.windows = [
-                    {"start": a.isoformat(), "end": b.isoformat(), "source": "hypothetical_plan"}
-                    for a, b in (target.blocks if target else [])
-                ]
-        elif plan.state not in GATED:
-            plan.state = "shadow_blocked"
-            plan.reasons = [
-                "meter_reading_suspect" if advice.meter_suspect else "heater_status_unavailable"
-            ]
-        self.values = asdict(plan)
-        readiness = advice.readiness
-        change = current = None
-        try:
-            change = next_tariff_change(now, self.tariffs, self.settings.tariff_clock)
-            current = tariff_at(now, self.tariffs, self.settings.tariff_clock)
-        except ValueError:
-            pass
-        goals = {goal.kind: goal for goal in reversed(advice.goals)}
-        pv_forecast_now = None
-        for start, end, value in self.forecast.pv_series:
-            if start <= now < end:
-                pv_forecast_now = value
-        forecast_surplus = (
-            max(0.0, pv_forecast_now - advice.base_p50_kw)
-            if pv_forecast_now is not None and advice.base_p50_kw is not None
-            else None
-        )
-        if best is not None and best.start is not None:
-            state = "hypothetical_heating_now" if best.start <= now else "hypothetical_waiting"
-        elif result is not None:
-            state = (
-                "not_needed"
-                if advice.code in {"no_heating_needed", "native_heating_economical"}
-                and not result.plans
-                else "hypothetical_heating_now"
-            )
-        else:
-            state = "suspended"
-        native = advice.native or {}
-        saving = result.saving_by_waiting_aud if result else None
-        self.values.update(
-            {
-                "recommendation": advice.label,
-                "decision": advice.code,
-                "simulated_cycle_state": state,
-                "benefit_of_now_aud": -saving if saving is not None else None,
-                "continuing_cost_aud": result.heat_now_cost_aud if result else None,
-                "later_cost_aud": result.best_cost_aud if result else None,
-                "forecast_net_surplus_kw": round(forecast_surplus, 3)
-                if forecast_surplus is not None
-                else None,
-                "forecast_age_minutes": self.forecast.age_minutes,
-                "forecast_usable_solar_kwh": round(best.solar_kwh, 3) if best else None,
-                "deadline_countdown_minutes": max(
-                    0, round((plan.deadline - now).total_seconds() / 60)
-                )
-                if plan.deadline
-                else None,
-                "completion_time": best.end if best else None,
-                "heater_element_state": advice.heater.state,
-                "heater_state_confidence": advice.heater.confidence,
-                "base_load_kw": round(advice.base_p50_kw, 3)
-                if advice.base_p50_kw is not None
-                else None,
-                "measured_pv_ac_kw": round(pv_ac_now, 3) if pv_ac_now is not None else None,
-                "current_solar_surplus_kw": advice.surplus_now_kw,
-                "next_tariff_change": change[0] if change else None,
-                "next_tariff_kind": change[1].kind if change else None,
-                "current_tariff_rate_aud": current.rate if current else None,
-                "morning_ready_deadline": goals["morning"].deadline if "morning" in goals else None,
-                "afternoon_ready_deadline": goals["afternoon"].deadline
-                if "afternoon" in goals
-                else None,
-                "morning_readiness": readiness.get("morning", {}).get("status"),
-                "afternoon_readiness": readiness.get("afternoon", {}).get("status"),
-                "waiting_saving_aud": saving,
-                "decision_confidence": advice.confidence,
-                "native_predicted_cost_aud": native.get("predicted_cost_aud"),
-                "schedule_advisor_suggestion": (advice.schedule or {}).get(
-                    "cheapest_meeting_goals"
-                ),
-                "native_vs_best_plan_aud": round(
-                    native["predicted_cost_aud"] - result.best_cost_aud, 3
-                )
-                if native and result and result.best_cost_aud is not None
-                else None,
-            }
-        )
-
-    def _advice_details(self):
-        advice = self.advice
-        if advice is None:
-            return {}
-        result = advice.assessment
-        heater = advice.heater
-        return {
-            "decision": advice.code,
-            "decision_explanation": advice.explanation,
-            "decision_confidence": advice.confidence,
-            "decision_pending_change_to": advice.pending_code,
-            "economic_decision": advice.economic_code,
-            "physical_state_applied_without_stabiliser_delay": True,
-            "hypothetical_surplus_kw": {
-                "value": advice.surplus_now_kw,
-                "bounds": list(advice.surplus_bounds_kw) if advice.surplus_bounds_kw else None,
-                "basis": advice.surplus_basis,
-                "meaning": "PV AC minus base load: what the heater could use if it were off; not measured export",
-            },
-            "native_thermostat_satisfied": advice.satisfied,
-            "heat_now_cost_range_aud": list(result.heat_now_cost_range_aud)
-            if result and result.heat_now_cost_range_aud
-            else None,
-            "heater_state": {
-                "state": heater.state,
-                "confidence": heater.confidence,
-                "basis": heater.basis,
-                "status_bit0": heater.status_bit,
-                "status_raw": heater.status_raw,
-                "status_semantics": "empirical_32_33_correlation_not_manufacturer_contract",
-                "last_load_step": heater.last_step,
-                "last_load_step_at": heater.last_step_at.isoformat()
-                if heater.last_step_at
-                else None,
-            },
-            "load": {
-                "base_low_kw": advice.base_low_kw,
-                "base_high_kw": advice.base_high_kw,
-                "base_p50_kw": advice.base_p50_kw,
-                "meter_suspect_pre_commissioning_signature": advice.meter_suspect,
-                "basis": "house_load_minus_3kW_when_element_on",
-            },
-            "goals": [
-                {
-                    "kind": goal.kind,
-                    "deadline": goal.deadline.isoformat(),
-                    "target_c": goal.target_c,
-                    "basis": goal.basis,
-                }
-                for goal in advice.goals
-            ],
-            "readiness": {
-                kind: {
-                    **item,
-                    "deadline": item["deadline"].isoformat(),
-                    "planning_deadline": item["planning_deadline"].isoformat(),
-                }
-                for kind, item in advice.readiness.items()
-            },
-            "strategies": {name: plan.summary() for name, plan in result.plans.items()}
-            if result
-            else {},
-            "requirements_kwh": [
-                {"goal": goal.kind, "kwh": round(kwh, 3), "deg_c": round(kwh / TANK_KWH_PER_C, 1)}
-                for goal, kwh in result.requirements
-            ]
-            if result
-            else [],
-            "fallback_starts": {kind: at.isoformat() for kind, at in result.fallback.items()}
-            if result
-            else {},
-            "strategy_warnings": result.warnings if result else [],
-            "native_outlook": advice.native,
-            "schedule_advisor": advice.schedule,
-        }
+            self.warnings.append("request_accounting_unavailable")
+            return
+        if self.last_count is not None and count < self.last_count:
+            self.first_count = self.count_started = None
+            self.warnings.append("request_counter_reset_history_incomplete")
+        if self.first_count is None:
+            self.first_count, self.count_started = count, now
+        self.last_count = count
+        values["requests_since_start"] = count - self.first_count
+        hours = (now - self.count_started).total_seconds() / 3600
+        if hours >= 0.5:
+            values["observed_requests_per_hour"] = round((count - self.first_count) / hours, 2)
 
     def subscribe(self, listener):
         self.listeners.add(listener)

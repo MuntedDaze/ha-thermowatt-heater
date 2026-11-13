@@ -331,7 +331,7 @@ def test_a_background_poll_in_the_window_is_evidence_without_a_duplicate_read(fa
     bridge.tick()
     assert bridge.session.request.call_count == 4  # one read served both
     assert last_command(bridge)["result"] == "observed_in_status"
-    assert bridge.next_background[SERIAL] == clock() + bridge.poll_interval
+    assert bridge.next_background[SERIAL] == bridge._next_slot()  # clock-aligned (1.3.13)
 
 
 def test_restart_while_pending_never_resends_and_the_next_read_decides(factory, clock):

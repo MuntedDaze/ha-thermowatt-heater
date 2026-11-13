@@ -23,7 +23,7 @@ parked. The empty-Schedule park described below is **superseded**, and no native
 Schedule configuration is required.
 
 The bridge's OFF behaviour (`off` and `Manual:70` from OFF) is qualified in T3;
-see [COMMISSIONING.md](COMMISSIONING.md). Bridge 1.3.9 is required, because 1.3.8
+see [COMMISSIONING.md](COMMISSIONING_0_6.md). Bridge 1.3.9 is required, because 1.3.8
 rejects an OFF status whose setpoint is outside 20–75 °C.
 
 ## 0. Owner decision (11 Nov 2026)

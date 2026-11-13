@@ -23,12 +23,12 @@ participation or approval · **Risk** = accepted or open limitation.
 | 9 | Disabled controller silent; storage written only on change | Done | disabled tests, real-HA check |
 | 10 | Fresh install incapable of control | Done | fresh-install tests, real-HA check |
 | 11 | HA-native UI, notifications, recovery guidance for OFF | Done | dashboard, `RECOVERY` |
-| 12 | Commissioning with gates and rollback | Done | [COMMISSIONING.md](COMMISSIONING.md) |
+| 12 | Commissioning with gates and rollback | Done | [COMMISSIONING.md](COMMISSIONING_0_6.md) |
 
 ## Outstanding physical qualifications (owner)
 
 1. ~~T3 with bridge 1.3.9~~ — done 12 Nov 2026.
-2. ~~T3b with bridge 1.3.10~~ — done 13 Nov 2026, stopped: the refresh worked
+2. ~~T3b with bridge 1.3.10~~ — done 12 Nov 2026, stopped: the refresh worked
    and the heater went OFF, but the immediate readback was the old mode.
 3. **Upgrade to 0.6.2** (Stage A, control off).
 4. **Bridge 1.3.11 and T3c** (Stage B3): `off` and `Manual:70` confirmed

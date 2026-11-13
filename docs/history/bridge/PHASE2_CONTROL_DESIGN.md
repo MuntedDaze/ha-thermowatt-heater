@@ -21,8 +21,8 @@ No deployment, commands, authentication changes or native programme edits occur.
   Preserve protections, confirm when possible, expose faults and supply verified
   human recovery guidance. A factory reset to 65°C is not established by evidence.
 
-Read [the current implementation and limitations](shadow_controller/README.md),
-[control/recovery evidence and future execution](shadow_controller/CONTROL_AND_RECOVERY.md)
-and [the supervised qualification plan](shadow_controller/SUPERVISED_VALIDATION.md).
+Read [the current implementation and limitations](../../../shadow_controller/README.md),
+[control/recovery evidence and future execution](../controller/CONTROL_AND_RECOVERY.md)
+and [the supervised qualification plan](../controller/SUPERVISED_VALIDATION.md).
 These supersede the earlier universal-automatic-fallback design assumption.
 EMHASS may later propose optimised windows; it is not required or a safety layer.
