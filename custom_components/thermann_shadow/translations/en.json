@@ -1,10 +1,10 @@
 {
-  "title": "Thermann Shadow Planner",
+  "title": "Thermann Controller",
   "config": {
     "step": {
       "user": {
-        "title": "Read-only entity mapping",
-        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered Forecast.Solar watts) with forecast_generated_at, and a household load forecast or measured baseline. Configure and dashboard controls share the same stored preferences.",
+        "title": "Thermann Controller: sensor mappings",
+        "description": "Unofficial community integration, not a Thermann product. Automatic control stays off until you commission it. Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered Forecast.Solar watts) with forecast_generated_at, and a household load forecast or measured baseline.",
         "data": {
           "heater": "Water heater (temperature attributes only)",
           "mode": "Native vendor mode",
@@ -14,68 +14,57 @@
           "grid": "Signed NET grid power (W or kW)",
           "pv": "PV production (display and forecast correction)",
           "house": "House consumption (display only)",
-          "import_energy": "Cumulative grid import (reference only)",
-          "export_energy": "Cumulative grid export (reference only)",
+          "import_energy": "Cumulative grid import (not used; kept for reference)",
+          "export_energy": "Cumulative grid export (not used; kept for reference)",
           "forecast_pv": "Optional published PV forecast",
-          "forecast_load": "Optional household load forecast or measured baseline"
+          "forecast_load": "Optional household load forecast or measured baseline",
+          "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
+          "heater_power": "Optional heater power sensor (element detection)"
         }
       }
     },
     "abort": {
-      "already_configured": "This shadow planner is already configured."
+      "already_configured": "Thermann Controller is already set up."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Edit read-only sources",
-        "description": "Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered Forecast.Solar watts) with forecast_generated_at, and a household load forecast or measured baseline. Configure and dashboard controls share the same stored preferences.",
+        "title": "Settings",
+        "description": "Choose what to change. Settings are also available as controls on the device page. System settings, the tariff contract and the sensor mappings can only be changed while Automatic heater control is off.",
+        "menu_options": {
+          "preferences": "Tariff and forecast settings",
+          "system": "System and commissioning",
+          "sources": "Sensor mappings"
+        }
+      },
+      "sources": {
+        "title": "Sensor mappings",
+        "description": "Which Home Assistant entities the controller reads. Reading only: nothing here sends a command or contacts the cloud. Changing a mapping restarts the meter evidence; it needs Automatic heater control off.",
         "data": {
           "heater": "Water heater (temperature attributes only)",
           "mode": "Native vendor mode",
-          "last_poll": "Last successful cloud poll",
+          "last_poll": "Last successful cloud poll (timestamp)",
           "cloud_health": "Cloud health",
           "requests": "Bridge local lifetime request attempts",
-          "grid": "Signed NET grid power",
+          "grid": "Signed NET grid power (W or kW)",
           "pv": "PV production (display and forecast correction)",
           "house": "House consumption (display only)",
-          "import_energy": "Cumulative grid import (reference only)",
-          "export_energy": "Cumulative grid export (reference only)",
+          "import_energy": "Cumulative grid import (not used; kept for reference)",
+          "export_energy": "Cumulative grid export (not used; kept for reference)",
           "forecast_pv": "Optional published PV forecast",
-          "forecast_load": "Optional household load forecast or measured baseline"
+          "forecast_load": "Optional household load forecast or measured baseline",
+          "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
+          "heater_power": "Optional heater power sensor (element detection)"
         }
       },
-      "settings": {
-        "title": "Shadow assumptions and tariff contract",
-        "description": "Local shadow preferences only; no setting enables execution. Dashboard controls use these exact same saved values. Current/recommended/original values and guidance are on the Settings dashboard. Morning is before noon; afternoon after noon; tariff peak times must increase. Aurora 93 uses fixed AEST, weekends off-peak. The stored custom weekly table is always validated and needs gap-free coverage.",
+      "preferences": {
+        "title": "Tariff and forecast settings",
+        "description": "Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later in summer) and must increase. The tariff contract can only be changed while Automatic heater control is off. Every change is checked together with the rest of the configuration; an invalid combination saves nothing.",
         "data": {
-          "morning_threshold_c": "Morning minimum (hard)",
-          "morning_preferred_c": "Morning preferred reserve",
-          "morning_preferred_time": "Morning ready (preferred)",
-          "morning_hard_time": "Morning ready (hard deadline)",
-          "morning_time": "Legacy: weekend morning time",
-          "shower_time_enabled": "Legacy: earlier weekday shower time",
-          "shower_time": "Legacy: weekday shower-ready time",
-          "expected_morning_draw_c": "Expected morning hot-water use",
-          "standing_loss_c_per_hour": "Assumed standing heat loss",
-          "target_c": "Afternoon storage target",
-          "evening_time": "Afternoon comfort preference",
-          "margin_minutes": "Heating time allowance",
-          "min_solar_kw": "Minimum useful net surplus",
-          "export_headroom_kw": "Solar headroom",
           "forecast_enabled": "Use published forecasts",
           "forecast_uncertainty": "Forecast uncertainty margin",
           "forecast_house_margin_kw": "Extra forecast household load",
-          "solar_hold_minutes": "Solar start qualification",
-          "solar_loss_minutes": "Economic loss grace period",
-          "minimum_cycle_minutes": "Minimum optional cycle",
-          "minimum_gap_minutes": "Minimum optional cycle gap",
-          "switching_benefit_aud": "Minimum economic switching benefit",
-          "wait_benefit_aud_per_kwh": "Minimum saving to recommend waiting",
-          "paused": "Pause shadow planning",
-          "meter_verified": "Meter sign and units verified",
-          "tariff_verified": "Tariff contract verified",
-          "import_positive": "Positive grid means import",
           "tariff_clock": "Tariff clock",
           "tariff_profile": "Tariff periods mode",
           "weekend_peak": "Use peak periods on weekends",
@@ -84,37 +73,35 @@
           "shoulder_rate": "Shoulder import price",
           "feed_in_rate": "Export compensation",
           "pv_ac_limit_kw": "Inverter AC output limit",
-          "base_load_source": "Household load basis",
           "forecast_max_age_minutes": "Maximum forecast generation age",
-          "solar_window_minutes": "Recent-export scenario horizon",
-          "status_max_age_minutes": "Maximum cloud poll age",
-          "grid_max_age_seconds": "Maximum power reading age",
-          "expected_native_target_c": "Expected native target",
-          "native_schedule_clock": "Native schedule clock reference",
-          "native_schedule_clock_verified": "Native clock checked",
-          "t_comfort_reference_c": "T-Comfort reference",
-          "native_clock_check_date": "Native clock check date",
           "tariff_periods": "Custom weekly tariff periods",
-          "native_schedule_periods": "Native schedule reference",
-          "controller_command_topic": "Controller command topic",
-          "controller_bridge_qualified": "Bridge commands qualified (T3)",
-          "controller_min_heating_minutes": "Minimum heating period",
-          "controller_min_rest_minutes": "Minimum rest period",
-          "controller_max_commands_per_day": "Maximum commands per day",
-          "controller_confirmation_timeout_minutes": "Command confirmation timeout",
-          "controller_max_requests_per_day": "Cloud request budget per day",
-          "controller_execution_latency_minutes": "Execution latency reserve",
-          "controller_notify_service": "Notification service",
           "peak_morning_start": "Peak morning start",
           "peak_morning_end": "Peak morning end",
           "peak_evening_start": "Peak evening start",
           "peak_evening_end": "Peak evening end"
         }
+      },
+      "system": {
+        "title": "System and commissioning",
+        "description": "Command destination, three-state qualification, budgets, data freshness and verification. Except for the notification service, these can only be changed while Automatic heater control is off. The command topic must be the one the bridge announced for your heater.",
+        "data": {
+          "meter_verified": "Meter sign and units verified",
+          "tariff_verified": "Tariff contract verified",
+          "import_positive": "Positive grid means import",
+          "status_max_age_minutes": "Maximum cloud poll age",
+          "grid_max_age_seconds": "Maximum power reading age",
+          "controller_command_topic": "Controller command topic",
+          "controller_three_state_qualified": "Three-state commands qualified (1.3.13)",
+          "controller_max_commands_per_day": "Maximum commands per day",
+          "controller_confirmation_timeout_minutes": "Command confirmation timeout",
+          "controller_max_requests_per_day": "Cloud request budget per day",
+          "controller_notify_service": "Notification service"
+        }
       }
     },
     "error": {
-      "locked_while_active": "{locked}",
-      "invalid_settings": "Nothing saved. Check finite planning bounds; morning before noon and afternoon after noon; increasing tariff times without overlaps; gap-free custom weekly periods (validated in every tariff mode); T-Comfort reference not above expected native target. No heater settings were changed."
+      "invalid_settings": "Nothing saved. {detail}",
+      "locked_while_active": "{detail}"
     }
   }
 }

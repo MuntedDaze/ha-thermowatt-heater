@@ -1,5 +1,7 @@
 # Commissioning
 
+> **Superseded for 0.9.0** by [COMMISSIONING_SIMPLIFIED.md](COMMISSIONING_SIMPLIFIED.md) (app 1.3.13, three-state commands). This page records the 0.6–0.7 stages and the Stage C history.
+
 Automatic control is switched on in stages, each with your approval. At any stage, recovery is the same:
 - **Thermann app:** Manual at 70 °C for hot water now, OFF to park, or Schedule for your normal programme.
 - **Home Assistant:** turning off *Automatic heater control* never changes the heater.
@@ -27,7 +29,7 @@ Measured: the cloud reports a change between about 2 s and 63 s after the comman
 Nothing was changed and no command was sent. Automatic control stayed off.
 
 **Passed:**
-- **Bridge 1.3.11** (Settings → Apps → Thermowatt Smart Boiler): authorised, healthy, no failures or cooldown, 30-minute polling, on-demand refresh off. `commands_enabled` is still **on** from T3c, with `command_policy: automation`. No confirmation pending; the last command (`Manual:70`, T3c) was confirmed.
+- **Bridge 1.3.11** (Settings → Apps → Thermann Hot Water, shown as Thermowatt Smart Boiler before app 1.3.12): authorised, healthy, no failures or cooldown, 30-minute polling, on-demand refresh off. `commands_enabled` is still **on** from T3c, with `command_policy: automation`. No confirmation pending; the last command (`Manual:70`, T3c) was confirmed.
 - **Heater:** Manual 70 °C, which the controller accepts as its own permitted state.
 - **Tariff:** Aurora 93 rates and peaks on the fixed AEST clock, so peaks show at 08–11 and 17–22 during daylight saving; weekends off-peak.
 - **Meter and solar:** GoodWe/HK1000 readings under a minute old, with the meter sign consistent with PV minus house load.
@@ -38,7 +40,7 @@ Nothing was changed and no command was sent. Automatic control stayed off.
 
 **Found and fixed in the corrected build (`bbbc5f9`):** with control on, a heater in Manual or OFF still tripped the old shadow-planner check for the native Schedule. The planner would then have reported *owner review required*, and the controller would only ever have held, parked for peaks or used the morning fail-safe. The corrected build was installed on 12 Nov 2026 (only `model.py` and `runtime.py` changed; settings, entities and the bridge unchanged). A read-only replay of the installed code on recorded live readings, with control simulated on, gave normal advice in both Manual 70 and OFF; with control off the old shadow review state is unchanged, as intended.
 
-**To set before C** (Settings → Devices & services → Integrations → Thermann Shadow Planner → Configure):
+**To set before C** (Settings → Devices & services → Integrations → Thermann Controller, shown as Thermann Shadow Planner before 0.8.0 → Configure):
 - *Controller command topic*: `P/<serial>/CMD/MODE`; keep the serial private;
 - *Bridge commands qualified (T3)*: on;
 - *Notification service*: recommended, for faults and unconfirmed commands. Without it, alerts are persistent notifications only.
@@ -63,7 +65,7 @@ Nothing was changed and no command was sent. Automatic control stayed off.
 - **Comfort:** the morning readings at 06:00 and 07:00, and afternoon readiness.
 - **Traffic:** commands and cloud requests per day; at most 6 commands.
 - **Notices:** any protective heating while OFF, which is never interrupted.
-- **Owner controls:** test once each: Hold then Resume, an app change (it should pause control), guest start and cancel, and a short holiday while you're home.
+- **Owner controls:** test once each: Hold then Resume, an app change (it should pause control), 12hr Override start and cancel, and a short holiday while you're home.
 
 **Pass:**
 - comfort goals met, or correctly reported;

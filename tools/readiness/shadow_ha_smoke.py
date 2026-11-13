@@ -56,9 +56,10 @@ def assert_entity_serialization(hass, sources):
     from custom_components.thermann_shadow.sensor import CONTROLLER_SENSORS, SENSORS
     from custom_components.thermann_shadow.settings import CATALOG
 
-    settings = sum(meta.kind != "form" for meta in CATALOG.values())
+    settings = sum(meta.kind != "form" and meta.group != "Retired" for meta in CATALOG.values())
     # + restore/undo buttons; 0.5.0: controller sensors, master switch, 3 owner buttons;
-    # 0.7.0: 3 guest/holiday buttons, 2 holiday datetimes, the thermal-state sensor.
+    # 0.7.0: 3 guest/holiday buttons, the holiday departure and return (dates
+    # since 0.9.0), the thermal-state sensor.
     expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3 + 3 + 2 + 1
     assert len(states) == expected, (len(states), expected)
     frames = []
@@ -174,7 +175,6 @@ async def main():
             DEFAULT_SOURCES,
             DOMAIN,
         )
-        from custom_components.thermann_shadow.model import Reading, evaluate
 
         result = await hass.config_entries.flow.async_configure(result["flow_id"], DEFAULT_SOURCES)
         assert result["type"] == "create_entry", result
@@ -183,7 +183,7 @@ async def main():
         assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
         runtime = hass.data[DOMAIN][entry.entry_id]
         assert isinstance(runtime.sources, MappingProxyType)
-        assert runtime.plan.state == "shadow_blocked"
+        assert runtime.values["temperature"] is None  # nothing reported yet
         assert_entity_serialization(hass, runtime.sources)
         assert_original_mappingproxy_failure_is_detected(hass, runtime.sources)
         now = dt_util.utcnow()
@@ -203,21 +203,23 @@ async def main():
             hass.states.async_set(DEFAULT_SOURCES[key], state, attrs)
         now = dt_util.utcnow()
         runtime.update(now)
-        assert runtime.plan.state not in {"shadow_blocked", "shadow_awaiting_validation"}
         assert runtime.values["temperature"] == 63
         assert runtime.values["target"] == 70
         assert runtime.values["measured_net_export_kw"] == 1.501
         assert runtime.values["pv"] == 2.322
         assert runtime.values["requests_since_start"] == 0
-        assert runtime.plan.current_price_aud in {0.170200, 0.361878}
+        assert runtime.values["current_price_aud"] in {0.170200, 0.361878}
         assert runtime.details["additional_cloud_requests"] == 0
-        assert runtime.details["control_capable"] is False
-        assert runtime.details["observed_refresh_pattern_attempts_per_day"] == 144
+        assert runtime.details["controller_active"] is False
+        assert runtime.values["controller"] == "shadow_observation"
         assert_entity_serialization(hass, runtime.sources)
         # Real config/options flows reject bad tariffs; owner can edit mappings.
         flow = await hass.config_entries.options.async_init(entry.entry_id)
-        flow = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_SOURCES)
-        assert flow["step_id"] == "settings"
+        assert flow["type"] == "menu", flow  # 0.8.0: preferences / system / sources
+        flow = await hass.config_entries.options.async_configure(
+            flow["flow_id"], {"next_step_id": "preferences"}
+        )
+        assert flow["step_id"] == "preferences"
         # The stored custom table is validated in BOTH profiles; an invalid
         # table must re-show the form with an error, never create an entry.
         for bad in (
@@ -226,13 +228,13 @@ async def main():
             {"peak_morning_end": "17:00:00"},
         ):
             flow = await hass.config_entries.options.async_configure(flow["flow_id"], bad)
-            assert flow["type"] == "form" and flow["step_id"] == "settings", flow
+            assert flow["type"] == "form" and flow["step_id"] == "preferences", flow
             assert flow["errors"] == {"base": "invalid_settings"}, flow
             assert entry.options == {}, entry.options
         # Explicit synthetic-only qualified settings exercise planning on real HA states.
         runtime.settings = replace(runtime.settings, meter_verified=True, tariff_verified=True)
         runtime.update(now)
-        assert runtime.plan.state != "shadow_blocked"
+        assert runtime.grid_import_kw is not None  # verified meter: signed import used
         hass.states.async_set(
             DEFAULT_SOURCES["requests"],
             7,
@@ -242,37 +244,21 @@ async def main():
         assert runtime.values["requests_since_start"] == 3
         hass.states.async_set(DEFAULT_SOURCES["requests"], 1)
         runtime.update(dt_util.utcnow())
-        assert "request_counter_reset_history_incomplete" in runtime.plan.warnings
-        hass.states.async_set(DEFAULT_SOURCES["mode"], "Manual")
-        runtime.update(dt_util.utcnow())
-        assert runtime.plan.state == "shadow_native_intervention"
-        hass.states.async_set(DEFAULT_SOURCES["mode"], "Schedule")
-        runtime.update(dt_util.utcnow())
-        assert runtime.plan.state == "shadow_native_intervention"  # latched for review
-        runtime.intervention = False
+        assert "request_counter_reset_history_incomplete" in runtime.warnings
         hass.states.async_set(DEFAULT_SOURCES["cloud_health"], "quota_limited")
         runtime.update(dt_util.utcnow())
-        assert runtime.plan.state == "shadow_blocked"
+        assert runtime.values["cloud_health"] == "quota_limited"
         assert_entity_serialization(hass, runtime.sources)
         # A fresh HA report of old retained cloud data is not a new poll after restart.
-        fresh = {
-            key: Reading(value, now, "°C" if key in {"target", "temperature"} else "W")
-            for key, value in {
-                "temperature": 63,
-                "target": 70,
-                "mode": "Schedule",
-                "cloud_health": "ok",
-                "last_poll": (now - timedelta(hours=1)).isoformat(),
-                "grid": 1501,
-            }.items()
-        }
-        assert (
-            evaluate(now, runtime.boot, fresh, runtime.settings, runtime.tariffs).state
-            == "shadow_blocked"
+        hass.states.async_set(DEFAULT_SOURCES["cloud_health"], "ok")
+        hass.states.async_set(
+            DEFAULT_SOURCES["last_poll"], (dt_util.utcnow() - timedelta(hours=1)).isoformat()
         )
+        runtime.update(dt_util.utcnow())
+        assert runtime.values["temperature"] is None and runtime.details["status_fresh"] is False
         controller = hass.states.get("sensor.thermann_shadow_controller")
         assert controller is not None
-        assert controller.attributes["control_capable"] is False
+        assert controller.attributes["controller_active"] is False
         sensor_ids = [
             state.entity_id
             for state in hass.states.async_all("sensor")
@@ -286,14 +272,20 @@ async def main():
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
-        saved = await hass.config_entries.options.async_configure(flow["flow_id"], DEFAULT_OPTIONS)
+        from custom_components.thermann_shadow.settings import CATALOG as SETTINGS_CATALOG
+
+        preferences = {
+            key: value
+            for key, value in DEFAULT_OPTIONS.items()
+            if SETTINGS_CATALOG[key].group in ("Everyday", "Advanced")
+        }
+        saved = await hass.config_entries.options.async_configure(flow["flow_id"], preferences)
         assert saved["type"] == "create_entry"
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED
         runtime = hass.data[DOMAIN][entry.entry_id]
         assert runtime is old_runtime  # preference saves recalculate, not reload
         assert runtime.settings.meter_verified and runtime.settings.tariff_verified
-        assert runtime.plan.state == "shadow_blocked"
         assert entry.options["sources"] == DEFAULT_SOURCES
         runtime.sources = MappingProxyType(dict(runtime.sources))
         runtime.update(dt_util.utcnow())
@@ -321,7 +313,7 @@ async def main():
         await hass.async_block_till_done()
         runtime = hass.data[DOMAIN][entry.entry_id]
         assert runtime is not old_runtime and not old_runtime.listeners
-        assert runtime.advisor.shown is None or runtime.plan.state == "shadow_blocked"
+        assert runtime.executor is not None and runtime.executor.controller.enabled is False
         assert set(sensor_ids) == {
             state.entity_id
             for state in hass.states.async_all("sensor")
@@ -344,7 +336,7 @@ async def main():
                     "sensor_count": len(sensor_ids),
                     "unknown_water_heater_attributes": "PASS",
                     "request_replay_accounting": "PASS",
-                    "manual_intervention_latch": "PASS",
+                    "shadow_observation_default": "PASS",
                     "options_reload_and_ids": "PASS",
                     "native_preference_controls_and_restore": "PASS",
                     "settings_entities_driven_through_ha_services": settings_checked,
@@ -353,15 +345,15 @@ async def main():
                     "dashboard_entity_references_resolved": dashboard_refs,
                     "dashboard_templates_rendered": dashboard_templates,
                     "forecast_paths": forecast_paths,
-                    "upgrade_0_2_0_to_0_7_1": upgrade,
-                    "upgrade_0_3_0_to_0_7_1": upgrade_030,
-                    "upgrade_0_5_0_to_0_7_1": upgrade_050,
-                    "upgrade_0_6_0_to_0_7_1": upgrade_060,
-                    "upgrade_0_6_1_to_0_7_1": upgrade_061,
-                    "upgrade_0_6_2_to_0_7_1": upgrade_062,
-                    "upgrade_0_7_0_to_0_7_1": upgrade_070,
+                    "upgrade_0_2_0_to_0_9_0": upgrade,
+                    "upgrade_0_3_0_to_0_9_0": upgrade_030,
+                    "upgrade_0_5_0_to_0_9_0": upgrade_050,
+                    "upgrade_0_6_0_to_0_9_0": upgrade_060,
+                    "upgrade_0_6_1_to_0_9_0": upgrade_061,
+                    "upgrade_0_6_2_to_0_9_0": upgrade_062,
+                    "upgrade_0_7_0_to_0_9_0": upgrade_070,
                     "unchanged_mqtt_payload_freshness": freshness,
-                    "controller_0_7_0": controller,
+                    "controller_0_9_0": controller,
                     "add_integration_hub_listing": "PASS",
                     "websocket_states_and_events_json": "PASS",
                     "recorder_attributes_and_sqlite_roundtrip": "PASS",

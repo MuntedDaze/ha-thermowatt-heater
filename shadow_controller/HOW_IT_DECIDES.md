@@ -1,71 +1,86 @@
-# How the controller decides (0.7.0)
+# How the controller decides (0.9.0)
 
-Technical reference for the current behaviour. The user guide is [README.md](README.md). The 0.6 reference (bridge contract, state machine, gates) is kept in [docs/history/controller/CONTROLLER_REFERENCE_0_6.md](../docs/history/controller/CONTROLLER_REFERENCE_0_6.md).
+Technical reference for the current behaviour. The design and its reasoning
+are in [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md); the user guide is
+[README.md](README.md). Earlier references are under `docs/history/controller/`.
 
-## Heating permission is separate from heating
+## One policy, three heater states
 
-Manual 70 °C only *permits* heating; Thermann's own thermostat decides when the element runs. `permission.py` keeps Manual permitted while heating **now** would be economical, and parks with OFF when it would not.
+`simple_policy.py` is the only decision engine. Every minute, and on each new
+bridge status, it chooses one of:
 
-**How "economical" is judged:**
-- **Price now:** the price the 3 kW element would pay *now*, with solar share × feed-in plus the remainder at the current tariff.
-- **Price later:** the cheapest **hour** of alternatives before the heat is needed (the next goal). Forecast solar is taken pessimistically; off-peak grid is the other option.
-- **Solar is measured excluding the element:** the advisor's base load removes 3 kW while the element is detected on. So the element consuming solar that was being exported never looks like lost solar.
-- **Rolling values:** a 10-minute median surplus. A cautious surplus (lower, minus 0.3 kW) is used to *grant* permission; the typical surplus to *withdraw* it.
-- **Price margin:** grant when no worse than the alternative (plus a real benefit, or ≥ 50% solar); withdraw only when more than 3 c/kWh worse.
-- **Sustained timers:** 10 min, or 5 min during a peak.
-- **No cloud requests:** meter and forecast only.
+| State | Heater setting | Bridge payload (from → to) |
+| --- | --- | --- |
+| OFF | Thermann software OFF | `off@45`, `off@70` |
+| BASELINE | Manual 45 °C | `Manual:45@off`, `Manual:45@70` |
+| STORAGE | Manual 70 °C | `Manual:70@off`, `Manual:70@45` |
 
-**Behaviour:**
-- After the thermostat is satisfied (for example 14:00), Manual stays while the window stays favourable, so the thermostat refills immediately after hot-water use.
-- **Peak start:** decided ahead (commands take about a minute). Permission continues into the peak only when solar makes peak top-up cheaper than heating later. On Tariff 93 that needs about 71% solar, roughly 2.1 kW plus headroom. Otherwise it parks before the peak.
-- **During a peak:** withdraws after 5 min of sustained disadvantage. That economic park may bypass the minimum-heating dwell; minimum rest still limits permits.
-- **Afternoon storage never buys peak-grid heat.** A shower right before the peak may leave storage short; that is accepted.
-- **Partial-grid heating** is permitted when cheaper than the alternative.
-- **Unknown meter:** no solar is assumed, and it parks before a peak.
-- **Unknown planner/meter in the morning window:** the morning fail-safe (below) applies.
-- **Commands:** standby permits use the economic command budget (4 of the 6 a day), keeping 2 for comfort, and skip the "thermostat would not call for heat" gate (that is their purpose).
+Thermann's thermostat decides when the element runs (on at about 8 °C below
+the setpoint). Manual 70 °C is the *requested setpoint*; a reading of 63–69 °C
+is "within the thermostat band", not "70 reached".
 
-## Morning: preferred 45 °C by 06:00, hard minimum 42 °C by 07:00, every day
+## Inputs (all local; no cloud request)
 
-- The preferred reserve is planned for when achievable. A shortfall under one whole degree starts nothing.
-- After 06:00 only the hard minimum remains; the missed reserve is not chased.
-- Inside the 4 h before 07:00, permission is granted or kept while the reading expected at 07:00 is below 42 °C + 1 °C. The expected reading is the current reading minus 0.5 °C/h of cooling. One allowance, not stacked.
-- The 0.5 °C/h figure is **provisional**:
-  - the planner assumes 0.2 °C/h;
-  - the bottom-sensor reading fell about 1 °C/h in recorder history, partly from water use;
-  - [THERMAL_MODEL.md](THERMAL_MODEL.md) says how it will be measured.
-- Morning heating continues into a morning peak (winter: peak and hard deadline both at 07:00).
-- **Fail-safe:** if the planner or meter is unavailable in that window, it permits rather than risk cold showers. Off-peak hours.
+- **Thermann reading** and its poll time (up to 75 minutes old). A stale
+  reading is assumed cold (37 °C).
+- **GoodWe grid power**, signed by the owner's verified convention, every
+  minute. Available surplus = export, plus 3 kW while the element estimate says
+  it is on. If the meter direction is not verified, no measured solar is used.
+- **EMHASS** PV and household-load forecasts, as net-export slots (with the
+  configured uncertainty margins).
+- **Tariff calendar** (Aurora 93, fixed AEST), feed-in rate.
 
-## Guest mode and holiday mode
+## The rules (precedence highest first)
 
-- **Guest (12 h, button):**
-  - Manual 70 °C for the period, with economics relaxed;
-  - all gates, confirmation and owner rules still apply;
-  - starting it releases Hold;
-  - expiry or cancel re-inspects before normal control;
-  - persisted across restarts;
-  - an alert appears if it cannot be applied.
-- **Holiday (departure/return datetimes):**
-  - parked while away, which keeps OFF's antibacterial and frost protection;
-  - no morning goals and no standby permission;
-  - in the last 24 h, one return goal at the storage target, so the planner picks the cheapest feasible heating;
-  - ends at the return time;
-  - dates are validated, never adjusted;
-  - **failures are reported:** "heating for your return is blocked" after 30 min of a blocked return heat, the planner's "return goal at risk" when it can't be reached, and "not fully heated for your return" for 2 h after the return while the reading is below the thermostat's restart point. An app change pauses control without cancelling the holiday.
-- **Thermann's native Holiday mode is not used.** Its return and protection behaviour is unverified, and the bridge allowlist stays `off` / `Manual:70`. Supporting it later would need a verified, allowlisted command and an owner test.
+1. The heater's own protections are native, in every state; nothing to decide.
+2. **Owner:** an app change or Hold (send nothing), holiday (OFF from
+   00:00 Hobart local on the departure date, or at once for today, until
+   00:00 on the return date; then the normal rules), 12hr
+   Override (STORAGE).
+3. **Guards** (may only block): cloud, authentication and freshness;
+   15-minute command spacing; the reserved park slot.
+4. **Peaks**, morning and evening alike, plus the 2 minutes before:
+   - OFF, unless measured surplus of at least 3.3 kW held for 10 minutes;
+   - withdraw after 5 minutes of import above 0.2 kW, or of surplus below
+     the element (also while the element is off).
+5. **Weekday before the evening peak:** reach 70 °C by the **soft target**
+   (peak − 30 min) in the cheapest window, then keep heating until the peak.
+   On weekday nights and weekends: Manual 45, plus solar STORAGE when it is
+   worth it.
+6. **Forecast economics:**
+   - wait for a cheaper window, as long as it is feasible;
+   - pause committed heating only for a later window that saves at least
+     $0.30 and still finishes in time.
 
-## Thermal observer (read-only)
+## The controller (safety shell)
 
-`sensor.thermann_shadow_tank_thermal_state` collects evidence: sessions, suspected draws, cooling spans, predicted versus actual. **It never affects control.** See [THERMAL_MODEL.md](THERMAL_MODEL.md).
+`controller.py` never chooses a state. It sends one guarded payload when:
 
-## When telemetry or cloud control is unavailable
+- the policy wants a different state;
+- every gate passes:
+  - commissioning: topic, three-state qualification;
+  - MQTT;
+  - the bridge: available, commands enabled, `automation` policy, cloud
+    `ok`, authorised, no backoff, 1.3.13 transitions, no pending
+    confirmation;
+  - a status no older than 35 minutes, and the pre-command refresh budget;
+  - the observed state equals the confirmed one;
+  - 15-minute spacing;
+  - the daily backstops: 6 commands that start or change heating (a park is
+    never held back), and 220 requests.
 
-| Situation | Behaviour |
-| --- | --- |
-| Meter stale or suspect, or no economic comparison | Off-peak: hold the current state. Before **or during** a peak, with Manual on: park at once (never kept through a peak blindly). In the 4 h before 07:00: morning fail-safe permit. Recovery needs 10 sustained minutes again |
-| Unknown tariff | Treated as peak |
-| Thermann status stale (> one poll + 5 min) | No commands (`heater_status_too_old`) |
-| Cloud backoff, quota or auth lock | No commands; alerts. Never retried |
-| Command not confirmed | Fault, owner acknowledges (bridge 1.3.11 bounded confirmation) |
-| HA restart | Re-inspects; guest and holiday persisted; permission timers restart (10 min) |
+It then supervises the confirmation:
+
+- The bridge's outcome decides it, or the observed status does.
+- An owner change (`refused_*_mismatch`, or an unexpected state) pauses control.
+- `not_confirmed_within_limit` or a refusal locks it, for the owner to
+  acknowledge.
+- Nothing is ever re-sent.
+
+After a restart, it re-inspects the heater from a NEW status first.
+
+## Shadow observation
+
+With automatic control off, the same policy runs on the observed heater state
+and records the payload it would send (`policy_plan.shadow_log`, the *Shadow
+command* sensor). Nothing is published.

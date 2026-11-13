@@ -4,9 +4,11 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
+from .naming import device_info_fields, entity_id
 from .config import DOMAIN, parse_options, rejection_message, saved_options
 from .settings import (
     CATALOG,
+    RETIRED,
     apply_changes,
     describe,
     locked_changes,
@@ -55,12 +57,8 @@ class SettingEntity:
         self.meta = CATALOG[key]
         self._attr_name = self.meta.name
         self._attr_unique_id = f"{entry.entry_id}_setting_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Thermann Shadow",
-            manufacturer="Community shadow planner",
-            model="315 L / 3 kW scenario",
-        )
+        self.entity_id = entity_id(self.meta.kind, self.meta.name)
+        self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.runtime.subscribe(self.async_write_ha_state))
@@ -87,5 +85,9 @@ class SettingEntity:
 def setup_controls(hass, entry, async_add_entities, kind, entity_class):
     runtime = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        [entity_class(entry, runtime, key) for key, meta in CATALOG.items() if meta.kind == kind]
+        [
+            entity_class(entry, runtime, key)
+            for key, meta in CATALOG.items()
+            if meta.kind == kind and key not in RETIRED
+        ]
     )
