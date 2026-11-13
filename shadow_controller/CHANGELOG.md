@@ -1,4 +1,72 @@
-# Thermann Shadow Planner
+# Thermann Controller (formerly Thermann Shadow Planner)
+
+## 0.9.0 — the simplified three-state controller (owner approval required)
+
+Replaces the 0.4–0.8 planner, economic permission and morning fail-safe with the agreed policy (`simple_policy.py`, [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md)). Requires Thermann Hot Water **1.3.13**.
+
+- **Three heater states:** OFF, Manual 45 °C (weekday nights and weekends) and Manual 70 °C. Each command is a guarded bridge payload naming the state it leaves (`<target>@<prior>`), so an app change is never overwritten.
+- **Weekday:**
+  - EMHASS full-window cost optimisation to reach 70 °C by the soft target (peak − 30 min);
+  - starts at once when waiting would miss it, and keeps heating until the peak;
+  - pauses only for a later window saving at least $0.30.
+- **Peaks:**
+  - OFF 2 minutes before every peak, with the command slot before it reserved;
+  - measured solar only: 3.3 kW for 10 minutes to start; withdrawal after 5 minutes of import over 0.2 kW or of too little surplus.
+- **Weekends:** Manual 45 °C, plus solar Manual 70 °C when at least 1 kW of measured surplus makes it worth it.
+- **Setpoint versus achieved:** "70 °C reached" only at a reading of 70 °C.
+- **Shadow observation** while automatic control is off: the policy runs and records the command it would send. Nothing is published.
+- **Activation and restart** ask the bridge for one guarded status read (used only if the app's on-demand refresh is enabled).
+- **Holiday uses dates only.** Departure and return both take effect at 00:00 Hobart local:
+  - a departure of today starts Holiday mode at once, and a future one at 00:00 on that date;
+  - while active, the guarded controller switches the heater OFF and keeps it OFF;
+  - at 00:00 on the return date Holiday mode ends by itself (also across a restart), and the normal policy resumes, usually with Manual 45 °C overnight.
+
+  There is no return target or pre-heating. The two datetime entities are replaced by *Holiday departure date* and *Holiday return date* (`date.thermann_shadow_holiday_departure_date` / `…_return_date`). Saved 0.7–0.8 departure and return times keep their Hobart dates.
+- **Removed:**
+  - `advisor`, `strategy`, `goals`, `permission`, `control_plan`, `cycles`, `economics` and `decision`;
+  - the model's planner (`evaluate`);
+  - minimum heating and rest;
+  - the comfort reserve and latency reserve;
+  - the unexplained-heating hold.
+- **New setting:** *Three-state commands qualified (1.3.13)* (System, locked while control is on). Automatic control cannot be enabled until it is on.
+- **Retired** (values kept, entities removed): the morning and afternoon planning settings, storage target, margins, cycle and gap timers, base-load source, minimum heating and rest, latency reserve, and the T3 qualification switch. The planner's sensors are removed from the registry; measurement, tariff and controller entity IDs are unchanged. New policy sensors are added.
+- **Fixed during integration testing:** while a command awaited confirmation, the policy planned from the old state and could ask for it back straight after the confirmation. It now plans from the requested state, and the controller enforces the 15-minute spacing itself as a backstop.
+- **Tests:**
+  - `test_controller_0_9_0.py`;
+  - `test_integration_0_9_0.py`: HA states, EMHASS and the GoodWe meter → runtime → policy → controller → real bridge 1.3.13 → mocked cloud → confirmation. It covers shadow, live, owner change, restart, commissioning, holiday, 12hr Override and the dashboard values.
+
+## 0.8.0 — names and a simpler settings interface (development)
+
+- **Thermann Controller** is the integration's display name (was Thermann Shadow Planner / Hot Water Controller); the app is **Thermann Hot Water** (app 1.3.12). Both are labelled unofficial community software, not Thermann products.
+- **12hr Override** replaces "guest mode" in every label and alert. Behaviour unchanged: Manual 70 °C for 12 hours regardless of price, end time shown, cancel any time, normal control afterwards, every safety rule kept.
+- **Nothing to reinstall:** same domain (`thermann_shadow`), device, entry, entity IDs (renamed entities keep their old IDs; fresh installs get the same IDs), MQTT topics, saved settings and stored controller state. The config entry and device are renamed in place.
+- **Settings in three groups:** Everyday, Advanced, System. 15 settings with no production effect are retired from the interface; their stored values stay. Their entities and the long-orphaned 0.3.0/0.5.0 entities are removed from the registry instead of showing as unavailable.
+- **Configure is a menu:** Comfort, tariff and forecast settings / System and commissioning / Sensor mappings.
+- The dashboard is titled **Hot Water**.
+
+## 0.7.1 — settings safety and validation (development)
+
+From the settings audit ([SETTINGS_AUDIT.md](SETTINGS_AUDIT.md)). No change to the two commands, the bridge allowlist or stored controller state.
+
+- **Locked while automatic control is on:** command topic, T3 qualification, dwell, command and request budgets, confirmation timeout, latency reserve, meter sign and verification, the tariff contract, freshness limits and sensor mappings. Turn control off to change them. Preferences, notifications and Restore recommended still apply at once.
+- **Command topic must match the mapped heater** (`command_topic_does_not_match_heater` otherwise).
+- **No command unless the bridge app's `command_policy` is `automation`.**
+- **Validation:** notification service name format; whole-number budgets; minimum rest at most latency + 30 min (max 90); poll age 35–90 min; forecast age 35–360 min; prices 0–2 $/kWh. Rejections now say which rule failed.
+- **Restore recommended** no longer changes dwell, budgets, timeouts or freshness limits.
+- Pricing or planning setting changes also reset the economic-permission samples and timers.
+- *Pause shadow planning* no longer affects an active controller (use Hold or the master switch).
+- Descriptions corrected for settings that do drive production planning (solar start qualification, minimum cycle and gap).
+- Config entry 1.2 → 1.3: values outside the new ranges move to the nearest allowed value, each logged. A 0.7.0 rollback still loads the entry.
+- The master switch shows whether the notification service exists.
+
+## 0.7.0 — economic permission, morning 45/42, guest and holiday modes, thermal observer (development)
+
+- **Economic heating permission** (`permission.py`): Manual stays permitted while heating now would be economical (meter-priced, excluding the element's own load), and parks when not. It stays on after thermostat satisfaction; solar-justified permission continues across the peak start; afternoon storage never buys peak-grid heat; an economic park during a peak bypasses minimum heating (not minimum rest).
+- **Morning:** preferred **45 °C by 06:00** and hard **42 °C by 07:00**, every day (new settings: preferred time, hard time, preferred reserve; the minimum stays `morning_threshold_c`). One cooling allowance protects the hard minimum. Fail-safe permit when the planner or meter is unavailable before 07:00. The legacy morning and shower settings are kept but hidden.
+- **Guest mode** (12 h) and **controller-managed holiday mode** (return-ready), with new buttons, datetimes and sensors. Native Thermann Holiday is not used.
+- **Read-only thermal observer:** tank state with confidence, suspected draws, cooling spans, heating performance and predicted versus actual. It never affects control.
+- **Fix found in the Stage C preflight (present since 0.5.0):** with automatic control on, the shadow-era "native Schedule expected" check still ran, so a heater in Manual or OFF (the controller's own states) gated the planner as *owner review required* and the controller would only ever have held, parked for peaks or used the morning fail-safe. The check and the intervention latch now apply only while control is off. Closed-loop tests had supplied the plan directly, so they did not see it; a runtime-level regression test now covers it.
+- **Unchanged:** 30-minute polling, the two commands, the bridge allowlist, command and request budgets, confirmation, owner override, disabled by default.
 
 ## 0.6.2 — bounded confirmation for a late cloud readback (bridge 1.3.11)
 

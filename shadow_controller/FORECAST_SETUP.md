@@ -1,4 +1,4 @@
-# Forecast setup — Shadow Planner 0.3.0
+# Forecast setup
 
 Forecasts are **optional and off by default**. Without them the planner still
 works: it uses the measured HK1000 net export for the next 15 minutes only and
@@ -13,7 +13,7 @@ cause **zero** Thermann requests. Nothing here touches the Thermowatt add-on.
 ## What the planner needs
 
 Two optional entities, mapped in **Settings → Devices & services → Thermann
-Shadow Planner → Configure** (first page):
+Controller → Configure → Sensor mappings**:
 
 | Mapping | Accepted shapes | Required attributes |
 |---|---|---|
@@ -211,4 +211,4 @@ would be heated now, and a viable comfort fallback.
 The EMHASS household-load forecast currently includes past heater cycles (and,
 before 10 Nov 14:25, PV output). 0.4.0 therefore defaults to the de-embedded
 measured base load (`base_load_source: measured_only`). See
-[STAGE_3B_3C_PROPOSAL.md](STAGE_3B_3C_PROPOSAL.md) for the de-embedding plan.
+[STAGE_3B_3C_PROPOSAL.md](../docs/history/controller/STAGE_3B_3C_PROPOSAL.md) for the de-embedding plan.

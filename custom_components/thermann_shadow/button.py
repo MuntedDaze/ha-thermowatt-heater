@@ -3,6 +3,7 @@
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.helpers.device_registry import DeviceInfo
+from .naming import device_info_fields, entity_id
 from .config import DOMAIN
 from .settings import BACKUP_KEY, RESTORED
 from .settings_entity import save
@@ -23,6 +24,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
             ControllerAction(
                 entry, runtime, "acknowledge", "Acknowledge controller fault", "mdi:check-decagram"
             ),
+            ControllerAction(
+                entry, runtime, "guest_start", "Start 12hr Override", "mdi:account-clock"
+            ),
+            ControllerAction(
+                entry, runtime, "guest_cancel", "Cancel 12hr Override", "mdi:clock-remove-outline"
+            ),
+            ControllerAction(
+                entry, runtime, "holiday_cancel", "Cancel holiday mode", "mdi:airplane-off"
+            ),
         ]
     )
 
@@ -34,12 +44,7 @@ class _LocalButton(ButtonEntity):
 
     def __init__(self, entry, runtime):
         self.entry, self.runtime = entry, runtime
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Thermann Shadow",
-            manufacturer="Community shadow planner",
-            model="315 L / 3 kW scenario",
-        )
+        self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.runtime.subscribe(self.async_write_ha_state))
@@ -54,12 +59,13 @@ class RestoreRecommendations(_LocalButton):
     def __init__(self, entry, runtime):
         super().__init__(entry, runtime)
         self._attr_unique_id = f"{entry.entry_id}_restore_recommended"
+        self.entity_id = entity_id("button", self._attr_name)
 
     @property
     def extra_state_attributes(self):
         return {
             "restores": list(RESTORED),
-            "preserves": "mappings, verifications, meter direction, tariff contract, native references",
+            "preserves": "system settings, sensor mappings, verifications, meter direction, tariff contract",
             "undo_available": isinstance(self.entry.options.get(BACKUP_KEY), dict),
             "heater_commands": 0,
         }
@@ -75,6 +81,7 @@ class UndoRestore(_LocalButton):
     def __init__(self, entry, runtime):
         super().__init__(entry, runtime)
         self._attr_unique_id = f"{entry.entry_id}_undo_restore"
+        self.entity_id = entity_id("button", self._attr_name)
 
     @property
     def available(self):
@@ -97,9 +104,16 @@ class ControllerAction(_LocalButton):
         self._attr_name = name
         self._attr_icon = icon
         self._attr_unique_id = f"{entry.entry_id}_controller_{action}"
+        self.entity_id = entity_id("button", name)
 
     async def async_press(self):
         from homeassistant.exceptions import HomeAssistantError
 
-        if not await self.runtime.executor.async_owner_action(self.action):
-            raise HomeAssistantError(f"Nothing to {self.action} in the current controller state.")
+        executor = self.runtime.executor
+        if not await executor.async_owner_action(self.action):
+            why = executor.controller.refusal
+            raise HomeAssistantError(
+                f"Not done: {why.replace('_', ' ')}."
+                if why
+                else f"Nothing to {self.action} in the current controller state."
+            )

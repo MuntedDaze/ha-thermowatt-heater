@@ -1,164 +1,117 @@
-# Thermann Shadow Planner 0.4.0 (candidate)
+# Thermann Controller (`thermann_shadow`)
 
-> **0.6.2 production controller candidate (Manual 70 °C permit / Thermann OFF park; needs bridge 1.3.11):** upgrade with [UPGRADE_0_6_1_TO_0_6_2.md](UPGRADE_0_6_1_TO_0_6_2.md); see [CONTROLLER.md](CONTROLLER.md),
-> [COMMISSIONING.md](COMMISSIONING.md) and
-> [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Automatic control is
-> **off** and impossible until commissioning (Stage B, T3) is complete; everything
-> below describes the planner, which the controller follows.
+*Unofficial community software, not a Thermann product.*
 
+A Home Assistant integration that decides which of three settings a Thermann
+Smart Electric heater uses, so hot water is ready and costs as little as
+practical:
 
-A **shadow-only** hot-water planner for the Thermann 315 L / 3 kW heater. It reads
-existing Home Assistant entities, decides when heating *would* be best, and
-explains why on a dashboard. **It never operates the heater.** The native
-Schedule keeps controlling the real element. Draft PR #9; owner review required,
-no merge or deployment is authorised.
+- **Thermann OFF**;
+- **Manual 45 °C**;
+- **Manual 70 °C**.
 
-Priorities, in order: **manufacturer safety, hot-water readiness, minimum total
-electricity cost (including foregone feed-in), solar self-consumption when cost is
-equal, fewer switches.**
+It works through the Thermann Hot Water app (1.3.13 or later). Thermann's own
+thermostat still decides when the element actually runs.
 
-- [Stage 3a / 0.4.0 changes and evidence](PHASE3A_0_4_0.md) and
-  [0.3.0 vs 0.4.0 comparison](COMPARISON_0_3_0_VS_0_4_0.md).
-- [Upgrade 0.3.0 → 0.4.0](UPGRADING_0_4_0.md) — owner steps, verification, rollback.
-- [Stage 3b/3c proposal](STAGE_3B_3C_PROPOSAL.md) — forecasts, whole-home solar
-  advisor, Tapo appliances, notifications, wall-tablet dashboard (design only).
-- [Upgrade or install 0.3.0](UPGRADING_0_3_0.md) — previous version.
-- [Forecast setup](FORECAST_SETUP.md) — EMHASS / Forecast.Solar / baseline.
-- [Phase 2B design and review](PHASE2B.md) — economics, cycles, decisions, tests.
-- [Legacy 0.3.0 cloud-interruption cycle results](CYCLE_SCENARIO_RESULTS.md).
-- [Control and recovery](CONTROL_AND_RECOVERY.md), [native On/Off review](NATIVE_ON_OFF_REVIEW.md)
-  and [supervised qualification plan](SUPERVISED_VALIDATION.md) — future control only.
+Current version: **0.9.0** (in review). Installed: **0.7.1**, automatic
+control off. To switch to 0.9.0, follow
+[COMMISSIONING_SIMPLIFIED.md](COMMISSIONING_SIMPLIFIED.md).
 
-## Safety boundaries
+## What it does
 
-- No heater commands, MQTT writes, HA service calls, network clients, cloud
-  refreshes, authentication changes or quota resets. No option enables control.
-- The Thermowatt add-on stays **1.3.8**, byte-identical, with commands and
-  on-demand refresh disabled. Native Schedule and T-Comfort are never changed.
-- A fixed one-minute **local** timer re-reads HA states. The planner adds **zero**
-  Thermann requests; forecast updates add none either.
-- Simulated heating is labelled hypothetical everywhere. Physical element state,
-  On/resume and safe Off remain **unqualified**.
+| When | Setting |
+| --- | --- |
+| Weekday nights after the evening peak, and all weekend | **Manual 45 °C**. The native thermostat looks after showers. |
+| Weekday daytime, before the evening peak | **Manual 70 °C**, started in the cheapest window that reaches 70 °C by the soft target (15:30 winter, 16:30 summer). Uses the EMHASS forecast, the measured solar and household load, and the tariff. If waiting would miss the soft target, it starts on off-peak power. Once started, it keeps going until the peak. |
+| Every peak (morning and evening), from 2 minutes before | **OFF**, unless measured surplus of at least 3.3 kW has held for 10 minutes. That permission is withdrawn after 5 minutes of grid import (over 0.2 kW), or of too little solar. |
+| Weekends with solar | **Manual 70 °C** while at least 1 kW of measured surplus makes it worth it and EMHASS shows nothing cheaper later. A passing cloud does not end it. |
 
-## What it reads
+Further rules:
 
-| Input | Default entity | Use |
-|---|---|---|
-| Heater temperatures | `water_heater.home_boiler_home` attributes | bottom-sensor temperature, reported target |
-| Mode, poll time, health | `sensor.home_boiler_home_vendor_mode`, `sensor.home_last_successful_poll`, `sensor.home_cloud_health` | gates; native mode/target change latches *owner review* |
-| Request counter | `sensor.home_cloud_request_attempts_local_lifetime` | diagnostics only |
-| Net grid power | `sensor.goodwe_inverter_meter_active_power` | **primary measurement** of surplus; positive = export (owner load-tested) |
-| PV, house load | GoodWe PV / house consumption | display; PV also corrects forecasts |
-| Forecasts (optional) | none | see [Forecast setup](FORECAST_SETUP.md) |
+- At least **15 minutes** between commands.
+- **No minimum heating or rest periods**: the thermostat switches the element.
+- **No extra cloud requests:** decisions use local readings every minute.
+- **Never against the heater:** its antibacterial and frost protection run on
+  their own in every setting.
 
-Missing, stale (poll > 45 min, meter > 120 s), restored or unhealthy inputs
-suspend the recommendation (**DATA UNAVAILABLE**). The native Schedule remains
-the real comfort fallback. Cloud-read time is not a device sample time.
+**Owner modes:**
 
-## How it decides
+| Mode | What happens |
+| --- | --- |
+| **12hr Override** | Button: Manual 70 °C for 12 hours, regardless of price. Cancel at any time. |
+| **Holiday** | Set a **departure date** and a **return date**. Both take effect at **00:00 Hobart time**. Today's departure date starts Holiday mode at once; a later one starts it at 00:00 on that date. The heater is switched OFF through the normal guarded command and stays OFF. At 00:00 on the return date, Holiday mode ends by itself and normal control resumes, so the tank usually reheats overnight on Manual 45 °C. A return date of 14 November ends it at 00:00 on 14 November. There is no return target or pre-heating. |
+| **Hold** | Button: pauses all automatic commands until you press Resume. |
 
-The thermal estimate is `315 × 4.186 × rise / 3600 ≈ 0.3663 kWh/°C` (about 7.3 min
-per °C at 3 kW). It uses the vendor reading `T_Avg` directly. That is a planning
-reading, not a whole-tank reserve, and not the thermostat's own control
-temperature.
+**App changes win.** If you change the heater in the Thermann app, control
+pauses until you press **Resume automatic control**.
 
-- **Morning:** **42 °C** reading before the morning peak starts: 07:00 standard
-  time, **08:00 daylight time** on weekdays, derived from the tariff table itself.
-  An optional earlier shower-ready time can only make it earlier. Weekends use a
-  household time (default 08:00). **Never a 42 °C storage setpoint.**
-- **Afternoon:** 70 °C (65–70 °C) before the evening peak: **16:00 standard time,
-  17:00 daylight time**. Weekends use a household time (default 16:00). If the
-  native thermostat switches the element off inside a permitted window, storage
-  counts as ready (its own sensor reached the target) until the reading falls >5 °C.
-- **Requirements** are cumulative from now and include an assumed standing loss
-  (0.2 °C/h) and morning draw (10 °C). Both are editable assumptions, not
-  measurements.
-- **Actual heating:** the element state is estimated ON / OFF / UNKNOWN from
-  `WaterHeaterSts` bit 0 (empirical) and 3 kW load changes. **Base household load =
-  house − 3 kW while ON**, so the real heater is never counted twice.
-- **Cost:** extra cost of running the fixed 3 kW element, relative to not running
-  it, per 15 minutes:
-  `hours × [0.09276 × s + rate × (3 − s)]`, with s = min(3, AC PV − base load).
-  For example, 1 kW exported → 43.3 c/h off-peak, 81.7 c/h peak; 2 kW surplus →
-  35.6 c/h off-peak versus 51.1 c/h all-grid.
-- **Plans compared** (all deliver the same energy by each deadline):
-  - heat now (for at least the 30-min minimum cycle);
-  - the best plan overall (≤3 blocks);
-  - the best single block, and the best single block later;
-  - a fallback start that keeps the 30-min allowance.
-- **Waiting** is recommended only if it saves at least **5 c per kWh** that would
-  be heated now and the fallback stays viable. Without a qualified forecast,
-  future solar is assumed zero, so waiting is never based on hoped-for sun.
+**Shadow observation.** While automatic control is off, the policy still runs
+and shows the command it **would** send (*Shadow command*). Nothing is sent.
 
-Recommendations shown in large type:
+## Install or upgrade
 
-| Label | Meaning |
-|---|---|
-| HEAT NOW | heating now is the cheapest plan, solar is available and waiting saves too little, or the comfort fallback is due |
-| HEATING NOW / HEATING LIKELY (NATIVE) | the native Schedule is heating (LIKELY = medium confidence); the text says whether that matches the cheapest plan |
-| WAIT – CHEAPER LATER | a later plan saves at least the threshold; saving, start and latest safe start shown |
-| NO HURRY | no meaningful cost difference; heat before the stated latest start |
-| NO HEATING NEEDED | both goals met (or storage satisfied by the native thermostat) |
-| INSUFFICIENT TIME | even continuous heating cannot meet the goal; shortfall shown |
-| DATA UNAVAILABLE / OWNER REVIEW / PAUSED | gates; nothing is recommended |
+1. Copy the package's `custom_components/thermann_shadow` folder into
+   `/config/custom_components/`. When upgrading, delete the old folder first.
+   Do not remove the integration in Home Assistant.
+2. Restart Home Assistant once.
+3. **First install:** add *Thermann Controller* under Settings → Devices &
+   services. Map your entities:
+   - heater, vendor mode and bridge diagnostics;
+   - GoodWe PV, house and grid;
+   - the EMHASS PV and load forecast sensors.
 
-Only changes between optional economic choices must persist 10 minutes. The physical
-heater state, comfort, data gates and "no heating needed" apply immediately.
-Readiness describes what the native Schedule is predicted to achieve, never a
-hypothetical plan.
+   Turn on *Use published forecasts*.
+4. **Check:** no `thermann_shadow` errors in the log, and *Automatic heater
+   control* is **off**.
 
-## Tariff (owner-confirmed Aurora 93)
+Saved settings and entity IDs are kept across upgrades. 0.9.0 retires the old
+planner's sensors and settings: their registry entries are removed, and the
+stored setting values are kept for a rollback.
 
-| Item | Default |
-|---|---|
-| Peak import | AUD 0.361878/kWh |
-| Off-peak import | AUD 0.170200/kWh |
-| Export compensation | AUD 0.092760/kWh |
-| Weekday peaks | 07:00–10:00 and 16:00–21:00 **fixed AEST (UTC+10)** |
-| Weekends | off-peak all day |
+**Before automatic control can be switched on:**
 
-Hobart daylight saving is handled automatically: peaks display at 08–11 and 17–22
-in summer. Never shift times manually for DST. Rates, peak times and weekend
-policy are editable; arbitrary weekly periods use custom mode in Configure. The
-stored custom table is always validated, even in Aurora mode. The Thermann
-device clock is separate and needs a manual DST check (Diagnostics reminder).
+- the app's `commands_enabled` is on, with `command_policy: automation`;
+- *Controller command topic* (`P/<serial>/CMD/MODE`) is set;
+- *Three-state commands qualified (1.3.13)* is on, after the supervised
+  qualification.
 
-## Dashboard and settings
+## Main entities
 
-`dashboard.yaml` (native cards only) has three views:
+| Entity | Shows |
+| --- | --- |
+| *Automatic heater control* (switch) | Master on/off. Turning it off never changes the heater. |
+| *Automatic control state* / *reason* | parked, baseline_45, storage_70, change_requested, confirming, owner override, fault, and why |
+| *Policy wanted state*, *Policy mode*, *Decision code* | what the policy wants now (off / baseline / storage) and why |
+| *Hypothetical heating start*, *Latest continuous heating start*, *Soft target time* | the plan before the evening peak |
+| *Storage target reached* | yes only at a reading of 70 °C (63–69 °C is the thermostat band) |
+| *Shadow command* | the payload the policy would send while control is off |
+| *Heater element state* + confidence | whether the element is drawing power (from the meter) |
+| *Controller fault* | none, or what needs your attention |
+| *Tank thermal state (estimate)* | diagnostics only |
 
-- **Hot Water** — colour-coded recommendation with explanation, tank gauge,
-  targets and countdown, next hypothetical start/completion, fallback time,
-  energy/cost estimates, live power and prices, forecast surplus, heat-now-vs-later
-  costs and history graphs. Sections layout reflows to one column on phones.
-- **Settings** — every preference as a native number/time/select/toggle in four
-  groups (Comfort, Solar & Forecasting, Heating Cycles, Advanced), each with its
-  **current, recommended and original** value and a plain explanation. The
-  controls and Configure share **one** saved configuration; changes validate
-  atomically, recalculate locally at once and never reload or contact the heater.
-  **Restore recommended** (confirmed) resets preferences only — tariff contract,
-  mappings, verifications, meter direction, pause state and native references are
-  kept — and **Undo last restore** puts the replaced values back once.
-- **Diagnostics** — measured inputs vs estimates, forecast source/age/error and
-  correction, simulated cycle details, reasons, warnings, native references and
-  request accounting.
+## Troubleshooting
 
-## Cloud accounting
+| You see | Meaning | What to do |
+| --- | --- | --- |
+| State `owner_override` | The heater was changed outside the controller, or Hold is on | Check the app. Press **Resume** when it's how you want it. |
+| Fault `command_not_confirmed` | A command was sent once but not confirmed | Check the app, set the mode you want, then press **Acknowledge**. |
+| Fault `bridge_refused_or_dropped` | The app did not send the command (see the reason) | Fix the cause, then Acknowledge. |
+| `bridge_1_3_13_required` | The Thermann Hot Water app is older than 1.3.13 | Update the app. |
+| `three_state_commands_not_qualified` | The supervised qualification is not recorded | See COMMISSIONING_SIMPLIFIED.md. |
+| `heater_status_too_old`, "heater status missing" | No fresh reading from the app | Check the app log and cloud health. |
+| "70 °C may not be reached before the peak" | A big draw or a late start | Nothing to do: it heats on off-peak power until the peak. |
 
-30-minute polling is about 48 bridge cycles a day. One cycle can be
-status → token refresh → replay (3 attempts), so ~144 attempts/day is plausible.
-This is not a vendor quota or upper bound. The counter is the bridge's local
-lifetime attempts and excludes the official app.
+## Recovery
 
-## What is verified, and what is not
+- **Hot water now:** Thermann app → **Manual at 70 °C**.
+- **Stop automatic control:** switch *Automatic heater control* off.
+- **Roll back:** see the end of COMMISSIONING_SIMPLIFIED.md.
 
-Verified in isolated CI (no network): real HA Core 2026.10.4 and 2026.11.1
-config/options flows, every settings entity driven through the HA service layer,
-restore/undo, atomic rejections, all dashboard entity references and rendered
-templates, forecast-present/invalid paths, WebSocket and Recorder serialisation,
-reload/unload, and a genuine **0.2.0 → 0.3.0 upgrade** over persisted HA storage.
-Offline tests cover economics, cycles, forecasts, DST and 23 closed-loop days.
+## More
 
-Not verified: the owner's real dashboard rendering on desktop/phone, real-data
-forecast accuracy, the owner's actual EMHASS/Forecast.Solar entities, the real
-thermal response and any physical heater control.
+- [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md): the agreed design and its simulation results.
+- [HOW_IT_DECIDES.md](HOW_IT_DECIDES.md): technical reference.
+- [COMMISSIONING_SIMPLIFIED.md](COMMISSIONING_SIMPLIFIED.md): deployment, supervised tests and rollback.
+- [FORECAST_SETUP.md](FORECAST_SETUP.md): setting up EMHASS forecasts.
+- [CHANGELOG.md](CHANGELOG.md).
+- `docs/history/controller/`: earlier designs and references.

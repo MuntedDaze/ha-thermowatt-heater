@@ -265,7 +265,23 @@ PLAIN_PAYLOADS = {"off", "Off", "Eco", "Auto", "Manual"}
 # any cloud request. "legacy" restores the full 1.3.8 command set and must be
 # chosen explicitly. Read-only monitoring is identical under both.
 COMMAND_POLICIES = ("automation", "legacy")
-AUTOMATION_COMMANDS = {("MODE", "Manual:70"), ("MODE", "off")}
+# Three-state transitions (1.3.13): "<target>@<prior>". The controller states
+# the exact state it expects to leave; the FRESH status (<= 60 s) must show it,
+# or the command is refused with no request (an owner change in the app is
+# never overwritten). Targets: software OFF, Manual 45 °C, Manual 70 °C.
+TRANSITIONS = {
+    "off@45": ("off", 45),
+    "off@70": ("off", 70),
+    "Manual:45@off": (45, "off"),
+    "Manual:45@70": (45, 70),
+    "Manual:70@off": (70, "off"),
+    "Manual:70@45": (70, 45),
+}
+# The 1.3.11 forms stay accepted for the installed controller: Manual:70 from
+# OFF only, off from Manual 70 only.
+AUTOMATION_COMMANDS = {("MODE", "Manual:70"), ("MODE", "off")} | {
+    ("MODE", payload) for payload in TRANSITIONS
+}
 # Software OFF. Cmd 8 is what the owner's heater actually reports when switched
 # OFF from Manual (observed in T3, 1.3.10). Cmd 16 was the original assumption
 # and is retained for compatibility; it may be OFF entered from another mode but
@@ -286,6 +302,21 @@ COMMAND_MAX_AGE_AFTER_REFRESH = 75
 CONFIRM_FOLLOWUPS = (60, 300)
 CONFIRM_DEADLINE = CONFIRM_FOLLOWUPS[-1] + 60
 COMMAND_STATE_VERSION = 1
+# 1.3.13: no status read immediately after the POST. In T3b, T3c and Stage C it
+# always showed the OLD mode (the cloud applies a change after about 2-63 s), so
+# it cost a request and proved nothing. The 60 s follow-up is the first read.
+# Clock-aligned background polls (1.3.13): due at multiples of the interval
+# (with 30 minutes, :00 and :30; Tasmania's UTC offset is a whole number of
+# hours). A due poll is skipped, and the schedule NOT moved, when any status
+# read of that heater happened within this many seconds (a command refresh, a
+# confirmation or an on-demand read): it already supplied the reading.
+POLL_REUSE_SECONDS = 180
+# Proactive token refresh (1.3.13; authentication change, owner approval). The
+# access token lasts under 30 minutes (every 30-minute poll in 1.3.11 was GET
+# 401 -> refresh -> GET). A request made when the token is at least this old
+# refreshes FIRST, saving the doomed 401 GET. The guard, its retry limits and
+# the 5-minute refresh cooldown are unchanged; a 401 still refreshes once.
+PROACTIVE_REFRESH_AGE = 1200
 
 
 class MyThermowattBridge:
@@ -391,6 +422,11 @@ class MyThermowattBridge:
         self.discovered = False
         self.last_diagnostic = None
         self.operation = "authentication_guard"
+        self.token_obtained_at = None  # in memory; see _token_age after a restart
+        # Not options: always True / False in the app. Tests written for 1.3.11
+        # change them to replay their scripted request sequences.
+        self.proactive_refresh = True
+        self.immediate_confirmation_read = False
 
     @staticmethod
     def valid_serial(serial):
@@ -518,6 +554,7 @@ class MyThermowattBridge:
             )
         else:
             self.guard.success(result["accessToken"], result["refreshToken"])
+            self.token_obtained_at = self.clock()
             LOG.info(
                 "Authentication accepted: operation=%s code=%s; tokens stored privately.",
                 self.operation,
@@ -541,6 +578,29 @@ class MyThermowattBridge:
     def refresh_session(self):
         return self._authenticate("refresh")
 
+    def _token_age(self):
+        """Seconds since the access token was issued, or None when unknown. After
+        a restart it is derived from the persisted refresh cooldown deadline."""
+        if self.token_obtained_at is not None:
+            return self.clock() - self.token_obtained_at
+        state = self.guard.state
+        if state["action"] == "refresh" and state["next_retry"] > 0:
+            return self.clock() - (state["next_retry"] - AuthGuard.REFRESH_COOLDOWN)
+        return None
+
+    def _token_due_for_refresh(self):
+        """Refresh BEFORE a request only when the token is old (or of unknown
+        age) and the guard's refresh cooldown has passed. Never in a loop: a
+        just-refreshed token is never due."""
+        if not self.proactive_refresh:
+            return False
+        if self.guard.state["mode"] != "authorized" or not self.guard.state.get("refresh_token"):
+            return False
+        if self.clock() < self.guard.state["next_retry"]:
+            return False
+        age = self._token_age()
+        return age is None or age >= PROACTIVE_REFRESH_AGE
+
     def request(self, method, endpoint, serial=None, **kwargs):
         self.guard.check()
         if not self.options.get("cloud_enabled", False):
@@ -549,6 +609,10 @@ class MyThermowattBridge:
             raise CloudError("authentication_not_ready")
         if self.clock() < self.next_cloud:
             raise CloudError("cloud_backoff")
+        if self._token_due_for_refresh():
+            operation = self.operation
+            self.refresh_session()
+            self.operation = operation
         try:
             response = self._send(method, endpoint, serial, **kwargs)
             if response.status_code == 401 and method == "GET":
@@ -759,6 +823,10 @@ class MyThermowattBridge:
                 "command_status_refresh_limit_24h": self.COMMAND_REFRESH_DAILY_LIMIT,
                 "command_confirmation_pending": self.pending is not None,
                 "command_confirmation_followups_seconds": list(CONFIRM_FOLLOWUPS),
+                # 1.3.13: the three-state transitions this bridge accepts (the
+                # controller requires them) and the polling schedule.
+                "command_transitions": sorted(TRANSITIONS),
+                "poll_schedule": "clock_aligned",
                 "refused_while_pending": dict(self.refused_while_pending)
                 if self.refused_while_pending
                 else None,
@@ -922,8 +990,13 @@ class MyThermowattBridge:
         self._observe_pending(serial, values)
         return values
 
+    @staticmethod
+    def _safe_payload(payload):
+        known = payload in GUARDED_PAYLOADS or payload in PLAIN_PAYLOADS or payload in TRANSITIONS
+        return payload if known else "other"
+
     def _command_result(self, kind, payload, result, refresh=None, error=None, extra=None):
-        safe = payload if payload in GUARDED_PAYLOADS or payload in PLAIN_PAYLOADS else "other"
+        safe = self._safe_payload(payload)
         self.last_command = {
             "kind": kind if kind in {"MODE", "TEMP"} else "other",
             "payload": safe if kind == "MODE" else "temperature",
@@ -1117,6 +1190,9 @@ class MyThermowattBridge:
             return ("/manual", temperature)
         if kind == "MODE" and payload in GUARDED_PAYLOADS:
             return ("/manual", GUARDED_PAYLOADS[payload])
+        if kind == "MODE" and payload in TRANSITIONS:
+            target = TRANSITIONS[payload][0]
+            return ("/off", None) if target == "off" else ("/manual", target)
         endpoint = {
             "off": "/off",
             "Off": "/off",
@@ -1147,7 +1223,7 @@ class MyThermowattBridge:
             # a repeated publish) and any other command wait for the outcome.
             # Recorded apart from last_command, which keeps the pending record.
             LOG.warning("Command refused: a previous command awaits confirmation. No request.")
-            safe = payload if payload in GUARDED_PAYLOADS or payload in PLAIN_PAYLOADS else "other"
+            safe = self._safe_payload(payload)
             self.refused_while_pending = {
                 "kind": kind if kind in {"MODE", "TEMP"} else "other",
                 "payload": safe if kind == "MODE" else "temperature",
@@ -1222,7 +1298,33 @@ class MyThermowattBridge:
         automation = policy != "legacy"
 
         arguments, expected = {}, None
-        if kind == "TEMP":
+        if payload in TRANSITIONS and kind == "MODE":
+            target, prior = TRANSITIONS[payload]
+            is_off, is_manual = mode in OFF_CODES, mode == 9
+
+            def shows(state):
+                return is_off if state == "off" else is_manual and observed == state
+
+            if shows(target):
+                self._command_result(kind, payload, "already_in_requested_state", refresh=refresh)
+                return
+            if not shows(prior):
+                # Not the state the controller left the heater in: the owner (or
+                # something else) changed it. Never overwritten.
+                reason = (
+                    "refused_mode_mismatch"
+                    if (prior == "off") != is_off or not (is_off or is_manual)
+                    else "refused_target_mismatch"
+                )
+                LOG.warning("Transition refused: heater not in the stated prior state. No request.")
+                self._command_result(kind, payload, reason, refresh=refresh)
+                return
+            if target == "off":
+                arguments, expected = {"data": ""}, (OFF_CODES, None)
+            else:
+                arguments = {"json": {"T_SetPoint": int(target)}}
+                expected = ({9}, target)
+        elif kind == "TEMP":
             # /manual changes mode too: never change temperature from other modes.
             if mode != 9:
                 return
@@ -1331,10 +1433,16 @@ class MyThermowattBridge:
         ):
             self._finish_pending("rejected_by_cloud")
             raise CloudError("command_rejected")
-        LOG.info("Command submitted; waiting for observed cloud state.")
+        LOG.info("Command submitted; the first confirmation read follows in 60 s.")
         self._pending_result("submitted_awaiting_status")
         self._save_command_state_quietly()
-        self.poll_status(serial, category="confirmation")
+        if self.immediate_confirmation_read:  # pre-1.3.13 sequencing (tests only)
+            self.poll_status(serial, category="confirmation")
+            return
+        # No immediate read (1.3.13): the last confirmed status is still the
+        # latest known state, so the heater is available again with it; the
+        # pending record tells consumers the outcome is not known yet.
+        self._availability(serial, True)
 
     def tick(self):
         """One bounded iteration; authentication failure idles instead of exiting."""
@@ -1377,21 +1485,29 @@ class MyThermowattBridge:
                     followup, category="confirmation", operation="command_confirmation"
                 )
             targets = self._take_demand()
+            due = set()
             if poll_due:
-                targets |= {
+                due = {
                     serial
                     for serial in self.active_devices
                     if self.next_background.get(serial, 0) <= self.clock()
                 }
             if poll_due or targets:
                 polling = True
-                for serial in sorted(targets):
-                    # A command or confirmation read in this tick has just read
-                    # this heater's status: that read counts as the due poll, so
-                    # no duplicate request is made.
-                    if serial not in self.read_this_tick:
+                for serial in sorted(targets | due):
+                    # A read of this heater in this tick, or within the reuse
+                    # window (a command refresh, a confirmation, an on-demand
+                    # read), already supplied the reading: no duplicate request.
+                    recent = (
+                        self.monotonic() - self.last_status_attempt.get(serial, float("-inf"))
+                        < POLL_REUSE_SECONDS
+                    )
+                    if serial not in self.read_this_tick and not (serial in due and recent):
                         self.poll_status(serial)
-                    self.next_background[serial] = self.clock() + self.poll_interval
+                    if serial in due:
+                        # Only a due background poll moves the schedule, and only
+                        # to the next clock slot: extra reads never shift it.
+                        self.next_background[serial] = self._next_slot()
                 self.next_poll = min(
                     (self.next_background.get(serial, 0) for serial in self.active_devices),
                     default=self.clock() + self.poll_interval,
@@ -1454,6 +1570,11 @@ class MyThermowattBridge:
                     sum(self.request_counts.values()),
                 )
                 self.last_diagnostic = diagnostic
+
+    def _next_slot(self):
+        """The next clock-aligned poll time strictly after now."""
+        now = self.clock()
+        return (math.floor(now / self.poll_interval) + 1) * self.poll_interval
 
     def run(self, stop=None):
         stop = stop if stop is not None else threading.Event()
