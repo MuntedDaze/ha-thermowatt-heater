@@ -21,30 +21,30 @@ class Setting:
 CATALOG = {
     "morning_threshold_c": Setting(
         "Morning minimum (hard)",
-        "Everyday",
-        "Minimum reading (bottom-of-tank T_Avg) by the hard morning deadline, every day. Protected over savings when at risk. A planning threshold, NEVER a heater setpoint or hygiene temperature.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Minimum reading (bottom-of-tank T_Avg) by the hard morning deadline, every day. Protected over savings when at risk. A planning threshold, NEVER a heater setpoint or hygiene temperature.",
         30,
         60,
         "°C",
     ),
     "morning_preferred_c": Setting(
         "Morning preferred reserve",
-        "Everyday",
-        "Preferred reading by the preferred morning time, every day: extra reserve before showers, aimed for when reasonably achievable. Once that time passes unmet, only the hard minimum is pursued. Not lower than the minimum.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Preferred reading by the preferred morning time, every day: extra reserve before showers, aimed for when reasonably achievable. Once that time passes unmet, only the hard minimum is pursued. Not lower than the minimum.",
         30,
         60,
         "°C",
     ),
     "morning_preferred_time": Setting(
         "Morning ready (preferred)",
-        "Everyday",
-        "Hobart local, every day. Aim to reach the morning threshold by this time.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Hobart local, every day. Aim to reach the morning threshold by this time.",
         kind="time",
     ),
     "morning_hard_time": Setting(
         "Morning ready (hard deadline)",
-        "Everyday",
-        "Hobart local, every day (showers). If the preferred time is missed, heating continues for this deadline; it is never abandoned. Must not be earlier than the preferred time.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Hobart local, every day (showers). If the preferred time is missed, heating continues for this deadline; it is never abandoned. Must not be earlier than the preferred time.",
         kind="time",
     ),
     "morning_time": Setting(
@@ -67,38 +67,38 @@ CATALOG = {
     ),
     "expected_morning_draw_c": Setting(
         "Expected morning hot-water use",
-        "Advanced",
-        "Reading drop assumed for morning showers when planning the afternoon target. An assumption (about 11 °C was seen on 11 Nov), not a measurement.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Reading drop assumed for morning showers when planning the afternoon target. An assumption (about 11 °C was seen on 11 Nov), not a measurement.",
         0,
         40,
         "°C",
     ),
     "standing_loss_c_per_hour": Setting(
         "Assumed standing heat loss",
-        "Advanced",
-        "Reading drop per hour with no use or heating. Not yet measured for this tank.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Reading drop per hour with no use or heating. Not yet measured for this tank.",
         0,
         2,
         "°C/h",
     ),
     "target_c": Setting(
         "Afternoon storage target",
-        "Everyday",
-        "Selected model target is never silently reduced. 65–70°C is a planning range, not a newly qualified command limit.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Selected model target is never silently reduced. 65–70°C is a planning range, not a newly qualified command limit.",
         65,
         70,
         "°C",
     ),
     "evening_time": Setting(
         "Weekend afternoon ready time",
-        "Everyday",
-        "Weekend (no-peak) afternoon ready time, Hobart local, after noon. Weekdays use the evening peak start automatically: 16:00 standard time, 17:00 daylight time.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Weekend (no-peak) afternoon ready time, Hobart local, after noon. Weekdays use the evening peak start automatically: 16:00 standard time, 17:00 daylight time.",
         kind="time",
     ),
     "margin_minutes": Setting(
         "Heating time allowance",
-        "Advanced",
-        "Extra full-power model minutes when heat is required. Uncalibrated; comfort overrides optional dwell.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Extra full-power model minutes when heat is required. Uncalibrated; comfort overrides optional dwell.",
         0,
         120,
         "min",
@@ -142,8 +142,8 @@ CATALOG = {
     ),
     "solar_hold_minutes": Setting(
         "Solar start qualification",
-        "Advanced",
-        "How long the planner's choice between optional economic options (heat now, wait, no difference) must persist before it changes, so a passing cloud does not flip the plan. Comfort, data gates and peak decisions are never delayed by it.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. How long the planner's choice between optional economic options (heat now, wait, no difference) must persist before it changes, so a passing cloud does not flip the plan. Comfort, data gates and peak decisions are never delayed by it.",
         5,
         30,
         "min",
@@ -158,16 +158,16 @@ CATALOG = {
     ),
     "minimum_cycle_minutes": Setting(
         "Minimum optional cycle",
-        "Advanced",
-        "Shortest heating block the planner schedules. The controller's own minimum heating and rest periods still apply on top.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest heating block the planner schedules. The controller's own minimum heating and rest periods still apply on top.",
         0,
         180,
         "min",
     ),
     "minimum_gap_minutes": Setting(
         "Minimum optional cycle gap",
-        "Advanced",
-        "Shortest gap the planner leaves between two scheduled heating blocks (it merges closer blocks).",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest gap the planner leaves between two scheduled heating blocks (it merges closer blocks).",
         0,
         180,
         "min",
@@ -182,8 +182,8 @@ CATALOG = {
     ),
     "wait_benefit_aud_per_kwh": Setting(
         "Minimum saving to recommend waiting",
-        "Advanced",
-        "Waiting is only recommended if it saves at least this much per kWh that would otherwise be heated now (first minimum cycle; 0.05 = 7.5 c for 30 min) and the comfort fallback stays viable. Solar later vs off-peak grid now is 7.7 c/kWh.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Waiting is only recommended if it saves at least this much per kWh that would otherwise be heated now (first minimum cycle; 0.05 = 7.5 c for 30 min) and the comfort fallback stays viable. Solar later vs off-peak grid now is 7.7 c/kWh.",
         0,
         0.5,
         "AUD/kWh",
@@ -274,8 +274,8 @@ CATALOG = {
     ),
     "base_load_source": Setting(
         "Household load basis",
-        "Advanced",
-        "measured_only: de-embedded measured base load (heater removed). measured_then_published also uses the published load forecast after 2 h; today's EMHASS load includes heater cycles.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. measured_only: de-embedded measured base load (heater removed). measured_then_published also uses the published load forecast after 2 h; today's EMHASS load includes heater cycles.",
         choices=("measured_only", "measured_then_published"),
         kind="select",
     ),
@@ -366,22 +366,28 @@ CATALOG = {
     ),
     "controller_bridge_qualified": Setting(
         "Bridge commands qualified (T3)",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Commissioning Stage B: ON only after the supervised T3 test showed the bridge's Manual:70 (from OFF) and off (from Manual 70) reproduce the app results. Requires Thermowatt add-on 1.3.9 or later.",
+        kind="switch",
+    ),
+    "controller_three_state_qualified": Setting(
+        "Three-state commands qualified (1.3.13)",
         "System",
-        "Commissioning Stage B: ON only after the supervised T3 test showed the bridge's Manual:70 (from OFF) and off (from Manual 70) reproduce the app results. Requires Thermowatt add-on 1.3.9 or later.",
+        "Commissioning: ON only after the supervised qualification of Thermann Hot Water 1.3.13 showed every transition between OFF, Manual 45 °C and Manual 70 °C reproduces the app result, and an owner change is refused (COMMISSIONING_SIMPLIFIED.md). Automatic control cannot be enabled until it is ON.",
         kind="switch",
     ),
     "controller_min_heating_minutes": Setting(
         "Minimum heating period",
-        "System",
-        "Shortest time Manual (heating permitted) is kept before parking, unless the thermostat has already stopped the element.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest time Manual (heating permitted) is kept before parking, unless the thermostat has already stopped the element.",
         30,
         180,
         "min",
     ),
     "controller_min_rest_minutes": Setting(
         "Minimum rest period",
-        "System",
-        "Shortest time parked before heating is permitted again, comfort starts included. At most the execution latency reserve plus 30 minutes, so a comfort start is never delayed beyond what the planner reserves.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest time parked before heating is permitted again, comfort starts included. At most the execution latency reserve plus 30 minutes, so a comfort start is never delayed beyond what the planner reserves.",
         30,
         90,
         "min",
@@ -389,7 +395,7 @@ CATALOG = {
     "controller_max_commands_per_day": Setting(
         "Maximum commands per day",
         "System",
-        "Rolling 24 h limit on mode commands. A typical day needs 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved for a comfort start and its park.",
+        "Backstop: rolling 24 h limit on commands that start or change heating. A typical weekday needs 4 commands in all; a switch to OFF (the park) is never held back by this limit.",
         4,
         10,
     ),
@@ -410,8 +416,8 @@ CATALOG = {
     ),
     "controller_execution_latency_minutes": Setting(
         "Execution latency reserve",
-        "System",
-        "Comfort deadlines are planned this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command normally reaches the heater within about a minute; the 30-minute default is a conservative margin you may reduce after the supervised trial.",
+        "Retired",
+        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Comfort deadlines are planned this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command normally reaches the heater within about a minute; the 30-minute default is a conservative margin you may reduce after the supervised trial.",
         0,
         60,
         "min",
@@ -438,7 +444,9 @@ assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # the stored value is kept, validated and restored by a rollback.
 GROUPS = ("Everyday", "Advanced", "System")
 RETIRED = frozenset(key for key, meta in CATALOG.items() if meta.group == "Retired")
-assert {meta.group for meta in CATALOG.values()} == {*GROUPS, "Retired"}
+# 0.9.0: every Everyday setting belonged to the retired planner; the group stays
+# so saved menus and dashboards keep working, and may be empty.
+assert {meta.group for meta in CATALOG.values()} <= {*GROUPS, "Retired"}
 
 # Truthful "original" defaults: the value each setting first shipped with
 # (0.2.0 for shared keys, 0.3.0 for new keys; identical today). RECOMMENDED is
@@ -484,6 +492,7 @@ PRESERVE_ON_RESTORE = frozenset(
         # Commissioning facts are never "preferences".
         "controller_command_topic",
         "controller_bridge_qualified",
+        "controller_three_state_qualified",
         "controller_notify_service",
         # 0.7.1: command safety timing, budgets and data-freshness limits are
         # system settings, not preferences; a restore never changes them.
@@ -506,6 +515,7 @@ LOCKED_WHILE_ACTIVE = frozenset(
     {
         "controller_command_topic",
         "controller_bridge_qualified",
+        "controller_three_state_qualified",
         "controller_min_heating_minutes",
         "controller_min_rest_minutes",
         "controller_max_commands_per_day",

@@ -37,7 +37,7 @@ CONTROLLER_BUTTONS = {
         "Resume control",
         "mdi:play-circle",
         "Resume automatic control? It first re-reads the heater from a NEW bridge status and "
-        "only continues if the heater is OFF or in Manual at 70 °C.",
+        "only continues if the heater is OFF, Manual 45 °C or Manual 70 °C.",
     ),
     "button.thermann_shadow_acknowledge_controller_fault": (
         "Acknowledge fault",
@@ -47,20 +47,32 @@ CONTROLLER_BUTTONS = {
     ),
 }
 UNDO = "button.thermann_shadow_undo_last_restore"
-# decision code -> (ha-alert type, icon)
+# policy reason -> (ha-alert type, icon)
 DECISION_STYLE = {
-    "heat_now_cheapest": ("success", "mdi:solar-power-variant"),
-    "heat_now_saving_too_small": ("success", "mdi:solar-power"),
-    "heat_now_comfort_fallback": ("warning", "mdi:transmission-tower"),
-    "native_heating_economical": ("success", "mdi:water-boiler"),
-    "native_heating_costlier_than_waiting": ("warning", "mdi:water-boiler-alert"),
-    "wait_cheaper_later": ("info", "mdi:weather-sunny"),
-    "flexible_no_cost_difference": ("info", "mdi:clock-outline"),
-    "no_heating_needed": ("success", "mdi:check-circle-outline"),
-    "insufficient_time": ("error", "mdi:clock-alert-outline"),
-    "data_unavailable": ("error", "mdi:lan-disconnect"),
-    "owner_review_required": ("warning", "mdi:account-alert-outline"),
-    "paused": ("info", "mdi:pause-circle-outline"),
+    "storage_cheapest_now": ("success", "mdi:water-boiler"),
+    "storage_until_peak": ("success", "mdi:water-boiler"),
+    "storage_latest_start": ("warning", "mdi:transmission-tower"),
+    "storage_target_may_be_missed": ("error", "mdi:clock-alert-outline"),
+    "storage_waiting_for_cheaper_window": ("info", "mdi:weather-sunny"),
+    "storage_paused_for_cheaper_window": ("info", "mdi:pause-circle-outline"),
+    "storage_target_reached": ("success", "mdi:check-circle-outline"),
+    "storage_within_thermostat_band": ("success", "mdi:thermometer-check"),
+    "peak_no_grid_heating": ("info", "mdi:transmission-tower-off"),
+    "peak_ahead_no_qualified_solar": ("info", "mdi:transmission-tower-off"),
+    "peak_solar_qualified": ("success", "mdi:solar-power-variant"),
+    "peak_solar_continues": ("success", "mdi:solar-power-variant"),
+    "peak_solar_withdrawn": ("warning", "mdi:weather-cloudy"),
+    "peak_meter_unavailable": ("error", "mdi:lan-disconnect"),
+    "peak_command_reserved": ("info", "mdi:timer-sand"),
+    "solar_opportunity": ("success", "mdi:solar-power"),
+    "solar_opportunity_continues": ("success", "mdi:solar-power"),
+    "solar_opportunity_ended": ("info", "mdi:weather-sunset-down"),
+    "baseline": ("info", "mdi:water-thermometer-outline"),
+    "owner_override": ("warning", "mdi:account-alert-outline"),
+    "heater_state_not_controlled": ("warning", "mdi:account-alert-outline"),
+    "holiday": ("info", "mdi:airplane"),
+    "12hr_override": ("info", "mdi:account-clock"),
+    "command_spacing": ("info", "mdi:timer-sand"),
 }
 
 
@@ -101,16 +113,20 @@ def recommendation_card():
             "{% set icon = " + icons + ".get(code, 'mdi:water-boiler') %}\n"
             '<ha-alert alert-type="{{ kind }}">'
             '<h1><ha-icon icon="{{ icon }}"></ha-icon> '
-            "{{ states('" + sensor("Recommendation") + "') }}</h1>"
-            "{{ state_attr('" + CONTROLLER + "','decision_explanation') "
-            "or 'Waiting for fresh heater and meter readings.' }}"
+            "{{ states('" + sensor("Policy wanted state") + "') | upper }}</h1>"
+            "{{ code | replace('_', ' ') }} · mode {{ states('"
+            + sensor("Policy mode")
+            + "') }} · 70 °C reached: {{ states('"
+            + sensor("Storage target reached")
+            + "') }}"
             "</ha-alert>\n\n"
             "{% if is_state('" + MASTER + "', 'on') %}**Automatic control is ON.** The "
-            "controller follows this plan: Manual 70 °C permits heating, Thermann OFF "
-            "parks it (antibacterial and frost protection stay active); the Thermann "
+            "controller applies this policy: OFF, Manual 45 °C or Manual 70 °C; the Thermann "
             "thermostat decides when the element runs."
-            "{% else %}**Planner only.** Automatic control is off, so no heater command is "
-            "sent.{% endif %}"
+            "{% else %}**Shadow observation.** Automatic control is off: the policy runs on "
+            "the observed heater state and nothing is sent. Would send: **{{ states('"
+            + sensor("Shadow command")
+            + "') }}**.{% endif %}"
         ),
     }
 
@@ -166,6 +182,18 @@ def controller_card():
                 "title": "Controller status",
                 "show_header_toggle": False,
                 "entities": rows,
+            },
+            {
+                "type": "entities",
+                "title": "Holiday (dates take effect at 00:00 Hobart)",
+                "show_header_toggle": False,
+                "entities": [
+                    sensor("Hot water operating mode"),
+                    "date.thermann_shadow_holiday_departure_date",
+                    "date.thermann_shadow_holiday_return_date",
+                    "button.thermann_shadow_cancel_holiday_mode",
+                    sensor("12hr Override ends"),
+                ],
             },
             *[
                 {
@@ -234,32 +262,30 @@ def build():
                 },
                 tile("Heater element state", "mdi:heat-wave"),
                 tile("Heater state confidence", "mdi:help-circle-outline"),
-                tile("Morning readiness", "mdi:weather-sunset-up"),
-                tile("Afternoon readiness", "mdi:water-thermometer"),
-                tile("Morning ready deadline", "mdi:alarm"),
-                tile("Afternoon ready deadline", "mdi:alarm"),
+                tile("Storage target reached", "mdi:thermometer-check"),
+                tile("Heating time needed", "mdi:timer-outline"),
             ],
         ),
         section(
-            "Heat now or later?",
-            "mdi:scale-balance",
+            "Plan before the evening peak",
+            "mdi:calendar-clock",
             [
-                tile("Continuous cycle cost now", "mdi:cash-fast"),
-                tile("Continuous cycle cost later", "mdi:cash-check"),
-                tile("Saving by waiting", "mdi:piggy-bank-outline"),
-                tile("Decision confidence", "mdi:shield-check-outline"),
                 tile("Hypothetical heating start", "mdi:play-circle-outline"),
-                tile("Simulated completion", "mdi:clock-check-outline"),
-                tile("Native Schedule predicted cost", "mdi:calendar-clock"),
-                tile("Native Schedule extra cost vs best plan", "mdi:calendar-alert"),
+                tile("Latest continuous heating start", "mdi:clock-alert-outline"),
+                tile("Soft target time", "mdi:flag-checkered"),
+                tile("Configured afternoon peak", "mdi:transmission-tower"),
+                tile("Measured surplus excluding element", "mdi:solar-panel"),
+                tile("Shadow command", "mdi:eye-outline"),
                 {
                     "type": "markdown",
                     "content": (
-                        "Costs are the **extra** electricity cost of heating, including "
-                        "**foregone feed-in**, for the same required energy. The 3 kW element "
-                        "is never treated as variable power; the real heater's load is removed "
-                        "from household demand once. *Start and completion are hypothetical: the "
-                        "native Schedule controls the heater.*"
+                        "**Cheapest window:** the start shown is when EMHASS and the measured "
+                        "surplus make heating to 70 °C cheapest while still finishing by the "
+                        "**soft target** (30 minutes before the peak). From the **latest start** "
+                        "it heats on off-peak power regardless. The soft target is a planning "
+                        "buffer, not a shutdown. In a peak only measured solar (3.3 kW for 10 "
+                        "minutes) may heat. Manual 70 °C is the *setpoint*; the tank is reported "
+                        "as reached only at 70 °C."
                     ),
                 },
             ],
@@ -270,7 +296,6 @@ def build():
             [
                 tile("Measured PV AC output", "mdi:solar-power"),
                 tile("Base household load excluding hot water", "mdi:home-lightning-bolt"),
-                tile("Hypothetical solar surplus if heater off", "mdi:solar-panel"),
                 tile("Measured grid export", "mdi:transmission-tower-export"),
                 tile("Measured grid import", "mdi:transmission-tower-import"),
                 tile("Current tariff", "mdi:tag-outline"),
@@ -325,6 +350,8 @@ def build():
             for key, meta in settings.CATALOG.items()
             if meta.group == group and meta.kind != "form"
         ]
+        if not keys:
+            continue  # 0.9.0: the Everyday group is empty (its settings are retired)
         controls.append(
             {
                 "type": "entities",
@@ -407,10 +434,10 @@ def build():
         {
             "type": "markdown",
             "content": (
-                "## Planner\n**Automatic control active: "
-                "{{ state_attr('" + CONTROLLER + "','control_capable') }} · extra cloud "
+                "## Policy\n**Automatic control active: "
+                "{{ state_attr('" + CONTROLLER + "','controller_active') }} · extra cloud "
                 "requests: {{ state_attr('" + CONTROLLER + "','additional_cloud_requests') }}**. "
-                "The planner only estimates; heater commands come from the controller alone "
+                "One coordinated policy; heater commands come from the controller alone "
                 "(Automatic heater control). Thermann Controller is unofficial community "
                 "software, not a Thermann product."
             ),
@@ -424,25 +451,20 @@ def build():
                 "{{ (h.basis or []) | join(', ') }}\n"
                 "- WaterHeaterSts raw {{ h.status_raw }} (bit 0 = {{ h.status_bit0 }}; "
                 "{{ h.status_semantics }})\n"
-                "- Last 3 kW load step: {{ h.last_load_step }} at {{ h.last_load_step_at }}\n"
-                "{% set l = state_attr('" + CONTROLLER + "','load') or {} %}"
-                "- Base load {{ l.base_low_kw }}–{{ l.base_high_kw }} kW "
-                "(median {{ l.base_p50_kw }}); meter suspect: "
-                "{{ l.meter_suspect_pre_commissioning_signature }}"
+                "- Base load excluding hot water: {{ states('"
+                + sensor("Base household load excluding hot water")
+                + "') }} kW"
             ),
         },
         {
             "type": "markdown",
             "content": (
-                "### Goals and strategies\n"
-                "{% for g in state_attr('" + CONTROLLER + "','goals') or [] %}"
-                "- {{ g.kind }}: {{ g.target_c }} °C by "
-                "{{ as_timestamp(g.deadline) | timestamp_custom('%a %H:%M') }} ({{ g.basis }})\n"
-                "{% endfor %}"
-                "| Strategy | Start | Cost | Solar |\n|---|---|---:|---:|\n"
-                "{% for name, p in (state_attr('" + CONTROLLER + "','strategies') or {}).items() %}"
-                "| {{ name }} | {{ as_timestamp(p.start) | timestamp_custom('%H:%M') "
-                "if p.start else '—' }} | ${{ p.cost_aud }} | {{ (p.solar_share * 100) | round(0) }}% |\n"
+                "### Policy decision\n"
+                "{% set d = state_attr('" + CONTROLLER + "','policy_plan') or {} %}"
+                "- **{{ d.state }}** · {{ d.reason }} (layer {{ d.layer }}) · "
+                "command now: {{ d.command_now }}\n"
+                "{% for item in (d.shadow_log or [])[-5:] %}"
+                "- shadow {{ item.at }}: would send **{{ item.would_send }}** ({{ item.reason }})\n"
                 "{% endfor %}"
             ),
         },
@@ -468,34 +490,20 @@ def build():
         },
         {
             "type": "entities",
-            "title": "Estimates and plan (not measurements)",
+            "title": "Policy and plan (not measurements)",
             "entities": [
                 sensor(name)
                 for name in (
                     "Decision code",
-                    "Simulated cycle state",
+                    "Policy wanted state",
+                    "Policy mode",
                     "Next tariff period",
-                    "Forecast usable solar before deadline",
-                    "Scenario cost difference",
-                    "Modelled energy shortfall",
                     "Latest continuous heating start",
-                    "Off peak fallback start",
-                    "Planning deadline",
-                    "Comfort deadline",
+                    "Hypothetical heating start",
+                    "Soft target time",
                     "Configured afternoon peak",
+                    "Afternoon storage target",
                     "Controller",
-                )
-            ],
-        },
-        {
-            "type": "entities",
-            "title": "Native heater references",
-            "entities": [
-                sensor(name)
-                for name in (
-                    "Reported Schedule window",
-                    "T Comfort reference",
-                    "Device clock check",
                 )
             ],
         },
@@ -508,21 +516,10 @@ def build():
                 "- Age: {{ f.age_minutes }} min · intervals: {{ f.intervals }}\n"
                 "- Measured AC PV (15-min mean): {{ f.measured_pv_average_kw }} kW · "
                 "error vs forecast: {{ f.pv_error_kw }} kW\n"
-                "- Correction now: {{ f.pv_correction_now }} (two-way, bounded; fades after "
-                "{{ f.pv_correction_fades_to_none_after_hours }} h)\n"
-                "### Reasons\n"
-                "{% for item in state_attr('" + CONTROLLER + "','reasons') or [] %}"
-                "- {{ item }}\n{% endfor %}"
                 "### Warnings and assumptions\n"
                 "{% for item in state_attr('" + CONTROLLER + "','warnings') or [] %}"
                 "- {{ item }}\n{% endfor %}"
-                "{% for item in state_attr('" + CONTROLLER + "','strategy_warnings') or [] %}"
-                "- {{ item }}\n{% endfor %}\n"
-                "{% if 'not_applicable' not in states('" + sensor("Device clock check") + "') %}"
-                "Native clock: compare manually with Hobart "
-                "{{ now().strftime('%a %d %b %H:%M') }} after DST changes. {% else %}"
-                "The native Schedule is not in use: the heater clock does not affect heating. "
-                "{% endif %}Tariff 93 stays fixed AEST. The planner adds zero cloud requests."
+                "Tariff 93 stays fixed AEST. The policy adds zero cloud requests."
             ),
         },
     ]
@@ -587,27 +584,26 @@ SOURCE_LABELS = {
 OPTIONS_STEPS = {
     "init": (
         "Settings",
-        "Choose what to change. Everyday comfort settings are also available as controls on "
+        "Choose what to change. Settings are also available as controls on "
         "the device page. System settings, the tariff contract and the sensor mappings can "
         "only be changed while Automatic heater control is off.",
     ),
     "sources": (
         "Sensor mappings",
         "Which Home Assistant entities the controller reads. Reading only: nothing here sends "
-        "a command or contacts the cloud. Changing a mapping restarts the planner's evidence; "
+        "a command or contacts the cloud. Changing a mapping restarts the meter evidence; "
         "it needs Automatic heater control off.",
     ),
     "preferences": (
-        "Comfort, tariff and forecast settings",
-        "Morning times are Hobart local and before noon; the weekend afternoon time is after "
-        "noon. Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later "
+        "Tariff and forecast settings",
+        "Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later "
         "in summer) and must increase. The tariff contract can only be changed while Automatic "
         "heater control is off. Every change is checked together with the rest of the "
         "configuration; an invalid combination saves nothing.",
     ),
     "system": (
         "System and commissioning",
-        "Command destination, T3 qualification, safety timing, budgets, data freshness and "
+        "Command destination, three-state qualification, budgets, data freshness and "
         "verification. Except for the notification service, these can only be changed while "
         "Automatic heater control is off. The command topic must be the one the bridge "
         "announced for your heater.",
@@ -619,6 +615,7 @@ def main():
     (ROOT / "shadow_controller/dashboard.yaml").write_text(
         yaml.safe_dump(build(), sort_keys=False, allow_unicode=True, width=100),
         encoding="utf-8",
+        newline="\n",
     )
     for filename in (PACKAGE / "strings.json", PACKAGE / "translations/en.json"):
         data = json.loads(filename.read_text(encoding="utf-8"))
@@ -652,7 +649,9 @@ def main():
                 "locked_while_active": "{detail}",
             },
         }
-        filename.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        filename.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
 
 
 if __name__ == "__main__":

@@ -1,120 +1,16 @@
 """Claude review of Phase 2B: decisions, forecast adapters, restore/undo, averaging."""
 
 from datetime import timedelta
-import importlib
 import json
 from types import SimpleNamespace
 
 import pytest
 
 from test_shadow_model import c, m, local, readings, runtime  # noqa: F401
-from test_shadow_phase2b import catalog, cycle_plan, cycles, forecast, series
-
-decision = importlib.import_module(f"{m.__package__}.decision")
-
-
-def run(policy, start, minutes, plan_for, settings, tariffs, future=lambda at: ()):
-    result = None
-    for index in range(minutes):
-        at = start + timedelta(minutes=index)
-        result = policy.step(at, plan_for(at), settings, tariffs, future(at), at)
-    return result
-
-
-def decide(plan, result, policy, settings, enabled=False, source="disabled"):
-    return decision.decide(plan, result, policy.active, enabled, source, settings)
+from test_forecast_and_settings import catalog, forecast, series
 
 
 # --- Decisions: every branch is reachable and honest --------------------------------
-
-
-@pytest.mark.parametrize(
-    "state,code,label",
-    [
-        ("shadow_paused", "paused", "PAUSED"),
-        ("shadow_native_intervention", "owner_review_required", "OWNER REVIEW"),
-        ("shadow_blocked", "data_unavailable", "DATA UNAVAILABLE"),
-        ("shadow_awaiting_validation", "data_unavailable", "DATA UNAVAILABLE"),
-    ],
-)
-def test_gated_decisions_never_recommend_heating(state, code, label):
-    now = local(hour=11)
-    settings, tariffs = c.parse_options({})
-    plan = cycle_plan(now, now + timedelta(hours=5))
-    plan.state = state
-    policy = cycles.CyclePolicy()
-    result = policy.step(now, plan, settings, tariffs, sample_at=now)
-    assert decide(plan, result, policy, settings)[:2] == (code, label)
-
-
-def test_partial_solar_full_solar_and_grace_period_decisions():
-    now = local(hour=11)
-    settings, tariffs = c.parse_options({"switching_benefit_aud": 0.01, "export_headroom_kw": 0})
-    deadline = now + timedelta(hours=8)
-    policy = cycles.CyclePolicy()
-    result = run(policy, now, 11, lambda at: cycle_plan(at, deadline, 2), settings, tariffs)
-    plan = cycle_plan(now, deadline, 2)
-    code, label, text = decide(plan, result, policy, settings)
-    assert policy.start_reason == "economic"
-    assert (code, label) == ("heat_now_partial_solar", "HEAT NOW")
-    assert "2.0 kW" in text and "67%" in text and "foregone feed-in" in text
-    result = policy.step(
-        now + timedelta(minutes=11), cycle_plan(now, deadline, 4), settings, tariffs
-    )
-    assert decide(plan, result, policy, settings)[0] == "heat_now_solar"
-    result = policy.step(
-        now + timedelta(minutes=12), cycle_plan(now, deadline, 0), settings, tariffs
-    )
-    assert policy.active  # one cloudy minute does not stop the cycle
-    assert decide(plan, result, policy, settings)[0] == "heat_now_grace_period"
-
-
-def test_grid_fallback_insufficient_time_and_no_topup_decisions():
-    now = local(hour=14)
-    settings, tariffs = c.parse_options({})
-    policy = cycles.CyclePolicy()
-    plan = cycle_plan(now, now + timedelta(hours=1), 0, 60)  # fallback due now
-    result = policy.step(now, plan, settings, tariffs, sample_at=now)
-    assert policy.start_reason == "comfort"
-    assert decide(plan, result, policy, settings)[:2] == ("begin_grid_fallback", "GRID FALLBACK")
-    short = cycles.CyclePolicy()
-    plan = cycle_plan(now, now + timedelta(minutes=30), 0, 90)
-    plan.state = "shadow_shortfall"
-    result = short.step(now, plan, settings, tariffs, sample_at=now)
-    assert short.active and result["continuing_cost_aud"] is None
-    assert decide(plan, result, short, settings)[:2] == ("insufficient_time", "INSUFFICIENT TIME")
-    done = cycles.CyclePolicy()
-    plan = cycle_plan(now, now + timedelta(hours=1), 0, 0)
-    plan.planning_target_c = 40
-    result = done.step(now, plan, settings, tariffs, sample_at=now)
-    code, label, text = decide(plan, result, done, settings)
-    assert (code, label) == ("no_topup_required", "NO HEATING NEEDED") and "40°C" in text
-
-
-def test_waiting_decisions_distinguish_forecast_solar_cost_and_unavailable_forecast():
-    now = local(hour=10)
-    settings, tariffs = c.parse_options({})
-    deadline = now + timedelta(hours=6)
-    policy = cycles.CyclePolicy()
-    plan = cycle_plan(now, deadline, 0, 60)
-    sunny = (m.Forecast(now + timedelta(hours=2), now + timedelta(hours=4), 3.5),)
-    result = policy.step(now, plan, settings, tariffs, sunny, now)
-    assert not policy.active and result["later_solar_kwh"] > 0
-    code, label, text = decide(plan, result, policy, settings, True, "published_pv_and_house_load")
-    assert (code, label) == ("wait_for_forecast_solar", "WAIT FOR SOLAR") and "reserved" in text
-    result = cycles.CyclePolicy().step(now, plan, settings, tariffs, (), now)
-    assert decide(plan, result, policy, settings, True, "unavailable")[0] == (
-        "forecast_unavailable_conservative_fallback"
-    )
-    assert decide(plan, result, policy, settings)[0] == "wait_for_cheaper_window"
-    # Qualifying solar is labelled as a wait, never as heating. (10:00 Hobart
-    # daylight time is still fixed-AEST peak, where solar loses to later off-peak.)
-    noon = local(hour=12)
-    sunny_now = cycles.CyclePolicy()
-    low, _ = c.parse_options({"switching_benefit_aud": 0.01})
-    plan = cycle_plan(noon, noon + timedelta(hours=4), 4, 60)
-    result = sunny_now.step(noon, plan, low, tariffs, (), noon)
-    assert decide(plan, result, sunny_now, low)[:2] == ("qualifying_solar", "WAIT FOR SOLAR")
 
 
 # --- Forecast adapters -------------------------------------------------------------
@@ -325,22 +221,5 @@ def test_runtime_pv_average_damps_a_single_cloudy_sample(runtime):  # noqa: F811
     # Rolling mean of fresh distinct reports (2.322 from setup, then 4, 4, 4, 0.4):
     assert instance.forecast.measured_pv_average_kw == pytest.approx(14.722 / 5, abs=1e-3)
     assert instance.forecast.correction == pytest.approx(14.722 / 5 / 4, abs=1e-3)
-    assert isinstance(instance.values["decision"], str)
-    assert instance.details["decision_explanation"]
-    assert instance.details["decision_explanation"]
-    json.dumps(instance.details, allow_nan=False)
-
-
-def test_runtime_warns_when_native_window_may_already_include_element_load(runtime):  # noqa: F811
-    instance, report, clock = runtime
-    clock[0] = local(hour=12)  # weekday 11:00-17:00 native reference window
-    report("heater", "unknown", {"current_temperature": 45, "temperature": 70})
-    for key, value in {"grid": 1000, "pv": 4000, "house": 3000}.items():
-        report(key, value, {"unit_of_measurement": "W"})
-    report("last_poll", clock[0].isoformat())
-    for key in ("mode", "cloud_health"):
-        report(key, {"mode": "Schedule", "cloud_health": "ok"}[key])
-    instance.update(clock[0])
-    assert instance.values["native_schedule_window"] == "within_reported_window"
-    assert "measured_grid_may_already_include_native_element_load" in instance.plan.warnings
-    assert instance.values["measured_net_export_kw"] == 1.0  # never de-embedded
+    assert instance.values.get("decision") is None  # no executor: the policy is not run here
+    json.dumps(instance.details, allow_nan=False, default=str)

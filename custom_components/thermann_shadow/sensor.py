@@ -3,6 +3,7 @@
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.helpers.device_registry import DeviceInfo
 
+from .naming import RETIRED_SENSORS as RETIRED  # noqa: F401 (re-exported)
 from .naming import device_info_fields, entity_id
 from .config import DOMAIN
 
@@ -16,72 +17,36 @@ SENSORS = {
     "measured_net_export_kw": ("Derived net export", "kW"),
     "cloud_health": ("Cloud health", None),
     "status_age_minutes": ("Status age", "min"),
-    "deadline": ("Planning deadline", None),
-    "comfort_deadline": ("Comfort deadline", None),
     "peak_start": ("Configured afternoon peak", None),
     "planned_start": ("Hypothetical heating start", None),
-    "mixed_model_energy_kwh": ("Mixed tank energy estimate", "kWh"),
-    "modelled_heating_minutes": ("Heating time estimate", "min"),
-    "estimated_import_kwh": ("Plan import estimate", "kWh"),
-    "estimated_solar_kwh": ("Plan solar estimate", "kWh"),
-    "unmet_model_energy_kwh": ("Modelled energy shortfall", "kWh"),
-    "estimated_cost_aud": ("Plan cost estimate", "AUD"),
-    "comparison_cost_difference_aud": ("Scenario cost difference", "AUD"),
     "requests_since_start": ("Observed request attempts", None),
     "observed_requests_per_hour": ("Observed requests per hour", None),
-    "native_schedule_window": ("Reported Schedule window", None),
-    "t_comfort_reference_c": ("T Comfort reference", "°C"),
-    "morning_threshold_c": ("Morning comfort threshold", "°C"),
     "storage_target_c": ("Afternoon storage target", "°C"),
-    "planning_target_c": ("Next decision threshold", "°C"),
     "latest_start": ("Latest continuous heating start", None),
-    "grid_fallback_start": ("Off peak fallback start", None),
     "current_tariff": ("Current tariff", None),
     "current_price_aud": ("Current import price", "AUD/kWh"),
-    "recommended_energy_source": ("Recommended energy source", None),
-    "device_clock_check": ("Device clock check", None),
     "measured_import_kw": ("Measured grid import", "kW"),
     "measured_export_kw": ("Measured grid export", "kW"),
-    "recommendation": ("Recommendation", None),
-    "simulated_cycle_state": ("Simulated cycle state", None),
-    "benefit_of_now_aud": ("Benefit of heating now", "AUD"),
-    "continuing_cost_aud": ("Continuous cycle cost now", "AUD"),
-    "later_cost_aud": ("Continuous cycle cost later", "AUD"),
     "forecast_net_surplus_kw": ("Forecast net surplus", "kW"),
     "forecast_age_minutes": ("Forecast age", "min"),
-    "deadline_countdown_minutes": ("Comfort countdown", "min"),
-    "completion_time": ("Simulated completion", None),
     "decision": ("Decision code", None),
-    "forecast_usable_solar_kwh": ("Forecast usable solar before deadline", "kWh"),
-    # 0.4.0: actual-versus-hypothetical heating, de-embedded load, tariff, readiness.
     "heater_element_state": ("Heater element state", None),
     "heater_state_confidence": ("Heater state confidence", None),
     "base_load_kw": ("Base household load excluding hot water", "kW"),
     "measured_pv_ac_kw": ("Measured PV AC output", "kW"),
-    "current_solar_surplus_kw": ("Hypothetical solar surplus if heater off", "kW"),
     "next_tariff_change": ("Next tariff change", None),
     "next_tariff_kind": ("Next tariff period", None),
     "current_tariff_rate_aud": ("Current tariff rate", "AUD/kWh"),
-    "morning_ready_deadline": ("Morning ready deadline", None),
-    "afternoon_ready_deadline": ("Afternoon ready deadline", None),
-    "morning_readiness": ("Morning readiness", None),
-    "afternoon_readiness": ("Afternoon readiness", None),
-    "waiting_saving_aud": ("Saving by waiting", "AUD"),
-    "decision_confidence": ("Decision confidence", None),
-    "native_predicted_cost_aud": ("Native Schedule predicted cost", "AUD"),
-    "native_vs_best_plan_aud": ("Native Schedule extra cost vs best plan", "AUD"),
-    "schedule_advisor_suggestion": ("Schedule advisor today", None),
+    # 0.9.0: the simplified policy (read-only; the controller alone commands).
+    "policy_state": ("Policy wanted state", None),
+    "policy_mode": ("Policy mode", None),
+    "soft_target": ("Soft target time", None),
+    "target_reached": ("Storage target reached", None),
+    "heating_hours_needed": ("Heating time needed", "h"),
+    "measured_surplus_kw": ("Measured surplus excluding element", "kW"),
+    "shadow_command": ("Shadow command", None),
 }
-# Retired in 0.4.0 (described a non-existent executor). HA keeps their registry
-# entries as unavailable until the owner removes them; see UPGRADING_0_4_0.md.
-RETIRED = (
-    "simulated_cycle_count",
-    "simulated_stop_count",
-    "suppressed_switching_episodes",
-    "simulated_cost_aud",
-)
-
-
+TIMESTAMPS = {"peak_start", "planned_start", "latest_start", "next_tariff_change", "soft_target"}
 CONTROLLER_SENSORS = {
     "controller_state": ("Automatic control state", None),
     "controller_reason": ("Automatic control reason", None),
@@ -133,18 +98,7 @@ class ShadowSensor(SensorEntity):
         self.entity_id = entity_id("sensor", name)
         self._attr_native_unit_of_measurement = unit
         self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
-        if key in {
-            "deadline",
-            "comfort_deadline",
-            "peak_start",
-            "planned_start",
-            "latest_start",
-            "grid_fallback_start",
-            "completion_time",
-            "next_tariff_change",
-            "morning_ready_deadline",
-            "afternoon_ready_deadline",
-        }:
+        if key in TIMESTAMPS:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     async def async_added_to_hass(self):

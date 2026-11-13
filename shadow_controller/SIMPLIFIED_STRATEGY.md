@@ -468,6 +468,19 @@ about 140.
 
 ## 9. Next steps, each needing owner approval
 
+**Implementation status:** items 2 and 3 are implemented and tested offline, as
+draft PRs:
+
+- app 1.3.13 (#25): three-state commands and clock-aligned polling, plus
+  proactive token refresh and no immediate confirmation read from item 4;
+- controller 0.9.0 (#26): this policy wired in, the planner removed, and shadow
+  observation.
+
+The deployment, supervised tests and rollback are in
+[COMMISSIONING_SIMPLIFIED.md](COMMISSIONING_SIMPLIFIED.md). Nothing is
+installed.
+
+
 1. **Compliance confirmation** (section 3.2), at the owner's discretion. The
    design stays at Manual 45 °C.
 2. **Bridge 1.3.13:**
