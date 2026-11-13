@@ -26,7 +26,7 @@ auth_retry_generation: 0
 | `cloud_enabled` | Allows this add-on to use the cloud at all. |
 | `commands_enabled` | Allows MQTT heater commands. Leave `false` for read-only use. |
 | `command_policy` | `automation` (default) accepts only `MODE=Manual:70` and `MODE=off`, and refuses everything else before any cloud request. `legacy` restores the older, broader command set; only choose it deliberately. |
-| `poll_interval_minutes` + `poll_interval_unit` | Background polling: 1–120 minutes, or 60–7200 seconds. 30 minutes is recommended. |
+| `poll_interval_minutes` + `poll_interval_unit` | Background polling: 1–120 minutes, or 60–7200 seconds. 30 minutes is recommended. From 1.3.13 polls are clock-aligned (with 30 minutes: :00 and :30). A restart reads once, then rejoins the clock slots. An on-demand, command or confirmation read never moves the schedule, and a due poll is skipped (the slot kept) when the heater was read in the last 3 minutes. |
 | `min_cloud_retry_minutes` | First wait after an ordinary cloud error, 5–1440 minutes (default 60). Repeated errors double it, up to 24 hours. A success resets it. |
 | `on_demand_refresh_enabled` | Optional read-only refresh on `P/<serial>/refresh`, at most one read per 5 minutes. Off by default; the controller does not need it. |
 | `auth_retry_generation` | Increase by one to allow **one** new authentication attempt after a lock (see below). 0 starts locked. |
@@ -45,15 +45,16 @@ The reading comes from a sensor near the **bottom** of the tank. It can drop sha
 ## Commands (when enabled)
 
 Under the `automation` policy:
-- `Manual:70` is accepted only from OFF. It sends 70 °C explicitly; an OFF target other than 70 that is still usable is refused, never overwritten.
-- `off` is accepted only from Manual at 70 °C.
+- **Three-state transitions (1.3.13)**, written `<target>@<prior>`: `Manual:45@off`, `Manual:70@off`, `Manual:45@70`, `Manual:70@45`, `off@45` and `off@70`. The fresh status must show exactly the stated prior state (OFF, or Manual at 45 or 70 °C). Anything else, such as a change made in the app, is refused with no request (`refused_mode_mismatch` or `refused_target_mismatch`), so an owner change is never overwritten.
+- `Manual:70` (1.3.11 form) is accepted only from OFF. It sends 70 °C explicitly; an OFF target other than 70 that is still usable is refused, never overwritten.
+- `off` (1.3.11 form) is accepted only from Manual at 70 °C.
 - Anything else, including a change made in the app since the last poll, is refused with no request.
 - A command already in place (OFF while OFF) sends nothing.
 
 How a command is carried out:
 1. **Fresh status first.** A command needs status no older than 60 s. If it is older, the bridge reads once first, after checking the policy, the command's age (≤ 30 s), the device, authentication, quota and backoff. It allows at most 24 such reads a day.
 2. **Sent once.** The command is recorded privately, then sent **once**, never repeated.
-3. **Confirmed from the heater's reported state.** The cloud reports changes late (about a minute on the tested heater). If the first read still shows the old mode, the command is *awaiting confirmation*. Two follow-up reads, at 60 s and 300 s, decide it:
+3. **Confirmed from the heater's reported state.** The cloud reports changes late (about 2–63 s on the tested heater), so from 1.3.13 there is no read straight after the POST: the command is *awaiting confirmation* until one of two reads, at 60 s and 300 s (or any poll in between), decides it:
    - `observed_in_status`: confirmed;
    - `unexpected_state_after_command`: neither the old nor the requested state;
    - `not_confirmed_within_limit`: after 6 minutes.
@@ -67,7 +68,7 @@ Retained MQTT messages and commands older than 30 seconds are ignored.
 - **Transient failures** (timeouts, connection errors, HTTP 5xx) get at most three attempts, 60 s and then 300 s apart. The count survives restarts.
 - **Rejections lock immediately.** That covers 401, 403, 429, an unrecognised response, or a TLS error. The bridge then idles; it does not exit or loop.
 - **Locks are persistent.** Restarting, updating, changing the password or toggling Watchdog does **not** clear a lock.
-- **Token expiry:** a read that gets 401 refreshes the token once and repeats the read once. A second 401 within 5 minutes of a refresh locks (`cloud_refresh_cooldown`).
+- **Token expiry:** the access token lasts under 30 minutes. From 1.3.13 a request made when the token is at least 20 minutes old (or of unknown age after a restart) refreshes it **first**, so a 30-minute poll costs 2 requests instead of 3. A refresh is never attempted inside the guard's 5-minute cooldown. A read that still gets 401 refreshes once and repeats once, and a 401 within 5 minutes of any refresh locks (`cloud_refresh_cooldown`), exactly as before.
 - **Commands are never replayed** after an authentication failure.
 
 ### Clearing an authentication lock (owner action)

@@ -86,6 +86,8 @@ DEFAULT_OPTIONS = {
     # not here) defaults to OFF. (0.6.0 removed the empty-Schedule confirmation.)
     "controller_command_topic": "",
     "controller_bridge_qualified": False,
+    # 0.9.0: ON only after the supervised bridge 1.3.13 three-state qualification.
+    "controller_three_state_qualified": False,
     "controller_min_heating_minutes": 30.0,
     "controller_min_rest_minutes": 30.0,
     "controller_max_commands_per_day": 6.0,
@@ -195,6 +197,7 @@ def parse_options(options):
         "weekend_peak",
         "shower_time_enabled",
         "controller_bridge_qualified",
+        "controller_three_state_qualified",
     ):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
