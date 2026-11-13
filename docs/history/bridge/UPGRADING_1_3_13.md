@@ -37,8 +37,17 @@ command set. It is a manual update (`breaking_versions`).
 4. No command is sent until the supervised tests in
    `shadow_controller/COMMISSIONING_SIMPLIFIED.md`.
 
+## Installing (in place)
+
+The app comes from this repository in the app store. Update it there, once
+`main` carries 1.3.13. Never copy it to the local add-ons share: that would be
+a different app with an empty `/data`, so the authentication state, tokens and
+accounting would not carry over.
+
 ## Rollback
 
-Reinstall 1.3.12 (or 1.3.11). Both read the same `/data` files. A 1.3.12
-bridge refuses the six new payloads with `refused_by_policy`, so roll back
-the controller first, or turn automatic control off.
+Restore the app from the backup Home Assistant made before the update
+(*Create backup before updating*). That restores 1.3.11 and its `/data`
+together. A 1.3.11 or 1.3.12 bridge refuses the six new payloads with
+`refused_by_policy`, so roll back the controller first, or keep automatic
+control off.

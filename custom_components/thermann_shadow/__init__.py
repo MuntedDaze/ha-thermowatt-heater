@@ -1,8 +1,8 @@
-"""Thermann planner (0.4.0) plus the 0.5.0 production controller.
-
-The planner never commands anything. The controller (executor.py/controller.py)
-is the only component that may publish a Thermann mode command, and it cannot
-do so until the owner completes commissioning and enables automatic control.
+"""Thermann Controller 0.9.0: one coordinated policy (simple_policy.py) and the
+production controller. The controller (executor.py/controller.py) is the only
+component that may publish a Thermann mode command, and it cannot do so until
+the owner completes commissioning and enables automatic control. With control
+off, the same policy runs as a read-only shadow observation.
 """
 
 from datetime import timedelta
@@ -20,7 +20,7 @@ import logging
 
 from .config import DOMAIN, LEGACY_MORNING_THRESHOLD_C, migrate_0_7_1, parse_options
 from .executor import Executor
-from .naming import ENTRY_TITLE, OLD_ENTRY_TITLES
+from .naming import ENTRY_TITLE, OLD_ENTRY_TITLES, RETIRED_SENSORS
 from .settings import RETIRED
 from .runtime import ShadowRuntime
 
@@ -33,7 +33,7 @@ PLATFORMS = [
     Platform.SELECT,
     Platform.TEXT,
     Platform.BUTTON,
-    Platform.DATETIME,
+    Platform.DATE,
 ]
 
 
@@ -43,10 +43,10 @@ PLATFORMS = [
 # they do not linger as "unavailable"; stored option values are kept.
 RETIRED_ENTITY_SUFFIXES = frozenset(
     {
-        "simulated_cycle_count",
-        "simulated_stop_count",
-        "suppressed_switching_episodes",
-        "simulated_cost_aud",
+        *RETIRED_SENSORS,  # 0.3.0 simulation and, since 0.9.0, the planner's sensors
+        # 0.9.0: the holiday departure and return datetimes became date entities.
+        "holiday_start",
+        "holiday_return",
         "setting_controller_empty_schedule_confirmed",
         *(f"setting_{key}" for key in RETIRED),
     }

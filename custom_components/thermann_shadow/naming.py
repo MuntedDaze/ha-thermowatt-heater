@@ -48,3 +48,48 @@ def device_info_fields(domain: str, entry_id: str) -> dict:
         "manufacturer": MANUFACTURER,
         "model": MODEL,
     }
+
+
+# Retired sensors (unique-id suffixes). Their registry entries are removed at
+# setup so they do not linger as "unavailable" (see __init__.py).
+RETIRED_SENSORS = (
+    "simulated_cycle_count",
+    "simulated_stop_count",
+    "suppressed_switching_episodes",
+    "simulated_cost_aud",
+    # 0.9.0: the 0.4-0.8 planner's estimates and goals.
+    "deadline",
+    "comfort_deadline",
+    "mixed_model_energy_kwh",
+    "modelled_heating_minutes",
+    "estimated_import_kwh",
+    "estimated_solar_kwh",
+    "unmet_model_energy_kwh",
+    "estimated_cost_aud",
+    "comparison_cost_difference_aud",
+    "native_schedule_window",
+    "t_comfort_reference_c",
+    "morning_threshold_c",
+    "planning_target_c",
+    "grid_fallback_start",
+    "recommended_energy_source",
+    "device_clock_check",
+    "recommendation",
+    "simulated_cycle_state",
+    "benefit_of_now_aud",
+    "continuing_cost_aud",
+    "later_cost_aud",
+    "deadline_countdown_minutes",
+    "completion_time",
+    "forecast_usable_solar_kwh",
+    "current_solar_surplus_kw",
+    "morning_ready_deadline",
+    "afternoon_ready_deadline",
+    "morning_readiness",
+    "afternoon_readiness",
+    "waiting_saving_aud",
+    "decision_confidence",
+    "native_predicted_cost_aud",
+    "native_vs_best_plan_aud",
+    "schedule_advisor_suggestion",
+)
