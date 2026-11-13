@@ -179,16 +179,21 @@ The tariff calendar decides which rule applies:
 **How the plan is made.** The policy recalculates every minute, locally, with
 no cloud request:
 
-1. **Heating time.** It comes from the reading and the observed heating rate,
-   about 8.2 °C an hour. A stale reading is assumed cold (37 °C), so the plan
-   starts earlier, never later.
+1. **Heating time.** It comes from the reading and the physical heating rate
+   of a 315 L tank with a 3 kW element, about 8.2 °C an hour. (The observed
+   rate is not used; the thermal observer is diagnostic only.) A stale reading
+   is assumed cold (37 °C), so the plan starts earlier, never later.
 2. **Expected surplus, slot by slot.** The day is split into 5-minute slots up
    to the soft target:
    - for the first 30 minutes, the **measured** GoodWe surplus (actual solar
      minus actual household load, excluding the element);
    - after that, the **EMHASS** net-export forecast;
    - a slot the forecast does not cover counts as no surplus, so a missing
-     forecast never makes waiting look cheaper.
+     forecast never makes waiting look cheaper;
+   - with **no forecast at all** (0.9.1), grid-only heating is not started
+     early: it waits for the latest start, measured solar can still start it
+     sooner, and an alert is raised after an hour. Automatic control cannot be
+     turned on without *Use published forecasts*.
 3. **Cost of each window.** Each candidate window lasts the full heating time.
    Its cost per kWh of heat mixes surplus at the feed-in rate with grid import
    at the tariff rate.
@@ -235,12 +240,17 @@ finished by 15:30 or 16:30 continues until the peak boundary.
 ### 4.3 Peaks: one rule, morning and evening
 
 - **Start:** Manual 70 °C only after at least **3.3 kW** of measured surplus
-  for about **10 minutes** (80 % of samples). The element's own load is
-  excluded, and forecasts never count.
-- **Withdraw:** after **5 minutes** in which either:
+  for **10 minutes**: the samples at the start and the end of the 10 minutes
+  both pass, and at least 80 % of those between. The element's own load is
+  excluded (and counted only while the heater is in Manual 70 °C, never from
+  a low-confidence estimate), and forecasts never count.
+- **Withdraw:** after **5 minutes** (the same sample rule) in which either:
   - grid import is above **0.2 kW**; or
   - the surplus is below the element's 3 kW (less the 0.2 kW tolerance). This
     check also applies while the thermostat has the element off.
+
+  The withdrawal OFF is the **one command exempt from the command spacing**
+  (0.9.1, owner-approved): it is sent even within 15 minutes of the start.
 - **Restart:** a new 10-minute qualification, and the 15-minute command
   spacing.
 - **Park lead: 2 minutes.** That is one decision tick plus the bridge's
@@ -344,11 +354,11 @@ the policy has no minimum heating, minimum rest or fallback timers.
 | --- | --- |
 | 10-minute solar qualification (80 % of samples) | Peak starts (3.3 kW) and weekend starts (1 kW) |
 | 5-minute withdrawal | Peak: import above 0.2 kW, or surplus below the element. Weekend: surplus below 1 kW, together with a faded forecast. |
-| 15-minute command spacing | Every command. One command is outstanding until confirmed. |
+| 15-minute command spacing | Every command except the peak withdrawal OFF. One command is outstanding until confirmed. |
 | 2-minute park lead and the reserved slot before it | Every peak |
 | 30-minute soft target | A planning buffer before the evening peak |
 | $0.30 pause threshold | The only reason to stop committed weekday heating early |
-| 6 commands and 220 requests a day | Backstop only. A normal weekday uses 4 commands. |
+| 6 commands and 220 requests a day | Backstop only. A normal weekday uses 4 commands. Optional solar starts stop at 6; essential commands (weekday heat, Manual 45 °C, the 12hr Override) may reach 12; OFF is never held back. |
 | Bridge freshness (≤ 60 s), one pending command, bounded confirmation, no retries | Unchanged |
 
 **Dropped:**

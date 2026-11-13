@@ -293,12 +293,15 @@ def test_starts_on_off_peak_when_waiting_would_miss_the_soft_target():
     assert (late.state, late.reason, late.command) == (STORE, "storage_latest_start", "Manual:70")
 
 
-def test_overcast_or_missing_forecast_starts_storage_at_once():
+def test_overcast_forecast_starts_storage_at_once_and_a_missing_one_waits():
     p = sp.SimplePolicy(S, TARIFFS)
     now = at(MON, 11, 5)
-    for forecast in (fc(now, 8, 0.3), ()):
-        d = p.decide(snap(now, OFF, reading=55, forecast=forecast))
-        assert (d.state, d.reason, d.layer) == (STORE, "storage_cheapest_now", 6)
+    d = p.decide(snap(now, OFF, reading=55, forecast=fc(now, 8, 0.3)))
+    assert (d.state, d.reason, d.layer) == (STORE, "storage_cheapest_now", 6)
+    # 0.9.1 (audit M4): with no published forecast at all, grid-only heating
+    # waits for the latest start; it is no longer started at once.
+    d = p.decide(snap(now, OFF, reading=55))
+    assert (d.state, d.reason, d.command) == (OFF, "storage_waiting_no_forecast", None)
 
 
 def test_measured_solar_now_as_good_as_the_forecast_later_starts_now():
@@ -481,7 +484,7 @@ def simulate(
     policy, tank = sp.SimplePolicy(settings, TARIFFS), Tank(reading, state, settings)
     forecast_pv = forecast_pv or pv
     draws, loads = draws or {}, loads or {}
-    seen, last_cmd, forecast, times = (reading, start), None, (), []
+    seen, last_cmd, forecast, times, reasons = (reading, start), None, (), [], []
     log = {"commands": [], "peak_grid_kwh": 0.0, "grid_heat_kwh": 0.0, "at": {}, "reasons": set()}
     log["baseline_peak_minutes"] = 0
     for i in range(hours * 60):
@@ -509,6 +512,7 @@ def simulate(
             log["commands"].append((loc.strftime("%a %H:%M"), d.state, d.reason))
             tank.state, last_cmd = d.state, now
             times.append(now)
+            reasons.append(d.reason)
         heat_grid = min(settings.element_kw, max(0.0, grid)) if tank.element else 0.0
         log["grid_heat_kwh"] += heat_grid / 60
         if m.tariff_at(now, TARIFFS, settings.tariff_clock).kind == "peak":
@@ -518,8 +522,10 @@ def simulate(
         log["at"][key] = tank.t
     # Agreed design: Manual 45 only in off-peak baseline periods, never in a peak.
     assert log["baseline_peak_minutes"] == 0, log["commands"]
-    gaps = [b - a for a, b in zip(times, times[1:], strict=False)]
-    assert all(gap >= settings.command_spacing for gap in gaps), log["commands"]
+    # Every command respects the spacing, except a peak withdrawal (0.9.1, H1).
+    for earlier, later, reason in zip(times, times[1:], reasons[1:], strict=False):
+        if reason not in sp.SPACING_EXEMPT_REASONS:
+            assert later - earlier >= settings.command_spacing, log["commands"]
     return log, tank
 
 
@@ -702,7 +708,8 @@ def test_setpoint_is_what_was_requested_and_reached_needs_a_fresh_reading():
 def test_band_reading_keeps_the_deadline_and_economics_unchanged():
     # At 62 the thermostat would heat in Manual 70, so the plan still runs.
     p = sp.SimplePolicy(S, TARIFFS)
-    d = p.decide(snap(at(MON, 11, 5), OFF, reading=62))
+    now = at(MON, 11, 5)
+    d = p.decide(snap(now, OFF, reading=62, forecast=fc(now, 8, 0.3)))
     assert d.plan["target_reached"] is False and d.plan["thermostat_would_heat_at_storage"]
     assert (d.state, d.reason) == (STORE, "storage_cheapest_now")
     assert d.plan["heating_hours"] == pytest.approx(8 / RATE, abs=0.01)

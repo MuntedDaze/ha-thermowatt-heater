@@ -40,13 +40,15 @@ from .controller import (
     payload_for,
     refresh_topic,
 )
-from .simple_policy import HOLD, PolicySettings, SimplePolicy, Snapshot
+from .model import HOBART
+from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
 
 LOG = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 NOTIFY_SERVICE = re.compile(r"^[a-z0-9_]{1,64}$")
 VENDOR_MODES = {"Manual", "Schedule", "Eco", "Off", "Holiday", "Unknown"}
 SHADOW_LOG_LENGTH = 30
+ELEMENT_CONFIDENCE = frozenset({"verified", "high", "medium"})
 
 
 def controller_config(
@@ -64,6 +66,7 @@ def controller_config(
         max_requests_per_day=int(values["controller_max_requests_per_day"]),
         poll_interval_minutes=poll_minutes,
         expected_command_topic=expected_topic,
+        published_forecasts_enabled=values["forecast_enabled"] is True,
     )
 
 
@@ -217,15 +220,13 @@ class Executor:
             obs.requests_total = _int(counter.state)
         obs.element = self.runtime.heater.state
         obs.element_confidence = self.runtime.heater.confidence
+        forecast = self.runtime.forecast
+        obs.forecast_available = bool(forecast is not None and forecast.slots)
         return obs
 
     def decide(self, now: datetime, obs: Observation):
         """One policy decision from the measurements (never a request)."""
         runtime, controller = self.runtime, self.controller
-        grid = runtime.grid_import_kw
-        if grid is not None:
-            element = {"on": True, "off": False}.get(runtime.heater.state)
-            self.policy.add_meter(now, grid, element)
         if controller.enabled:
             # While a command awaits confirmation the policy plans from the
             # state it requested (found by the end-to-end test: planning from
@@ -236,6 +237,21 @@ class Executor:
         else:
             state = heater_state(obs.mode, obs.target_c)
             last = _dt(self.shadow[-1]["at"]) if self.shadow else None
+        grid = runtime.grid_import_kw
+        if grid is not None:
+            # 0.9.1 (audits M2 and N1): the element's 3 kW is added back to the
+            # measured surplus ONLY while the policy is in Manual 70 °C (confirmed,
+            # or requested and awaiting confirmation) and the estimate is at
+            # least medium confidence. In OFF or Manual 45 °C an appliance's load
+            # step read as the element and created solar that was not there. Not
+            # counting a baseline reheat only makes the surplus look smaller.
+            estimate = runtime.heater
+            element = (
+                state == STORAGE
+                and estimate.state == "on"
+                and estimate.confidence in ELEMENT_CONFIDENCE
+            )
+            self.policy.add_meter(now, grid, element)
         forecast = runtime.forecast.slots if runtime.forecast is not None else ()
         snapshot = Snapshot(
             now=now,
@@ -259,9 +275,16 @@ class Executor:
         if decision.command is None or state is None or decision.state == HOLD:
             return
         payload = payload_for(decision.state, state)
-        if self.shadow and self.shadow[-1]["would_send"] == payload:
+        if (
+            self.shadow
+            and self.shadow[-1]["would_send"] == payload
+            and _dt(self.shadow[-1]["at"]).astimezone(HOBART).date()
+            == now.astimezone(HOBART).date()
+        ):
             # The heater is not changed in shadow mode, so the same wish recurs
-            # after every spacing interval: recorded once.
+            # after every spacing interval: recorded once a (Hobart) day. The
+            # next day's command is recorded again (0.9.1, audit M7), so each
+            # day's park is visible.
             return
         self.shadow = (
             self.shadow

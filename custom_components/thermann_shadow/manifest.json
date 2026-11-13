@@ -1,7 +1,7 @@
 {
   "domain": "thermann_shadow",
   "name": "Thermann Controller",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "documentation": "https://github.com/MuntedDaze/ha-thermowatt-heater/tree/main/shadow_controller",
   "codeowners": [
     "@MuntedDaze"

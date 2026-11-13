@@ -13,8 +13,8 @@ practical:
 It works through the Thermann Hot Water app (1.3.13 or later). Thermann's own
 thermostat still decides when the element actually runs.
 
-Current version: **0.9.0** (in review). Installed: **0.7.1**, automatic
-control off. To switch to 0.9.0, follow
+Current version: **0.9.1** (in review). Installed: **0.7.1**, automatic
+control off. To switch to 0.9.1, follow
 [COMMISSIONING_SIMPLIFIED.md](COMMISSIONING_SIMPLIFIED.md).
 
 ## What it does

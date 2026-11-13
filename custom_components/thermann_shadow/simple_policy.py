@@ -77,6 +77,12 @@ SLOT = timedelta(minutes=5)  # planning grid
 MEASURED_SPAN = timedelta(minutes=30)  # the measured surplus stands in for the forecast
 SCAN_STEP = timedelta(minutes=15)
 SCAN_HORIZON = timedelta(days=4)
+SAMPLE_SLACK = timedelta(seconds=30)  # timer drift allowed at the start of a sample window
+# 0.9.1 (owner-approved, audit H1): the ONLY command exempt from the command
+# spacing. A peak withdrawal is the import protection itself; holding it for
+# the spacing after a start kept the element on peak grid for up to 15 minutes.
+# Every other command, including the restart after it, still waits.
+SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn"})
 
 
 @dataclass(frozen=True)
@@ -171,17 +177,21 @@ class SimplePolicy:
         return bool(self.samples) and now - self.samples[-1][0] <= self.s.meter_max_age
 
     def sustained(self, now: datetime, window: timedelta, test) -> bool:
-        """``test`` held for ``window``: samples cover the whole window (to within
-        one minute) with no gap above the meter age limit, and at least 80 % of
-        them pass (a kettle or a passing cloud for a minute or two does not
-        reset it)."""
-        recent = self._window(now, window)
-        start = now - window + timedelta(minutes=1)
-        if not recent or not self.meter_fresh(now) or recent[0][0] > start:
+        """``test`` held for the WHOLE ``window`` (0.9.1): the sample at the
+        start of the window (to within half a minute) and the latest sample
+        both pass, the samples between have no gap above the meter age limit,
+        and at least 80 % of them pass (a kettle or a passing cloud for a
+        minute does not reset it). With one sample a minute, 10 minutes is 11
+        samples spanning the full 10 minutes, and 5 minutes is 6 spanning 5:
+        the condition can never be met sooner than the stated time."""
+        recent = self._window(now, window + SAMPLE_SLACK)
+        if not recent or not self.meter_fresh(now) or recent[0][0] > now - window + SAMPLE_SLACK:
             return False
         if any(
             b[0] - a[0] > self.s.meter_max_age for a, b in zip(recent, recent[1:], strict=False)
         ):
+            return False
+        if not (test(recent[0]) and test(recent[-1])):
             return False
         return sum(1 for smp in recent if test(smp)) >= 0.8 * len(recent)
 
@@ -299,13 +309,15 @@ class SimplePolicy:
         return self._send(snap, desired, reason, layer, plan)
 
     def _send(self, snap, desired, reason, layer, plan) -> Decision:
+        spacing_exempt = desired == OFF and reason in SPACING_EXEMPT_REASONS
         if desired == snap.heater_state:
             return Decision(desired, reason, layer, None, plan)
         # 3. Cloud and command guards may only block a command, never choose one.
         if not snap.cloud_ready:
             return Decision(HOLD, "cloud_or_freshness_gate", 3, None, {**plan, "wanted": desired})
         if (
-            snap.last_command_at is not None
+            not spacing_exempt
+            and snap.last_command_at is not None
             and snap.now - snap.last_command_at < self.s.command_spacing
         ):
             return Decision(HOLD, "command_spacing", 3, None, {**plan, "wanted": desired})
@@ -424,6 +436,15 @@ class SimplePolicy:
                 cost_best=round(costs[best], 4),
             )
             if best == 0:
+                if not snap.forecast and costs[0] > grid_rate - PRICE_TOLERANCE:
+                    # 0.9.1 (audit M4): no published forecast and no measured
+                    # solar worth having. Nothing says now is cheaper than
+                    # later, so grid-only heating waits for the latest start
+                    # (measured solar can still start it sooner). Without this
+                    # a missing forecast silently became grid heating as soon
+                    # as the morning peak ended.
+                    plan["waiting_for"] = "latest_start_no_forecast"
+                    return state, "storage_waiting_no_forecast", 6, plan
                 return STORAGE, "storage_cheapest_now", 6, plan
             return state, "storage_waiting_for_cheaper_window", 6, plan
 

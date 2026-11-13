@@ -136,6 +136,9 @@ async def _reload(hass, entry):
     runtime.apply_options(entry.options, entry.options.get("sources", entry.data))
     if runtime.executor is not None:
         runtime.executor.configure(entry.options)
+        # 0.9.1: the commissioning requirements shown on the master switch follow
+        # a settings change at once (they were stale until the next minute).
+        runtime.executor._notify_listeners()
 
 
 async def async_unload_entry(hass, entry):
