@@ -13,6 +13,7 @@ Fixes to 0.9.0 found by the audit of `main` `04a8d3d`. The strategy is unchanged
   - *Restore recommended preferences* no longer turns it off.
   - With no forecast at all, grid-only weekday heating waits for the latest start (`storage_waiting_no_forecast`); measured solar still starts it sooner. Before, it started on grid as soon as the morning peak ended.
   - A forecast missing for over an hour raises the *EMHASS forecast unavailable* alert.
+  - The commissioning requirements shown on *Automatic heater control* now follow a settings change at once (they were stale for up to a minute).
 - **Sample windows (audit M5).** "10 minutes" and "5 minutes" now mean it: the sample at the start of the window and the latest sample must both pass, with at least 80 % passing between. Before, a start could follow 8 minutes of surplus and a withdrawal 4 minutes of import.
 - **Shadow log (audit M7).** A repeated would-be command is recorded once a day, not once ever, so each day's park appears.
 - **Documentation (audit M3).** The heating time uses the physical rate (about 8.2 °C an hour). The observed rate is not used; the thermal observer stays diagnostic.

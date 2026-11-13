@@ -704,6 +704,9 @@ async def check_controller(hass, entry, entity_for):
             pass
         else:
             raise AssertionError("automatic control was enabled without published forecasts")
+        # The switch shows the remaining requirement at once (0.9.1: a settings
+        # change refreshes it; before, it was stale until the next minute).
+        await hass.async_block_till_done()
         assert hass.states.get(master).attributes["commissioning_missing"] == [
             "published_forecasts_not_enabled"
         ]
