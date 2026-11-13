@@ -191,6 +191,7 @@ def controller_card():
                     sensor("Hot water operating mode"),
                     "date.thermann_shadow_holiday_departure_date",
                     "date.thermann_shadow_holiday_return_date",
+                    "button.thermann_shadow_cancel_holiday_mode",
                     sensor("12hr Override ends"),
                 ],
             },

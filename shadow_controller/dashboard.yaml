@@ -53,6 +53,7 @@ views:
       - sensor.thermann_shadow_hot_water_operating_mode
       - date.thermann_shadow_holiday_departure_date
       - date.thermann_shadow_holiday_return_date
+      - button.thermann_shadow_cancel_holiday_mode
       - sensor.thermann_shadow_guest_mode_ends
     - type: button
       entity: button.thermann_shadow_hold_heater_owner_override
