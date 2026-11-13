@@ -41,13 +41,14 @@ from .controller import (
     refresh_topic,
 )
 from .model import HOBART
-from .simple_policy import HOLD, OFF, PolicySettings, SimplePolicy, Snapshot
+from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
 
 LOG = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 NOTIFY_SERVICE = re.compile(r"^[a-z0-9_]{1,64}$")
 VENDOR_MODES = {"Manual", "Schedule", "Eco", "Off", "Holiday", "Unknown"}
 SHADOW_LOG_LENGTH = 30
+ELEMENT_CONFIDENCE = frozenset({"verified", "high", "medium"})
 
 
 def controller_config(
@@ -238,15 +239,18 @@ class Executor:
             last = _dt(self.shadow[-1]["at"]) if self.shadow else None
         grid = runtime.grid_import_kw
         if grid is not None:
-            # 0.9.1 (audit M2): the element estimate adds the element's 3 kW
-            # back to the measured surplus, so it must not be a guess. With the
-            # heater OFF the element is off (an appliance's load step must not
-            # read as the element), and a low-confidence estimate counts as
-            # off, which can only make the surplus look smaller.
+            # 0.9.1 (audits M2 and N1): the element's 3 kW is added back to the
+            # measured surplus ONLY while the policy is in Manual 70 °C (confirmed,
+            # or requested and awaiting confirmation) and the estimate is at
+            # least medium confidence. In OFF or Manual 45 °C an appliance's load
+            # step read as the element and created solar that was not there. Not
+            # counting a baseline reheat only makes the surplus look smaller.
             estimate = runtime.heater
-            element = {"on": True, "off": False}.get(estimate.state)
-            if state == OFF or estimate.confidence in {"low", "none"}:
-                element = False
+            element = (
+                state == STORAGE
+                and estimate.state == "on"
+                and estimate.confidence in ELEMENT_CONFIDENCE
+            )
             self.policy.add_meter(now, grid, element)
         forecast = runtime.forecast.slots if runtime.forecast is not None else ()
         snapshot = Snapshot(

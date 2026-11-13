@@ -7,7 +7,7 @@ Fixes to 0.9.0 found by the audit of `main` `04a8d3d`. The strategy is unchanged
 - **Command budget (audit C1).** Optional solar starts (a peak-solar start, a weekend solar start) stop at *Maximum commands per day*. The weekday 70 °C heat, Manual 45 °C and the 12hr Override are essential: they may go 6 commands beyond that limit, so solar cycling can no longer block them, and the higher cap still stops a fault that loops. OFF is never held back. Before, a partly cloudy morning used the whole budget: no heating before the evening peak and the heater OFF all night.
 - **Peak withdrawal (audit H1, owner-approved).** The OFF sent when peak solar is withdrawn (`peak_solar_withdrawn`) is exempt from the 15-minute command spacing, in the policy and in the controller's gate. It is the only exemption: the park, a pause, every start and every Manual 45 °C still wait, and a restart still needs a new 10-minute qualification and the spacing.
 - **12hr Override ending (audit M1).** Cancelling the override, or its expiry, no longer re-inspects a controller that already knows the heater state, so the policy resumes on the next minute. Before, Manual 70 °C stayed on until the next poll (up to 30 minutes, in a peak).
-- **Element estimate (audit M2).** With the heater OFF the element is counted as off, and a low-confidence estimate counts as off. An appliance's load step can no longer add 3 kW to the measured surplus and qualify a peak start.
+- **Element estimate (audits M2 and N1).** The element's 3 kW is added back to the measured surplus only while the policy is in Manual 70 °C and the estimate is at least medium confidence. In OFF or Manual 45 °C an appliance's load step can no longer read as the element and create solar that is not there (it qualified a peak start from OFF, and a weekend Manual 70 °C from Manual 45 °C). A genuine Manual 45 °C reheat is not counted either, which only makes the surplus look smaller.
 - **Published forecasts (audit M4).**
   - Automatic control cannot be turned on until *Use published forecasts* is on (`published_forecasts_not_enabled`), and the switch is locked while control is on.
   - *Restore recommended preferences* no longer turns it off.
@@ -18,7 +18,9 @@ Fixes to 0.9.0 found by the audit of `main` `04a8d3d`. The strategy is unchanged
 - **Shadow log (audit M7).** A repeated would-be command is recorded once a day, not once ever, so each day's park appears.
 - **Documentation (audit M3).** The heating time uses the physical rate (about 8.2 °C an hour). The observed rate is not used; the thermal observer stays diagnostic.
 
-Not changed (deferred): the Low findings of the audit, and M6 (a rollback note only, added to the commissioning guide).
+- **Commissioning guide** rewritten for 0.9.1: the merge step, the installation order, the package names and the rollback versions; supervised tests Q2 and Q5 now record the raw `WaterHeaterSts` at the first 60 s read.
+
+Not changed (deferred): the Low findings of the first audit, M6 (a rollback note only), and N2 of the second audit (whether the real status bit follows the element promptly: to be observed in the supervised tests before automatic control is enabled; the estimator is unchanged).
 
 ## 0.9.0 — the simplified three-state controller (owner approval required)
 

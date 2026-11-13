@@ -544,3 +544,175 @@ def test_m7_each_days_park_is_recorded_in_shadow_observation(tmp_path, monkeypat
     # Within one day the recurring wish is still recorded once.
     payloads = [item["would_send"] for item in rig.executor.shadow]
     assert len(payloads) <= 6, payloads
+
+
+# --- N1 (second audit): the element is counted only in Manual 70 °C ------------------------
+#
+# The element's 3 kW is added back to the measured surplus only while the policy
+# is in STORAGE (Manual 70 °C) and the estimate is at least medium confidence.
+# In Manual 45 °C an appliance's load step read as "element on" (medium, because
+# the heater is in Manual) and created solar that was not there.
+
+SAT = 14  # 2026-11-14, a weekend day: Manual 45 °C baseline, optional solar storage
+
+
+class Weekend(Sim):
+    """Actual PV and the published forecast are scripted separately."""
+
+    forecast_pv = staticmethod(lambda loc: 0.0)
+
+    def _forecast(self, pv=None):
+        super()._forecast(self.forecast_pv)
+
+
+def element_trace(rig):
+    trace(rig)
+    rig.log[-1].update(
+        estimate=rig.runtime.heater.state,
+        confidence=rig.runtime.heater.confidence,
+        element=rig.tank.element,
+        measured=rig.executor.policy.typical_available(rig.now()),
+    )
+
+
+def between(rig, first, last):
+    return [row for row in rig.log if first <= row["at"] <= last]
+
+
+def test_n1_an_appliance_in_manual_45_creates_no_solar_and_no_command(tmp_path, monkeypatch):
+    class Oven(Weekend):
+        # Export 0.7 kW (below the 1 kW weekend floor); a 2.5 kW oven from 10:02.
+        base = staticmethod(lambda loc: 0.5 + (2.5 if loc.hour * 60 + loc.minute >= 602 else 0.0))
+        forecast_pv = staticmethod(lambda loc: 1.7)  # promises 1.2 kW of surplus all day
+
+    rig = Oven(
+        tmp_path,
+        monkeypatch,
+        hobart(SAT, 9, 20),
+        reading=46.0,
+        mode="Manual",
+        setpoint=45,
+        pv=lambda loc: 1.2,
+    )
+    rig.enable()
+    rig.run(hobart(SAT, 11, 40), element_trace)
+    # The estimator does read the oven as the element (medium: the heater is in Manual) ...
+    fooled = [row for row in rig.log if row["estimate"] == "on" and not row["element"]]
+    assert fooled and "medium" in {row["confidence"] for row in fooled}
+    # ... but in Manual 45 °C it adds nothing: the surplus stays what the meter shows.
+    assert all((row["measured"] or 0.0) < 1.0 for row in between(rig, "09:35", "11:40"))
+    # At 9cd5fa4 this sent Manual:70@45 (reason solar_opportunity) on 0.7 kW of real surplus.
+    assert rig.posts == [] and rig.commands() == [], rig.posts_local()
+    assert rig.executor.controller.state == "baseline_45"
+
+
+def test_n1_manual_45_heating_by_its_own_thermostat_then_a_real_weekend_start(
+    tmp_path, monkeypatch
+):
+    class Sunny(Weekend):
+        forecast_pv = staticmethod(lambda loc: 3.2)
+
+    # Reading 36.5 °C: the Manual 45 thermostat is heating (it starts at 37 °C).
+    rig = Sunny(
+        tmp_path,
+        monkeypatch,
+        hobart(SAT, 9, 20),
+        reading=36.5,
+        mode="Manual",
+        setpoint=45,
+        pv=lambda loc: 3.2,
+    )
+    rig.enable()
+    rig.run(hobart(SAT, 12, 30), element_trace)
+    heating = [row for row in rig.log if row["element"] and row["setpoint"] == 45]
+    assert len(heating) >= 45  # the baseline thermostat really ran (36.5 to 45 °C)
+    # While it heats, the meter shows a 0.3 kW import; nothing is added to it.
+    settled = [row for row in heating if row["at"] >= "09:35"]
+    assert settled and all((row["measured"] or 0.0) <= 0.0 for row in settled)
+    stopped = next(row["at"] for row in rig.log if row["at"] > heating[-1]["at"])
+    # The start comes only from surplus the meter really shows (2.7 kW once the
+    # thermostat is satisfied), held for the full 10 minutes.
+    start = rig.posts_local()[0]
+    assert start[1:] == ("manual", 70), rig.posts_local()
+    assert minute_of(start[0]) - minute_of(stopped) >= 10, (stopped, rig.posts_local())
+    assert rig.commands() == ["Manual:70@45"]
+    # In Manual 70 °C the genuine element IS counted: the meter exports nothing
+    # while it runs, and the surplus still reads about 2.7 kW, so the session holds.
+    storage = [row for row in rig.log if row["state"] == "storage_70" and row["element"]]
+    assert len(storage) >= 20
+    later = [row for row in storage if minute_of(row["at"]) >= minute_of(storage[0]["at"]) + 12]
+    assert later and all(2.5 <= row["measured"] <= 2.9 for row in later), later[:3]
+    assert len(rig.posts) == 1
+
+
+def test_n1_manual_70_with_the_thermostat_idle_withdraws_on_real_surplus_only(
+    tmp_path, monkeypatch
+):
+    def pv(loc):  # export 4.0 kW until 09:00, then 2.0 kW: less than the element needs
+        return 4.5 if loc.hour < 9 else 2.5
+
+    # Manual 70 °C in the morning peak with the tank hot: the thermostat is idle.
+    rig = Sim(
+        tmp_path, monkeypatch, hobart(MON, 8, 20), reading=69.9, mode="Manual", setpoint=70, pv=pv
+    )
+    rig.enable()
+    rig.run(hobart(MON, 9, 30), element_trace)
+    idle = between(rig, "08:35", "08:59")
+    assert idle and not any(row["element"] for row in idle)
+    assert all(row["estimate"] == "off" for row in idle)
+    assert all(3.9 <= row["measured"] <= 4.1 for row in idle)  # nothing added while idle
+    assert {row["decision"] for row in idle} == {"peak_solar_continues"}
+    # Too little surplus for the element, although it is not running: withdrawn in 5-6 min.
+    stop = rig.posts_local()
+    assert len(stop) == 1 and stop[0][1] == "off" and "09:05" <= stop[0][0] <= "09:07", stop
+    assert rig.peak_import_kwh == 0
+
+
+def test_n1_manual_70_heating_in_a_peak_is_counted_and_keeps_qualified_solar(tmp_path, monkeypatch):
+    rig = Sim(
+        tmp_path, monkeypatch, hobart(MON, 8, 20), reading=46.0, mode="Off", pv=lambda loc: 4.5
+    )
+    rig.enable()
+    rig.run(hobart(MON, 10, 55), element_trace)
+    # Qualified on 4.0 kW of measured surplus (the heater OFF, nothing added) ...
+    assert [p[1:] for p in rig.posts_local()] == [("manual", 70)], rig.posts_local()
+    before = between(rig, "08:35", rig.posts_local()[0][0])
+    assert all(3.9 <= row["measured"] <= 4.1 for row in before[:-1])
+    # ... and with the element running the meter exports only 1.0 kW, yet the
+    # surplus still reads 4.0 kW (element counted), so it is never withdrawn.
+    heating = [row for row in rig.log if row["state"] == "storage_70" and row["element"]]
+    settled = [r for r in heating if minute_of(r["at"]) >= minute_of(heating[0]["at"]) + 12]
+    assert settled and all(3.9 <= row["measured"] <= 4.1 for row in settled), settled[:3]
+    assert {row["decision"] for row in settled} == {"peak_solar_continues"}
+    assert rig.peak_import_kwh == 0
+
+
+def test_n1_only_storage_with_a_confident_estimate_counts_the_element(rig):
+    """The rule itself, for every policy state and confidence."""
+    executor, runtime = rig.executor, rig.runtime
+    rig.enable()
+    heater_state = importlib.import_module(f"{m.__package__}.heater_state")
+    now = rig.now()
+    runtime.grid_import_kw = 0.5
+    counted = {}
+    for state in (sp.OFF, sp.BASELINE, sp.STORAGE, None):
+        for confidence in ("verified", "high", "medium", "low", "none"):
+            executor.controller.state = ctl.ACTIVE_OF.get(state, ctl.OBSERVING)
+            executor.controller.heater = state
+            runtime.heater = heater_state.HeaterState(state="on", confidence=confidence)
+            executor.reset_policy()
+            executor.decide(now, executor.observe(now))
+            counted[(state, confidence)] = executor.policy.samples[-1][3]
+    assert {key for key, value in counted.items() if value} == {
+        (sp.STORAGE, "verified"),
+        (sp.STORAGE, "high"),
+        (sp.STORAGE, "medium"),
+    }
+    # An estimate of "off" or "unknown" is never counted, in any state.
+    for estimate in ("off", "unknown"):
+        runtime.heater = heater_state.HeaterState(state=estimate, confidence="high")
+        executor.controller.heater = sp.STORAGE
+        executor.controller.state = ctl.STORAGE_ACTIVE
+        executor.reset_policy()
+        executor.decide(now, executor.observe(now))
+        assert executor.policy.samples[-1][3] is False

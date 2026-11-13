@@ -242,8 +242,8 @@ finished by 15:30 or 16:30 continues until the peak boundary.
 - **Start:** Manual 70 °C only after at least **3.3 kW** of measured surplus
   for **10 minutes**: the samples at the start and the end of the 10 minutes
   both pass, and at least 80 % of those between. The element's own load is
-  excluded (and counted only while the heater is in Manual, never from a
-  low-confidence estimate), and forecasts never count.
+  excluded (and counted only while the heater is in Manual 70 °C, never from
+  a low-confidence estimate), and forecasts never count.
 - **Withdraw:** after **5 minutes** (the same sample rule) in which either:
   - grid import is above **0.2 kW**; or
   - the surplus is below the element's 3 kW (less the 0.2 kW tolerance). This
