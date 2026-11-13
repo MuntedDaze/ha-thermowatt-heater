@@ -122,7 +122,7 @@ CATALOG = {
     "forecast_enabled": Setting(
         "Use published forecasts",
         "Advanced",
-        "Optional local PV AND household-load forecasts with generation timestamps; missing forecasts never delay fallback.",
+        "The EMHASS PV AND household-load forecasts with generation timestamps. Required for automatic control (it cannot be turned on without them, and they cannot be turned off while it is on). If the forecast is missing, weekday grid heating waits for the latest start instead of starting at once, and an alert is raised after an hour.",
         kind="switch",
     ),
     "forecast_uncertainty": Setting(
@@ -395,7 +395,7 @@ CATALOG = {
     "controller_max_commands_per_day": Setting(
         "Maximum commands per day",
         "System",
-        "Backstop: rolling 24 h limit on commands that start or change heating. A typical weekday needs 4 commands in all; a switch to OFF (the park) is never held back by this limit.",
+        "Rolling 24 h limit for OPTIONAL solar starts (a peak-solar start, a weekend solar start): none is sent once this many commands have gone out. Essential commands (the weekday 70 °C heat, Manual 45 °C, the 12hr Override) may go 6 beyond it, so optional solar activity can never block them; that higher cap still stops a fault that loops. A switch to OFF is never held back. A typical weekday needs 4 commands in all.",
         4,
         10,
     ),
@@ -504,6 +504,9 @@ PRESERVE_ON_RESTORE = frozenset(
         "controller_execution_latency_minutes",
         "status_max_age_minutes",
         "grid_max_age_seconds",
+        # 0.9.1 (audit M4): the forecast switch decides whether EMHASS is used
+        # at all and is a commissioning requirement, not a preference.
+        "forecast_enabled",
     }
 )
 # 0.7.1: settings that change WHERE commands go, WHETHER they may be sent, HOW
@@ -539,6 +542,7 @@ LOCKED_WHILE_ACTIVE = frozenset(
         "peak_evening_end",
         "status_max_age_minutes",
         "grid_max_age_seconds",
+        "forecast_enabled",
         "sources",
     }
 )

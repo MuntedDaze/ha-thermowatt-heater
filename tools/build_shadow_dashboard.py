@@ -54,6 +54,7 @@ DECISION_STYLE = {
     "storage_latest_start": ("warning", "mdi:transmission-tower"),
     "storage_target_may_be_missed": ("error", "mdi:clock-alert-outline"),
     "storage_waiting_for_cheaper_window": ("info", "mdi:weather-sunny"),
+    "storage_waiting_no_forecast": ("warning", "mdi:weather-cloudy-alert"),
     "storage_paused_for_cheaper_window": ("info", "mdi:pause-circle-outline"),
     "storage_target_reached": ("success", "mdi:check-circle-outline"),
     "storage_within_thermostat_band": ("success", "mdi:thermometer-check"),

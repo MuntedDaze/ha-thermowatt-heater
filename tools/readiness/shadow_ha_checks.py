@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.9.0"
+CURRENT_VERSION = "0.9.1"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -402,9 +402,11 @@ async def check_settings_services(hass, entry, runtime, entity_for):
     await set_setting(hass, entity_for("forecast_enabled"), "switch", True)
     await drive(hass, "button", "press", "button.thermann_shadow_restore_recommended_preferences")
     assert entry.options["forecast_uncertainty"] == 0.25
-    assert entry.options["forecast_enabled"] is False
+    # 0.9.1: the forecast switch is a commissioning requirement, not a
+    # preference; a restore never turns the EMHASS forecasts off.
+    assert entry.options["forecast_enabled"] is True
     assert entry.options["peak_rate"] == 0.4  # tariff contract preserved
-    assert entry.options[BACKUP_KEY] == {"forecast_uncertainty": 0.3, "forecast_enabled": True}
+    assert entry.options[BACKUP_KEY] == {"forecast_uncertainty": 0.3}
     assert runtime.settings.forecast_uncertainty == 0.25
     assert hass.states.get("button.thermann_shadow_undo_last_restore").state != "unavailable"
     await drive(hass, "button", "press", "button.thermann_shadow_undo_last_restore")
@@ -415,6 +417,7 @@ async def check_settings_services(hass, entry, runtime, entity_for):
     assert set(RESTORED) & {"peak_rate", "meter_verified", "import_positive"} == set()
     await drive(hass, "button", "press", "button.thermann_shadow_restore_recommended_preferences")
     await set_setting(hass, entity_for("peak_rate"), "number", DEFAULT_OPTIONS["peak_rate"])
+    await set_setting(hass, entity_for("forecast_enabled"), "switch", False)
     return checked
 
 
@@ -662,7 +665,8 @@ async def check_controller(hass, entry, entity_for):
     try:
         state = hass.states.get(master)
         assert state.state == "off", state
-        assert len(state.attributes["commissioning_missing"]) == 2
+        # Command topic, three-state qualification and (0.9.1) published forecasts.
+        assert len(state.attributes["commissioning_missing"]) == 3
         # Stage A (disabled): repeated evaluations neither publish, notify nor
         # rewrite the controller's storage file when nothing changed.
         idle = hass.data["thermann_shadow"][entry.entry_id].executor
@@ -693,6 +697,17 @@ async def check_controller(hass, entry, entity_for):
             ("controller_three_state_qualified", True),
         ):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
+        # 0.9.1: still refused until the published forecasts are enabled.
+        try:
+            await drive(hass, "switch", "turn_on", master)
+        except HomeAssistantError:
+            pass
+        else:
+            raise AssertionError("automatic control was enabled without published forecasts")
+        assert hass.states.get(master).attributes["commissioning_missing"] == [
+            "published_forecasts_not_enabled"
+        ]
+        await set_setting(hass, entity_for("forecast_enabled"), "switch", True)
         await drive(hass, "switch", "turn_on", master)
         assert hass.states.get(master).state == "on"
         # 0.7.1 (audit F1): with control ON, settings that decide where
@@ -703,6 +718,7 @@ async def check_controller(hass, entry, entity_for):
             ("controller_command_topic", "P/OTHER99/CMD/MODE"),
             ("controller_three_state_qualified", False),
             ("controller_max_commands_per_day", 8),
+            ("forecast_enabled", False),
             ("import_positive", True),
             ("peak_rate", 0.40),
         ):
@@ -754,6 +770,7 @@ async def check_controller(hass, entry, entity_for):
         for key, value in (
             ("controller_command_topic", ""),
             ("controller_three_state_qualified", False),
+            ("forecast_enabled", False),
         ):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
     finally:
@@ -896,7 +913,11 @@ async def _upgrade_from_0_6(folder, version):
         missing = hass.states.get("switch.thermann_shadow_automatic_heater_control").attributes[
             "commissioning_missing"
         ]
-        assert missing == ["command_topic_not_configured", "three_state_commands_not_qualified"]
+        assert missing == [
+            "command_topic_not_configured",
+            "three_state_commands_not_qualified",
+            "published_forecasts_not_enabled",
+        ]
         assert captured == []
     finally:
         if original is not None:
@@ -1010,7 +1031,11 @@ async def upgrade_from_0_5_0(folder):
         missing = hass.states.get("switch.thermann_shadow_automatic_heater_control").attributes[
             "commissioning_missing"
         ]
-        assert missing == ["command_topic_not_configured", "three_state_commands_not_qualified"]
+        assert missing == [
+            "command_topic_not_configured",
+            "three_state_commands_not_qualified",
+            "published_forecasts_not_enabled",
+        ]
         assert captured == []
     finally:
         if original is not None:

@@ -1,5 +1,24 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.9.1 — corrections from the independent audit of 13 Nov 2026 (owner approval required)
+
+Fixes to 0.9.0 found by the audit of `main` `04a8d3d`. The strategy is unchanged. Nothing here was installed; 0.9.0 was never enabled. No app change: Thermann Hot Water stays **1.3.13**.
+
+- **Command budget (audit C1).** Optional solar starts (a peak-solar start, a weekend solar start) stop at *Maximum commands per day*. The weekday 70 °C heat, Manual 45 °C and the 12hr Override are essential: they may go 6 commands beyond that limit, so solar cycling can no longer block them, and the higher cap still stops a fault that loops. OFF is never held back. Before, a partly cloudy morning used the whole budget: no heating before the evening peak and the heater OFF all night.
+- **Peak withdrawal (audit H1, owner-approved).** The OFF sent when peak solar is withdrawn (`peak_solar_withdrawn`) is exempt from the 15-minute command spacing, in the policy and in the controller's gate. It is the only exemption: the park, a pause, every start and every Manual 45 °C still wait, and a restart still needs a new 10-minute qualification and the spacing.
+- **12hr Override ending (audit M1).** Cancelling the override, or its expiry, no longer re-inspects a controller that already knows the heater state, so the policy resumes on the next minute. Before, Manual 70 °C stayed on until the next poll (up to 30 minutes, in a peak).
+- **Element estimate (audit M2).** With the heater OFF the element is counted as off, and a low-confidence estimate counts as off. An appliance's load step can no longer add 3 kW to the measured surplus and qualify a peak start.
+- **Published forecasts (audit M4).**
+  - Automatic control cannot be turned on until *Use published forecasts* is on (`published_forecasts_not_enabled`), and the switch is locked while control is on.
+  - *Restore recommended preferences* no longer turns it off.
+  - With no forecast at all, grid-only weekday heating waits for the latest start (`storage_waiting_no_forecast`); measured solar still starts it sooner. Before, it started on grid as soon as the morning peak ended.
+  - A forecast missing for over an hour raises the *EMHASS forecast unavailable* alert.
+- **Sample windows (audit M5).** "10 minutes" and "5 minutes" now mean it: the sample at the start of the window and the latest sample must both pass, with at least 80 % passing between. Before, a start could follow 8 minutes of surplus and a withdrawal 4 minutes of import.
+- **Shadow log (audit M7).** A repeated would-be command is recorded once a day, not once ever, so each day's park appears.
+- **Documentation (audit M3).** The heating time uses the physical rate (about 8.2 °C an hour). The observed rate is not used; the thermal observer stays diagnostic.
+
+Not changed (deferred): the Low findings of the audit, and M6 (a rollback note only, added to the commissioning guide).
+
 ## 0.9.0 — the simplified three-state controller (owner approval required)
 
 Replaces the 0.4–0.8 planner, economic permission and morning fail-safe with the agreed policy (`simple_policy.py`, [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md)). Requires Thermann Hot Water **1.3.13**.

@@ -75,6 +75,18 @@ BRIDGE_IN_PROGRESS_RESULTS = {
     "submitted_awaiting_status",
     "awaiting_confirmation",
 }
+# 0.9.1 (audit C1). OPTIONAL commands start heating that is not needed for hot
+# water: a peak-solar start and a weekend/night solar start. They stop at the
+# configured daily limit. Every other non-OFF command is ESSENTIAL (the weekday
+# 70 °C heat, the Manual 45 °C baseline, the 12hr Override): optional activity
+# can never use up its budget. Essential commands have their own higher cap, so
+# a fault that loops is still stopped. OFF is never held back.
+OPTIONAL_REASONS = frozenset({"peak_solar_qualified", "solar_opportunity"})
+ESSENTIAL_EXTRA_COMMANDS = 6
+# 0.9.1 (owner-approved, audit H1): the peak withdrawal alone is exempt from
+# the command spacing (the same set as simple_policy.SPACING_EXEMPT_REASONS).
+SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn"})
+FORECAST_ALERT_AFTER = timedelta(minutes=60)
 BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
 BRIDGE_UNEXPECTED_STATE = "unexpected_state_after_command"
 
@@ -123,7 +135,11 @@ class ControllerConfig:
     command_topic: str = ""
     bridge_commands_qualified: bool = False  # 1.3.11 T3 (kept for the record)
     three_state_qualified: bool = False  # 0.9.0: supervised 1.3.13 qualification
-    max_commands_per_day: int = 8  # backstop; a park (OFF) is never held back by it
+    # Daily limit for OPTIONAL solar starts; essential commands may go
+    # ESSENTIAL_EXTRA_COMMANDS beyond it; a park (OFF) is never held back.
+    max_commands_per_day: int = 8
+    # 0.9.1: automatic control needs the published (EMHASS) forecasts enabled.
+    published_forecasts_enabled: bool = True
     command_spacing_minutes: float = 15.0  # the shared spacing rule, enforced here too
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
@@ -139,6 +155,8 @@ class ControllerConfig:
             missing.append("command_topic_does_not_match_heater")
         if not self.three_state_qualified:
             missing.append("three_state_commands_not_qualified")
+        if not self.published_forecasts_enabled:
+            missing.append("published_forecasts_not_enabled")
         return missing
 
 
@@ -195,6 +213,7 @@ class Observation:
     bridge_transitions: list | None = None  # 1.3.13 diagnostics
     requests_total: int | None = None
     mqtt_ready: bool = False
+    forecast_available: bool | None = None  # published forecast usable now (None: unknown)
 
     @property
     def heater_state(self) -> str | None:
@@ -282,6 +301,7 @@ class Controller:
     holiday_start: str | None = None
     holiday_return: str | None = None
     refusal: str | None = None
+    forecast_missing_since: str | None = None
 
     # ------------------------------------------------------------------ persistence
     def to_dict(self) -> dict:
@@ -417,7 +437,10 @@ class Controller:
             return False
         self.guest_started = self.guest_until = None
         self.refusal = None
-        if self.enabled and self.state not in {FAULT_LOCKED, OWNER_OVERRIDE}:
+        # 0.9.1 (audit M1): a steady controller knows the heater state (every
+        # status is checked against it), so the policy resumes at once. Waiting
+        # for a new poll left Manual 70 °C on peak grid for up to 30 minutes.
+        if self.enabled and self.state not in {FAULT_LOCKED, OWNER_OVERRIDE, *STEADY}:
             self._reinspect(now, reason)
         return True
 
@@ -687,7 +710,12 @@ class Controller:
         self.intent = None
 
     def gates(
-        self, obs: Observation, target: str, cfg: ControllerConfig, payload: str = ""
+        self,
+        obs: Observation,
+        target: str,
+        cfg: ControllerConfig,
+        payload: str = "",
+        reason: str = "",
     ) -> list[str]:
         """Every reason the controller may NOT publish now (empty = eligible)."""
         failures = list(cfg.missing_commissioning())
@@ -725,12 +753,22 @@ class Controller:
         if obs.heater_state != self.heater:
             failures.append("heater_not_in_confirmed_state")
         last = self.last_command_at()
-        if last is not None and now - last < timedelta(minutes=cfg.command_spacing_minutes):
+        spacing_exempt = target == OFF and reason in SPACING_EXEMPT_REASONS
+        if (
+            not spacing_exempt
+            and last is not None
+            and now - last < timedelta(minutes=cfg.command_spacing_minutes)
+        ):
             # The policy applies the same rule; this is the backstop.
             failures.append("command_spacing")
-        if target != OFF and len(self.commands) >= cfg.max_commands_per_day:
-            # A backstop against a fault; a park (OFF) is never held back by it.
-            failures.append("daily_command_limit_reached")
+        if target != OFF:
+            # A park (OFF) is never held back by either limit.
+            sent = len(self.commands)
+            if reason in OPTIONAL_REASONS:
+                if sent >= cfg.max_commands_per_day:
+                    failures.append("daily_command_limit_reached")
+            elif sent >= cfg.max_commands_per_day + ESSENTIAL_EXTRA_COMMANDS:
+                failures.append("daily_essential_command_limit_reached")
         used = self.requests_last_24h(now)
         if used is None:
             failures.append("request_accounting_unavailable")
@@ -748,7 +786,7 @@ class Controller:
             self.gate_failures = []
             return
         payload = payload_for(want.state, current)
-        failures = self.gates(obs, want.state, cfg, payload)
+        failures = self.gates(obs, want.state, cfg, payload, want.reason)
         self.gate_failures = failures
         if failures:
             self.state, self.reason = CHANGE_REQUESTED, failures[0]
@@ -836,6 +874,21 @@ class Controller:
                     "documentation.",
                 )
             )
+        if obs.forecast_available is False:
+            self.forecast_missing_since = self.forecast_missing_since or _iso(now)
+            if now - _dt(self.forecast_missing_since) >= FORECAST_ALERT_AFTER:
+                alerts.append(
+                    (
+                        "forecast_unavailable",
+                        "Hot water: EMHASS forecast unavailable",
+                        "No usable published PV and household-load forecast for over an hour. "
+                        "Heating is planned from measured solar only: weekday grid heating "
+                        "waits for the latest start, and weekend solar heating rarely starts. "
+                        "Check the EMHASS forecast sensors and 'Use published forecasts'.",
+                    )
+                )
+        else:
+            self.forecast_missing_since = None
         started = _dt(self.guest_started)
         if (
             self.guest_active(now)

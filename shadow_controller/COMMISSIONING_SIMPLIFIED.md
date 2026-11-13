@@ -1,4 +1,4 @@
-# Commissioning the simplified controller (0.9.0 + app 1.3.13)
+# Commissioning the simplified controller (0.9.1 + app 1.3.13)
 
 **Nothing here has been done.** Every step that changes the owner's Home
 Assistant, the app or the heater needs the owner's explicit approval at the
@@ -8,7 +8,7 @@ operation (AGENTS.md).
 | Component | Installed now | This release | PR |
 | --- | --- | --- | --- |
 | Thermann Hot Water app (bridge) | 1.3.11 | **1.3.13** | #25 |
-| Thermann Controller integration | 0.7.1 (automatic control off since 12 Nov 20:13) | **0.9.0** | #26 |
+| Thermann Controller integration | 0.7.1 (automatic control off since 12 Nov 20:13) | **0.9.1** (0.9.0 plus the audit corrections; build the package from the head that carries it) | #26, audit fixes |
 | Policy and strategy | – | simplified three-state policy | #24 |
 
 The design is in [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md).
@@ -45,8 +45,10 @@ The hashes are in `dist/SHA256SUMS-commissioning-<head>.txt`. Rebuild the
 | Controller storage | `.storage/thermann_shadow.<entry>.controller`: enabled **false**, owner modes; `…thermal` | Loaded by 0.9.0; an old pending intent is never re-sent |
 | Entity IDs | All measurement, tariff, controller, owner-mode and settings entities | Unchanged. Removed: the planner sensors, the retired settings' controls and the two holiday datetimes (replaced by date entities). |
 
-**Needed by 0.9.0 and worth confirming:**
-- *Use published forecasts* is on, with the EMHASS sensors mapped;
+**Needed by 0.9.1:**
+- *Use published forecasts* is on, with the EMHASS sensors mapped. Automatic
+  control cannot be turned on without it (0.9.1), and it is locked while
+  control is on;
 - the meter is verified and its sign is correct;
 - the tariff is verified.
 
@@ -130,9 +132,15 @@ Check against the agreed design:
 | Weekday 22:00 / 21:00 | `Manual:45@off` |
 | Weekend | Manual 45; `Manual:70@45` only with at least 1 kW measured surplus that EMHASS does not beat later |
 
-Because the heater does not follow in shadow mode, the same wish is recorded
-only once until it changes. Note anything unexpected; that is the point of this
-stage.
+Because the heater does not follow in shadow mode:
+
+- the same wish is recorded once a day until it changes (0.9.1; each day's park
+  appears);
+- every payload names the state the heater is **observed** in. With the heater
+  left in Manual 45 °C, expect `off@45` at the parks and `Manual:70@45` for the
+  start, and no `Manual:45@off` at 22:00 (it is already there).
+
+Note anything unexpected; that is the point of this stage.
 
 ## 5. App option for activation and restart reads (approval: app option change; optional)
 
@@ -188,7 +196,7 @@ commands qualified (1.3.13)* (automatic control must be off).
 | --- | --- | --- |
 | Stop control | Automatic control **off** (or Hold) | Immediate; the heater stays in its current state |
 | Controller → 0.7.1 | Replace the folder with the `custom_components/thermann_shadow` folder from `thermann_shadow-0.7.1-9ca7ea5-rollback.zip`, then restart HA | The settings and entry are read as before; 0.9.0's retired settings were never removed. 0.7.1 ignores the new `controller_three_state_qualified` option and re-inspects the heater (its stored state names do not cover 0.9.0's, so it starts by observing). Turn control off first. |
-| App → 1.3.11 | **Settings → System → Backups**: restore the app from the backup made before the update (it restores the app and its `/data` together) | An older app refuses the six new payloads (`refused_by_policy`), so roll the controller back first, or keep it off. The 1.3.11 source package is for reference. |
+| App → 1.3.11 | **Settings → System → Backups**: restore the app from the backup made before the update (it restores the app and its `/data` together) | An older app refuses the six new payloads (`refused_by_policy`), so roll the controller back first, or keep it off. The 1.3.11 source package is for reference. The restored `/data` holds the tokens from before the update, and 1.3.13 has refreshed them since. If the cloud no longer accepts the old refresh token, 1.3.11 locks (`auth_http_4xx`) and needs one `auth_retry_generation` increase and a password login; that is expected, not a new fault. |
 | Heater | Thermann app | Choose OFF, Manual 45 °C or Manual 70 °C yourself |
 
 Never reset an authentication lock automatically; see the app documentation.
