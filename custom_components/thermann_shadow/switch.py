@@ -8,6 +8,7 @@ automatic commands immediately and never changes the heater mode.
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
+from .naming import device_info_fields, entity_id
 from .config import DOMAIN
 from .settings_entity import SettingEntity, setup_controls
 
@@ -40,12 +41,8 @@ class AutomaticControl(SwitchEntity):
     def __init__(self, entry, runtime):
         self.entry, self.runtime = entry, runtime
         self._attr_unique_id = f"{entry.entry_id}_automatic_control"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Thermann Shadow",
-            manufacturer="Community shadow planner",
-            model="315 L / 3 kW scenario",
-        )
+        self.entity_id = entity_id("switch", self._attr_name)
+        self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.runtime.executor.subscribe(self.async_write_ha_state))
@@ -57,10 +54,16 @@ class AutomaticControl(SwitchEntity):
     @property
     def extra_state_attributes(self):
         executor = self.runtime.executor
+        service = executor.notify_service
         return {
             "commissioning_missing": executor.cfg.missing_commissioning(),
             "state": executor.controller.state,
             "turning_off_changes_heater_mode": False,
+            # 0.7.1 (audit F4): whether phone alerts can actually be delivered.
+            "notification_service": service or None,
+            "notification_service_found": (
+                self.hass.services.has_service("notify", service) if service else None
+            ),
         }
 
     async def async_turn_on(self, **kwargs):

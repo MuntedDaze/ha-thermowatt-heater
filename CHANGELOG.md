@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.13] - Three-state commands, clock-aligned polling, fewer requests (owner review required)
+
+- **Three-state guarded transitions** for the simplified controller:
+  `Manual:45@off`, `Manual:70@off`, `Manual:45@70`, `Manual:70@45`, `off@45`
+  and `off@70`. Each names the state it leaves; the fresh status (≤ 60 s, at
+  most one pre-command read) must show exactly that state or the command is
+  refused with no request. An owner change in the app is never overwritten.
+  The 1.3.11 forms `Manual:70` (from OFF) and `off` (from Manual 70) keep
+  their meaning for the installed controller 0.7.1.
+- **No immediate confirmation read.** It always showed the old mode (T3b,
+  T3c, Stage C). The 60 s read is now the first; 300 s and the 360 s deadline
+  are unchanged, and the POST is still never repeated. A command now costs 2
+  requests (3 with a pre-command read), one fewer than before.
+- **Clock-aligned polling** at multiples of the interval (:00 and :30).
+  Restarts, on-demand reads, command refreshes and confirmations never move
+  the schedule. A due poll is skipped, keeping its slot, when the heater was
+  read in the last 3 minutes. A reading is never older than about 33 minutes.
+- **Proactive token refresh** *(authentication change)*: a request made with
+  a token at least 20 minutes old refreshes it first, saving the 401 that
+  every 30-minute poll used to spend. Polling drops from 144 to 96 requests a
+  day. The guard, its persisted file format, retry limits, the 5-minute
+  cooldown and the 401 lock are unchanged.
+- Unchanged: options, credentials, guard state, MQTT topics and entity IDs,
+  request accounting, backoff, quota handling and the command allowlist's
+  refusal rules. Listed in `breaking_versions`, so it never updates
+  automatically.
+
+## [1.3.12] - Display name "Thermann Hot Water"
+
+- The app is now shown as **Thermann Hot Water**, with a description that
+  states it is unofficial community software, not a Thermann product.
+- Nothing else changes: same slug (`thermowatt_boiler`), options, credentials,
+  authentication guard, MQTT topics and payloads, entity IDs and command
+  behaviour. The bridge code is identical to 1.3.11.
+- Listed in `breaking_versions` like every release, so Home Assistant never
+  updates it automatically.
+
 ## [1.3.11] - Bounded command confirmation for a delayed cloud readback (owner review required)
 
 - **Why.** In T3b (1.3.10) a stale-status `off` was refreshed once and POSTed,

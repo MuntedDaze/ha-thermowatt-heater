@@ -1,4 +1,4 @@
-title: Thermann Hot Water
+title: Hot Water
 views:
 - title: Hot Water
   path: thermann-shadow
@@ -46,6 +46,15 @@ views:
       - sensor.thermann_shadow_commands_in_last_24_hours
       - sensor.thermann_shadow_cloud_requests_in_last_24_hours
       - sensor.thermann_shadow_controller_fault
+    - type: entities
+      title: Holiday (dates take effect at 00:00 Hobart)
+      show_header_toggle: false
+      entities:
+      - sensor.thermann_shadow_hot_water_operating_mode
+      - date.thermann_shadow_holiday_departure_date
+      - date.thermann_shadow_holiday_return_date
+      - button.thermann_shadow_cancel_holiday_mode
+      - sensor.thermann_shadow_guest_mode_ends
     - type: button
       entity: button.thermann_shadow_hold_heater_owner_override
       name: Hold heater
@@ -71,7 +80,7 @@ views:
           entity_id: button.thermann_shadow_resume_automatic_control
         confirmation:
           text: Resume automatic control? It first re-reads the heater from a NEW bridge status and only
-            continues if the heater is OFF or in Manual at 70 °C.
+            continues if the heater is OFF, Manual 45 °C or Manual 70 °C.
     - type: button
       entity: button.thermann_shadow_acknowledge_controller_fault
       name: Acknowledge fault
@@ -92,28 +101,38 @@ views:
       icon: mdi:water-boiler
     - type: markdown
       text_only: true
-      content: '{% set code = states(''sensor.thermann_shadow_decision_code'') %}{% set kind = {"heat_now_cheapest":
-        "success", "heat_now_saving_too_small": "success", "heat_now_comfort_fallback": "warning", "native_heating_economical":
-        "success", "native_heating_costlier_than_waiting": "warning", "wait_cheaper_later": "info", "flexible_no_cost_difference":
-        "info", "no_heating_needed": "success", "insufficient_time": "error", "data_unavailable": "error",
-        "owner_review_required": "warning", "paused": "info"}.get(code, ''info'') %}{% set icon = {"heat_now_cheapest":
-        "mdi:solar-power-variant", "heat_now_saving_too_small": "mdi:solar-power", "heat_now_comfort_fallback":
-        "mdi:transmission-tower", "native_heating_economical": "mdi:water-boiler", "native_heating_costlier_than_waiting":
-        "mdi:water-boiler-alert", "wait_cheaper_later": "mdi:weather-sunny", "flexible_no_cost_difference":
-        "mdi:clock-outline", "no_heating_needed": "mdi:check-circle-outline", "insufficient_time": "mdi:clock-alert-outline",
-        "data_unavailable": "mdi:lan-disconnect", "owner_review_required": "mdi:account-alert-outline",
-        "paused": "mdi:pause-circle-outline"}.get(code, ''mdi:water-boiler'') %}
+      content: '{% set code = states(''sensor.thermann_shadow_decision_code'') %}{% set kind = {"storage_cheapest_now":
+        "success", "storage_until_peak": "success", "storage_latest_start": "warning", "storage_target_may_be_missed":
+        "error", "storage_waiting_for_cheaper_window": "info", "storage_paused_for_cheaper_window": "info",
+        "storage_target_reached": "success", "storage_within_thermostat_band": "success", "peak_no_grid_heating":
+        "info", "peak_ahead_no_qualified_solar": "info", "peak_solar_qualified": "success", "peak_solar_continues":
+        "success", "peak_solar_withdrawn": "warning", "peak_meter_unavailable": "error", "peak_command_reserved":
+        "info", "solar_opportunity": "success", "solar_opportunity_continues": "success", "solar_opportunity_ended":
+        "info", "baseline": "info", "owner_override": "warning", "heater_state_not_controlled": "warning",
+        "holiday": "info", "12hr_override": "info", "command_spacing": "info"}.get(code, ''info'') %}{%
+        set icon = {"storage_cheapest_now": "mdi:water-boiler", "storage_until_peak": "mdi:water-boiler",
+        "storage_latest_start": "mdi:transmission-tower", "storage_target_may_be_missed": "mdi:clock-alert-outline",
+        "storage_waiting_for_cheaper_window": "mdi:weather-sunny", "storage_paused_for_cheaper_window":
+        "mdi:pause-circle-outline", "storage_target_reached": "mdi:check-circle-outline", "storage_within_thermostat_band":
+        "mdi:thermometer-check", "peak_no_grid_heating": "mdi:transmission-tower-off", "peak_ahead_no_qualified_solar":
+        "mdi:transmission-tower-off", "peak_solar_qualified": "mdi:solar-power-variant", "peak_solar_continues":
+        "mdi:solar-power-variant", "peak_solar_withdrawn": "mdi:weather-cloudy", "peak_meter_unavailable":
+        "mdi:lan-disconnect", "peak_command_reserved": "mdi:timer-sand", "solar_opportunity": "mdi:solar-power",
+        "solar_opportunity_continues": "mdi:solar-power", "solar_opportunity_ended": "mdi:weather-sunset-down",
+        "baseline": "mdi:water-thermometer-outline", "owner_override": "mdi:account-alert-outline", "heater_state_not_controlled":
+        "mdi:account-alert-outline", "holiday": "mdi:airplane", "12hr_override": "mdi:account-clock",
+        "command_spacing": "mdi:timer-sand"}.get(code, ''mdi:water-boiler'') %}
 
-        <ha-alert alert-type="{{ kind }}"><h1><ha-icon icon="{{ icon }}"></ha-icon> {{ states(''sensor.thermann_shadow_recommendation'')
-        }}</h1>{{ state_attr(''sensor.thermann_shadow_controller'',''decision_explanation'') or ''Waiting
-        for fresh heater and meter readings.'' }}</ha-alert>
+        <ha-alert alert-type="{{ kind }}"><h1><ha-icon icon="{{ icon }}"></ha-icon> {{ states(''sensor.thermann_shadow_policy_wanted_state'')
+        | upper }}</h1>{{ code | replace(''_'', '' '') }} · mode {{ states(''sensor.thermann_shadow_policy_mode'')
+        }} · 70 °C reached: {{ states(''sensor.thermann_shadow_storage_target_reached'') }}</ha-alert>
 
 
         {% if is_state(''switch.thermann_shadow_automatic_heater_control'', ''on'') %}**Automatic control
-        is ON.** The controller follows this plan: Manual 70 °C permits heating, Thermann OFF parks it
-        (antibacterial and frost protection stay active); the Thermann thermostat decides when the element
-        runs.{% else %}**Planner only.** Automatic control is off, so no heater command is sent.{% endif
-        %}'
+        is ON.** The controller applies this policy: OFF, Manual 45 °C or Manual 70 °C; the Thermann thermostat
+        decides when the element runs.{% else %}**Shadow observation.** Automatic control is off: the
+        policy runs on the observed heater state and nothing is sent. Would send: **{{ states(''sensor.thermann_shadow_shadow_command'')
+        }}**.{% endif %}'
     - type: gauge
       entity: sensor.thermann_shadow_bottom_temperature
       name: Tank reading (T_Avg)
@@ -130,51 +149,40 @@ views:
       entity: sensor.thermann_shadow_heater_state_confidence
       icon: mdi:help-circle-outline
     - type: tile
-      entity: sensor.thermann_shadow_morning_readiness
-      icon: mdi:weather-sunset-up
+      entity: sensor.thermann_shadow_storage_target_reached
+      icon: mdi:thermometer-check
     - type: tile
-      entity: sensor.thermann_shadow_afternoon_readiness
-      icon: mdi:water-thermometer
-    - type: tile
-      entity: sensor.thermann_shadow_morning_ready_deadline
-      icon: mdi:alarm
-    - type: tile
-      entity: sensor.thermann_shadow_afternoon_ready_deadline
-      icon: mdi:alarm
+      entity: sensor.thermann_shadow_heating_time_needed
+      icon: mdi:timer-outline
   - type: grid
     cards:
     - type: heading
-      heading: Heat now or later?
-      icon: mdi:scale-balance
-    - type: tile
-      entity: sensor.thermann_shadow_continuous_cycle_cost_now
-      icon: mdi:cash-fast
-    - type: tile
-      entity: sensor.thermann_shadow_continuous_cycle_cost_later
-      icon: mdi:cash-check
-    - type: tile
-      entity: sensor.thermann_shadow_saving_by_waiting
-      icon: mdi:piggy-bank-outline
-    - type: tile
-      entity: sensor.thermann_shadow_decision_confidence
-      icon: mdi:shield-check-outline
+      heading: Plan before the evening peak
+      icon: mdi:calendar-clock
     - type: tile
       entity: sensor.thermann_shadow_hypothetical_heating_start
       icon: mdi:play-circle-outline
     - type: tile
-      entity: sensor.thermann_shadow_simulated_completion
-      icon: mdi:clock-check-outline
+      entity: sensor.thermann_shadow_latest_continuous_heating_start
+      icon: mdi:clock-alert-outline
     - type: tile
-      entity: sensor.thermann_shadow_native_schedule_predicted_cost
-      icon: mdi:calendar-clock
+      entity: sensor.thermann_shadow_soft_target_time
+      icon: mdi:flag-checkered
     - type: tile
-      entity: sensor.thermann_shadow_native_schedule_extra_cost_vs_best_plan
-      icon: mdi:calendar-alert
+      entity: sensor.thermann_shadow_configured_afternoon_peak
+      icon: mdi:transmission-tower
+    - type: tile
+      entity: sensor.thermann_shadow_measured_surplus_excluding_element
+      icon: mdi:solar-panel
+    - type: tile
+      entity: sensor.thermann_shadow_shadow_command
+      icon: mdi:eye-outline
     - type: markdown
-      content: 'Costs are the **extra** electricity cost of heating, including **foregone feed-in**, for
-        the same required energy. The 3 kW element is never treated as variable power; the real heater''s
-        load is removed from household demand once. *Start and completion are hypothetical: the native
-        Schedule controls the heater.*'
+      content: '**Cheapest window:** the start shown is when EMHASS and the measured surplus make heating
+        to 70 °C cheapest while still finishing by the **soft target** (30 minutes before the peak). From
+        the **latest start** it heats on off-peak power regardless. The soft target is a planning buffer,
+        not a shutdown. In a peak only measured solar (3.3 kW for 10 minutes) may heat. Manual 70 °C is
+        the *setpoint*; the tank is reported as reached only at 70 °C.'
   - type: grid
     cards:
     - type: heading
@@ -186,9 +194,6 @@ views:
     - type: tile
       entity: sensor.thermann_shadow_base_household_load_excluding_hot_water
       icon: mdi:home-lightning-bolt
-    - type: tile
-      entity: sensor.thermann_shadow_hypothetical_solar_surplus_if_heater_off
-      icon: mdi:solar-panel
     - type: tile
       entity: sensor.thermann_shadow_measured_grid_export
       icon: mdi:transmission-tower-export
@@ -234,176 +239,21 @@ views:
   icon: mdi:cog
   cards:
   - type: markdown
-    content: '# Hot-water preferences
+    content: '# Hot-water settings
 
-      **Local shadow settings only.** These controls and the integration''s Configure dialog edit **one**
-      saved configuration. Changes are validated together (an invalid change saves nothing), recalculate
-      locally at once and never contact Thermann, restart the heater or change the native Schedule or
-      T-Comfort. Recommended values are experimental starting points, not manufacturer limits.'
-  - type: entities
-    title: Comfort
-    icon: mdi:home-thermometer
-    show_header_toggle: false
-    state_color: true
-    entities:
-    - number.thermann_shadow_morning_minimum_hard
-    - number.thermann_shadow_morning_preferred_reserve
-    - time.thermann_shadow_morning_ready_preferred
-    - time.thermann_shadow_morning_ready_hard_deadline
-    - number.thermann_shadow_expected_morning_hot_water_use
-    - number.thermann_shadow_afternoon_storage_target
-    - time.thermann_shadow_afternoon_comfort_preference
-    - number.thermann_shadow_heating_time_allowance
-  - type: markdown
-    content: "### Comfort — current, recommended and original values\n\n**Morning minimum (hard)** — current\
-      \ **{{ states('number.thermann_shadow_morning_minimum_hard') }} °C** · recommended **42 °C** · original\
-      \ **40 °C** · *restored by Restore*  \nMinimum reading (bottom-of-tank T_Avg) by the hard morning\
-      \ deadline, every day. Protected over savings when at risk. A planning threshold, NEVER a heater\
-      \ setpoint or hygiene temperature.\n\n**Morning preferred reserve** — current **{{ states('number.thermann_shadow_morning_preferred_reserve')\
-      \ }} °C** · recommended & original **45 °C** · *restored by Restore*  \nPreferred reading by the\
-      \ preferred morning time, every day: extra reserve before showers, aimed for when reasonably achievable.\
-      \ Once that time passes unmet, only the hard minimum is pursued. Not lower than the minimum.\n\n\
-      **Morning ready (preferred)** — current **{{ states('time.thermann_shadow_morning_ready_preferred')\
-      \ }}** · recommended & original **06:00** · *restored by Restore*  \nHobart local, every day. Aim\
-      \ to reach the morning threshold by this time.\n\n**Morning ready (hard deadline)** — current **{{\
-      \ states('time.thermann_shadow_morning_ready_hard_deadline') }}** · recommended & original **07:00**\
-      \ · *restored by Restore*  \nHobart local, every day (showers). If the preferred time is missed,\
-      \ heating continues for this deadline; it is never abandoned. Must not be earlier than the preferred\
-      \ time.\n\n**Expected morning hot-water use** — current **{{ states('number.thermann_shadow_expected_morning_hot_water_use')\
-      \ }} °C** · recommended & original **10 °C** · *restored by Restore*  \nReading drop assumed for\
-      \ morning showers when planning the afternoon target. An assumption (about 11 °C was seen on 11\
-      \ Nov), not a measurement.\n\n**Afternoon storage target** — current **{{ states('number.thermann_shadow_afternoon_storage_target')\
-      \ }} °C** · recommended & original **70 °C** · *restored by Restore*  \nSelected model target is\
-      \ never silently reduced. 65–70°C is a planning range, not a newly qualified command limit.\n\n\
-      **Afternoon comfort preference** — current **{{ states('time.thermann_shadow_afternoon_comfort_preference')\
-      \ }}** · recommended & original **16:00** · *restored by Restore*  \nWeekend (no-peak) afternoon\
-      \ ready time, Hobart local, after noon. Weekdays use the evening peak start automatically: 16:00\
-      \ standard time, 17:00 daylight time.\n\n**Heating time allowance** — current **{{ states('number.thermann_shadow_heating_time_allowance')\
-      \ }} min** · recommended & original **30 min** · *restored by Restore*  \nExtra full-power model\
-      \ minutes when heat is required. Uncalibrated; comfort overrides optional dwell."
-  - type: entities
-    title: Solar & Forecasting
-    icon: mdi:solar-power
-    show_header_toggle: false
-    state_color: true
-    entities:
-    - number.thermann_shadow_minimum_useful_net_surplus
-    - number.thermann_shadow_solar_headroom
-    - switch.thermann_shadow_use_published_forecasts
-    - number.thermann_shadow_forecast_uncertainty_margin
-    - number.thermann_shadow_extra_forecast_household_load
-    - number.thermann_shadow_inverter_ac_output_limit
-    - select.thermann_shadow_household_load_basis
-  - type: markdown
-    content: "### Solar & Forecasting — current, recommended and original values\n\n**Minimum useful net\
-      \ surplus** — current **{{ states('number.thermann_shadow_minimum_useful_net_surplus') }} kW** ·\
-      \ recommended & original **0.1 kW** · *restored by Restore*  \nPartial solar can be worthwhile.\
-      \ Economic comparison must also pass; never a variable-power command.\n\n**Solar headroom** — current\
-      \ **{{ states('number.thermann_shadow_solar_headroom') }} kW** · recommended & original **0.3 kW**\
-      \ · *restored by Restore*  \nDeduct from measured surplus for uncertain household loads.\n\n**Use\
-      \ published forecasts** — current **{{ states('switch.thermann_shadow_use_published_forecasts')\
-      \ }}** · recommended & original **Off** · *restored by Restore*  \nOptional local PV AND household-load\
-      \ forecasts with generation timestamps; missing forecasts never delay fallback.\n\n**Forecast uncertainty\
-      \ margin** — current **{{ states('number.thermann_shadow_forecast_uncertainty_margin') }}** · recommended\
-      \ & original **0.25** · *restored by Restore*  \nFraction: reduce PV and increase household load.\
-      \ 0.25 means 25%; never guaranteed surplus.\n\n**Extra forecast household load** — current **{{\
-      \ states('number.thermann_shadow_extra_forecast_household_load') }} kW** · recommended & original\
-      \ **0.3 kW** · *restored by Restore*  \nAdditional allowance for competing appliances, beyond forecast\
-      \ demand.\n\n**Inverter AC output limit** — current **{{ states('number.thermann_shadow_inverter_ac_output_limit')\
-      \ }} kW** · recommended & original **5 kW** · *restored by Restore*  \nCombined AC limit of the\
-      \ single GoodWe inverter for BOTH arrays; forecasts above it are clipped.\n\n**Household load basis**\
-      \ — current **{{ states('select.thermann_shadow_household_load_basis') }}** · recommended & original\
-      \ **measured_only** · *restored by Restore*  \nmeasured_only: de-embedded measured base load (heater\
-      \ removed). measured_then_published also uses the published load forecast after 2 h; today's EMHASS\
-      \ load includes heater cycles."
-  - type: entities
-    title: Heating Cycles
-    icon: mdi:sync
-    show_header_toggle: false
-    state_color: true
-    entities:
-    - number.thermann_shadow_solar_start_qualification
-    - number.thermann_shadow_economic_loss_grace_period
-    - number.thermann_shadow_minimum_optional_cycle
-    - number.thermann_shadow_minimum_optional_cycle_gap
-    - number.thermann_shadow_minimum_economic_switching_benefit
-    - number.thermann_shadow_minimum_saving_to_recommend_waiting
-  - type: markdown
-    content: "### Heating Cycles — current, recommended and original values\n\n**Solar start qualification**\
-      \ — current **{{ states('number.thermann_shadow_solar_start_qualification') }} min** · recommended\
-      \ & original **10 min** · *restored by Restore*  \nSustained economic advantage on fresh observations\
-      \ before a SIMULATED optional start.\n\n**Economic loss grace period** — current **{{ states('number.thermann_shadow_economic_loss_grace_period')\
-      \ }} min** · recommended & original **20 min** · *restored by Restore*  \nSustained cost disadvantage\
-      \ before a SIMULATED optional stop; short clouds do not stop a cycle.\n\n**Minimum optional cycle**\
-      \ — current **{{ states('number.thermann_shadow_minimum_optional_cycle') }} min** · recommended\
-      \ & original **30 min** · *restored by Restore*  \nSIMULATION ONLY. Comfort, data gates, owner intervention\
-      \ and protections override dwell.\n\n**Minimum optional cycle gap** — current **{{ states('number.thermann_shadow_minimum_optional_cycle_gap')\
-      \ }} min** · recommended & original **30 min** · *restored by Restore*  \nSIMULATION ONLY. Comfort\
-      \ can start sooner. No physical On/resume contract is qualified.\n\n**Minimum economic switching\
-      \ benefit** — current **{{ states('number.thermann_shadow_minimum_economic_switching_benefit') }}\
-      \ AUD** · recommended & original **0.1 AUD** · *restored by Restore*  \nFUTURE CONTROL ONLY: minimum\
-      \ benefit per heater switch. The 0.4.0 advisor uses the per-kWh waiting threshold instead.\n\n**Minimum\
-      \ saving to recommend waiting** — current **{{ states('number.thermann_shadow_minimum_saving_to_recommend_waiting')\
-      \ }} AUD/kWh** · recommended & original **0.05 AUD/kWh** · *restored by Restore*  \nWaiting is only\
-      \ recommended if it saves at least this much per kWh that would otherwise be heated now (first minimum\
-      \ cycle; 0.05 = 7.5 c for 30 min) and the comfort fallback stays viable. Solar later vs off-peak\
-      \ grid now is 7.7 c/kWh."
-  - type: entities
-    title: Controller
-    icon: mdi:robot
-    show_header_toggle: false
-    state_color: true
-    entities:
-    - text.thermann_shadow_controller_command_topic
-    - switch.thermann_shadow_bridge_commands_qualified_t3
-    - number.thermann_shadow_minimum_heating_period
-    - number.thermann_shadow_minimum_rest_period
-    - number.thermann_shadow_maximum_commands_per_day
-    - number.thermann_shadow_command_confirmation_timeout
-    - number.thermann_shadow_cloud_request_budget_per_day
-    - number.thermann_shadow_execution_latency_reserve
-    - text.thermann_shadow_notification_service
-  - type: markdown
-    content: "### Controller — current, recommended and original values\n\n**Controller command topic**\
-      \ — current **{{ states('text.thermann_shadow_controller_command_topic') }}** · recommended & original\
-      \ **blank / unknown** · *kept by Restore*  \nCommissioning: the Thermowatt MQTT mode command topic\
-      \ for your heater, exactly as written in the commissioning runbook (Stage B). Blank = the controller\
-      \ can never command.\n\n**Bridge commands qualified (T3)** — current **{{ states('switch.thermann_shadow_bridge_commands_qualified_t3')\
-      \ }}** · recommended & original **Off** · *kept by Restore*  \nCommissioning Stage B: ON only after\
-      \ the supervised T3 test showed the bridge's Manual:70 (from OFF) and off (from Manual 70) reproduce\
-      \ the app results. Requires Thermowatt add-on 1.3.9 or later.\n\n**Minimum heating period** — current\
-      \ **{{ states('number.thermann_shadow_minimum_heating_period') }} min** · recommended & original\
-      \ **30 min** · *restored by Restore*  \nShortest time Manual (heating permitted) is kept before\
-      \ parking, unless the thermostat has already stopped the element.\n\n**Minimum rest period** — current\
-      \ **{{ states('number.thermann_shadow_minimum_rest_period') }} min** · recommended & original **30\
-      \ min** · *restored by Restore*  \nShortest time parked before heating is permitted again.\n\n**Maximum\
-      \ commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day') }}**\
-      \ · recommended & original **6** · *restored by Restore*  \nRolling 24 h limit on mode commands.\
-      \ A typical day needs 2 (one heating period) or 4 (morning and afternoon). The last 2 are reserved\
-      \ for a comfort start and its park.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
-      \ }} min** · recommended & original **65 min** · *restored by Restore*  \nIf no status confirms\
-      \ a command within this time, automatic control locks until you acknowledge. At least one poll interval\
-      \ plus margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
-      \ }}** · recommended & original **220** · *restored by Restore*  \nNo command is sent once the bridge's\
-      \ local request count over 24 h reaches this. Normal 30-minute polling uses about 150/day.\n\n**Execution\
-      \ latency reserve** — current **{{ states('number.thermann_shadow_execution_latency_reserve') }}\
-      \ min** · recommended & original **30 min** · *restored by Restore*  \nComfort deadlines are planned\
-      \ this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command\
-      \ normally reaches the heater within about a minute; the 30-minute default is a conservative margin\
-      \ you may reduce after the supervised trial.\n\n**Notification service** — current **{{ states('text.thermann_shadow_notification_service')\
-      \ }}** · recommended & original **blank / unknown** · *kept by Restore*  \nOptional notify service\
-      \ name, e.g. mobile_app_phone (without notify.). Blank = Home Assistant notifications only."
+      These controls and **Configure** edit **one** saved configuration. Every change is checked together
+      with the rest (an invalid change saves nothing) and applies at once, without a restart. **System**
+      settings and the tariff contract can only be changed while Automatic heater control is off. Nothing
+      here contacts Thermann or changes the heater''s own settings.'
   - type: entities
     title: Advanced
     icon: mdi:tune
     show_header_toggle: false
     state_color: true
     entities:
-    - number.thermann_shadow_assumed_standing_heat_loss
-    - switch.thermann_shadow_pause_shadow_planning
-    - switch.thermann_shadow_meter_sign_and_units_verified
-    - switch.thermann_shadow_tariff_contract_verified
-    - switch.thermann_shadow_positive_grid_means_import
+    - switch.thermann_shadow_use_published_forecasts
+    - number.thermann_shadow_forecast_uncertainty_margin
+    - number.thermann_shadow_extra_forecast_household_load
     - select.thermann_shadow_tariff_clock
     - select.thermann_shadow_tariff_periods_mode
     - switch.thermann_shadow_use_peak_periods_on_weekends
@@ -411,82 +261,107 @@ views:
     - number.thermann_shadow_peak_import_price
     - number.thermann_shadow_shoulder_import_price
     - number.thermann_shadow_export_compensation
+    - number.thermann_shadow_inverter_ac_output_limit
     - number.thermann_shadow_maximum_forecast_generation_age
-    - number.thermann_shadow_recent_export_scenario_horizon
-    - number.thermann_shadow_maximum_cloud_poll_age
-    - number.thermann_shadow_maximum_power_reading_age
-    - number.thermann_shadow_expected_native_target
-    - select.thermann_shadow_native_schedule_clock_reference
-    - switch.thermann_shadow_native_clock_checked
-    - number.thermann_shadow_t_comfort_reference
-    - text.thermann_shadow_native_clock_check_date
     - time.thermann_shadow_peak_morning_start
     - time.thermann_shadow_peak_morning_end
     - time.thermann_shadow_peak_evening_start
     - time.thermann_shadow_peak_evening_end
   - type: markdown
-    content: "### Advanced — current, recommended and original values\n\n**Assumed standing heat loss**\
-      \ — current **{{ states('number.thermann_shadow_assumed_standing_heat_loss') }} °C/h** · recommended\
-      \ & original **0.2 °C/h** · *restored by Restore*  \nReading drop per hour with no use or heating.\
-      \ Not yet measured for this tank.\n\n**Pause shadow planning** — current **{{ states('switch.thermann_shadow_pause_shadow_planning')\
-      \ }}** · recommended & original **Off** · *kept by Restore*  \nPauses only hypothetical decisions;\
-      \ native Schedule continues.\n\n**Meter sign and units verified** — current **{{ states('switch.thermann_shadow_meter_sign_and_units_verified')\
-      \ }}** · recommended & original **On** · *kept by Restore*  \nOwner verification, not an optimisation\
-      \ preference. Restore recommendations preserves this flag.\n\n**Tariff contract verified** — current\
-      \ **{{ states('switch.thermann_shadow_tariff_contract_verified') }}** · recommended & original **On**\
-      \ · *kept by Restore*  \nOwner confirmation of rates, periods and clock. Restore preserves this\
-      \ flag.\n\n**Positive grid means import** — current **{{ states('switch.thermann_shadow_positive_grid_means_import')\
-      \ }}** · recommended & original **Off** · *kept by Restore*  \nOFF means export-positive HK1000.\
-      \ Never change without a load test; restore preserves direction.\n\n**Tariff clock** — current **{{\
-      \ states('select.thermann_shadow_tariff_clock') }}** · recommended & original **standard** · *kept\
-      \ by Restore*  \nConfirmed Aurora 93 uses standard (fixed AEST UTC+10), automatically one hour later\
-      \ in Hobart summer.\n\n**Tariff periods mode** — current **{{ states('select.thermann_shadow_tariff_periods_mode')\
-      \ }}** · recommended & original **aurora_93** · *kept by Restore*  \naurora_93 uses editable weekday\
-      \ peak times below; custom retains advanced weekly JSON periods in Configure.\n\n**Use peak periods\
-      \ on weekends** — current **{{ states('switch.thermann_shadow_use_peak_periods_on_weekends') }}**\
-      \ · recommended & original **Off** · *kept by Restore*  \nOFF for confirmed Aurora 93, all weekend\
-      \ off-peak.\n\n**Off-peak import price** — current **{{ states('number.thermann_shadow_off_peak_import_price')\
-      \ }} AUD/kWh** · recommended & original **0.1702 AUD/kWh** · *kept by Restore*  \nAUD/kWh from your\
-      \ contract; includes all grid energy in the 3kW scenario.\n\n**Peak import price** — current **{{\
-      \ states('number.thermann_shadow_peak_import_price') }} AUD/kWh** · recommended & original **0.361878\
-      \ AUD/kWh** · *kept by Restore*  \nAUD/kWh; actual clock boundaries affect every candidate minute.\n\
-      \n**Shoulder import price** — current **{{ states('number.thermann_shadow_shoulder_import_price')\
-      \ }} AUD/kWh** · recommended & original **0.1702 AUD/kWh** · *kept by Restore*  \nUsed only by custom\
-      \ weekly periods with shoulder entries.\n\n**Export compensation** — current **{{ states('number.thermann_shadow_export_compensation')\
-      \ }} AUD/kWh** · recommended & original **0.09276 AUD/kWh** · *kept by Restore*  \nForegone feed-in\
-      \ revenue counts as a cost of solar self-consumption.\n\n**Maximum forecast generation age** — current\
-      \ **{{ states('number.thermann_shadow_maximum_forecast_generation_age') }} min** · recommended &\
-      \ original **120 min** · *restored by Restore*  \nRequire real generation time; republishing an\
-      \ old forecast does not freshen it.\n\n**Recent-export scenario horizon** — current **{{ states('number.thermann_shadow_recent_export_scenario_horizon')\
-      \ }} min** · recommended & original **15 min** · *restored by Restore*  \nBounded assumption for\
-      \ current export, never a daily forecast or guaranteed solar.\n\n**Maximum cloud poll age** — current\
-      \ **{{ states('number.thermann_shadow_maximum_cloud_poll_age') }} min** · recommended & original\
-      \ **45 min** · *restored by Restore*  \nOnly local freshness gate; does not alter bridge polling\
-      \ or issue refresh requests.\n\n**Maximum power reading age** — current **{{ states('number.thermann_shadow_maximum_power_reading_age')\
-      \ }} s** · recommended & original **120 s** · *restored by Restore*  \nMissing/stale observations\
-      \ reset economic holds; no cloud calls.\n\n**Expected native target** — current **{{ states('number.thermann_shadow_expected_native_target')\
-      \ }} °C** · recommended & original **70 °C** · *kept by Restore*  \nReference only. Different observed\
-      \ mode/target latches intervention; never sets the heater.\n\n**Native schedule clock reference**\
-      \ — current **{{ states('select.thermann_shadow_native_schedule_clock_reference') }}** · recommended\
-      \ & original **local** · *kept by Restore*  \nReference only; never adjusts the device clock or\
-      \ native Schedule.\n\n**Native clock checked** — current **{{ states('switch.thermann_shadow_native_clock_checked')\
-      \ }}** · recommended & original **Off** · *kept by Restore*  \nOwner observation only; restore preserves\
-      \ this verification.\n\n**T-Comfort reference** — current **{{ states('number.thermann_shadow_t_comfort_reference')\
-      \ }} °C** · recommended & original **10 °C** · *kept by Restore*  \nReference only; 10°C is not\
-      \ a useful comfort reserve. Never changes T-Comfort.\n\n**Native clock check date** — current **{{\
-      \ states('text.thermann_shadow_native_clock_check_date') }}** · recommended & original **blank /\
-      \ unknown** · *kept by Restore*  \nOwner check date YYYY-MM-DD, blank if unknown; reference only.\n\
-      \n**Peak morning start** — current **{{ states('time.thermann_shadow_peak_morning_start') }}** ·\
-      \ recommended & original **07:00** · *kept by Restore*  \nTariff-clock HH:MM, not Hobart comfort\
-      \ time. Must be increasing: morning start/end, evening start/end.\n\n**Peak morning end** — current\
-      \ **{{ states('time.thermann_shadow_peak_morning_end') }}** · recommended & original **10:00** ·\
-      \ *kept by Restore*  \nTariff-clock HH:MM, not Hobart comfort time. Must be increasing: morning\
+    content: "### Advanced — current, recommended and original values\n\n**Use published forecasts** —\
+      \ current **{{ states('switch.thermann_shadow_use_published_forecasts') }}** · recommended & original\
+      \ **Off** · *restored by Restore*  \nOptional local PV AND household-load forecasts with generation\
+      \ timestamps; missing forecasts never delay fallback.\n\n**Forecast uncertainty margin** — current\
+      \ **{{ states('number.thermann_shadow_forecast_uncertainty_margin') }}** · recommended & original\
+      \ **0.25** · *restored by Restore*  \nFraction: reduce PV and increase household load. 0.25 means\
+      \ 25%; never guaranteed surplus.\n\n**Extra forecast household load** — current **{{ states('number.thermann_shadow_extra_forecast_household_load')\
+      \ }} kW** · recommended & original **0.3 kW** · *restored by Restore*  \nAdditional allowance for\
+      \ competing appliances, beyond forecast demand.\n\n**Tariff clock** — current **{{ states('select.thermann_shadow_tariff_clock')\
+      \ }}** · recommended & original **standard** · *kept by Restore*  \nConfirmed Aurora 93 uses standard\
+      \ (fixed AEST UTC+10), automatically one hour later in Hobart summer.\n\n**Tariff periods mode**\
+      \ — current **{{ states('select.thermann_shadow_tariff_periods_mode') }}** · recommended & original\
+      \ **aurora_93** · *kept by Restore*  \naurora_93 uses editable weekday peak times below; custom\
+      \ retains advanced weekly JSON periods in Configure.\n\n**Use peak periods on weekends** — current\
+      \ **{{ states('switch.thermann_shadow_use_peak_periods_on_weekends') }}** · recommended & original\
+      \ **Off** · *kept by Restore*  \nOFF for confirmed Aurora 93, all weekend off-peak.\n\n**Off-peak\
+      \ import price** — current **{{ states('number.thermann_shadow_off_peak_import_price') }} AUD/kWh**\
+      \ · recommended & original **0.1702 AUD/kWh** · *kept by Restore*  \nAUD/kWh from your contract\
+      \ (0-2).\n\n**Peak import price** — current **{{ states('number.thermann_shadow_peak_import_price')\
+      \ }} AUD/kWh** · recommended & original **0.361878 AUD/kWh** · *kept by Restore*  \nAUD/kWh from\
+      \ your contract (0-2).\n\n**Shoulder import price** — current **{{ states('number.thermann_shadow_shoulder_import_price')\
+      \ }} AUD/kWh** · recommended & original **0.1702 AUD/kWh** · *kept by Restore*  \nAUD/kWh (0-2).\
+      \ Used only by custom weekly periods with shoulder entries.\n\n**Export compensation** — current\
+      \ **{{ states('number.thermann_shadow_export_compensation') }} AUD/kWh** · recommended & original\
+      \ **0.09276 AUD/kWh** · *kept by Restore*  \nForegone feed-in revenue counts as a cost of solar\
+      \ self-consumption.\n\n**Inverter AC output limit** — current **{{ states('number.thermann_shadow_inverter_ac_output_limit')\
+      \ }} kW** · recommended & original **5 kW** · *restored by Restore*  \nCombined AC limit of the\
+      \ single GoodWe inverter for BOTH arrays; forecasts above it are clipped.\n\n**Maximum forecast\
+      \ generation age** — current **{{ states('number.thermann_shadow_maximum_forecast_generation_age')\
+      \ }} min** · recommended & original **120 min** · *restored by Restore*  \nOlder forecasts are ignored\
+      \ (no future solar is assumed). EMHASS publishes every 30 minutes, so at least 35. Republishing\
+      \ an old forecast does not freshen it.\n\n**Peak morning start** — current **{{ states('time.thermann_shadow_peak_morning_start')\
+      \ }}** · recommended & original **07:00** · *kept by Restore*  \nTariff-clock HH:MM, not Hobart\
+      \ comfort time. Must be increasing: morning start/end, evening start/end.\n\n**Peak morning end**\
+      \ — current **{{ states('time.thermann_shadow_peak_morning_end') }}** · recommended & original **10:00**\
+      \ · *kept by Restore*  \nTariff-clock HH:MM, not Hobart comfort time. Must be increasing: morning\
       \ start/end, evening start/end.\n\n**Peak evening start** — current **{{ states('time.thermann_shadow_peak_evening_start')\
       \ }}** · recommended & original **16:00** · *kept by Restore*  \nTariff-clock HH:MM, not Hobart\
       \ comfort time. Must be increasing: morning start/end, evening start/end.\n\n**Peak evening end**\
       \ — current **{{ states('time.thermann_shadow_peak_evening_end') }}** · recommended & original **21:00**\
       \ · *kept by Restore*  \nTariff-clock HH:MM, not Hobart comfort time. Must be increasing: morning\
       \ start/end, evening start/end."
+  - type: entities
+    title: System
+    icon: mdi:shield-check
+    show_header_toggle: false
+    state_color: true
+    entities:
+    - switch.thermann_shadow_meter_sign_and_units_verified
+    - switch.thermann_shadow_tariff_contract_verified
+    - switch.thermann_shadow_positive_grid_means_import
+    - number.thermann_shadow_maximum_cloud_poll_age
+    - number.thermann_shadow_maximum_power_reading_age
+    - text.thermann_shadow_controller_command_topic
+    - switch.thermann_shadow_three_state_commands_qualified_1_3_13
+    - number.thermann_shadow_maximum_commands_per_day
+    - number.thermann_shadow_command_confirmation_timeout
+    - number.thermann_shadow_cloud_request_budget_per_day
+    - text.thermann_shadow_notification_service
+  - type: markdown
+    content: "### System — current, recommended and original values\n\n**Meter sign and units verified**\
+      \ — current **{{ states('switch.thermann_shadow_meter_sign_and_units_verified') }}** · recommended\
+      \ & original **On** · *kept by Restore*  \nOwner verification, not an optimisation preference. Restore\
+      \ recommendations preserves this flag.\n\n**Tariff contract verified** — current **{{ states('switch.thermann_shadow_tariff_contract_verified')\
+      \ }}** · recommended & original **On** · *kept by Restore*  \nOwner confirmation of rates, periods\
+      \ and clock. Restore preserves this flag.\n\n**Positive grid means import** — current **{{ states('switch.thermann_shadow_positive_grid_means_import')\
+      \ }}** · recommended & original **Off** · *kept by Restore*  \nOFF means export-positive HK1000.\
+      \ Never change without a load test; restore preserves direction.\n\n**Maximum cloud poll age** —\
+      \ current **{{ states('number.thermann_shadow_maximum_cloud_poll_age') }} min** · recommended &\
+      \ original **45 min** · *kept by Restore*  \nPlanner freshness gate for the heater status. Must\
+      \ exceed the bridge's 30-minute polling; does not change polling or request a refresh.\n\n**Maximum\
+      \ power reading age** — current **{{ states('number.thermann_shadow_maximum_power_reading_age')\
+      \ }} s** · recommended & original **120 s** · *kept by Restore*  \nMissing/stale observations reset\
+      \ economic holds; no cloud calls.\n\n**Controller command topic** — current **{{ states('text.thermann_shadow_controller_command_topic')\
+      \ }}** · recommended & original **blank / unknown** · *kept by Restore*  \nCommissioning: the Thermowatt\
+      \ MQTT mode command topic for your heater, exactly as written in the commissioning runbook (Stage\
+      \ B). Blank = the controller can never command.\n\n**Three-state commands qualified (1.3.13)** —\
+      \ current **{{ states('switch.thermann_shadow_three_state_commands_qualified_1_3_13') }}** · recommended\
+      \ & original **Off** · *kept by Restore*  \nCommissioning: ON only after the supervised qualification\
+      \ of Thermann Hot Water 1.3.13 showed every transition between OFF, Manual 45 °C and Manual 70 °C\
+      \ reproduces the app result, and an owner change is refused (COMMISSIONING_SIMPLIFIED.md). Automatic\
+      \ control cannot be enabled until it is ON.\n\n**Maximum commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day')\
+      \ }}** · recommended & original **6** · *kept by Restore*  \nBackstop: rolling 24 h limit on commands\
+      \ that start or change heating. A typical weekday needs 4 commands in all; a switch to OFF (the\
+      \ park) is never held back by this limit.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
+      \ }} min** · recommended & original **65 min** · *kept by Restore*  \nIf no status confirms a command\
+      \ within this time, automatic control locks until you acknowledge. At least one poll interval plus\
+      \ margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
+      \ }}** · recommended & original **220** · *kept by Restore*  \nNo command is sent once the bridge's\
+      \ local request count over 24 h reaches this. Normal 30-minute polling uses about 150/day.\n\n**Notification\
+      \ service** — current **{{ states('text.thermann_shadow_notification_service') }}** · recommended\
+      \ & original **blank / unknown** · *kept by Restore*  \nOptional phone notifications for faults,\
+      \ unconfirmed commands and comfort risks: the notify service name only, for example mobile_app_phone\
+      \ (no 'notify.' in front). Blank = Home Assistant notifications only."
   - type: markdown
     content: '### Advanced weekly periods
 
@@ -520,9 +395,9 @@ views:
         target:
           entity_id: button.thermann_shadow_restore_recommended_preferences
         confirmation:
-          text: Restore recommended comfort, solar, cycle and freshness preferences? The tariff contract,
-            entity mappings, verifications, meter direction, pause state and native references are kept.
-            You can undo this once. No heater command is sent.
+          text: Restore the recommended comfort, forecast and planning preferences? System settings, the
+            tariff contract, sensor mappings and verifications are kept. You can undo this once. No heater
+            command is sent.
     - type: button
       entity: button.thermann_shadow_undo_last_restore
       name: Undo last restore
@@ -539,11 +414,12 @@ views:
   icon: mdi:information-outline
   cards:
   - type: markdown
-    content: '## Shadow mode
+    content: '## Policy
 
-      **Commands disabled · control capable: {{ state_attr(''sensor.thermann_shadow_controller'',''control_capable'')
+      **Automatic control active: {{ state_attr(''sensor.thermann_shadow_controller'',''controller_active'')
       }} · extra cloud requests: {{ state_attr(''sensor.thermann_shadow_controller'',''additional_cloud_requests'')
-      }}**. Physical heating is estimated, never commanded.'
+      }}**. One coordinated policy; heater commands come from the controller alone (Automatic heater control).
+      Thermann Controller is unofficial community software, not a Thermann product.'
   - type: markdown
     content: '### Heater state evidence
 
@@ -552,25 +428,16 @@ views:
 
       - WaterHeaterSts raw {{ h.status_raw }} (bit 0 = {{ h.status_bit0 }}; {{ h.status_semantics }})
 
-      - Last 3 kW load step: {{ h.last_load_step }} at {{ h.last_load_step_at }}
-
-      {% set l = state_attr(''sensor.thermann_shadow_controller'',''load'') or {} %}- Base load {{ l.base_low_kw
-      }}–{{ l.base_high_kw }} kW (median {{ l.base_p50_kw }}); meter suspect: {{ l.meter_suspect_pre_commissioning_signature
-      }}'
+      - Base load excluding hot water: {{ states(''sensor.thermann_shadow_base_household_load_excluding_hot_water'')
+      }} kW'
   - type: markdown
-    content: '### Goals and strategies
+    content: '### Policy decision
 
-      {% for g in state_attr(''sensor.thermann_shadow_controller'',''goals'') or [] %}- {{ g.kind }}:
-      {{ g.target_c }} °C by {{ as_timestamp(g.deadline) | timestamp_custom(''%a %H:%M'') }} ({{ g.basis
-      }})
+      {% set d = state_attr(''sensor.thermann_shadow_controller'',''policy_plan'') or {} %}- **{{ d.state
+      }}** · {{ d.reason }} (layer {{ d.layer }}) · command now: {{ d.command_now }}
 
-      {% endfor %}| Strategy | Start | Cost | Solar |
-
-      |---|---|---:|---:|
-
-      {% for name, p in (state_attr(''sensor.thermann_shadow_controller'',''strategies'') or {}).items()
-      %}| {{ name }} | {{ as_timestamp(p.start) | timestamp_custom(''%H:%M'') if p.start else ''—'' }}
-      | ${{ p.cost_aud }} | {{ (p.solar_share * 100) | round(0) }}% |
+      {% for item in (d.shadow_log or [])[-5:] %}- shadow {{ item.at }}: would send **{{ item.would_send
+      }}** ({{ item.reason }})
 
       {% endfor %}'
   - type: entities
@@ -588,26 +455,18 @@ views:
     - sensor.thermann_shadow_observed_request_attempts
     - sensor.thermann_shadow_observed_requests_per_hour
   - type: entities
-    title: Estimates and plan (not measurements)
+    title: Policy and plan (not measurements)
     entities:
     - sensor.thermann_shadow_decision_code
-    - sensor.thermann_shadow_simulated_cycle_state
+    - sensor.thermann_shadow_policy_wanted_state
+    - sensor.thermann_shadow_policy_mode
     - sensor.thermann_shadow_next_tariff_period
-    - sensor.thermann_shadow_forecast_usable_solar_before_deadline
-    - sensor.thermann_shadow_scenario_cost_difference
-    - sensor.thermann_shadow_modelled_energy_shortfall
     - sensor.thermann_shadow_latest_continuous_heating_start
-    - sensor.thermann_shadow_off_peak_fallback_start
-    - sensor.thermann_shadow_planning_deadline
-    - sensor.thermann_shadow_comfort_deadline
+    - sensor.thermann_shadow_hypothetical_heating_start
+    - sensor.thermann_shadow_soft_target_time
     - sensor.thermann_shadow_configured_afternoon_peak
+    - sensor.thermann_shadow_afternoon_storage_target
     - sensor.thermann_shadow_controller
-  - type: entities
-    title: Native heater references
-    entities:
-    - sensor.thermann_shadow_reported_schedule_window
-    - sensor.thermann_shadow_t_comfort_reference
-    - sensor.thermann_shadow_device_clock_check
   - type: markdown
     content: '### Forecast
 
@@ -619,24 +478,9 @@ views:
       - Measured AC PV (15-min mean): {{ f.measured_pv_average_kw }} kW · error vs forecast: {{ f.pv_error_kw
       }} kW
 
-      - Correction now: {{ f.pv_correction_now }} (two-way, bounded; fades after {{ f.pv_correction_fades_to_none_after_hours
-      }} h)
-
-      ### Reasons
-
-      {% for item in state_attr(''sensor.thermann_shadow_controller'',''reasons'') or [] %}- {{ item }}
-
-      {% endfor %}### Warnings and assumptions
+      ### Warnings and assumptions
 
       {% for item in state_attr(''sensor.thermann_shadow_controller'',''warnings'') or [] %}- {{ item
       }}
 
-      {% endfor %}{% for item in state_attr(''sensor.thermann_shadow_controller'',''strategy_warnings'')
-      or [] %}- {{ item }}
-
-      {% endfor %}
-
-      {% if ''not_applicable'' not in states(''sensor.thermann_shadow_device_clock_check'') %}Native clock:
-      compare manually with Hobart {{ now().strftime(''%a %d %b %H:%M'') }} after DST changes. {% else
-      %}The native Schedule is not in use: the heater clock does not affect heating. {% endif %}Tariff
-      93 stays fixed AEST. The planner adds zero cloud requests.'
+      {% endfor %}Tariff 93 stays fixed AEST. The policy adds zero cloud requests.'

@@ -40,7 +40,7 @@ def module():
 @pytest.fixture
 def clock():
     class Clock:
-        now = 1000
+        now = 1_728_000_000  # a whole number of days: clock-aligned polls (1.3.13) line up
 
         def __call__(self):
             return self.now
@@ -53,7 +53,7 @@ def clock():
 
 @pytest.fixture
 def factory(tmp_path, clock):
-    def create(**overrides):
+    def create(proactive_refresh=False, legacy_confirmation=True, **overrides):
         options = {
             "email": "synthetic@example.invalid",
             "password": "SYNTHETIC_PASSWORD",
@@ -68,6 +68,13 @@ def factory(tmp_path, clock):
             options, tmp_path, session=session, mqtt_client=Mock(), clock=clock, monotonic=clock
         )
         bridge.mqtt_connected.set()
+        # Tests written before 1.3.13 script exact request sequences around a
+        # reactive 401 refresh. Proactive refresh is tested on its own
+        # (test_bridge_1_3_13.py) with the real threshold.
+        if not proactive_refresh:
+            bridge.proactive_refresh = False
+        # Likewise their scripted immediate confirmation read (removed in 1.3.13).
+        bridge.immediate_confirmation_read = legacy_confirmation
         return bridge
 
     return create

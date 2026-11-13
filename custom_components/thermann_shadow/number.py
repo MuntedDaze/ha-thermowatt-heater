@@ -1,6 +1,7 @@
 """Validated shadow-model numeric preferences, never heater setpoints."""
 
 from homeassistant.components.number import NumberEntity, NumberMode
+from .config import WHOLE_NUMBER_OPTIONS
 from .settings_entity import SettingEntity, setup_controls
 
 
@@ -19,6 +20,8 @@ class ShadowNumber(SettingEntity, NumberEntity):
         self._attr_native_unit_of_measurement = self.meta.unit
         if key.endswith("rate"):
             self._attr_native_step = 0.000001
+        elif key in WHOLE_NUMBER_OPTIONS:
+            self._attr_native_step = 1
 
     @property
     def native_value(self):

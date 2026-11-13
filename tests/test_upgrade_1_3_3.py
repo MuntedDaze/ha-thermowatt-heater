@@ -23,9 +23,11 @@ def snapshot(version="1.3.2"):
 def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(source_version):
     old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == source_version and new["version"] == "1.3.11"
+    assert old["version"] == source_version and new["version"] == "1.3.13"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
-    assert {"1.3.8", "1.3.9", "1.3.10", "1.3.11"} <= set(new["breaking_versions"])
+    assert {"1.3.8", "1.3.9", "1.3.10", "1.3.11", "1.3.12", "1.3.13"} <= set(
+        new["breaking_versions"]
+    )
     assert new["options"].pop("command_policy") == "automation"
     assert new["schema"].pop("command_policy") == "list(automation|legacy)"
     assert new["options"].pop("on_demand_refresh_enabled") is False
@@ -41,6 +43,10 @@ def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(sou
         assert old["schema"].pop("poll_interval_minutes") == "int(5,120)"
         assert old["options"].pop("min_cloud_retry_minutes") == 60
         assert old["schema"].pop("min_cloud_retry_minutes") == "int(5,1440)"
+    # 1.3.12: display name and description only ("Thermann Hot Water").
+    assert new.pop("name") == "Thermann Hot Water" and old.pop("name") == "Thermowatt Smart Boiler"
+    new.pop("description")
+    old.pop("description")
     for key in ("version", "breaking_versions"):
         old.pop(key)
         new.pop(key)
