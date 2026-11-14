@@ -259,6 +259,8 @@ views:
         name: Next actual background poll
       - entity: sensor.thermann_shadow_shadow_next_adaptive_poll
         name: Next hypothetical shadow poll
+      - entity: sensor.thermann_shadow_actual_adaptive_polling_status
+        name: Adaptive polling status / reason
       - entity: sensor.thermann_shadow_cloud_request_budget_remaining
         name: Request budget remaining (rolling 24h)
       - entity: sensor.thermann_shadow_cloud_poll_interval

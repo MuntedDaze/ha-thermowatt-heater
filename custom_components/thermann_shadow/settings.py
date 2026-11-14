@@ -569,6 +569,12 @@ CATALOG.update(
         ),
     }
 )
+CATALOG["adaptive_polling_enabled"] = Setting(
+    "Send adaptive cloud scheduling plans",
+    "System",
+    "Disabled until independent review and supervised validation. Sends bounded expiring hints only; the bridge needs its separate enabled and qualified options. Fixed fallback and every cloud/command guard remain.",
+    kind="switch",
+)
 _DUAL_PROTECTED = frozenset(
     {
         "baseline_c",
@@ -669,6 +675,7 @@ PRESERVE_ON_RESTORE = frozenset(
         "forecast_enabled",
         "heater_meter_verification",
         "adaptive_polling_shadow",
+        "adaptive_polling_enabled",
         "adaptive_poll_heating_minutes",
         "adaptive_poll_stable_minutes",
         "optional_heat_margin_aud_per_kwh",
@@ -809,3 +816,6 @@ def describe(key, current):
         "changed_from_recommended": current != recommended,
         "restore_recommended": "restores" if key in RESTORED else "preserves",
     }
+
+
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {"adaptive_polling_enabled"}

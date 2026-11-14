@@ -1116,6 +1116,8 @@ ADDED_IN_0_9_0 = {
 # Backend-only additions on the separate smart-controller development branch.
 # Existing registry IDs must still be preserved; enumerate additions explicitly.
 ADDED_IN_SMART_DEVELOPMENT = {
+    "setting_adaptive_polling_enabled",
+    "adaptive_polling_status",
     "baseline_target_c",
     "setting_baseline_c",
     "setting_normal_storage_c",

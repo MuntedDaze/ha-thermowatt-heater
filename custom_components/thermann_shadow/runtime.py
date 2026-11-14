@@ -482,6 +482,22 @@ class ShadowRuntime:
             else None
         )
         values["cloud_poll_interval"] = seconds if values["next_cloud_poll"] is not None else None
+        schedule = attrs.get("adaptive_polling")
+        values["adaptive_polling_status"] = (
+            attrs.get("polling_mode", "fixed") + ":" + attrs.get("polling_reason", "clock_aligned")
+        )
+        if isinstance(schedule, dict) and schedule.get("enabled"):
+            try:
+                due = datetime.fromisoformat(attrs["next_scheduled_poll"])
+                values["next_cloud_poll"] = (
+                    due if due.tzinfo and due >= now and values["cloud_health"] == "ok" else None
+                )
+            except (ValueError, TypeError, KeyError):
+                values["next_cloud_poll"] = None
+            values["cloud_poll_interval"] = (
+                schedule.get("interval_seconds") if values["next_cloud_poll"] else None
+            )
+
         try:
             current = tariff_at(now, self.tariffs, self.settings.tariff_clock)
             change = next_tariff_change(now, self.tariffs, self.settings.tariff_clock)

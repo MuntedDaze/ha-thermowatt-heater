@@ -105,6 +105,7 @@ DEFAULT_OPTIONS = {
     "controller_notify_service": "",
     "heater_meter_verification": "",  # commissioned entity_id|W (or |kW); no default authority
     "adaptive_polling_shadow": False,
+    "adaptive_polling_enabled": False,
     "adaptive_poll_heating_minutes": 60.0,
     "adaptive_poll_stable_minutes": 90.0,
     "optional_heat_margin_aud_per_kwh": 0.02,
@@ -226,6 +227,7 @@ def parse_options(options):
         "controller_bridge_qualified",
         "controller_three_state_qualified",
         "adaptive_polling_shadow",
+        "adaptive_polling_enabled",
         "optional_solar_boost",
         "controller_four_state_qualified",
     ):

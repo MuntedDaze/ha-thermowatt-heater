@@ -32,10 +32,13 @@ New draft PR will target `codex/economic-dual-storage` (PR #34).
    package check_config variants. **1310 full tests passed**, 155 focused
    monitoring tests pass, Ruff lint/format pass. Actual HA awaits CI.
    Controller retains no dashboard import/dependency.
-3. C: implement one bridge polling authority with bounded expiring controller
-   hints, monotonic deadlines, fixed fallback, startup reinspection and existing
-   command/auth/backoff/accounting gates. Live option defaults false and needs
-   separate commissioning. Do not change vendor-token assumptions.
+3. C: implemented one bridge authority with expiring status-anchored plans,
+   monotonic 15–40 minute bounds, CT-free 30 minute bound, fixed fallback,
+   startup reinspection and existing command/auth/backoff/accounting gates.
+   Controller and bridge options default false; bridge qualification is separate.
+   No token-lifetime claim. 18 new scheduling regressions and 141 focused
+   schedule/upgrade/source-boundary tests pass. Full final suite/CI still needed.
+   Stage-B actual combined HA and all eight workflows passed at `18fd378`.
 4. D: enrich target-labelled measured sessions and robust held-out prediction
    diagnostics; gate any learned scheduling on real evidence/commissioning and
    retain conservative nominal lower-rate fallback.
@@ -64,6 +67,18 @@ New draft PR will target `codex/economic-dual-storage` (PR #34).
   Health reports staleness. Do not hide outages as zero measurements.
 
 ## Resume
+
+Draft PR #35 targets unchanged PR #34. Owner clarification: public distribution
+is deferred; no speculative packaging/licence administration. Finish controller,
+dashboard, adaptive polling, safe learning and tests first. Add practical common
+configuration: HA-default IANA zone, separate local/fixed tariff clock, flat and
+editable TOU/shoulder/weekend/midday rates and optional seasonal rows. One tariff
+model; limited free/tier/demand/controlled-load/dynamic export products may remain
+explicitly unsupported. Remove the unconditional EMHASS activation requirement
+for supported basic no-solar operation, preserving every command safety gate.
+Retain the closed 45/62/70 set until independent hardware evidence supports more.
+Government/network/retailer sources have been researched; document their distinct
+roles and conditional offers without copying current prices as defaults.
 
 Inspect branch/status first. Do not switch/reset existing PR branches or touch
 Fable's worktree. Finish staged merge and stage B, commit logical increments and

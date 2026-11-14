@@ -42,6 +42,7 @@ from .controller import (
 )
 from .model import HOBART
 from .polling import PollContext, PollingShadow
+from .adaptive import make_plan
 from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
 
 LOG = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ class Executor:
         self.save_failed = False
         self._saved: dict | None = None
         self._refresh_wanted = False
+        self._last_poll_plan_at = None
         self.poll_shadow = PollingShadow()
         self.reset_policy()
         self.configure(entry.options)
@@ -413,7 +415,7 @@ class Executor:
                 self.runtime.values.get("next_tariff_change"),
                 decision.plan.get("best_start"),
                 decision.plan.get("latest_start"),
-                now if decision.command else None,
+                now if decision.command and self.controller.enabled else None,
             ]
             actions = [at for at in actions if at is not None and at >= now]
             self.poll_shadow.observe(
@@ -435,8 +437,45 @@ class Executor:
                     reported_target_c=obs.target_c if obs.mode == "Manual" else None,
                 )
             )
+            await self._publish_poll_plan(now, obs, decision, min(actions) if actions else None)
             self.runtime.record_event(now, obs, decision)
         self._notify_listeners()
+
+    async def _publish_poll_plan(self, now, obs, decision, decision_at):
+        if not self.runtime.native_options["adaptive_polling_enabled"]:
+            return
+        if self.controller.state == CONFIRMING:
+            return  # the bridge owns the existing confirmation read sequence
+        if (
+            self._last_poll_plan_at is not None
+            and 0 <= (now - self._last_poll_plan_at).total_seconds() < 60
+        ):
+            return
+        topic = refresh_topic(self.cfg.command_topic)
+        if topic is None or obs.cloud_health != "ok" or obs.auth_mode != "authorized":
+            return
+        plan = make_plan(
+            now,
+            obs.poll_at,
+            heating=self.runtime.circuit.state == "on",
+            has_ct=self.runtime.circuit.valid,
+            temperature_valid=self.runtime.temperature_c is not None,
+            decision_at=decision_at,
+            completion_at=_dt(self.runtime.completion.get("earliest")),
+            status_max_minutes=self.runtime.settings.status_max_age_minutes,
+        )
+        if plan is None:
+            return
+        self._last_poll_plan_at = now
+        try:
+            from homeassistant.components import mqtt
+            import json
+
+            await mqtt.async_publish(
+                self.hass, topic.removesuffix("refresh") + "poll_plan", json.dumps(plan), 0, False
+            )
+        except Exception:  # noqa: BLE001 - no fallback HTTP or retry; bridge lease expires
+            LOG.debug("Adaptive plan unavailable; bridge fixed fallback remains.")
 
     async def _request_refresh(self) -> None:
         """At activation or restart: ask the bridge for ONE guarded status read

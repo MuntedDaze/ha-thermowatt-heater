@@ -30,6 +30,8 @@ options:
   poll_interval_unit: minutes
   min_cloud_retry_minutes: 60
   on_demand_refresh_enabled: false
+  adaptive_polling_enabled: false
+  adaptive_polling_qualified: false
   auth_retry_generation: 0
 schema:
   email: str
@@ -41,6 +43,8 @@ schema:
   poll_interval_unit: list(seconds|minutes)
   min_cloud_retry_minutes: int(5,1440)
   on_demand_refresh_enabled: bool
+  adaptive_polling_enabled: bool
+  adaptive_polling_qualified: bool
   auth_retry_generation: int(0,)
 services:
   - mqtt:need

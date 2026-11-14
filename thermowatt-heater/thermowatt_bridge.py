@@ -20,6 +20,7 @@ from paho.mqtt.enums import CallbackAPIVersion
 import requests
 
 from thermowatt_read_only import RequestUsage, daily_limit, poll_seconds
+from thermowatt_polling import AdaptiveSchedule
 
 LOG = logging.getLogger("thermowatt")
 _APP_API_KEY = "YVjArWssxKH631jv1dnnWOTr6gijsSAGz7rQJ4hJoUNRffxYvbQaMbePBEZalena"
@@ -421,6 +422,16 @@ class MyThermowattBridge:
         self.refresh_requested = set()
         self.refresh_lock = threading.Lock()
         self.read_this_tick = set()  # serials whose status was read in this tick
+        self.poll_hints = {}
+        self.poll_schedule = AdaptiveSchedule(
+            self.options.get("adaptive_polling_enabled", False)
+            and self.options.get("adaptive_polling_qualified", False)
+            and self.poll_interval >= 900,
+            self.clock,
+            self.monotonic,
+            self.data_dir / "poll_state.json",
+            atomic_json,
+        )
         self.failures = self.usage.failures
         if self.usage.cooldown_until > self.clock():
             self.next_cloud = self.next_poll = self.usage.cooldown_until
@@ -682,8 +693,10 @@ class MyThermowattBridge:
 
     def _offline(self):
         self.confirmed.clear()
+        self.poll_schedule.clear()
         with self.refresh_lock:
             self.refresh_requested.clear()
+            self.poll_hints.clear()
         for serial in self.config["devices"]:
             self._availability(serial, False)
         while True:
@@ -802,6 +815,7 @@ class MyThermowattBridge:
             health = self.cloud_health
         for serial in self.config["devices"]:
             timestamp = self.last_success.get(serial)
+            schedule = self.poll_schedule.summary(serial)
             payload = {
                 "last_successful_poll": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
                 if timestamp is not None
@@ -833,6 +847,18 @@ class MyThermowattBridge:
                 # controller requires them) and the polling schedule.
                 "command_transitions": sorted(TRANSITIONS),
                 "poll_schedule": "clock_aligned",
+                "adaptive_polling": schedule,
+                "polling_mode": "adaptive"
+                if schedule["active"]
+                else "fixed_fallback"
+                if schedule["enabled"]
+                else "fixed",
+                "polling_reason": schedule["reason"],
+                "next_scheduled_poll": datetime.fromtimestamp(
+                    schedule["next_at"], timezone.utc
+                ).isoformat()
+                if schedule["next_at"] is not None and health == "ok"
+                else None,
                 "refused_while_pending": dict(self.refused_while_pending)
                 if self.refused_while_pending
                 else None,
@@ -844,6 +870,11 @@ class MyThermowattBridge:
         self.mqtt_client.subscribe(
             f"P/{serial}/CMD/#", options=mqtt.SubscribeOptions(qos=0, retainAsPublished=True)
         )
+        if self.poll_schedule.active:
+            self.mqtt_client.subscribe(
+                f"P/{serial}/poll_plan",
+                options=mqtt.SubscribeOptions(qos=0, retainAsPublished=True),
+            )
         if self.options.get("on_demand_refresh_enabled", False):
             self.mqtt_client.subscribe(
                 f"P/{serial}/refresh", options=mqtt.SubscribeOptions(qos=0, retainAsPublished=True)
@@ -868,6 +899,15 @@ class MyThermowattBridge:
         if msg.retain or not self.mqtt_connected.is_set():
             return
         parts = msg.topic.split("/")
+        if len(parts) == 3 and parts[0] == "P" and parts[2] == "poll_plan":
+            if (
+                self.poll_schedule.active
+                and parts[1] in self.active_devices
+                and len(msg.payload) <= 512
+            ):
+                with self.refresh_lock:
+                    self.poll_hints[parts[1]] = msg.payload
+            return
         if len(parts) == 3 and parts[0] == "P" and parts[2] == "refresh":
             serial = parts[1]
             if (
@@ -909,6 +949,37 @@ class MyThermowattBridge:
             and self.clock() >= self.usage.cooldown_until
             and self.cloud_health not in {"backoff", "quota_limited"}
         )
+
+    def _adaptive_sync(self):
+        # This remains the only background polling timer. MQTT callbacks queue
+        # plans; they never authenticate or independently trigger a GET.
+        if (
+            not self.poll_schedule.active
+            or not self.discovered
+            or self.cloud_health != "ok"
+            or self.clock() < self.usage.cooldown_until
+        ):
+            return
+        with self.refresh_lock:
+            hints, self.poll_hints = self.poll_hints, {}
+        for serial, payload in hints.items():
+            if serial in self.active_devices:
+                self.poll_schedule.accept(serial, payload)
+        due_now = False
+        for serial in self.active_devices:
+            due = self.poll_schedule.deadline(serial)
+            if due is not None:
+                remaining = max(0, due - self.monotonic())
+                self.next_background[serial] = self.clock() + remaining
+                due_now |= remaining == 0
+        if self.next_background:
+            self.next_poll = min(
+                self.next_background.get(serial, 0) for serial in self.active_devices
+            )
+        # UTC clock changes cannot stall an otherwise healthy monotonic poll.
+        # Backoff/lockout paths above are never shortened.
+        if due_now and not self.failures:
+            self.next_cloud = min(self.next_cloud, self.clock())
 
     def _take_demand(self):
         with self.refresh_lock:
@@ -990,6 +1061,13 @@ class MyThermowattBridge:
         self.mqtt_client.publish(f"P/{serial}/STATUS", json.dumps({"result": safe}), retain=True)
         self._availability(serial, True)
         self.last_success[serial] = self.clock()
+        self.poll_schedule.observed(serial, self.last_success[serial], self.poll_interval)
+        if category == "status":
+            self.poll_schedule.counts["ordinary_reads"] += 1
+        else:
+            self.poll_schedule.counts["reused_reads"] += 1
+        if self.poll_schedule.enabled:
+            self.poll_schedule.save()
         self.cloud_health = "ok"
         self.publish_diagnostics(force=True)
         # Every fresh read after a command's POST is evidence for its outcome.
@@ -1465,6 +1543,7 @@ class MyThermowattBridge:
             return
         polling = False
         self.read_this_tick = set()
+        self._adaptive_sync()
         try:
             self.operation = "authentication_guard"
             self.guard.check()
@@ -1526,6 +1605,7 @@ class MyThermowattBridge:
                 self.cloud_health = "ok"
                 self.publish_diagnostics(force=True)
             self.next_cloud = min(self.clock() + self.COMMAND_INTERVAL, self.next_poll)
+            self._adaptive_sync()
         except (CloudError, OSError, ValueError, TypeError) as error:
             self._offline()
             self.failures = min(self.failures + 1, 5)
@@ -1627,7 +1707,13 @@ def load_options(path):
     for key in ("email", "password"):
         if not isinstance(options.get(key, ""), str):
             raise ValueError
-    for key in ("cloud_enabled", "commands_enabled", "on_demand_refresh_enabled"):
+    for key in (
+        "cloud_enabled",
+        "commands_enabled",
+        "on_demand_refresh_enabled",
+        "adaptive_polling_enabled",
+        "adaptive_polling_qualified",
+    ):
         if type(options.get(key, False)) is not bool:
             raise ValueError
     if options.get("command_policy", "automation") not in COMMAND_POLICIES:

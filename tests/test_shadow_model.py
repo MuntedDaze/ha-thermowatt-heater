@@ -121,8 +121,9 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
             assert "SensorStateClass.TOTAL" not in source
     assert seen == {"executor.py": {"async_publish", "async_call"}}
     executor = (PACKAGE / "executor.py").read_text()
-    # One command publish, and one guarded on-demand status request (refresh topic only).
-    assert executor.count("mqtt.async_publish(") == 2
+    # One command, one guarded refresh and one bounded scheduling-plan publish.
+    # Plans use a separate topic and cannot operate HTTP or heater commands.
+    assert executor.count("mqtt.async_publish(") == 3
     assert "refresh_topic(self.cfg.command_topic)" in executor
     assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())

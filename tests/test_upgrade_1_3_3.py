@@ -32,6 +32,9 @@ def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(sou
     assert new["schema"].pop("command_policy") == "list(automation|legacy)"
     assert new["options"].pop("on_demand_refresh_enabled") is False
     assert new["schema"].pop("on_demand_refresh_enabled") == "bool"
+    for key in ("adaptive_polling_enabled", "adaptive_polling_qualified"):
+        assert new["options"].pop(key) is False
+        assert new["schema"].pop(key) == "bool"
     assert new["options"].pop("poll_interval_minutes") == 30
     assert new["schema"].pop("poll_interval_minutes") == "int(1,7200)"
     assert new["options"].pop("poll_interval_unit") == "minutes"

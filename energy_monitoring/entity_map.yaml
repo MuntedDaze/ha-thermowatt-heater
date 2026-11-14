@@ -111,6 +111,7 @@ hot_water:
   last_poll: sensor.home_last_successful_poll
   last_cloud_error: sensor.home_last_cloud_error
   request_attempts: sensor.home_cloud_request_attempts_local_lifetime
+  adaptive_status: sensor.thermann_shadow_actual_adaptive_polling_status
   # Four-state backend telemetry, independent of this monitoring package:
   expected_completion: sensor.thermann_shadow_expected_heating_completion
   next_poll: sensor.thermann_shadow_next_cloud_poll
