@@ -402,12 +402,14 @@ def test_m2_a_real_element_is_still_counted_once_the_heater_is_in_manual(tmp_pat
 # --- M4: published forecasts ---------------------------------------------------------------
 
 
-def test_m4_automatic_control_cannot_be_enabled_without_published_forecasts(rig):
+def test_basic_four_state_control_supports_no_forecasts_after_commissioning(rig):
     rig.entry.options["forecast_enabled"] = False
     rig.executor.configure(rig.entry.options)
-    with pytest.raises(RuntimeError, match="published_forecasts_not_enabled"):
-        rig.enable()
-    assert rig.executor.controller.enabled is False
+    rig.enable()
+    assert rig.executor.controller.enabled is True
+    assert "published_forecasts_not_enabled" not in rig.executor.cfg.missing_commissioning()
+    # Auth, exact-prior protocol, topic, tariff and owner guards are unchanged.
+    rig.executor.controller.enabled = False
     rig.entry.options["forecast_enabled"] = True
     rig.executor.configure(rig.entry.options)
     rig.enable()

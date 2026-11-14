@@ -23,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
@@ -40,7 +40,7 @@ from .controller import (
     payload_for,
     refresh_topic,
 )
-from .model import HOBART
+from zoneinfo import ZoneInfo
 from .polling import PollContext, PollingShadow
 from .adaptive import make_plan
 from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
@@ -97,6 +97,7 @@ class Executor:
         from .config import DEFAULT_OPTIONS
 
         values = {**DEFAULT_OPTIONS, **options}
+        self.controller.time_zone = self.runtime.settings.time_zone
         self.cfg = controller_config(values, self._poll_minutes(), self._expected_topic())
         economic_change = any(
             values[key] != self.runtime.native_options[key]
@@ -153,6 +154,10 @@ class Executor:
                 boost_min_saving=float(self.runtime.native_options["boost_min_saving_aud"]),
                 feed_in_rate=settings.feed_in_rate,
                 tariff_clock=settings.tariff_clock,
+                time_zone=settings.time_zone,
+                daytime_start=time.fromisoformat(self.runtime.native_options["daytime_start"]),
+                storage_ready=time.fromisoformat(self.runtime.native_options["storage_ready_time"]),
+                baseline_start=time.fromisoformat(self.runtime.native_options["baseline_start"]),
                 optional_heat_margin=self.runtime.native_options[
                     "optional_heat_margin_aud_per_kwh"
                 ],
@@ -164,6 +169,7 @@ class Executor:
     async def async_load(self) -> None:
         data = await self.store.async_load()
         self.controller = Controller.from_dict(data)
+        self.controller.time_zone = self.runtime.settings.time_zone
         self._saved = data if isinstance(data, dict) else None
         self.controller.restored(dt_util.utcnow())
         self.runtime.controller_active = self.controller.enabled
@@ -283,7 +289,11 @@ class Executor:
         obs.element = self.runtime.circuit.state
         obs.element_confidence = "verified" if self.runtime.circuit.valid else "none"
         forecast = self.runtime.forecast
-        obs.forecast_available = bool(forecast is not None and forecast.slots)
+        obs.forecast_available = (
+            bool(forecast is not None and forecast.slots)
+            if self.runtime.settings.forecast_enabled
+            else None
+        )
         return obs
 
     def decide(self, now: datetime, obs: Observation):
@@ -356,8 +366,10 @@ class Executor:
         if (
             self.shadow
             and self.shadow[-1]["would_send"] == payload
-            and _dt(self.shadow[-1]["at"]).astimezone(HOBART).date()
-            == now.astimezone(HOBART).date()
+            and _dt(self.shadow[-1]["at"])
+            .astimezone(ZoneInfo(self.runtime.settings.time_zone))
+            .date()
+            == now.astimezone(ZoneInfo(self.runtime.settings.time_zone)).date()
         ):
             # The heater is not changed in shadow mode, so the same wish recurs
             # after every spacing interval: recorded once a (Hobart) day. The
@@ -415,6 +427,7 @@ class Executor:
                 self.runtime.values.get("next_tariff_change"),
                 decision.plan.get("best_start"),
                 decision.plan.get("latest_start"),
+                decision.plan.get("next_baseline"),
                 now if decision.command and self.controller.enabled else None,
             ]
             actions = [at for at in actions if at is not None and at >= now]

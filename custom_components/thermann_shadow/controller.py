@@ -179,7 +179,7 @@ class ControllerConfig:
             missing.append("three_state_commands_not_qualified")
         if self.requires_four_states and not self.four_state_qualified:
             missing.append("four_state_commands_not_qualified")
-        if not self.published_forecasts_enabled:
+        if not self.published_forecasts_enabled and not self.requires_four_states:
             missing.append("published_forecasts_not_enabled")
         if not self.tariff_verified:
             missing.append("tariff_contract_not_verified")
@@ -294,18 +294,19 @@ def _dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
 
-def hobart_midnight(day: date | datetime) -> datetime:
+def hobart_midnight(day: date | datetime, zone: str = "Australia/Hobart") -> datetime:
     """Holiday dates take effect at 00:00 Hobart local: a departure of 10
     November starts Holiday mode at 00:00 on 10 November (so today's date
     starts it at once), and a return of 14 November ends it at 00:00 on 14
     November. A datetime is reduced to its Hobart date."""
     if isinstance(day, datetime):
-        day = day.astimezone(HOBART).date()
-    return datetime.combine(day, time(0), HOBART)
+        day = day.astimezone(ZoneInfo(zone)).date()
+    return datetime.combine(day, time(0), ZoneInfo(zone))
 
 
 @dataclass
 class Controller:
+    time_zone: str = "Australia/Hobart"
     enabled: bool = False
     hold: bool = False
     state: str = DISABLED
@@ -349,8 +350,12 @@ class Controller:
         # 0.7-0.8 stored dates AND times; 0.9.0 keeps each Hobart date (00:00).
         for key in ("holiday_start", "holiday_return"):
             value = getattr(controller, key)
-            if value:
-                setattr(controller, key, _iso(hobart_midnight(datetime.fromisoformat(value))))
+            if value and "time_zone" not in data:
+                setattr(
+                    controller,
+                    key,
+                    _iso(hobart_midnight(datetime.fromisoformat(value), controller.time_zone)),
+                )
         intent = controller.intent
         if intent is not None and (not isinstance(intent, dict) or "target" not in intent):
             # A 0.8.x permit/park intent: its outcome is decided by the next
@@ -477,11 +482,11 @@ class Controller:
 
     def holiday_start_date(self) -> date | None:
         start = _dt(self.holiday_start)
-        return start.astimezone(HOBART).date() if start else None
+        return start.astimezone(ZoneInfo(self.time_zone)).date() if start else None
 
     def holiday_return_date(self) -> date | None:
         back = _dt(self.holiday_return)
-        return back.astimezone(HOBART).date() if back else None
+        return back.astimezone(ZoneInfo(self.time_zone)).date() if back else None
 
     def set_holiday(
         self, now: datetime, start: date | datetime | None, back: date | datetime | None
@@ -491,9 +496,9 @@ class Controller:
         today starts Holiday mode at once. Validated, never silently
         adjusted; a refusal leaves the previous dates unchanged."""
         if start is not None:
-            start = hobart_midnight(start)
+            start = hobart_midnight(start, self.time_zone)
         if back is not None:
-            back = hobart_midnight(back)
+            back = hobart_midnight(back, self.time_zone)
         if back is not None and back <= now:
             self.refusal = "return_must_be_in_the_future"
             return False

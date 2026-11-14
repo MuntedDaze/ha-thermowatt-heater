@@ -50,15 +50,18 @@ def background_poll_due(now, seconds, health, schedule):
     return datetime.fromtimestamp((math.floor(now.timestamp() / seconds) + 1) * seconds, now.tzinfo)
 
 
-def next_tariff_change(now, tariffs, clock):
+def next_tariff_change(now, tariffs, clock, zone="Australia/Hobart"):
     """(time, tariff) of the next change of tariff kind within 8 days, or None."""
-    current = tariff_at(now, tariffs, clock)
+    current = tariff_at(now, tariffs, clock, zone)
     at = now.replace(second=0, microsecond=0)
     for _ in range(8 * 24 * 4):
         at += timedelta(minutes=15)
-        candidate = tariff_at(at, tariffs, clock)
-        if candidate.kind != current.kind:
-            while tariff_at(at - timedelta(minutes=1), tariffs, clock).kind != current.kind:
+        candidate = tariff_at(at, tariffs, clock, zone)
+        if (candidate.kind, candidate.rate) != (current.kind, current.rate):
+            while (
+                tariff_at(at - timedelta(minutes=1), tariffs, clock, zone).kind,
+                tariff_at(at - timedelta(minutes=1), tariffs, clock, zone).rate,
+            ) != (current.kind, current.rate):
                 at -= timedelta(minutes=1)
             return at, candidate
     return None
@@ -499,8 +502,12 @@ class ShadowRuntime:
             )
 
         try:
-            current = tariff_at(now, self.tariffs, self.settings.tariff_clock)
-            change = next_tariff_change(now, self.tariffs, self.settings.tariff_clock)
+            current = tariff_at(
+                now, self.tariffs, self.settings.tariff_clock, self.settings.time_zone
+            )
+            change = next_tariff_change(
+                now, self.tariffs, self.settings.tariff_clock, self.settings.time_zone
+            )
         except ValueError:
             current = change = None
         values.update(
@@ -542,6 +549,7 @@ class ShadowRuntime:
             "meter_sign_load_test_verified": self.settings.meter_verified,
             "tariff_contract_verified": self.settings.tariff_verified,
             "tariff_clock": self.settings.tariff_clock,
+            "time_zone": self.settings.time_zone,
             "status_fresh": status_ok,
             "warnings": list(self.warnings),
             "sources": dict(self.sources),

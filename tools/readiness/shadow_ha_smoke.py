@@ -217,11 +217,20 @@ async def main():
         assert not runtime.settings.tariff_verified
         assert runtime.values["pv"] == 2.322
         assert runtime.values["requests_since_start"] == 0
-        assert runtime.values["current_price_aud"] in {0.170200, 0.361878}
+        assert runtime.values["current_price_aud"] == 0
+        assert (
+            entry.options["tariff_profile"] == "flat"
+            and entry.options["time_zone"] == hass.config.time_zone
+        )
+        assert entry.options["baseline_c"] == "62" and not entry.options["optional_solar_boost"]
         assert runtime.details["additional_cloud_requests"] == 0
         assert runtime.details["controller_active"] is False
         assert runtime.values["controller"] == "shadow_observation"
         assert_entity_serialization(hass, runtime.sources)
+        # The following legacy form regressions use the historic empty options
+        # fixture after explicitly checking the new fresh-install defaults.
+        hass.config_entries.async_update_entry(entry, options={})
+        await hass.async_block_till_done()
         # Real config/options flows reject bad tariffs; owner can edit mappings.
         flow = await hass.config_entries.options.async_init(entry.entry_id)
         assert flow["type"] == "menu", flow  # 0.8.0: preferences / system / sources

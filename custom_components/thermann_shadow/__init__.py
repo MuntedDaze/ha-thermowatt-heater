@@ -126,7 +126,7 @@ async def async_migrate_entry(hass, entry):
     Only the exact old default is moved; any value the owner chose is kept.
     Major version stays 1, so a 0.3.0 rollback can still load the entry.
     """
-    if entry.version != 1 or entry.minor_version >= 4:
+    if entry.version != 1 or entry.minor_version >= 5:
         return True
     options = dict(entry.options)
     if entry.minor_version < 2 and options.get("morning_threshold_c") == LEGACY_MORNING_THRESHOLD_C:
@@ -141,8 +141,18 @@ async def async_migrate_entry(hass, entry):
         )
     from .installation import preserve_existing
 
-    options = preserve_existing(options, getattr(entry, "data", {}))
-    hass.config_entries.async_update_entry(entry, options=options, minor_version=4)
+    if entry.minor_version < 4:
+        options = preserve_existing(options, getattr(entry, "data", {}))
+    else:
+        options = {
+            "meter_verified": False,
+            "tariff_verified": False,
+            "import_positive": True,
+            "tariff_clock": "local",
+            "time_zone": "Australia/Hobart",
+            **options,
+        }
+    hass.config_entries.async_update_entry(entry, options=options, minor_version=5)
     return True
 
 

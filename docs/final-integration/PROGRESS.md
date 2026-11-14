@@ -42,6 +42,18 @@ New draft PR will target `codex/economic-dual-storage` (PR #34).
 4. D: enrich target-labelled measured sessions and robust held-out prediction
    diagnostics; gate any learned scheduling on real evidence/commissioning and
    retain conservative nominal lower-rate fallback.
+   C2 configuration increment implemented before D: actual fresh setup uses HA's
+   IANA zone, unverified flat placeholder rates, no forecast/boost authority and
+   a 62-degree initial baseline awaiting compliance/appliance verification.
+   Existing household settings keep their old values/zone. One tariff model now
+   supports editable per-window prices, months, weekday/weekend/shoulder/midday
+   windows and zone-specific fixed-standard versus DST clocks. Weekdays without
+   an afternoon peak get a configurable service deadline, not an invented peak.
+   Optional EMHASS no longer blocks qualified basic CT-free/no-solar control;
+   disabled forecasts do not create outage alerts. All command guards remain.
+   1342 full tests passed and strict model mypy/Ruff passed; 14 new general
+   tariff tests cover zones, seasons, service, no-solar commands and cheap windows.
+   Research and unsupported complex products: TARIFFS.md. Final CI still required.
 5. E: comparative polling and full-week end-to-end scenarios including owner,
    restart, cloud/meter failures, CT-free and CT-measured; equal service/terminal
    energy, request categories and detection/error trade-offs must be explicit.

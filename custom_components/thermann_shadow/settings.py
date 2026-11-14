@@ -1,6 +1,7 @@
 """One metadata catalogue for native controls, forms, defaults and validation."""
 
 from dataclasses import dataclass
+from zoneinfo import available_timezones
 from types import MappingProxyType
 
 from .config import DEFAULT_OPTIONS
@@ -122,7 +123,7 @@ CATALOG = {
     "forecast_enabled": Setting(
         "Use published forecasts",
         "Advanced",
-        "The EMHASS PV AND household-load forecasts with generation timestamps. Required for automatic control (it cannot be turned on without them, and they cannot be turned off while it is on). If the forecast is missing, weekday grid heating waits for the latest start instead of starting at once, and an alert is raised after an hour.",
+        "The EMHASS PV AND household-load forecasts with generation timestamps. Optional for basic no-solar tariff control. Settings cannot change while automatic control is on. If the forecast is missing, weekday grid heating waits for the latest start instead of starting at once, and an alert is raised after an hour.",
         kind="switch",
     ),
     "forecast_uncertainty": Setting(
@@ -223,7 +224,7 @@ CATALOG = {
         "Tariff periods mode",
         "Advanced",
         "aurora_93 uses editable weekday peak times below; custom retains advanced weekly JSON periods in Configure.",
-        choices=("aurora_93", "custom"),
+        choices=("flat", "aurora_93", "custom"),
         kind="select",
     ),
     "weekend_peak": Setting(
@@ -575,6 +576,27 @@ CATALOG["adaptive_polling_enabled"] = Setting(
     "Disabled until independent review and supervised validation. Sends bounded expiring hints only; the bridge needs its separate enabled and qualified options. Fixed fallback and every cloud/command guard remain.",
     kind="switch",
 )
+
+
+CATALOG["time_zone"] = Setting(
+    "Household time zone",
+    "Advanced",
+    "IANA zone; a new installation starts from Home Assistant's configured zone. Tariff local/fixed standard basis is separate. Changing this requires control disabled.",
+    choices=tuple(sorted(available_timezones())),
+    kind="select",
+)
+for key, name in (
+    ("daytime_start", "Weekday storage window starts"),
+    ("storage_ready_time", "Weekday storage ready time without peak"),
+    ("baseline_start", "Return to overnight baseline without peak"),
+):
+    CATALOG[key] = Setting(
+        name,
+        "Everyday",
+        "Household local clock. Used for required weekday storage when the electricity plan has no peak deadline. Start < ready < baseline return. Not an electrical peak or a hygiene guarantee.",
+        kind="time",
+    )
+
 _DUAL_PROTECTED = frozenset(
     {
         "baseline_c",
@@ -819,3 +841,15 @@ def describe(key, current):
 
 
 LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {"adaptive_polling_enabled"}
+PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
+    "time_zone",
+    "daytime_start",
+    "storage_ready_time",
+    "baseline_start",
+}
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
+    "time_zone",
+    "daytime_start",
+    "storage_ready_time",
+    "baseline_start",
+}

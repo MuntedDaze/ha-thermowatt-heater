@@ -76,7 +76,7 @@ def options_schema(values, groups=("Everyday", "Advanced", "System")):
 
 class ShadowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    MINOR_VERSION = 4
+    MINOR_VERSION = 5
 
     async def async_step_user(self, user_input=None):
         await self.async_set_unique_id("thermann_shadow_315l")
@@ -84,7 +84,13 @@ class ShadowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             for entity in user_input.values():
                 cv.entity_id(entity)
-            return self.async_create_entry(title=ENTRY_TITLE, data=user_input)
+            from .installation import fresh_options
+
+            return self.async_create_entry(
+                title=ENTRY_TITLE,
+                data=user_input,
+                options=fresh_options(self.hass.config.time_zone),
+            )
         return self.async_show_form(step_id="user", data_schema=sources_schema({}))
 
     @staticmethod

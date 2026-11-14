@@ -23,11 +23,12 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import math
 from statistics import median
 
-from .model import ELEMENT_KW, HOBART, TANK_KWH_PER_C, Forecast, Tariff, tariff_at
+from .model import ELEMENT_KW, TANK_KWH_PER_C, Forecast, Tariff, tariff_at, tariff_zone
+from zoneinfo import ZoneInfo
 from .targets import NORMAL, TARGET_C, state_at, validate_roles
 
 OFF, BASELINE, STORAGE, HOLD = "off", "baseline", "storage", "hold"
@@ -66,6 +67,10 @@ class PolicySettings:
     kwh_per_c: float = TANK_KWH_PER_C
     feed_in_rate: float = 0.09276
     tariff_clock: str = "standard"
+    time_zone: str = "Australia/Hobart"
+    daytime_start: time = time(9)
+    storage_ready: time = time(16)
+    baseline_start: time = time(21)
     peak_start_kw: float = 3.3  # element 3.0 kW + 0.3 kW buffer
     peak_import_tolerance_kw: float = 0.2
     solar_floor_kw: float = 1.0  # least measured surplus for optional (weekend) heating
@@ -198,7 +203,7 @@ class SimplePolicy:
     # --- tariff calendar --------------------------------------------------------------
 
     def _kind(self, at: datetime) -> str:
-        return tariff_at(at, self.tariffs, self.s.tariff_clock).kind
+        return tariff_at(at, self.tariffs, self.s.tariff_clock, self.s.time_zone).kind
 
     def next_peak(self, now: datetime) -> datetime | None:
         """Start of the next peak strictly after ``now`` (``now`` not in a peak)."""
@@ -258,12 +263,21 @@ class SimplePolicy:
             at += SLOT
         return out
 
-    def _windows(self, profile: list[float], grid_rate: float, slots: int):
+    def _windows(self, profile: list[float], grid_rate: float | list[float], slots: int):
         """Mean $/kWh of each window of ``slots`` consecutive slots, by start index."""
         prefix = [0.0]
-        for kw in profile:
-            prefix.append(prefix[-1] + self.mixed_cost(kw, grid_rate))
+        for i, kw in enumerate(profile):
+            prefix.append(
+                prefix[-1]
+                + self.mixed_cost(kw, grid_rate[i] if isinstance(grid_rate, list) else grid_rate)
+            )
         return [(prefix[i + slots] - prefix[i]) / slots for i in range(len(profile) - slots + 1)]
+
+    def _prices(self, now, count):
+        return [
+            tariff_at(now + i * SLOT, self.tariffs, self.s.tariff_clock, self.s.time_zone).rate
+            for i in range(count)
+        ]
 
     @staticmethod
     def _cheapest(costs: list[float], first: int = 0) -> int | None:
@@ -379,8 +393,11 @@ class SimplePolicy:
         horizon = now + timedelta(hours=max(hours, SLOT.total_seconds() / 3600))
         profile = self.surplus_profile(now, horizon, snap.forecast, self.typical_available(now))
         later = min((t.rate for t in self.tariffs if t.kind != "peak"), default=0)
-        price = tariff_at(now, self.tariffs, s.tariff_clock).rate
-        cost = sum(self.mixed_cost(kw, price) for kw in profile) / len(profile)
+        price = tariff_at(now, self.tariffs, s.tariff_clock, s.time_zone).rate
+        cost = sum(
+            self.mixed_cost(kw, p)
+            for kw, p in zip(profile, self._prices(now, len(profile)), strict=True)
+        ) / len(profile)
         if peak:
             cost = self.mixed_cost(self.typical_available(now), price)
         extra = info["boost_extra_kwh"]
@@ -471,14 +488,32 @@ class SimplePolicy:
             return OFF, "peak_no_grid_heating", 4, plan
 
         measured = self.typical_available(now)
-        price = tariff_at(now, self.tariffs, s.tariff_clock).rate
-        local = now.astimezone(HOBART)
+        price = tariff_at(now, self.tariffs, s.tariff_clock, s.time_zone).rate
+        local = now.astimezone(ZoneInfo(s.time_zone))
+        daytime = s.daytime_start <= local.time().replace(tzinfo=None)
         evening = (
-            peak is not None
-            and peak.astimezone(HOBART).date() == local.date()
-            and peak.astimezone(HOBART).hour >= s.evening_peak_from_hour
+            daytime
+            and peak is not None
+            and peak.astimezone(ZoneInfo(s.time_zone)).date() == local.date()
+            and peak.astimezone(ZoneInfo(s.time_zone)).hour >= s.evening_peak_from_hour
         )
-        goal = s.normal_c if evening else s.storage_c
+        # A flat or no-afternoon-peak day still has required weekday storage.
+        # This is a service deadline, never an artificial peak/OFF boundary.
+        clock_local = now.astimezone(tariff_zone(now, s.tariff_clock, s.time_zone))
+        afternoon_peak_today = any(
+            t.kind == "peak"
+            and clock_local.month in t.months
+            and clock_local.weekday() in t.days
+            and (t.start >= 720 or t.end > 720 or t.start == t.end)
+            for t in self.tariffs
+        )
+        flat_deadline = (
+            daytime
+            and local.time().replace(tzinfo=None) < s.baseline_start
+            and local.weekday() < 5
+            and not afternoon_peak_today
+        )
+        goal = s.normal_c if evening or flat_deadline else s.storage_c
         would_heat = reading <= goal - s.hysteresis_c
         # Actual ON evidence can continue toward target inside its hysteresis band.
         hours = (
@@ -488,12 +523,25 @@ class SimplePolicy:
         )
         need = max(1, math.ceil(hours * 60 / 5))
         plan.update(heating_hours=round(hours, 2), measured_kw=measured)
-        if evening:
+        if evening or flat_deadline:
             plan["mode"] = DEADLINE
-            soft = peak - s.soft_target_margin
+            service_at = (
+                peak
+                if evening
+                else datetime.combine(local.date(), s.storage_ready, ZoneInfo(s.time_zone))
+            )
+            soft = service_at - s.soft_target_margin
             latest = soft - timedelta(hours=hours)
             plan.update(soft_target=soft, latest_start=latest)
-            eligible, info = self._boost(snap, reading, fresh, rate, soft, s.normal_c)
+            optional_end = (
+                soft
+                if evening
+                else datetime.combine(local.date(), s.baseline_start, ZoneInfo(s.time_zone))
+            )
+            plan["next_baseline"] = datetime.combine(
+                local.date(), s.baseline_start, ZoneInfo(s.time_zone)
+            )
+            eligible, info = self._boost(snap, reading, fresh, rate, optional_end, s.normal_c)
             plan.update(info)
             optional_running = state == boost and boost != normal
             if optional_running:
@@ -535,9 +583,8 @@ class SimplePolicy:
                     5,
                     plan,
                 )
-            costs = self._windows(
-                self.surplus_profile(now, soft, snap.forecast, measured), price, need
-            )
+            profile = self.surplus_profile(now, soft, snap.forecast, measured)
+            costs = self._windows(profile, self._prices(now, len(profile)), need)
             if state == normal:
                 best = self._cheapest(costs, math.ceil(s.command_spacing / SLOT))
                 if best is not None:
@@ -553,7 +600,11 @@ class SimplePolicy:
                 cost_best=round(costs[best], 4),
             )
             if best == 0:
-                if not snap.forecast and costs[0] > price - PRICE_TOLERANCE:
+                if (
+                    not snap.forecast
+                    and costs[0] > price - PRICE_TOLERANCE
+                    and max(costs) - costs[0] < PRICE_TOLERANCE
+                ):
                     plan["waiting_for"] = "latest_start_no_forecast"
                     return state, "storage_waiting_no_forecast", 6, plan
                 return normal, "storage_cheapest_now", 6, plan

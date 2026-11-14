@@ -236,7 +236,7 @@ async def upgrade_from(folder, fixture, version, customise):
     # The only rewrite is the documented 1.1 -> 1.2 migration of the untouched
     # old 40 °C default to the 42 °C requirement; everything else is kept
     # (the 1.2 -> 1.3 range check of 0.7.1 changes nothing in range).
-    assert entry.minor_version == 4
+    assert entry.minor_version == 5
     assert_preserved_options(entry.options, saved_options, threshold_migrated=True)
     runtime = hass.data["thermann_shadow"][entry.entry_id]
     for key, value in customise.items():
@@ -313,6 +313,7 @@ def assert_preserved_options(actual, before, threshold_migrated=False):
         "tariff_clock",
         "sources",
         "peak_heating_policy",
+        "time_zone",
     }
 
 
@@ -692,7 +693,7 @@ async def check_controller(hass, entry, entity_for):
         state = hass.states.get(master)
         assert state.state == "off", state
         # Command topic, three-state qualification and (0.9.1) published forecasts.
-        assert len(state.attributes["commissioning_missing"]) == 3
+        assert len(state.attributes["commissioning_missing"]) == 2
         # Stage A (disabled): repeated evaluations neither publish, notify nor
         # rewrite the controller's storage file when nothing changed.
         idle = hass.data["thermann_shadow"][entry.entry_id].executor
@@ -723,19 +724,10 @@ async def check_controller(hass, entry, entity_for):
             ("controller_four_state_qualified", True),
         ):
             await set_setting(hass, entity_for(key), CATALOG[key].kind, value)
-        # 0.9.1: still refused until the published forecasts are enabled.
-        try:
-            await drive(hass, "switch", "turn_on", master)
-        except HomeAssistantError:
-            pass
-        else:
-            raise AssertionError("automatic control was enabled without published forecasts")
-        # The switch shows the remaining requirement at once (0.9.1: a settings
-        # change refreshes it; before, it was stale until the next minute).
-        await hass.async_block_till_done()
-        assert hass.states.get(master).attributes["commissioning_missing"] == [
-            "published_forecasts_not_enabled"
-        ]
+        # No-solar/basic tariff operation needs no forecast feature gate.
+        await drive(hass, "switch", "turn_on", master)
+        assert hass.states.get(master).state == "on"
+        await drive(hass, "switch", "turn_off", master)
         await set_setting(hass, entity_for("forecast_enabled"), "switch", True)
         await drive(hass, "switch", "turn_on", master)
         assert hass.states.get(master).state == "on"
@@ -899,7 +891,7 @@ async def _upgrade_from_0_6(folder, version):
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
         assert_preserved_options(entry.options, saved_options)
-        assert entry.minor_version == 4  # 0.7.1 range check ran and changed nothing
+        assert entry.minor_version == 5  # 0.7.1 range check ran and changed nothing
         runtime = hass.data["thermann_shadow"][entry.entry_id]
         assert runtime.settings.target_c == 68.0
         assert runtime.executor.cfg.max_commands_per_day == 5
@@ -945,7 +937,6 @@ async def _upgrade_from_0_6(folder, version):
         assert missing == [
             "command_topic_not_configured",
             "four_state_commands_not_qualified",
-            "published_forecasts_not_enabled",
         ]
         assert captured == []
     finally:
@@ -1022,7 +1013,7 @@ async def upgrade_from_0_5_0(folder):
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
         assert_preserved_options(entry.options, saved_options)
-        assert entry.minor_version == 4  # 0.7.1 range check ran and changed nothing
+        assert entry.minor_version == 5  # 0.7.1 range check ran and changed nothing
         runtime = hass.data["thermann_shadow"][entry.entry_id]
         assert runtime.settings.target_c == 68.0
         assert runtime.executor.cfg.max_commands_per_day == 5
@@ -1063,7 +1054,6 @@ async def upgrade_from_0_5_0(folder):
         assert missing == [
             "command_topic_not_configured",
             "four_state_commands_not_qualified",
-            "published_forecasts_not_enabled",
         ]
         assert captured == []
     finally:
@@ -1116,6 +1106,10 @@ ADDED_IN_0_9_0 = {
 # Backend-only additions on the separate smart-controller development branch.
 # Existing registry IDs must still be preserved; enumerate additions explicitly.
 ADDED_IN_SMART_DEVELOPMENT = {
+    "setting_time_zone",
+    "setting_daytime_start",
+    "setting_storage_ready_time",
+    "setting_baseline_start",
     "setting_adaptive_polling_enabled",
     "adaptive_polling_status",
     "baseline_target_c",

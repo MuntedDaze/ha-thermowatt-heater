@@ -5,9 +5,9 @@ Plans are advisory counterfactuals while native Schedule retains all ownership.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone, tzinfo
 import math
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 HOBART = ZoneInfo("Australia/Hobart")
 STANDARD = timezone(timedelta(hours=10))
@@ -31,6 +31,7 @@ class Tariff:
     end: int  # exclusive; equal start/end means 24 hours
     rate: float  # AUD/kWh; no vendor tariff is assumed
     kind: str
+    months: tuple[int, ...] = tuple(range(1, 13))
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class Settings:
     paused: bool = False
     import_positive: bool = True
     tariff_clock: str = "local"
+    time_zone: str = "Australia/Hobart"  # legacy fallback; fresh entries use HA's zone
     target_c: float = 70.0  # model target only; never a heater setpoint
     morning_threshold_c: float = 42.0  # HARD morning minimum; NEVER a storage setpoint
     morning_preferred_c: float = 45.0  # preferred morning reserve (soft); NEVER a setpoint
@@ -109,28 +111,47 @@ def timestamp(value: object) -> datetime:
     return result.astimezone(UTC)
 
 
-_TARIFF_CACHE: dict[tuple[float, int, str], tuple[tuple[Tariff, ...], Tariff]] = {}
+_TARIFF_CACHE: dict[tuple[float, int, str, str], tuple[tuple[Tariff, ...], Tariff]] = {}
 
 
-def tariff_at(at: datetime, tariffs: tuple[Tariff, ...], clock: str) -> Tariff:
+def tariff_zone(at: datetime, clock: str, zone: str = "Australia/Hobart") -> tzinfo:
+    try:
+        local = ZoneInfo(zone)
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        raise ValueError("time_zone_invalid") from None
+    if clock == "local":
+        return local
+    # Separate fixed standard clock, including half-hour offsets. It does not
+    # acquire the site's current daylight-saving offset.
+    sample = at.astimezone(local)
+    return timezone((sample.utcoffset() or timedelta()) - (sample.dst() or timedelta()))
+
+
+def tariff_at(
+    at: datetime, tariffs: tuple[Tariff, ...], clock: str, zone: str = "Australia/Hobart"
+) -> Tariff:
     # Tariffs change on wall-minute boundaries only: memoise per UTC minute and
     # tariff-table identity (the cached entry holds the table, so ids stay valid).
-    key = (at.timestamp() // 60, id(tariffs), clock)
+    key = (at.timestamp() // 60, id(tariffs), clock, zone)
     hit = _TARIFF_CACHE.get(key)
     if hit is not None and hit[0] is tariffs:
         return hit[1]
-    result = _tariff_at_minute(at, tariffs, clock)
+    result = _tariff_at_minute(at, tariffs, clock, zone)
     if len(_TARIFF_CACHE) >= 50000:
         _TARIFF_CACHE.clear()
     _TARIFF_CACHE[key] = (tariffs, result)
     return result
 
 
-def _tariff_at_minute(at: datetime, tariffs: tuple[Tariff, ...], clock: str) -> Tariff:
-    local = at.astimezone(HOBART if clock == "local" else STANDARD)
+def _tariff_at_minute(
+    at: datetime, tariffs: tuple[Tariff, ...], clock: str, zone: str = "Australia/Hobart"
+) -> Tariff:
+    local = at.astimezone(tariff_zone(at, clock, zone))
     minute = local.hour * 60 + local.minute
     matches = []
     for item in tariffs:
+        if local.month not in item.months:
+            continue
         today = local.weekday() in item.days
         previous = (local.weekday() - 1) % 7 in item.days
         if (
@@ -147,7 +168,9 @@ def _tariff_at_minute(at: datetime, tariffs: tuple[Tariff, ...], clock: str) -> 
     return matches[0]
 
 
-def validate_tariffs(tariffs: tuple[Tariff, ...], clock: str) -> None:
+def validate_tariffs(
+    tariffs: tuple[Tariff, ...], clock: str, zone: str = "Australia/Hobart"
+) -> None:
     if clock not in {"local", "standard"} or not 1 <= len(tariffs) <= 32:
         raise ValueError("tariff_invalid")
     for item in tariffs:
@@ -160,13 +183,34 @@ def validate_tariffs(tariffs: tuple[Tariff, ...], clock: str) -> None:
             or not math.isfinite(item.rate)
             or not -5 <= item.rate <= 10
             or item.kind not in {"off_peak", "shoulder", "peak"}
+            or not item.months
+            or any(type(month) is not int or not 1 <= month <= 12 for month in item.months)
+            or len(set(item.months)) != len(item.months)
         ):
             raise ValueError("tariff_invalid")
-    # A whole local week, outside DST, proves minute coverage including overnight
-    # weekday/weekend boundaries. Runtime UTC iteration also covers both DST folds.
-    start = datetime(2026, 6, 1, tzinfo=HOBART if clock == "local" else STANDARD)
-    for minute in range(7 * 1440):
-        tariff_at(start + timedelta(minutes=minute), tariffs, clock)
+    tariff_zone(datetime(2026, 1, 1, tzinfo=UTC), clock, zone)
+    # Sweep boundaries for every month and weekday, including overnight tails.
+    # Month selection follows the current tariff-clock date at midnight.
+    for month in range(1, 13):
+        edges: list[list[tuple[int, int]]] = [[(0, 0), (1440, 0)] for _ in range(7)]
+        for item in tariffs:
+            if month not in item.months:
+                continue
+            for day in item.days:
+                if item.start == item.end:
+                    edges[day] += [(0, 1), (1440, -1)]
+                elif item.start < item.end:
+                    edges[day] += [(item.start, 1), (item.end, -1)]
+                else:
+                    edges[day] += [(item.start, 1), (1440, -1)]
+                    edges[(day + 1) % 7] += [(0, 1), (item.end, -1)]
+        for day_edges in edges:
+            level, previous = 0, 0
+            for boundary, delta in sorted(day_edges):
+                if boundary > previous and level != 1:
+                    raise ValueError("tariff_gap_or_overlap")
+                level += delta
+                previous = boundary
 
 
 def _fresh(reading: Reading, now: datetime, boot: datetime, seconds: float) -> None:

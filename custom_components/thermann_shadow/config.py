@@ -40,6 +40,10 @@ DEFAULT_OPTIONS = {
     "tariff_verified": False,
     "import_positive": True,
     "tariff_clock": "local",
+    "time_zone": "Australia/Hobart",  # preserved legacy fallback, not fresh setup
+    "daytime_start": "09:00",
+    "storage_ready_time": "16:00",
+    "baseline_start": "21:00",
     "target_c": 70.0,
     "morning_threshold_c": 42.0,
     "morning_preferred_c": 45.0,
@@ -139,6 +143,8 @@ REST_BEYOND_LATENCY_MINUTES = 30.0
 NOTIFY_SERVICE_PATTERN = re.compile(r"^[a-z0-9_]{1,64}$")
 # Readable reasons for rejected settings (ValueError codes from parse_options).
 REJECTION_MESSAGES = {
+    "time_zone_invalid": "Select a valid IANA time zone, such as Australia/Perth.",
+    "daytime_times_invalid": "Storage window start must be before ready time, and ready time before the overnight baseline returns.",
     "unsupported_target_roles": "Use only supported 45/62/70 targets, with baseline no higher than normal and normal no higher than solar boost.",
     "dual_storage_settings_invalid": "Check tank capacity (50–500 L), nominal element (2–3.6 kW), completion margin (5–120 minutes), useful-heat fraction (0–1) and the peak policy.",
     "settings_invalid": "A value is outside its allowed range.",
@@ -184,7 +190,7 @@ def _minute(value):
     return hour * 60 + minute
 
 
-def _periods(raw, rates, clock):
+def _periods(raw, rates, clock, zone="Australia/Hobart"):
     """Parse and fully validate one weekly tariff table (gap- and overlap-free)."""
     if not isinstance(raw, str) or len(raw) > 8192:
         raise ValueError("tariff_invalid")
@@ -193,21 +199,29 @@ def _periods(raw, rates, clock):
         raise ValueError("tariff_invalid")
     tariffs = []
     for item in periods:
-        if not isinstance(item, dict) or set(item) != {"days", "start", "end", "kind"}:
+        if (
+            not isinstance(item, dict)
+            or not {"days", "start", "end", "kind"} <= set(item)
+            or set(item) - {"days", "start", "end", "kind", "months", "rate"}
+        ):
             raise ValueError("tariff_invalid")
         if not isinstance(item["days"], list) or item["kind"] not in rates:
+            raise ValueError("tariff_invalid")
+        rate = number(item.get("rate", rates[item["kind"]]))
+        if not 0 <= rate <= 2:
             raise ValueError("tariff_invalid")
         tariffs.append(
             Tariff(
                 tuple(item["days"]),
                 _minute(item["start"]),
                 _minute(item["end"]),
-                rates[item["kind"]],
+                rate,
                 item["kind"],
+                tuple(item.get("months", range(1, 13))),
             )
         )
     result = tuple(tariffs)
-    validate_tariffs(result, clock)
+    validate_tariffs(result, clock, zone)
     return result
 
 
@@ -291,13 +305,17 @@ def parse_options(options):
         and values["tariff_periods"] != DEFAULT_OPTIONS["tariff_periods"]
     ):
         profile = "custom"
-    if profile not in {"aurora_93", "custom"}:
+    if profile not in {"flat", "aurora_93", "custom"}:
         raise ValueError("tariff_invalid")
     raw = values["tariff_periods"]
     # The stored custom weekly table is ALWAYS validated, even while the Aurora
     # profile is active. It is persisted, and switching the profile select later
     # must never activate an unvalidated table. One invalid field saves nothing.
-    _periods(raw, rates, values["tariff_clock"])
+    _periods(raw, rates, values["tariff_clock"], values["time_zone"])
+    if profile == "flat":
+        raw = json.dumps(
+            [{"days": list(range(7)), "start": "00:00", "end": "00:00", "kind": "off_peak"}]
+        )
     if profile == "aurora_93":
         edges = [
             "00:00",
@@ -331,7 +349,13 @@ def parse_options(options):
                 else [{"days": [5, 6], "start": "00:00", "end": "00:00", "kind": "off_peak"}]
             )
         )
-    tariffs = _periods(raw, rates, values["tariff_clock"])
+    tariffs = _periods(raw, rates, values["tariff_clock"], values["time_zone"])
+    if (
+        not _minute(values["daytime_start"])
+        < _minute(values["storage_ready_time"])
+        < _minute(values["baseline_start"])
+    ):
+        raise ValueError("daytime_times_invalid")
     settings = Settings(
         **{
             key: values[key]
@@ -342,6 +366,7 @@ def parse_options(options):
                 "tariff_verified",
                 "import_positive",
                 "tariff_clock",
+                "time_zone",
                 "forecast_enabled",
                 "shower_time_enabled",
                 "base_load_source",
