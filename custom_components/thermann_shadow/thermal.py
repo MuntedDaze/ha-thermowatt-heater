@@ -61,6 +61,7 @@ class ThermalObserver:
         self.previous: tuple[datetime, float] | None = None  # earlier poll
         self.interval_change_c_per_hour: float | None = None
         self.energy_since_poll = 0.0
+        self.energy_unknown_since_poll = False
         self.element_on = False
         self.session: dict | None = None
         self.last_heating_end: datetime | None = None
@@ -84,41 +85,63 @@ class ThermalObserver:
         element: str,
         element_confidence: str,
         mode: str | None,
+        *,
+        heater_power_kw: float | None = None,
+        meter_configured: bool = False,
     ) -> None:
-        on = element == "on" and element_confidence in CONFIDENT
+        # Preserve nominal-energy historical diagnostics only while no dedicated
+        # circuit meter is configured. Once configured, incomplete readings must
+        # not silently contaminate the thermal calibration with inferred 3 kW.
+        meter_missing = meter_configured and heater_power_kw is None
+        on = (
+            element == "on"
+            and element_confidence in CONFIDENT
+            and not meter_missing
+        )
+        if meter_missing:
+            self.energy_unknown_since_poll = True
+            if self.session is not None:
+                self.session["meter_gap"] = True
         if self.last_tick is not None and on:
             step = min(timedelta(minutes=2), max(timedelta(0), now - self.last_tick))
-            kwh = ELEMENT_KW * step.total_seconds() / 3600
+            kw = heater_power_kw if meter_configured else ELEMENT_KW
+            kwh = kw * step.total_seconds() / 3600
             self.energy_since_poll += kwh
             if self.session is not None:
                 self.session["energy_kwh"] += kwh
         self.last_tick = now
         if on and not self.element_on:
-            self._start_session(now)
+            self._start_session(now, meter_configured)
         elif not on and self.element_on:
-            self._end_session(now, mode)
+            self._end_session(now, mode, meter_missing)
         self.element_on = on
         if reading is not None and poll_at is not None and poll_at != self.poll_at:
             self._new_reading(poll_at, reading)
         self._classify(now, element_confidence)
 
-    def _start_session(self, now: datetime) -> None:
+    def _start_session(self, now: datetime, meter_configured: bool = False) -> None:
         recent_draw = self.last_draw is not None and now - _dt(self.last_draw["at"]) <= DRAW_SETTLE
         self.session = {
             "start": _iso(now),
             "start_reading": self.reading,
             "start_reading_at": _iso(self.poll_at),
             "energy_kwh": 0.0,
+            "energy_source": "circuit_meter" if meter_configured else "nominal_element",
+            "meter_gap": False,
             "after_draw": recent_draw,
         }
         self.anchor = None
 
-    def _end_session(self, now: datetime, mode: str | None) -> None:
+    def _end_session(
+        self, now: datetime, mode: str | None, meter_missing: bool = False
+    ) -> None:
         session, self.session = self.session, None
         self.last_heating_end = now
-        self.last_end_satisfied = mode == "Manual"
+        self.last_end_satisfied = mode == "Manual" and not meter_missing
         if session is None:
             return
+        if meter_missing:
+            session["meter_gap"] = True
         minutes = (now - _dt(session["start"])).total_seconds() / 60
         if minutes < MIN_SESSION_MINUTES:
             return
@@ -143,30 +166,39 @@ class ThermalObserver:
             change = reading - self.reading
             self.interval_change_c_per_hour = change / hours if hours > 0 else None
             heated = self.energy_since_poll >= 0.1
-            if heated:
+            if self.energy_unknown_since_poll:
+                # No reliable draw or cooling inference over a meter-data gap.
                 self.anchor = None
-            elif change <= -DRAW_DROP_C:
-                self._record_draw(poll_at, reading, change)
-            elif (
-                change >= REBOUND_C
-                and self.last_draw is not None
-                and poll_at - _dt(self.last_draw["at"]) <= DRAW_SETTLE
-            ):
-                self.last_draw["rebound_c"] = round(
-                    self.last_draw.get("rebound_c", 0.0) + change, 1
-                )
-                self.dirty = True
-            self._track_cooling(poll_at, reading, heated)
+            else:
+                if heated:
+                    self.anchor = None
+                elif change <= -DRAW_DROP_C:
+                    self._record_draw(poll_at, reading, change)
+                elif (
+                    change >= REBOUND_C
+                    and self.last_draw is not None
+                    and poll_at - _dt(self.last_draw["at"]) <= DRAW_SETTLE
+                ):
+                    self.last_draw["rebound_c"] = round(
+                        self.last_draw.get("rebound_c", 0.0) + change, 1
+                    )
+                    self.dirty = True
+                self._track_cooling(poll_at, reading, heated)
         if self.pending_end is not None:
             session, self.pending_end = self.pending_end, None
             session["end_reading"] = reading
             start = session["start_reading"]
-            if start is not None and session["energy_kwh"] > 0.05:
+            if (
+                start is not None
+                and session["energy_kwh"] > 0.05
+                and not session.get("meter_gap")
+            ):
                 session["observed_c_per_kwh"] = round((reading - start) / session["energy_kwh"], 2)
             self.sessions.append(session)
             self.dirty = True
         self.poll_at, self.reading = poll_at, reading
         self.energy_since_poll = 0.0
+        self.energy_unknown_since_poll = False
 
     def _record_draw(self, at: datetime, reading: float, change: float) -> None:
         after_heating = (
@@ -290,6 +322,14 @@ class ThermalObserver:
                 "last_suspected_draw": self.last_draw,
                 "heating_after_draw": perf([s for s in done if s.get("after_draw")]),
                 "heating_undisturbed": perf([s for s in done if not s.get("after_draw")]),
+                "metered_heating_undisturbed": perf(
+                    [
+                        s
+                        for s in done
+                        if s.get("energy_source") == "circuit_meter"
+                        and not s.get("after_draw")
+                    ]
+                ),
                 "actual_vs_physical_minutes_median": round(median(ratios), 2) if ratios else None,
                 "satisfied_sessions": len(ratios),
             },
