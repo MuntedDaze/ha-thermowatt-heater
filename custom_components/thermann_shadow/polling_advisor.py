@@ -64,7 +64,11 @@ def recommend_poll(
             minutes = max(0.0, target_c - temperature_c) * TANK_KWH_PER_C / heater_power_kw * 60
             result["estimated_heating_minutes"] = round(minutes)
             interval = HEATING_MAX_MINUTES if minutes > NEAR_TARGET_MINUTES else 30
-            reason = "metered_heating_far_from_target" if interval == 60 else "metered_heating_near_target"
+            reason = (
+                "metered_heating_far_from_target"
+                if interval == 60
+                else "metered_heating_near_target"
+            )
         else:
             interval, reason = STABLE_MAX_MINUTES, "verified_element_idle"
     if owner_override:
