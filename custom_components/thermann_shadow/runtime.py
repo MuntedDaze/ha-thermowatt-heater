@@ -442,6 +442,7 @@ class ShadowRuntime:
             heater_state_confidence=self.heater.confidence,
             storage_target_c=float(self.native_options["normal_storage_c"]),
             normal_storage_target_c=float(self.native_options["normal_storage_c"]),
+            baseline_target_c=float(self.native_options["baseline_c"]),
             solar_boost_target_c=float(self.native_options["solar_boost_c"]),
             peak_heating_policy=self.native_options["peak_heating_policy"],
             optional_boost_enabled="on" if self.native_options["optional_solar_boost"] else "off",

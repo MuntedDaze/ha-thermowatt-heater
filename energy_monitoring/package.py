@@ -56,6 +56,16 @@ def ok(*entities: str) -> str:
     return "{{ " + " and ".join(f"is_number(states('{entity}'))" for entity in entities) + " }}"
 
 
+def fresh_power(entity, age, units=None):
+    """Availability follows the original report, never a template heartbeat."""
+    unit = f" and s.attributes.get('unit_of_measurement') in {list(units)!r}" if units else ""
+    fresh = f" and 0 <= (now() - s.last_reported).total_seconds() <= {age}" if age else ""
+    return (
+        f"{{% set s = states['{entity}'] %}}"
+        f"{{{{ s is not none and is_number(s.state){unit}{fresh} }}}}"
+    )
+
+
 def unit_factor(entity: str, unit: str, factor) -> str:
     """Scale a reading whose source reports in ``unit`` instead of W or kWh."""
     return f"({factor} if state_attr('{entity}', 'unit_of_measurement') == '{unit}' else 1)"
@@ -331,28 +341,30 @@ def build_package(config: dict) -> dict:
             f"{{{{ [0, {sign}{num(grid['power'])}] | max | round(1) }}}}",
             "W",
             "power",
-            availability=ok(grid["power"]),
+            availability=fresh_power(grid["power"], config["freshness_seconds"]["core"]),
         ),
         template_sensor(
             "EM grid export power",
             f"{{{{ [0, {reverse}{num(grid['power'])}] | max | round(1) }}}}",
             "W",
             "power",
-            availability=ok(grid["power"]),
+            availability=fresh_power(grid["power"], config["freshness_seconds"]["core"]),
         ),
         template_sensor(
             "EM solar power",
             f"{{{{ [0, {num(solar['power'])}] | max | round(1) }}}}",
             "W",
             "power",
-            availability=None if solar["zero_when_unavailable"] else ok(solar["power"]),
+            availability=None
+            if solar["zero_when_unavailable"]
+            else fresh_power(solar["power"], config["freshness_seconds"]["core"]),
         ),
         template_sensor(
             "EM house power",
             f"{{{{ [0, {num(house['power'])}] | max | round(1) }}}}",
             "W",
             "power",
-            availability=ok(house["power"]),
+            availability=fresh_power(house["power"], config["freshness_seconds"]["core"]),
         ),
         template_sensor(
             "EM solar self consumed power",
@@ -414,7 +426,9 @@ def build_package(config: dict) -> dict:
                 " | abs | round(1) }}",
                 "W",
                 "power",
-                availability=ok(circuit["power"]),
+                availability=fresh_power(
+                    circuit["power"], config["freshness_seconds"]["circuits"], ("W", "kW")
+                ),
             )
         )
         if circuit["energy"]:
@@ -427,7 +441,11 @@ def build_package(config: dict) -> dict:
                     "kWh",
                     "energy",
                     "total_increasing",
-                    availability=ok(circuit["energy"]),
+                    availability="{{ is_number(states('"
+                    + circuit["energy"]
+                    + "')) and state_attr('"
+                    + circuit["energy"]
+                    + "', 'unit_of_measurement') in ['Wh', 'kWh'] }}",
                 )
             )
         else:

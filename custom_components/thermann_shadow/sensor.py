@@ -56,6 +56,7 @@ SENSORS = {
     "learned_heating_rate": ("Learned heating rate", "°C/h"),
     "prediction_confidence": ("Heating prediction confidence", None),
     "normal_storage_target_c": ("Normal storage target", "°C"),
+    "baseline_target_c": ("Overnight baseline target", "°C"),
     "solar_boost_target_c": ("Solar boost target", "°C"),
     "peak_heating_policy": ("Peak heating policy", None),
     "optional_boost_enabled": ("Optional solar boost enabled", None),

@@ -1,6 +1,7 @@
 """Load and validate ``entity_map.yaml``. Pure Python: no Home Assistant imports."""
 
 from pathlib import Path
+import math
 import re
 
 import yaml
@@ -16,6 +17,12 @@ RESERVED_KEYS = frozenset(
     {"grid", "grid_import", "grid_export", "solar", "house", "tracked", "untracked", "tariff"}
 )
 RATE_KEYS = ("peak_rate", "off_peak_rate", "feed_in_rate", "daily_supply_charge")
+
+
+def _boolean(value, where):
+    if type(value) is not bool:
+        raise ValueError(f"{where}: use a YAML boolean, true or false")
+    return value
 
 
 def minutes(clock: str) -> int:
@@ -44,7 +51,7 @@ def validate(raw: dict) -> dict:
         "currency": str(raw.get("currency") or "AUD"),
         "grid": {
             "power": _entity(grid.get("power"), "grid.power", True),
-            "export_positive": bool(grid.get("export_positive", True)),
+            "export_positive": _boolean(grid.get("export_positive", True), "grid.export_positive"),
             "import_energy": _entity(grid.get("import_energy"), "grid.import_energy", True),
             "export_energy": _entity(grid.get("export_energy"), "grid.export_energy", True),
         },
@@ -52,7 +59,9 @@ def validate(raw: dict) -> dict:
             "power": _entity(solar.get("power"), "solar.power", True),
             "energy": _entity(solar.get("energy"), "solar.energy", True),
             "forecast_power": _entity(solar.get("forecast_power"), "solar.forecast_power"),
-            "zero_when_unavailable": bool(solar.get("zero_when_unavailable", False)),
+            "zero_when_unavailable": _boolean(
+                solar.get("zero_when_unavailable", False), "solar.zero_when_unavailable"
+            ),
         },
         "house": {"power": _entity(house.get("power"), "house.power", True)},
     }
@@ -68,7 +77,11 @@ def validate(raw: dict) -> dict:
     for index, window in enumerate(tariff.get("peak_windows") or []):
         where = f"tariff.peak_windows[{index}]"
         days = window.get("days")
-        if not days or any(day not in range(7) for day in days):
+        if (
+            not isinstance(days, list)
+            or not days
+            or any(type(day) is not int or day not in range(7) for day in days)
+        ):
             raise ValueError(f"{where}.days: use 0 (Monday) to 6 (Sunday)")
         start, end = str(window.get("start", "")), str(window.get("end", ""))
         if not CLOCK.match(start) or not CLOCK.match(end):
@@ -98,7 +111,7 @@ def validate(raw: dict) -> dict:
         if energy and not power:
             raise ValueError(f"{where}: an energy entity needs a power entity as well")
         threshold = circuit.get("element_on_watts", 1000)
-        if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or threshold <= 0:
+        if type(threshold) not in (int, float) or not math.isfinite(threshold) or threshold <= 0:
             raise ValueError(f"{where}.element_on_watts: must be a positive number")
         circuits.append(
             {
@@ -136,6 +149,13 @@ def validate(raw: dict) -> dict:
             }
         )
     result["appliances"] = appliances
+    top_level = [c["power"] for c in circuits if c["power"]]
+    mapped_parents = {c["key"] for c in circuits if c["power"]}
+    top_level += [
+        a["power"] for a in appliances if a["power"] and a["circuit"] not in mapped_parents
+    ]
+    if len(set(top_level)) != len(top_level):
+        raise ValueError("power: duplicate top-level source would double count measured energy")
 
     result["hot_water"] = {
         str(key): _entity(value, f"hot_water.{key}")
@@ -143,11 +163,16 @@ def validate(raw: dict) -> dict:
     }
     freshness = raw.get("freshness_seconds") or {}
     result["freshness_seconds"] = {
-        group: int(freshness.get(group, default))
+        group: freshness.get(group, default)
         for group, default in (("core", 300), ("circuits", 300), ("appliances", 1800))
     }
-    if any(value < 0 for value in result["freshness_seconds"].values()):
-        raise ValueError("freshness_seconds: values cannot be negative")
+    if any(
+        type(value) is not int or not 0 <= value <= 86400
+        for value in result["freshness_seconds"].values()
+    ):
+        raise ValueError(
+            "freshness_seconds: negative/fractional values invalid; use whole seconds 0–86400"
+        )
     return result
 
 

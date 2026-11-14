@@ -214,7 +214,14 @@ def hot_water_view(config):
             config,
             (
                 ("mode", "Thermann mode"),
-                ("target", "Target temperature"),
+                ("target", "Reported target temperature"),
+                ("baseline_target", "Overnight baseline target"),
+                ("normal_target", "Normal weekday target"),
+                ("boost_target", "Optional solar target"),
+                ("measurement_mode", "Circuit measurement mode"),
+                ("measured_element_state", "Verified circuit element state"),
+                ("peak_policy", "Heating during peak periods"),
+                ("boost_enabled", "Optional solar boost enabled"),
                 ("operating_mode", "Operating mode"),
                 ("element_state", "Element (meter-inferred)"),
                 ("controller_fault", "Controller fault"),
@@ -227,6 +234,12 @@ def hot_water_view(config):
             ("control_state", "Controller state"),
             ("control_reason", "Reason"),
             ("policy_state", "Policy wants"),
+            ("desired_temperature", "Desired thermostat target"),
+            ("heating_requirement", "Required / optional heating"),
+            ("boost_eligibility", "Solar boost eligibility"),
+            ("boost_reason", "Solar boost selected / rejected"),
+            ("planned_heat", "Planned energy estimate (not metered)"),
+            ("prediction_confidence", "Prediction confidence"),
             ("policy_mode", "Policy mode"),
             ("decision_code", "Decision code"),
             ("next_action", "Next intended action"),
@@ -253,8 +266,11 @@ def hot_water_view(config):
             ("cloud_health", "Cloud health"),
             ("status_age", "Status age"),
             ("last_poll", "Last successful poll"),
-            ("next_poll", "Next poll"),
-            ("poll_interval", "Poll interval"),
+            ("next_poll", "Next actual background poll"),
+            ("next_adaptive_poll", "Next hypothetical shadow poll"),
+            ("adaptive_status", "Adaptive polling status / reason"),
+            ("request_budget", "Request budget remaining (rolling 24h)"),
+            ("poll_interval", "Actual background poll interval"),
             ("last_cloud_error", "Last cloud error"),
             ("requests_24h", "Requests in last 24 h"),
             ("requests_per_hour", "Requests per hour"),
@@ -273,6 +289,32 @@ def hot_water_view(config):
             bars("Cloud requests per day", [(hot_water["request_attempts"], "Requests")], days=14)
         )
     sections = [section(*status), section(*planning), section(*polling)]
+    learning = controller_rows(
+        config,
+        (
+            ("learning_status", "Learning eligibility"),
+            ("learning_sessions", "Clean sessions in current cohort"),
+            ("learned_rate", "Learned rate (diagnostic)"),
+            ("prediction_error", "Held-out prediction error"),
+        ),
+    )
+    if learning:
+        sections.append(
+            section(
+                heading("Heating history and prediction", "mdi:chart-timeline-variant"),
+                rows("Learning readiness", learning),
+            )
+        )
+    if hot_water.get("telemetry"):
+        telemetry = hot_water["telemetry"]
+        sections[1]["cards"].append(
+            note(
+                "{% set c = state_attr('"
+                + telemetry
+                + "', 'completion') or {} %}Conditional continuous-heating range: {{ c.get('earliest') or 'unavailable' }} to {{ c.get('latest') or 'unavailable' }}. A bottom-probe estimate is not a promised completion or hygiene measurement."
+            )
+        )
+
     if not circuit:
         sections.append(
             section(

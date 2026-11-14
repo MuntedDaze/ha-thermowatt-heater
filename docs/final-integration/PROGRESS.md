@@ -24,8 +24,14 @@ New draft PR will target `codex/economic-dual-storage` (PR #34).
    Recorder. Fable package reads original entities independently. Official latest
    releases checked: HA Core 2026.11.1, Supervisor 2026.11.0; existing matrices
    already include them. Local merge of Fable #32 into this new branch is clean.
-2. B: next, preserve Fable tests and validate/update four-state maps, seven
-   views and actual combined HA configuration. Keep controller independent.
+2. B: integrated the exact Fable baseline in merge commit `5bac236` (146 tests
+   passed unchanged first). Updated four-state/prediction/actual-vs-shadow maps,
+   seven views and raw-power freshness/unit availability. Strict sign/threshold
+   validation and duplicate top-level metering reject silent misconfiguration.
+   Added actual combined HA template/entity contract checks and retained full
+   package check_config variants. **1310 full tests passed**, 155 focused
+   monitoring tests pass, Ruff lint/format pass. Actual HA awaits CI.
+   Controller retains no dashboard import/dependency.
 3. C: implement one bridge polling authority with bounded expiring controller
    hints, monotonic deadlines, fixed fallback, startup reinspection and existing
    command/auth/backoff/accounting gates. Live option defaults false and needs

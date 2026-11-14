@@ -229,7 +229,10 @@ def test_hot_water_sensors_exist_only_when_the_ct_is_mapped():
     assert not {entity for entity in without if "hot_water" in entity}
     text = build.dump(build_dashboard(VARIANTS["no_meter"]))
     assert "The hot-water CT is not mapped yet" in text
-    assert "Expected completion** is not exposed" in text
+    assert "Expected completion" in text
+    assert VARIANTS["no_meter"]["hot_water"]["expected_completion"] in text
+    unmapped = variant(0, hot_water__expected_completion="")
+    assert "Expected completion** is not exposed" in build.dump(build_dashboard(unmapped))
 
 
 def test_hot_water_sensors_do_not_depend_on_the_optional_circuits():
@@ -300,7 +303,7 @@ def test_health_summary_markdown_renders():
     summaries = [
         card["content"]
         for card in walk_cards(dashboard)
-        if card["type"] == "markdown" and "{{" in card["content"]
+        if card["type"] == "markdown" and "sensor.em_monitoring_health" in card["content"]
     ]
     assert len(summaries) == 1
     states = {

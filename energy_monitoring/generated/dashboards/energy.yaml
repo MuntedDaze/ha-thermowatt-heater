@@ -107,6 +107,9 @@ views:
       name: Next heating start
     - type: markdown
       content: Element power appears here once the hot-water CT is mapped.
+    - type: tile
+      entity: sensor.thermann_shadow_expected_heating_completion
+      name: Expected completion
   - type: grid
     cards:
     - type: heading
@@ -159,7 +162,28 @@ views:
       name: Thermann mode
     - type: tile
       entity: sensor.thermann_shadow_thermann_target
-      name: Target temperature
+      name: Reported target temperature
+    - type: tile
+      entity: sensor.thermann_shadow_overnight_baseline_target
+      name: Overnight baseline target
+    - type: tile
+      entity: sensor.thermann_shadow_normal_storage_target
+      name: Normal weekday target
+    - type: tile
+      entity: sensor.thermann_shadow_solar_boost_target
+      name: Optional solar target
+    - type: tile
+      entity: sensor.thermann_shadow_circuit_measurement_mode
+      name: Circuit measurement mode
+    - type: tile
+      entity: sensor.thermann_shadow_hot_water_measured_element_state
+      name: Verified circuit element state
+    - type: tile
+      entity: sensor.thermann_shadow_peak_heating_policy
+      name: Heating during peak periods
+    - type: tile
+      entity: sensor.thermann_shadow_optional_solar_boost_enabled
+      name: Optional solar boost enabled
     - type: tile
       entity: sensor.thermann_shadow_hot_water_operating_mode
       name: Operating mode
@@ -184,6 +208,18 @@ views:
         name: Reason
       - entity: sensor.thermann_shadow_policy_wanted_state
         name: Policy wants
+      - entity: sensor.thermann_shadow_desired_thermostat_temperature
+        name: Desired thermostat target
+      - entity: sensor.thermann_shadow_heating_requirement
+        name: Required / optional heating
+      - entity: sensor.thermann_shadow_solar_boost_eligibility
+        name: Solar boost eligibility
+      - entity: sensor.thermann_shadow_solar_boost_reason
+        name: Solar boost selected / rejected
+      - entity: sensor.thermann_shadow_planned_heating_energy_estimate
+        name: Planned energy estimate (not metered)
+      - entity: sensor.thermann_shadow_heating_prediction_confidence
+        name: Prediction confidence
       - entity: sensor.thermann_shadow_policy_mode
         name: Policy mode
       - entity: sensor.thermann_shadow_decision_code
@@ -200,8 +236,10 @@ views:
         name: Soft target time
       - entity: sensor.thermann_shadow_heating_time_needed
         name: Heating time needed
+      - entity: sensor.thermann_shadow_expected_heating_completion
+        name: Expected completion
     - type: markdown
-      content: '**Expected completion** is not exposed by controller 0.9.1. It is requested in `ENTITY_CONTRACT.md`; map it under `hot_water.expected_completion` when available. Until then use *Next heating stop* and *Heating time needed*.'
+      content: '{% set c = state_attr(''sensor.thermann_shadow_controller_telemetry'', ''completion'') or {} %}Conditional continuous-heating range: {{ c.get(''earliest'') or ''unavailable'' }} to {{ c.get(''latest'') or ''unavailable'' }}. A bottom-probe estimate is not a promised completion or hygiene measurement.'
   - type: grid
     cards:
     - type: heading
@@ -217,6 +255,14 @@ views:
         name: Status age
       - entity: sensor.home_last_successful_poll
         name: Last successful poll
+      - entity: sensor.thermann_shadow_next_cloud_poll
+        name: Next actual background poll
+      - entity: sensor.thermann_shadow_shadow_next_adaptive_poll
+        name: Next hypothetical shadow poll
+      - entity: sensor.thermann_shadow_cloud_request_budget_remaining
+        name: Request budget remaining (rolling 24h)
+      - entity: sensor.thermann_shadow_cloud_poll_interval
+        name: Actual background poll interval
       - entity: sensor.home_last_cloud_error
         name: Last cloud error
       - entity: sensor.thermann_shadow_cloud_requests_in_last_24_hours
@@ -243,6 +289,17 @@ views:
         name: Requests
       grid_options:
         columns: full
+  - type: grid
+    cards:
+    - type: heading
+      heading: Heating history and prediction
+      heading_style: title
+      icon: mdi:chart-timeline-variant
+    - type: entities
+      title: Learning readiness
+      entities:
+      - entity: sensor.thermann_shadow_learned_heating_rate
+        name: Learned rate (diagnostic)
   - type: grid
     cards:
     - type: heading
@@ -1114,9 +1171,6 @@ views:
         - Hot water CT
         - Air conditioner CT
         - Oven CT
-        - Controller: expected completion
-        - Controller: next poll time
-        - Controller: poll interval
     - type: statistics-graph
       title: Sources reporting · hourly mean, 7 days
       chart_type: line

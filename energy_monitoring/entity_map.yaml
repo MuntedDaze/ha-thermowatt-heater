@@ -80,8 +80,8 @@ appliances:
   - {key: garage, name: Garage, power: sensor.garage_current_consumption, energy: sensor.garage_today_s_consumption, circuit: ""}                        # [unverified]
 
 # Read-only entities from the Thermann bridge add-on and Thermann Controller
-# (0.9.1 baseline). Blank entries are placeholders for entities the controller
-# does not expose yet: see energy_monitoring/ENTITY_CONTRACT.md.
+# (four-state combined candidate). Verify actual registry IDs before installation.
+# Household meter/appliance mappings above are examples, not verified for new users.
 hot_water:
   mode: sensor.thermann_shadow_thermann_mode
   target: sensor.thermann_shadow_thermann_target
@@ -111,10 +111,28 @@ hot_water:
   last_poll: sensor.home_last_successful_poll
   last_cloud_error: sensor.home_last_cloud_error
   request_attempts: sensor.home_cloud_request_attempts_local_lifetime
-  # Not exposed by controller 0.9.1 (requested from Codex):
-  expected_completion: ""
-  next_poll: ""
-  poll_interval: ""
+  # Four-state backend telemetry, independent of this monitoring package:
+  expected_completion: sensor.thermann_shadow_expected_heating_completion
+  next_poll: sensor.thermann_shadow_next_cloud_poll
+  poll_interval: sensor.thermann_shadow_cloud_poll_interval
+
+  baseline_target: sensor.thermann_shadow_overnight_baseline_target
+  normal_target: sensor.thermann_shadow_normal_storage_target
+  boost_target: sensor.thermann_shadow_solar_boost_target
+  measurement_mode: sensor.thermann_shadow_circuit_measurement_mode
+  measured_element_state: sensor.thermann_shadow_hot_water_measured_element_state
+  peak_policy: sensor.thermann_shadow_peak_heating_policy
+  boost_enabled: sensor.thermann_shadow_optional_solar_boost_enabled
+  desired_temperature: sensor.thermann_shadow_desired_thermostat_temperature
+  heating_requirement: sensor.thermann_shadow_heating_requirement
+  boost_eligibility: sensor.thermann_shadow_solar_boost_eligibility
+  boost_reason: sensor.thermann_shadow_solar_boost_reason
+  planned_heat: sensor.thermann_shadow_planned_heating_energy_estimate
+  prediction_confidence: sensor.thermann_shadow_heating_prediction_confidence
+  learned_rate: sensor.thermann_shadow_learned_heating_rate
+  next_adaptive_poll: sensor.thermann_shadow_shadow_next_adaptive_poll
+  request_budget: sensor.thermann_shadow_cloud_request_budget_remaining
+  telemetry: sensor.thermann_shadow_controller_telemetry
 
 # A source is "stale" when Home Assistant has not heard from it for this long.
 freshness_seconds:

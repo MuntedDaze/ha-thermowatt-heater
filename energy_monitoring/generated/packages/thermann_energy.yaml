@@ -8,28 +8,28 @@ template:
     unit_of_measurement: W
     device_class: power
     state_class: measurement
-    availability: '{{ is_number(states(''sensor.goodwe_inverter_meter_active_power'')) }}'
+    availability: '{% set s = states[''sensor.goodwe_inverter_meter_active_power''] %}{{ s is not none and is_number(s.state) and 0 <= (now() - s.last_reported).total_seconds() <= 300 }}'
   - name: EM grid export power
     unique_id: em_grid_export_power
     state: '{{ [0, (states(''sensor.goodwe_inverter_meter_active_power'') | float(0))] | max | round(1) }}'
     unit_of_measurement: W
     device_class: power
     state_class: measurement
-    availability: '{{ is_number(states(''sensor.goodwe_inverter_meter_active_power'')) }}'
+    availability: '{% set s = states[''sensor.goodwe_inverter_meter_active_power''] %}{{ s is not none and is_number(s.state) and 0 <= (now() - s.last_reported).total_seconds() <= 300 }}'
   - name: EM solar power
     unique_id: em_solar_power
     state: '{{ [0, (states(''sensor.goodwe_inverter_pv_power'') | float(0))] | max | round(1) }}'
     unit_of_measurement: W
     device_class: power
     state_class: measurement
-    availability: '{{ is_number(states(''sensor.goodwe_inverter_pv_power'')) }}'
+    availability: '{% set s = states[''sensor.goodwe_inverter_pv_power''] %}{{ s is not none and is_number(s.state) and 0 <= (now() - s.last_reported).total_seconds() <= 300 }}'
   - name: EM house power
     unique_id: em_house_power
     state: '{{ [0, (states(''sensor.goodwe_inverter_house_consumption'') | float(0))] | max | round(1) }}'
     unit_of_measurement: W
     device_class: power
     state_class: measurement
-    availability: '{{ is_number(states(''sensor.goodwe_inverter_house_consumption'')) }}'
+    availability: '{% set s = states[''sensor.goodwe_inverter_house_consumption''] %}{{ s is not none and is_number(s.state) and 0 <= (now() - s.last_reported).total_seconds() <= 300 }}'
   - name: EM solar self consumed power
     unique_id: em_solar_self_consumed_power
     state: '{{ [0, (states(''sensor.em_solar_power'') | float(0)) - (states(''sensor.em_grid_export_power'') | float(0))] | max | round(1) }}'

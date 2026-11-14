@@ -26,3 +26,9 @@ jobs:
             --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
             ghcr.io/home-assistant/home-assistant:${{ matrix.version }} \
             /workspace/tools/readiness/shadow_ha_smoke.py
+      - name: Combined controller and seven-view package contracts, isolated
+        run: |
+          docker run --rm --network none --entrypoint python3 \
+            --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+            ghcr.io/home-assistant/home-assistant:${{ matrix.version }} \
+            /workspace/tools/readiness/combined_ha_smoke.py

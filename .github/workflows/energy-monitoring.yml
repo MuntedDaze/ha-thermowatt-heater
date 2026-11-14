@@ -7,8 +7,10 @@ on:
       - "tests/test_energy_monitoring_*.py"
       - "tests/energy_template_shim.py"
       - ".github/workflows/energy-monitoring.yml"
+      - "custom_components/thermann_shadow/**"
+      - "tools/readiness/combined_ha_smoke.py"
   push:
-    branches: ["fable/**"]
+    branches: ["fable/**", "codex/**"]
 
 permissions:
   contents: read
