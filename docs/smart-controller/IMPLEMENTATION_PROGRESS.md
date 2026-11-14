@@ -122,6 +122,13 @@ The independent replay yields 108/60/51 modelled HTTP calls for fixed30/fixed60/
 adaptive, with detection/phase limits explicitly labelled. No annual savings.
 Final-head CI is the remaining software gate. Commit subject:
 `Guard economic dispatch and complete raw-meter telemetry handoff`.
+Commit: `b4fd9eba9a3fca4c2963665a7a9fcaba48a311a3` (1059 tests locally and
+Python 3.12/3.13/3.14 CI passed). HA progressed past the upgrade allowlist and
+then found a second outdated harness assertion: the standalone telemetry sensor
+was missing from the total serialization/sensor counts. Both counts are now
+updated, with explicit timestamp and duration/measurement shape assertions.
+This follow-up changes the isolated test harness only; controller source stays
+at the tested implementation head. Require green HA jobs on the new head.
 
 ## Current release gates and exact next steps
 

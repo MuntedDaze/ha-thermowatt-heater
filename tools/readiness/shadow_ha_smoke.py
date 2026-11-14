@@ -59,8 +59,8 @@ def assert_entity_serialization(hass, sources):
     settings = sum(meta.kind != "form" and meta.group != "Retired" for meta in CATALOG.values())
     # + restore/undo buttons; 0.5.0: controller sensors, master switch, 3 owner buttons;
     # 0.7.0: 3 guest/holiday buttons, the holiday departure and return (dates
-    # since 0.9.0), the thermal-state sensor.
-    expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3 + 3 + 2 + 1
+    # since 0.9.0), the thermal-state sensor and backend event telemetry sensor.
+    expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3 + 3 + 2 + 2
     assert len(states) == expected, (len(states), expected)
     frames = []
     connection = SimpleNamespace(
@@ -72,6 +72,14 @@ def assert_entity_serialization(hass, sources):
     response = json.loads(frames[0])
     assert response["success"] is True
     returned = {state["entity_id"]: state for state in response["result"]}
+    for key in ("cloud_poll_interval", "shadow_adaptive_poll_interval"):
+        attrs = returned[f"sensor.thermann_shadow_{key}"]["attributes"]
+        assert attrs["device_class"] == "duration" and attrs["state_class"] == "measurement", attrs
+        assert attrs["unit_of_measurement"] == "s", attrs
+    for key in ("expected_heating_completion", "next_cloud_poll", "shadow_next_adaptive_poll"):
+        assert (
+            returned[f"sensor.thermann_shadow_{key}"]["attributes"]["device_class"] == "timestamp"
+        )
     assert all(state.entity_id in returned for state in states)  # no silent omission
     assert returned["sensor.thermann_shadow_controller"]["attributes"]["sources"] == dict(sources)
     engine = create_engine("sqlite:///:memory:")
@@ -267,8 +275,9 @@ async def main():
         from custom_components.thermann_shadow.sensor import CONTROLLER_SENSORS, SENSORS
 
         # + the 0.7.0 read-only thermal-state sensor.
-        assert len(sensor_ids) == len(SENSORS) + len(CONTROLLER_SENSORS) + 1, sensor_ids
+        assert len(sensor_ids) == len(SENSORS) + len(CONTROLLER_SENSORS) + 2, sensor_ids
         assert "sensor.thermann_shadow_tank_thermal_state_estimate" in sensor_ids
+        assert "sensor.thermann_shadow_controller_telemetry" in sensor_ids
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
