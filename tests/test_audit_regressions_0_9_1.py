@@ -192,6 +192,7 @@ def test_h1_protective_peak_off_is_exempt_in_the_policy():
     # Ordinary OFF commands still wait: the pre-peak park and an economic pause.
     q = sp.SimplePolicy(S, TARIFFS)
     lead = at(MON, 16, 58)
+    q.add_meter(lead, 2.5, True)  # fresh meter: ordinary pre-peak park, not meter loss
     d = q.decide(snap(lead, STORE, last_command_at=lead - 5 * MIN))
     assert (d.reason, d.command) == ("command_spacing", None)
     peak = at(MON, 18, 0)
