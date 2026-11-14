@@ -19,7 +19,8 @@
           "forecast_pv": "Optional published PV forecast",
           "forecast_load": "Optional household load forecast or measured baseline",
           "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
-          "heater_power": "Optional heater power sensor (element detection)"
+          "heater_power": "Hot-water circuit active power (W/kW; commissioning required)",
+          "heater_energy": "Optional same-circuit cumulative import energy (Wh/kWh)"
         }
       }
     },
@@ -55,7 +56,8 @@
           "forecast_pv": "Optional published PV forecast",
           "forecast_load": "Optional household load forecast or measured baseline",
           "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
-          "heater_power": "Optional heater power sensor (element detection)"
+          "heater_power": "Hot-water circuit active power (W/kW; commissioning required)",
+          "heater_energy": "Optional same-circuit cumulative import energy (Wh/kWh)"
         }
       },
       "preferences": {
@@ -95,7 +97,8 @@
           "controller_max_commands_per_day": "Maximum commands per day",
           "controller_confirmation_timeout_minutes": "Command confirmation timeout",
           "controller_max_requests_per_day": "Cloud request budget per day",
-          "controller_notify_service": "Notification service"
+          "controller_notify_service": "Notification service",
+          "heater_meter_verification": "Commissioned hot-water power entity and unit"
         }
       }
     },

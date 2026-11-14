@@ -48,7 +48,6 @@ STORAGE_VERSION = 1
 NOTIFY_SERVICE = re.compile(r"^[a-z0-9_]{1,64}$")
 VENDOR_MODES = {"Manual", "Schedule", "Eco", "Off", "Holiday", "Unknown"}
 SHADOW_LOG_LENGTH = 30
-ELEMENT_CONFIDENCE = frozenset({"verified", "high", "medium"})
 
 
 def controller_config(
@@ -92,6 +91,7 @@ class Executor:
 
         values = {**DEFAULT_OPTIONS, **options}
         self.cfg = controller_config(values, self._poll_minutes(), self._expected_topic())
+        self.runtime.set_native_reference(options)
         self.notify_service = str(values["controller_notify_service"]).strip()
 
     def reset_policy(self) -> None:
@@ -218,8 +218,8 @@ class Executor:
         counter = states.get(sources.get("requests", ""))
         if counter is not None:
             obs.requests_total = _int(counter.state)
-        obs.element = self.runtime.heater.state
-        obs.element_confidence = self.runtime.heater.confidence
+        obs.element = self.runtime.circuit.state
+        obs.element_confidence = "verified" if self.runtime.circuit.valid else "none"
         forecast = self.runtime.forecast
         obs.forecast_available = bool(forecast is not None and forecast.slots)
         return obs
@@ -239,19 +239,23 @@ class Executor:
             last = _dt(self.shadow[-1]["at"]) if self.shadow else None
         grid = runtime.grid_import_kw
         if grid is not None:
-            # 0.9.1 (audits M2 and N1): the element's 3 kW is added back to the
-            # measured surplus ONLY while the policy is in Manual 70 °C (confirmed,
-            # or requested and awaiting confirmation) and the estimate is at
-            # least medium confidence. In OFF or Manual 45 °C an appliance's load
-            # step read as the element and created solar that was not there. Not
-            # counting a baseline reheat only makes the surplus look smaller.
-            estimate = runtime.heater
-            element = (
-                state == STORAGE
-                and estimate.state == "on"
-                and estimate.confidence in ELEMENT_CONFIDENCE
+            # Physical budget always uses measured watts. Optional upgrades from
+            # baseline still require raw export: existing baseline heat is not a
+            # new discretionary solar purchase. Never credit aggregate inference.
+            watts = (
+                runtime.circuit.watts
+                if runtime.power_budget is not None and state == STORAGE
+                else 0.0
             )
-            self.policy.add_meter(now, grid, element)
+            at = runtime.grid_observed_at
+            if runtime.power_budget is not None:
+                at = min(at, runtime.circuit.observed_at)
+            if at is not None:
+                self.policy.add_meter(at, grid, heater_kw=watts / 1000)
+        else:
+            self.policy.samples.clear()  # a loss breaks qualification continuity
+        if runtime.power_budget is None:
+            self.policy.samples.clear()
         forecast = runtime.forecast.slots if runtime.forecast is not None else ()
         snapshot = Snapshot(
             now=now,
@@ -260,6 +264,7 @@ class Executor:
             reading_at=runtime.poll_at,
             forecast=tuple(forecast),
             last_command_at=last,
+            heater_meter_valid=runtime.power_budget is not None,
             owner_override=controller.enabled
             and (controller.hold or controller.state == "owner_override"),
             holiday=controller.holiday_active(now),

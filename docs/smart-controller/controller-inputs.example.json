@@ -1,0 +1,14 @@
+{
+  "development_example_only": true,
+  "hardware_commissioned": false,
+  "sources": {
+    "heater_power": "sensor.replace_with_exclusive_hot_water_active_power",
+    "heater_energy": "sensor.replace_with_optional_same_circuit_total_energy"
+  },
+  "options": {
+    "heater_meter_verification": ""
+  },
+  "grid_convention": "Existing import_positive option; normalized backend import is positive",
+  "verification_format_after_authorized_commissioning": "sensor.actual_entity|W",
+  "optional_load_channels": "Not controller dependencies; dashboard mappings belong to Fable"
+}

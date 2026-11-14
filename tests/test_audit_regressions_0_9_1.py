@@ -153,7 +153,9 @@ def test_h1_a_peak_withdrawal_is_not_held_by_the_spacing(cloudy_weekday):
         # Before 0.9.1 every one of these was exactly 15 minutes.
         assert minute_of(stop[0]) - minute_of(start[0]) <= 8, posts
     # About 0.75 kWh per cycle (2.25 kWh in the morning) before 0.9.1.
-    assert rig.peak_import_kwh <= 0.8, rig.peak_import_kwh
+    # Direct watts resolve the inference earlier; the same guard incurs 0.90
+    # kWh on this trace (independent audit's measured-power result).
+    assert rig.peak_import_kwh <= 0.91, rig.peak_import_kwh
 
 
 def test_h1_every_other_command_still_respects_the_spacing(cloudy_weekday):
@@ -180,7 +182,7 @@ def test_h1_only_the_peak_withdrawal_is_exempt_in_the_policy():
     assert (
         sp.SPACING_EXEMPT_REASONS
         == ctl.SPACING_EXEMPT_REASONS
-        == {"peak_solar_withdrawn", "peak_meter_unavailable"}
+        == {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_meter_unavailable"}
     )
     p = sp.SimplePolicy(S, TARIFFS)
     now = feed(p, at(MON, 9, 0), 6, 2.5, element=True)  # importing 2.5 kW in the peak
@@ -691,13 +693,17 @@ def test_n1_manual_70_heating_in_a_peak_is_counted_and_keeps_qualified_solar(tmp
     assert rig.peak_import_kwh == 0
 
 
-def test_n1_only_storage_with_a_confident_estimate_counts_the_element(rig):
-    """The rule itself, for every policy state and confidence."""
+def test_n1_aggregate_confidence_never_counts_as_measured_element_power(rig):
+    """D1-D6 estimates cannot add any solar credit, in any policy state."""
     executor, runtime = rig.executor, rig.runtime
     rig.enable()
     heater_state = importlib.import_module(f"{m.__package__}.heater_state")
     now = rig.now()
     runtime.grid_import_kw = 0.5
+    measurement = importlib.import_module(f"{m.__package__}.measurement")
+    runtime.grid_observed_at = now
+    runtime.circuit = measurement.CircuitPower(0, now, "off", "verified")
+    runtime.power_budget = measurement.power_balance(0.5, 0)
     counted = {}
     for state in (sp.OFF, sp.BASELINE, sp.STORAGE, None):
         for confidence in ("verified", "high", "medium", "low", "none"):
@@ -707,11 +713,7 @@ def test_n1_only_storage_with_a_confident_estimate_counts_the_element(rig):
             executor.reset_policy()
             executor.decide(now, executor.observe(now))
             counted[(state, confidence)] = executor.policy.samples[-1][3]
-    assert {key for key, value in counted.items() if value} == {
-        (sp.STORAGE, "verified"),
-        (sp.STORAGE, "high"),
-        (sp.STORAGE, "medium"),
-    }
+    assert not any(counted.values())
     # An estimate of "off" or "unknown" is never counted, in any state.
     for estimate in ("off", "unknown"):
         runtime.heater = heater_state.HeaterState(state=estimate, confidence="high")

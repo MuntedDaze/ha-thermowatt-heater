@@ -19,7 +19,11 @@ Keep untracked `review-1b29be1/` and `uv.lock` untouched.
    ordinary weekend spacing remains (up to 15 minutes of exposure after a start).
    Only peak withdrawal/meter-loss OFF bypass spacing; confirmation/auth guards
    remain. Future status cannot authorize a command or poison the watermark.
-2. Pending: generic verified CT power/energy, source times and conservation.
+2. Implemented: generic W/kW CT with entity/unit commissioning stamp; optional
+   Wh/kWh input; invalid/negative/ambiguous/stale/future/pre-boot handling;
+   source-time deduplication and ≤60 s grid pairing; exact H−G conservation.
+   Inferred state is diagnostic only. Optional heat requires CT; essential
+   off-peak heat does not. Acquisition, balance and policy are separate.
 3. Pending: event telemetry, restart-safe measured energy/thermal calibration.
 4. Pending: bounded adaptive polling shadow comparison; fixed polling unchanged.
 5. Pending: economic comparison scenarios and guarded planning improvements.
@@ -52,3 +56,16 @@ Docker is absent: native amd64/aarch64, HA and Supervisor matrices await CI.
 Initial full baseline run: 992 passed, one overnight-baseline simulation failed;
 the same test passed in isolation and the full post-change suite passed.
 Increment 1 commit: find by subject `Fix optional import withdrawal and protective peak OFF`.
+Commit: `4d404a2`.
+
+Increment 2 full suite: **1024 passed**, Python 3.12. Focused final checks after
+making the pure snapshot fail-closed by default: 102 passed. Ruff lint/format,
+both strict mypy targets and compileall pass. Bash unchanged from increment 1.
+The direct-meter cloudy replay now measures 0.90 kWh peak import, matching
+Astra's direct trace; it is not the old inferred 0.75 kWh result. Hardware
+checks remain unverified in CT_COMMISSIONING.md. No install package/version bump.
+Increment 2 commit subject: `Use verified generic circuit power for optional heat`.
+
+Isolation independently verified: Fable's registered worktree is
+`C:/Users/jacob/Documents/ChatGPT/ha-thermowatt-heater-fable`, branch
+`fable/thermann-energy-dashboard`; this branch uses the original path exclusively.

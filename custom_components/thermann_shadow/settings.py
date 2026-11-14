@@ -436,6 +436,14 @@ for key in ("peak_morning_start", "peak_morning_end", "peak_evening_start", "pea
         "Tariff-clock HH:MM, not Hobart comfort time. Must be increasing: morning start/end, evening start/end.",
         kind="time",
     )
+CATALOG["heater_meter_verification"] = Setting(
+    "Commissioned hot-water power entity and unit",
+    "System",
+    "After an electrician verifies the exclusive hot-water circuit, sign, units, reporting cadence, "
+    "OFF/ON and outage tests, enter entity_id|W or entity_id|kW. Empty disables optional heating. "
+    "Remapping the power sensor clears this record; no relay control is used.",
+    kind="text",
+)
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety
@@ -507,6 +515,7 @@ PRESERVE_ON_RESTORE = frozenset(
         # 0.9.1 (audit M4): the forecast switch decides whether EMHASS is used
         # at all and is a commissioning requirement, not a preference.
         "forecast_enabled",
+        "heater_meter_verification",
     }
 )
 # 0.7.1: settings that change WHERE commands go, WHETHER they may be sent, HOW
@@ -544,6 +553,7 @@ LOCKED_WHILE_ACTIVE = frozenset(
         "grid_max_age_seconds",
         "forecast_enabled",
         "sources",
+        "heater_meter_verification",
     }
 )
 RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)

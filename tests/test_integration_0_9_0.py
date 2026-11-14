@@ -108,12 +108,14 @@ class Rig:
                 "forecast_house_margin_kw": 0.0,
                 "controller_command_topic": TOPIC,
                 "controller_three_state_qualified": True,
+                "heater_meter_verification": "sensor.synthetic_heater_w|W",
             },
         )
         self.sources = {
             **c.DEFAULT_SOURCES,
             "forecast_pv": FORECAST_PV,
             "forecast_load": FORECAST_LOAD,
+            "heater_power": "sensor.synthetic_heater_w",
         }
         self.hass = SimpleNamespace(
             states=SimpleNamespace(get=self.states.get),
@@ -325,6 +327,11 @@ class Rig:
                 self.bridge.tick()
             self.tank.minute(self.t)
             self._meter()
+            self.report(
+                "sensor.synthetic_heater_w",
+                3000 if self.tank.element else 0,
+                {"unit_of_measurement": "W"},
+            )
             if self.now().minute in (0, 30):
                 self._forecast()  # EMHASS publishes every 30 minutes
             if every_minute:

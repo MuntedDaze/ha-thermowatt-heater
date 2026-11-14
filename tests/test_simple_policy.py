@@ -39,6 +39,7 @@ def feed(policy, start, minutes, grid_kw, element=False):
 
 
 def snap(now, state, reading=60.0, **kw):
+    kw.setdefault("heater_meter_valid", True)  # synthetic direct-meter tank fixture
     return sp.Snapshot(now, state, reading, kw.pop("reading_at", now - 5 * MIN), **kw)
 
 
@@ -507,7 +508,11 @@ def simulate(
                 )
                 for k in range(36)
             )
-        d = policy.decide(sp.Snapshot(now, tank.state, seen[0], seen[1], forecast, last_cmd))
+        d = policy.decide(
+            sp.Snapshot(
+                now, tank.state, seen[0], seen[1], forecast, last_cmd, heater_meter_valid=True
+            )
+        )
         log["reasons"].add(d.reason)
         if d.command:
             log["commands"].append((loc.strftime("%a %H:%M"), d.state, d.reason))

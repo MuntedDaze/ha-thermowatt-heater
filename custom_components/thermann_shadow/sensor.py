@@ -45,6 +45,10 @@ SENSORS = {
     "heating_hours_needed": ("Heating time needed", "h"),
     "measured_surplus_kw": ("Measured surplus excluding element", "kW"),
     "shadow_command": ("Shadow command", None),
+    "heater_measured_w": ("Hot water measured power", "W"),
+    "heater_meter_state": ("Hot water measured element state", None),
+    "heater_meter_quality": ("Hot water meter quality", None),
+    "heater_energy_kwh": ("Hot water circuit energy", "kWh"),
 }
 TIMESTAMPS = {"peak_start", "planned_start", "latest_start", "next_tariff_change", "soft_target"}
 CONTROLLER_SENSORS = {

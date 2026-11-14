@@ -19,7 +19,13 @@ DEFAULT_SOURCES = {
     "import_energy": "sensor.goodwe_inverter_meter_total_energy_import",
     "export_energy": "sensor.goodwe_inverter_meter_total_energy_export",
 }
-OPTIONAL_SOURCES = {"forecast_pv": "", "forecast_load": "", "pv_ac": "", "heater_power": ""}
+OPTIONAL_SOURCES = {
+    "forecast_pv": "",
+    "forecast_load": "",
+    "pv_ac": "",
+    "heater_power": "",
+    "heater_energy": "",
+}
 # AC-side inverter output, consistent with the AC meter and house load. Used
 # when no explicit pv_ac mapping is saved (existing 0.3.0 entries).
 DEFAULT_PV_AC = "sensor.goodwe_inverter_total_power"
@@ -95,6 +101,7 @@ DEFAULT_OPTIONS = {
     "controller_max_requests_per_day": 220.0,
     "controller_execution_latency_minutes": 30.0,
     "controller_notify_service": "",
+    "heater_meter_verification": "",  # commissioned entity_id|W (or |kW); no default authority
 }
 # 0.7.1 (settings audit): ranges a saved value must respect. Values saved by
 # older versions outside them are brought inside once, by the entry migration
@@ -207,6 +214,11 @@ def parse_options(options):
     for key in ("controller_command_topic", "controller_notify_service"):
         if not isinstance(values[key], str) or len(values[key]) > 64:
             raise ValueError("controller_setting_invalid")
+    stamp = values["heater_meter_verification"]
+    if not isinstance(stamp, str) or (
+        stamp and not re.fullmatch(r"sensor\.[a-z0-9_]+\|(W|kW)", stamp)
+    ):
+        raise ValueError("heater_meter_verification_invalid")
     notify = values["controller_notify_service"].strip()
     if notify and not NOTIFY_SERVICE_PATTERN.match(notify):
         raise ValueError("notify_service_invalid")  # F4: was silently ignored

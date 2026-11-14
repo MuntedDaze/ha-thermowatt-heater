@@ -1,9 +1,6 @@
-"""Simplified heating policy: DESIGN DRAFT, not used by the installed controller.
+"""Pure three-state controller policy; the executor supplies verified inputs.
 
-Nothing imports this module yet. It is the reviewable core of the proposed
-simplification (see shadow_controller/SIMPLIFIED_STRATEGY.md). Wiring it into
-the controller needs owner approval, and so does the bridge change it depends
-on: today the bridge accepts only ``Manual:70`` and ``off``.
+Development changes require owner approval before merge or live operation.
 
 Three heater states, chosen from the tariff calendar, the Thermann reading, the
 EMHASS forecast and LOCAL meter samples (GoodWe, about once a minute; never a
@@ -34,10 +31,9 @@ The tariff calendar decides the mode:
                not finished by then continues until the peak.
   OPPORTUNITY  every other off-peak time: weekday nights and whole weekends.
                BASELINE, plus STORAGE while measured solar (at least
-               ``solar_floor_kw``) makes heating worth it now and no cheaper
-               window is forecast later that day. A worthwhile session ends only
-               when both the measured surplus and the next hour's forecast have
-               faded, not on a passing cloud.
+               full element cover) makes heating worth it now and no cheaper
+               window is forecast later that day. Sustained import or lost
+               measurement returns to baseline regardless of a sunny forecast.
 
 Precedence, highest first:
 
@@ -79,7 +75,9 @@ SCAN_STEP = timedelta(minutes=15)
 SCAN_HORIZON = timedelta(days=4)
 SAMPLE_SLACK = timedelta(seconds=30)  # timer drift allowed at the start of a sample window
 # Protective peak OFF only. Restarts, holiday and ordinary transitions still wait.
-SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn", "peak_meter_unavailable"})
+SPACING_EXEMPT_REASONS = frozenset(
+    {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_meter_unavailable"}
+)
 
 
 @dataclass(frozen=True)
@@ -136,6 +134,7 @@ class Snapshot:
     holiday: bool = False
     override_12h: bool = False
     cloud_ready: bool = True
+    heater_meter_valid: bool = False  # optional starts require explicit verified input
 
 
 @dataclass(frozen=True)
@@ -157,12 +156,22 @@ class SimplePolicy:
 
     # --- local meter ---------------------------------------------------------------
 
-    def add_meter(self, at: datetime, grid_kw: float, element_on: bool | None) -> None:
+    def add_meter(
+        self, at: datetime, grid_kw: float, element_on: bool | None = None, *, heater_kw=None
+    ) -> None:
         """One local sample: grid import positive, export negative. ``element_on``
         is the caller's element estimate (house-load step); None counts as off,
         which can only make solar look SMALLER (never a costly start)."""
-        available = -grid_kw + (self.s.element_kw if element_on else 0.0)
-        self.samples.append((at, max(0.0, grid_kw), available, bool(element_on)))
+        if not math.isfinite(grid_kw) or (heater_kw is not None and not 0 <= heater_kw <= 3.8):
+            self.samples.clear()
+            return
+        if self.samples and at <= self.samples[-1][0]:
+            return  # the same HA report cannot become extra qualification votes
+        # Boolean input is retained for synthetic pure-policy tank simulations.
+        # The runtime always supplies actual CT kW explicitly.
+        measured = heater_kw if heater_kw is not None else self.s.element_kw if element_on else 0.0
+        available = -grid_kw + measured
+        self.samples.append((at, max(0.0, grid_kw), available, measured >= 2.0))
         cutoff = at - 2 * max(self.s.qualify, self.s.withdraw)
         while self.samples and self.samples[0][0] < cutoff:
             self.samples.popleft()
@@ -361,6 +370,8 @@ class SimplePolicy:
             if state == STORAGE:
                 if not self.meter_fresh(now):
                     return OFF, "peak_meter_unavailable", 4, plan
+                if not snap.heater_meter_valid:
+                    return OFF, "peak_heater_meter_unavailable", 4, plan
                 if not in_peak and not qualified:
                     return OFF, "peak_ahead_no_qualified_solar", 4, plan  # the park
                 # Import above the tolerance, or the surplus no longer covering the
@@ -371,7 +382,7 @@ class SimplePolicy:
                 ):
                     return OFF, "peak_solar_withdrawn", 4, plan
                 return STORAGE, "peak_solar_continues", 4, plan
-            if would_heat and qualified:
+            if fresh and would_heat and qualified and snap.heater_meter_valid:
                 return STORAGE, "peak_solar_qualified", 4, plan
             return OFF, "peak_no_grid_heating", 4, plan
 
@@ -450,7 +461,7 @@ class SimplePolicy:
         # Opportunity: weekday nights and weekends.
         plan["mode"] = OPPORTUNITY
         if state == STORAGE:
-            if measured is None:
+            if measured is None or not snap.heater_meter_valid:
                 return BASELINE, "solar_opportunity_ended", 5, plan
             # Optional heat must not import indefinitely on a forecast promise.
             # The same five-minute tolerance as peak withdrawal avoids toggling
@@ -466,7 +477,9 @@ class SimplePolicy:
             return STORAGE, "solar_opportunity_continues", 5, plan
         finish_by = None if peak is None else peak - s.soft_target_margin
         if (
-            would_heat
+            fresh
+            and would_heat
+            and snap.heater_meter_valid
             and (finish_by is None or now + timedelta(hours=hours) <= finish_by)
             and self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw)
         ):

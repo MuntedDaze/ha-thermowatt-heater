@@ -84,7 +84,9 @@ BRIDGE_IN_PROGRESS_RESULTS = {
 OPTIONAL_REASONS = frozenset({"peak_solar_qualified", "solar_opportunity"})
 ESSENTIAL_EXTRA_COMMANDS = 6
 # Must match the policy: only justified protective peak OFF bypasses spacing.
-SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn", "peak_meter_unavailable"})
+SPACING_EXEMPT_REASONS = frozenset(
+    {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_meter_unavailable"}
+)
 FORECAST_ALERT_AFTER = timedelta(minutes=60)
 BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
 BRIDGE_UNEXPECTED_STATE = "unexpected_state_after_command"

@@ -24,6 +24,7 @@ from .config import DEFAULT_OPTIONS, DEFAULT_PV_AC
 from .forecast import build_forecast
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
+from .measurement import CircuitPower, circuit_power, energy_reading, power_balance
 from .settings import BACKUP_KEY, describe
 from .thermal import ThermalObserver
 
@@ -67,6 +68,10 @@ class ShadowRuntime:
         self.heater = HeaterState()
         self.forecast = None
         self.grid_import_kw = None  # signed: import positive; None when stale/unverified
+        self.grid_observed_at = None
+        self.circuit = CircuitPower()
+        self.circuit_energy_kwh = None
+        self.power_budget = None
         self.temperature_c = None
         self.poll_at = None
         self.warnings = []
@@ -86,7 +91,16 @@ class ShadowRuntime:
 
         settings, tariffs = parse_options(options)
         changed_mapping = dict(sources) != dict(self.sources)
-        if changed_mapping or settings != self.settings or tariffs != self.tariffs:
+        verification_changed = (
+            options.get("heater_meter_verification", "")
+            != self.native_options["heater_meter_verification"]
+        )
+        if (
+            changed_mapping
+            or verification_changed
+            or settings != self.settings
+            or tariffs != self.tariffs
+        ):
             self.pv_samples.clear()
             self.estimator.reset()
             if self.executor is not None:
@@ -167,6 +181,10 @@ class ShadowRuntime:
         self.grid_import_kw = (
             None if export_kw is None or not settings.meter_verified else -export_kw
         )
+        grid_reading = self._reading("grid")
+        self.grid_observed_at = (
+            grid_reading.observed_at if self.grid_import_kw is not None else None
+        )
         if not settings.meter_verified:
             self.warnings.append("meter_direction_not_verified_no_measured_solar_used")
         pv_ac_now = None
@@ -190,7 +208,25 @@ class ShadowRuntime:
         house_kw = self._kw("house", now)
         if house_kw is None and pv_ac_now is not None and export_kw is not None:
             house_kw = max(0.0, pv_ac_now - export_kw)
-        heater_power = self._kw("heater_power", now) if self.sources.get("heater_power") else None
+        self.circuit = circuit_power(
+            self._reading("heater_power"),
+            self.sources.get("heater_power"),
+            self.native_options["heater_meter_verification"],
+            now,
+            self.boot,
+            settings.grid_max_age_seconds,
+        )
+        self.circuit_energy_kwh = energy_reading(
+            self._reading("heater_energy"), now, self.boot, settings.grid_max_age_seconds
+        )
+        paired = (
+            self.circuit.valid
+            and self.grid_observed_at is not None
+            and abs((self.circuit.observed_at - self.grid_observed_at).total_seconds()) <= 60
+        )
+        self.power_budget = (
+            power_balance(self.grid_import_kw, self.circuit.watts / 1000) if paired else None
+        )
         status_raw = mode_state.attributes.get("WaterHeaterSts") if mode_state else None
         self.heater = self.estimator.update(
             now,
@@ -198,7 +234,7 @@ class ShadowRuntime:
             status_raw,
             self.poll_at if status_ok else None,
             mode == "Manual",
-            heater_power,
+            None,  # aggregate estimator is diagnostic only; CT is a separate authority
         )
 
         # EMHASS forecasts as net-export slots.
@@ -259,6 +295,10 @@ class ShadowRuntime:
             heater_element_state=self.heater.state,
             heater_state_confidence=self.heater.confidence,
             storage_target_c=70,
+            heater_measured_w=self.circuit.watts if self.circuit.valid else None,
+            heater_meter_state=self.circuit.state,
+            heater_meter_quality=self.circuit.quality,
+            heater_energy_kwh=self.circuit_energy_kwh,
         )
         base, _ = base_load(house_kw, self.heater)
         values["base_load_kw"] = None if base is None else round(base, 3)
@@ -291,6 +331,16 @@ class ShadowRuntime:
             "automatic_control" if self.controller_active else "shadow_observation"
         )
         self.details = {
+            "circuit_measurement": {
+                "watts": self.circuit.watts,
+                "state": self.circuit.state,
+                "quality": self.circuit.quality,
+                "observed_at": self.circuit.observed_at.isoformat()
+                if self.circuit.observed_at
+                else None,
+                "budget": self.power_budget,
+                "aggregate_inference": "diagnostic_only",
+            },
             "shadow_mode": not self.controller_active,
             "controller_active": self.controller_active,
             "policy": "simplified_three_state (SIMPLIFIED_STRATEGY.md)",
