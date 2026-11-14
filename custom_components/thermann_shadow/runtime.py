@@ -24,6 +24,7 @@ from .config import DEFAULT_OPTIONS, DEFAULT_PV_AC
 from .forecast import build_forecast
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import ELEMENT_KW, Reading, _fresh, _power, number, tariff_at, timestamp
+from .polling_advisor import recommend_poll
 from .settings import BACKUP_KEY, describe
 from .thermal import ThermalObserver
 
@@ -77,6 +78,7 @@ class ShadowRuntime:
         # 0.7.0 read-only thermal observer (diagnostics; never affects control).
         self.thermal = ThermalObserver()
         self.thermal_store = None
+        self.poll_advice = None  # read-only candidate; the bridge still polls normally
         self.native_options = dict(DEFAULT_OPTIONS)
 
     def set_native_reference(self, options):
@@ -299,6 +301,28 @@ class ShadowRuntime:
             None if export_now is None else round(max(0.0, export_now), 3)
         )
         values["forecast_age_minutes"] = self.forecast.age_minutes if self.forecast else None
+        mode_state = self.hass.states.get(self.sources.get("mode", ""))
+        executor = self.executor
+        owner_override = bool(
+            executor is not None
+            and (executor.controller.hold or executor.controller.state == "owner_override")
+        )
+        self.poll_advice = recommend_poll(
+            now,
+            self.poll_at,
+            mode=mode_state.state if mode_state else None,
+            temperature_c=temperature,
+            target_c=target,
+            heater_power_kw=self.heater_power_kw,
+            heater_meter_configured=bool(self.sources.get("heater_power")),
+            next_tariff_at=change[0] if change else None,
+            cloud_health=values["cloud_health"],
+            owner_override=owner_override,
+        )
+        values["adaptive_poll_shadow_interval_minutes"] = self.poll_advice[
+            "recommended_interval_minutes"
+        ]
+        values["adaptive_poll_shadow_due_at"] = self.poll_advice["recommended_due_at"]
         self._requests(now)
         executor = self.executor
         policy = executor.policy_values() if executor is not None else {}
@@ -322,6 +346,7 @@ class ShadowRuntime:
             "tariff_contract_verified": self.settings.tariff_verified,
             "tariff_clock": self.settings.tariff_clock,
             "status_fresh": status_ok,
+            "adaptive_poll_shadow_advice": self.poll_advice,
             "warnings": list(self.warnings),
             "sources": dict(self.sources),
             "heater_state": {
