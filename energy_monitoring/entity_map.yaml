@@ -1,0 +1,123 @@
+# Entity map for the energy-monitoring package and dashboard.
+#
+# This is the ONLY file to edit. After a change, regenerate:
+#     python energy_monitoring/build.py
+# which rewrites energy_monitoring/generated/. Leave an entity as "" when the
+# device is not installed: the generator then omits everything that needs it
+# and the dashboard shows a "not mapped" note instead of a broken card.
+#
+# Status markers in comments: [verified] = checked read-only against the live
+# entity registry on 12 Nov 2026 (shadow_controller/DASHBOARD_CONTRACT.md);
+# [unverified] = follows the documented naming pattern, confirm before install.
+
+version: 1
+currency: AUD
+
+grid:
+  power: sensor.goodwe_inverter_meter_active_power          # W, signed [verified]
+  export_positive: true                                      # owner-verified HK1000 sign
+  import_energy: sensor.goodwe_inverter_meter_total_energy_import   # kWh lifetime [verified]
+  export_energy: sensor.goodwe_inverter_meter_total_energy_export   # kWh lifetime [verified]
+
+solar:
+  power: sensor.goodwe_inverter_pv_power                     # W [verified]
+  energy: sensor.goodwe_inverter_today_s_pv_generation       # kWh, resets daily [verified]
+  forecast_power: sensor.p_pv_forecast                       # W, EMHASS [verified]; "" to omit
+
+house:
+  power: sensor.goodwe_inverter_house_consumption            # W [verified]
+
+tariff:
+  # Aurora Tariff 93 runs on fixed AEST (UTC+10) all year: "standard".
+  # "local" follows Home Assistant's local time including daylight saving.
+  clock: standard
+  utc_offset_hours: 10
+  # Everything outside these windows is off-peak. days: 0 = Monday.
+  peak_windows:
+    - {days: [0, 1, 2, 3, 4], start: "07:00", end: "10:00"}
+    - {days: [0, 1, 2, 3, 4], start: "16:00", end: "21:00"}
+  # Rates are NOT stored here. The package creates input_number helpers
+  # (input_number.em_peak_rate, em_off_peak_rate, em_feed_in_rate,
+  # em_daily_supply_charge) which you set once in Home Assistant. To use an
+  # existing entity instead, put its entity ID here and the helper is omitted.
+  peak_rate_entity: ""
+  off_peak_rate_entity: ""
+  feed_in_rate_entity: ""
+  daily_supply_charge_entity: ""
+
+# CT-monitored circuits (0 to 3). Works with any meter that exposes a power
+# entity in W; "energy" (kWh, total_increasing) is optional: when blank the
+# package integrates the power instead. role: hot_water enables the element,
+# heating-cycle and solar/grid attribution sensors for that circuit.
+circuits:
+  - key: hot_water
+    name: Hot water
+    role: hot_water
+    power: ""            # e.g. sensor.<shelly>_channel_1_power, once installed
+    energy: ""           # e.g. sensor.<shelly>_channel_1_energy
+    element_on_watts: 1000
+  - key: air_conditioner
+    name: Air conditioner
+    role: circuit
+    power: ""
+    energy: ""
+  - key: oven
+    name: Oven
+    role: circuit
+    power: ""
+    energy: ""
+
+# Smart plugs. "circuit" names the CT circuit (key above) the plug is wired
+# downstream of, if any: such a plug is shown as a breakdown of that circuit
+# and is NOT added to the tracked total, so nothing is counted twice.
+appliances:
+  - {key: dryer, name: Dryer, power: sensor.dryer_current_consumption, energy: sensor.dryer_today_s_consumption, circuit: ""}                              # [verified]
+  - {key: washing_machine, name: Washing machine, power: sensor.washing_machine_current_consumption, energy: sensor.washing_machine_today_s_consumption, circuit: ""}   # [verified]
+  - {key: dishwasher, name: Dishwasher, power: sensor.dishwasher_current_consumption, energy: sensor.dishwasher_today_s_consumption, circuit: ""}          # [verified]
+  - {key: server, name: Server, power: sensor.server_current_consumption, energy: sensor.server_today_s_consumption, circuit: ""}                        # [unverified]
+  - {key: network_cupboard, name: Network cupboard, power: sensor.network_cupboard_current_consumption, energy: sensor.network_cupboard_today_s_consumption, circuit: ""}  # [unverified]
+  - {key: jrig, name: Jrig, power: sensor.jrig_current_consumption, energy: sensor.jrig_today_s_consumption, circuit: ""}                                # [unverified]
+  - {key: garage, name: Garage, power: sensor.garage_current_consumption, energy: sensor.garage_today_s_consumption, circuit: ""}                        # [unverified]
+
+# Read-only entities from the Thermann bridge add-on and Thermann Controller
+# (0.9.1 baseline). Blank entries are placeholders for entities the controller
+# does not expose yet: see energy_monitoring/ENTITY_CONTRACT.md.
+hot_water:
+  mode: sensor.thermann_shadow_thermann_mode
+  target: sensor.thermann_shadow_thermann_target
+  tank_temperature: sensor.thermann_shadow_bottom_temperature
+  operating_mode: sensor.thermann_shadow_hot_water_operating_mode
+  control_state: sensor.thermann_shadow_automatic_control_state
+  control_reason: sensor.thermann_shadow_automatic_control_reason
+  policy_state: sensor.thermann_shadow_policy_wanted_state
+  policy_mode: sensor.thermann_shadow_policy_mode
+  decision_code: sensor.thermann_shadow_decision_code
+  next_action: sensor.thermann_shadow_next_intended_action
+  next_heating_start: sensor.thermann_shadow_next_heating_start
+  next_heating_stop: sensor.thermann_shadow_next_heating_stop
+  latest_start: sensor.thermann_shadow_latest_continuous_heating_start
+  soft_target_time: sensor.thermann_shadow_soft_target_time
+  heating_time_needed: sensor.thermann_shadow_heating_time_needed
+  element_state: sensor.thermann_shadow_heater_element_state
+  controller_fault: sensor.thermann_shadow_controller_fault
+  current_tariff: sensor.thermann_shadow_current_tariff
+  last_command: sensor.thermann_shadow_last_command
+  last_command_result: sensor.thermann_shadow_last_command_result
+  commands_24h: sensor.thermann_shadow_commands_in_last_24_hours
+  requests_24h: sensor.thermann_shadow_cloud_requests_in_last_24_hours
+  requests_per_hour: sensor.thermann_shadow_observed_requests_per_hour
+  cloud_health: sensor.home_cloud_health
+  status_age: sensor.home_status_age
+  last_poll: sensor.home_last_successful_poll
+  last_cloud_error: sensor.home_last_cloud_error
+  request_attempts: sensor.home_cloud_request_attempts_local_lifetime
+  # Not exposed by controller 0.9.1 (requested from Codex):
+  expected_completion: ""
+  next_poll: ""
+  poll_interval: ""
+
+# A source is "stale" when Home Assistant has not heard from it for this long.
+freshness_seconds:
+  core: 300          # grid, solar, house
+  circuits: 300
+  appliances: 1800

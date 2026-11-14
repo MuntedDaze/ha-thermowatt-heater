@@ -1,0 +1,49 @@
+name: Energy monitoring (isolated Home Assistant)
+
+on:
+  pull_request:
+    paths:
+      - "energy_monitoring/**"
+      - "tests/test_energy_monitoring_*.py"
+      - "tests/energy_template_shim.py"
+      - ".github/workflows/energy-monitoring.yml"
+  push:
+    branches: ["fable/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-config:
+    name: HA Core ${{ matrix.version }}, ${{ matrix.meters }} CT circuits
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["2026.10.4", "2026.11.1"]
+        meters: [0, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install PyYAML==6.0.3
+      - name: Generated files are up to date
+        run: python energy_monitoring/build.py --check
+      - name: Write a throwaway config holding only the package
+        run: |
+          python energy_monitoring/ha_check.py --out "$RUNNER_TEMP/cfg" --meters ${{ matrix.meters }}
+          chmod -R a+rwX "$RUNNER_TEMP/cfg"
+      - name: Home Assistant check_config, without networking
+        run: |
+          set -o pipefail
+          docker pull ghcr.io/home-assistant/home-assistant:${{ matrix.version }}
+          docker run --rm --network none --entrypoint python3 \
+            --mount "type=bind,src=$RUNNER_TEMP/cfg,dst=/config" \
+            ghcr.io/home-assistant/home-assistant:${{ matrix.version }} \
+            -m homeassistant --script check_config --config /config | tee "$RUNNER_TEMP/check.txt"
+          # check_config prints problems under these headings; any of them fails the job.
+          if grep -E "Failed config|Invalid config|ERROR|Traceback" "$RUNNER_TEMP/check.txt"; then
+            exit 1
+          fi
