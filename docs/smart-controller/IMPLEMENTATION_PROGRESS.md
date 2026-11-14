@@ -24,7 +24,11 @@ Keep untracked `review-1b29be1/` and `uv.lock` untouched.
    source-time deduplication and ≤60 s grid pairing; exact H−G conservation.
    Inferred state is diagnostic only. Optional heat requires CT; essential
    off-peak heat does not. Acquisition, balance and policy are separate.
-3. Pending: event telemetry, restart-safe measured energy/thermal calibration.
+3. Implemented: Recorder event interface; covered measured power integration;
+   optional counter epochs/recovery; compact ≤40 clean heating sessions;
+   draw/gap/command-change exclusion and bounded save cadence; conditional ETA
+   ranges with idle/unknown suppression. Calibration requires ≥10 independent
+   sessions on ≥3 days and remains diagnostic pending held-out/hardware evidence.
 4. Pending: bounded adaptive polling shadow comparison; fixed polling unchanged.
 5. Pending: economic comparison scenarios and guarded planning improvements.
 6. Interface/documentation only: Fable implements dashboards separately.
@@ -65,6 +69,16 @@ The direct-meter cloudy replay now measures 0.90 kWh peak import, matching
 Astra's direct trace; it is not the old inferred 0.75 kWh result. Hardware
 checks remain unverified in CT_COMMISSIONING.md. No install package/version bump.
 Increment 2 commit subject: `Use verified generic circuit power for optional heat`.
+Commit: `b9620a8`.
+
+Increment 3: **1032 passed**, Python 3.12; Ruff lint/format, both strict mypy
+targets, compileall passed. Tests cover deduplication, outages, restart, counter
+reset/jump/remap, disturbed cycles, independent learning, uncertainty and event
+serialization/source-time labels. See TELEMETRY_INTERFACE.md for Fable's backend
+contract. Ordinary history writes are ≤15-minute cadence plus session completion
+and unload; an abrupt crash may lose unsaved integrated intervals. Native meter
+counter/HA Recorder remain primary. No raw DB or dashboard changes.
+Increment 3 commit subject: `Collect measured heating history and controller telemetry`.
 
 Isolation independently verified: Fable's registered worktree is
 `C:/Users/jacob/Documents/ChatGPT/ha-thermowatt-heater-fable`, branch

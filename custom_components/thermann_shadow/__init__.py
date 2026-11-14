@@ -79,6 +79,13 @@ async def async_setup_entry(hass, entry):
     from .thermal import ThermalObserver
 
     runtime.thermal_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.thermal")
+    from .performance import MeasuredHistory
+
+    runtime.history_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.measured_history")
+    try:
+        runtime.history = MeasuredHistory.from_dict(await runtime.history_store.async_load())
+    except Exception:  # noqa: BLE001 - observations remain usable without learned history
+        runtime.history = MeasuredHistory()
     try:
         runtime.thermal = ThermalObserver.from_dict(await runtime.thermal_store.async_load())
     except Exception:  # noqa: BLE001 - diagnostics only; start empty
@@ -143,6 +150,8 @@ async def _reload(hass, entry):
 
 async def async_unload_entry(hass, entry):
     if await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        runtime = hass.data[DOMAIN][entry.entry_id]
+        await runtime._save_history()
         hass.data[DOMAIN].pop(entry.entry_id)
         return True
     return False

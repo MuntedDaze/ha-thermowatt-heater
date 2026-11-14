@@ -25,6 +25,7 @@ from .forecast import build_forecast
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
 from .measurement import CircuitPower, circuit_power, energy_reading, power_balance
+from .performance import MeasuredHistory
 from .settings import BACKUP_KEY, describe
 from .thermal import ThermalObserver
 
@@ -82,6 +83,11 @@ class ShadowRuntime:
         self.thermal = ThermalObserver()
         self.thermal_store = None
         self.native_options = dict(DEFAULT_OPTIONS)
+        self.history = MeasuredHistory()
+        self.history_store = None
+        self.completion = {}
+        self.telemetry = None
+        self._event_key = None
 
     def set_native_reference(self, options):
         self.native_options = {**DEFAULT_OPTIONS, **options}
@@ -102,6 +108,7 @@ class ShadowRuntime:
             or tariffs != self.tariffs
         ):
             self.pv_samples.clear()
+            self.history.last = self.history.anchor = self.history.candidate = None
             self.estimator.reset()
             if self.executor is not None:
                 # Meter evidence was gathered under the old mapping or sign.
@@ -236,6 +243,27 @@ class ShadowRuntime:
             mode == "Manual",
             None,  # aggregate estimator is diagnostic only; CT is a separate authority
         )
+        command_key = self.executor.controller.last_command_at() if self.executor else None
+        self.history.update(
+            self.circuit,
+            temperature,
+            self.poll_at if status_ok else None,
+            mode,
+            target,
+            command_key,
+            settings.grid_max_age_seconds,
+        )
+        energy_source = self._reading("heater_energy")
+        if energy_source and self.circuit_energy_kwh is not None:
+            identity = f"{self.sources.get('heater_energy')}|{energy_source.unit}"
+            self.history.counter_update(
+                energy_source.observed_at, self.circuit_energy_kwh, identity
+            )
+        self.completion = self.history.completion(
+            now, temperature, self.poll_at, target, self.circuit
+        )
+        if self.history_store is not None and self.history.should_save(now):
+            self.hass.async_create_task(self._save_history())
 
         # EMHASS forecasts as net-export slots.
         self.forecast = build_forecast(
@@ -268,6 +296,84 @@ class ShadowRuntime:
         self._display(now, temperature, target, grid, export_kw, house_kw, pv_ac_now, status_ok)
         for listener in tuple(self.listeners):
             listener()
+
+    async def _save_history(self):
+        try:
+            await self.history_store.async_save(self.history.to_dict())
+        except Exception:  # noqa: BLE001 - diagnostic failure must not disrupt guards
+            LOG.warning("Measured heating history could not be saved.")
+
+    def record_event(self, now, obs, decision):
+        """One event per semantic change; existing input sensors retain raw data."""
+        last = self.executor.controller.intent or (
+            self.executor.controller.history[-1] if self.executor.controller.history else {}
+        )
+        key = (
+            obs.mode,
+            obs.target_c,
+            obs.poll_at,
+            self.circuit.state,
+            self.circuit.quality,
+            self.values.get("current_tariff"),
+            decision.reason,
+            last.get("id"),
+            last.get("status"),
+            self.executor.controller.state,
+        )
+        if key == self._event_key:
+            return
+        self._event_key = key
+        self.telemetry = {
+            "schema_version": 1,
+            "at": now.isoformat(),
+            "power": {
+                "watts": self.circuit.watts,
+                "state": self.circuit.state,
+                "quality": self.circuit.quality,
+                "observed_at": self.circuit.observed_at.isoformat()
+                if self.circuit.observed_at
+                else None,
+            },
+            "energy": {
+                "circuit_kwh": self.circuit_energy_kwh,
+                "integrated_covered_kwh": round(self.history.integrated_kwh, 6),
+                "covered_seconds": self.history.covered_seconds,
+                "gaps": self.history.gaps,
+                "counter_epochs": self.history.counter_epochs,
+            },
+            "thermann": {
+                "temperature_c": obs.temperature_c,
+                "target_c": obs.target_c,
+                "mode": obs.mode,
+                "observed_at": obs.poll_at.isoformat() if obs.poll_at else None,
+                "time_basis": "bridge_receipt_not_device_acquisition",
+                "status_raw": self.heater.status_raw,
+            },
+            "site": {
+                "grid_import_kw": self.grid_import_kw,
+                "pv_ac_kw": self.values.get("measured_pv_ac_kw"),
+                "budget": self.power_budget,
+                "grid_observed_at": self.grid_observed_at.isoformat()
+                if self.grid_observed_at
+                else None,
+            },
+            "tariff": {
+                "kind": self.values.get("current_tariff"),
+                "rate_aud_kwh": self.values.get("current_price_aud"),
+                "clock": self.settings.tariff_clock,
+                "feed_in_aud_kwh": self.settings.feed_in_rate,
+            },
+            "forecast": self.details.get("forecast"),
+            "controller": {
+                "state": self.executor.controller.state,
+                "reason": decision.reason,
+                "wanted": decision.state,
+                "operating_mode": self.executor.controller.operating_mode(now),
+                "last_command": dict(last),
+            },
+            "completion": dict(self.completion),
+            "calibration": self.history.calibration(),
+        }
 
     # ------------------------------------------------------------------ displays
     def forecast_export_now(self, now):

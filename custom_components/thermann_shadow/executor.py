@@ -338,6 +338,7 @@ class Executor:
                     await self._notify(effect)
                 elif effect.kind == "resolve":
                     self._dismiss(effect.key)
+            self.runtime.record_event(now, obs, decision)
         self._notify_listeners()
 
     async def _request_refresh(self) -> None:

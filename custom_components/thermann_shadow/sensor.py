@@ -86,6 +86,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         for key, (name, unit) in CONTROLLER_SENSORS.items()
     ]
     entities.append(ThermalStateSensor(runtime, entry))
+    entities.append(ControllerTelemetrySensor(runtime, entry))
     async_add_entities(entities)
 
 
@@ -166,3 +167,23 @@ class ThermalStateSensor(ShadowSensor):
         from homeassistant.util import dt as dt_util
 
         return self.runtime.thermal.summary(dt_util.utcnow())
+
+
+class ControllerTelemetrySensor(ShadowSensor):
+    """Stable backend event contract for Recorder and independently built views."""
+
+    def __init__(self, runtime, entry):
+        super().__init__(runtime, entry, "controller_telemetry", "Controller telemetry", None)
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        self.async_on_remove(self.runtime.executor.subscribe(self.async_write_ha_state))
+
+    @property
+    def native_value(self):
+        event = self.runtime.telemetry
+        return event["controller"]["reason"] if event else "awaiting_observations"
+
+    @property
+    def extra_state_attributes(self):
+        return self.runtime.telemetry
