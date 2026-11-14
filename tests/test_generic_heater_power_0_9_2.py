@@ -3,7 +3,6 @@
 All tests are synthetic and offline. No Shelly model or live HA device is required.
 """
 
-from datetime import timedelta
 import math
 
 import pytest
