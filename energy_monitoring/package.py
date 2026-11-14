@@ -56,6 +56,11 @@ def ok(*entities: str) -> str:
     return "{{ " + " and ".join(f"is_number(states('{entity}'))" for entity in entities) + " }}"
 
 
+def unit_factor(entity: str, unit: str, factor) -> str:
+    """Scale a reading whose source reports in ``unit`` instead of W or kWh."""
+    return f"({factor} if state_attr('{entity}', 'unit_of_measurement') == '{unit}' else 1)"
+
+
 def template_sensor(name, state, unit=None, device_class=None, state_class="measurement", **more):
     entity = {"name": name, "unique_id": slug(name), "state": state}
     if unit:
@@ -285,14 +290,21 @@ def cycle_block(config: dict, circuit: dict) -> dict:
     if "status_age_s" in snapshot:
         values["status_age_start_s"] = began("status_age_s")
         values["status_age_end_s"] = f"(states('{snapshot['status_age_s']}') | float(none))"
+    # An "off" is recorded only against a start that has not been closed yet.
+    # If the meter drops out so that a start is missed, the next "off" would
+    # otherwise be paired with the previous run's start and invent a long cycle.
+    closes = (
+        f"trigger.id == 'end' and states('{CYCLE_START}') not in ['unknown', 'unavailable']"
+        f" and a.get('started') != states('{CYCLE_START}')"
+    )
     last = template_sensor(
         "EM hot water last cycle",
-        f"{{{{ {delta('energy_kwh')} if trigger.id == 'end' else {keep} }}}}",
+        f"{THIS_ATTRIBUTES}\n{{{{ {delta('energy_kwh')} if {closes} else {keep} }}}}",
         "kWh",
         state_class=None,
         icon="mdi:water-boiler",
         attributes={
-            key: f"{THIS_ATTRIBUTES}\n{{{{ {value} if trigger.id == 'end' else a.get('{key}') }}}}"
+            key: f"{THIS_ATTRIBUTES}\n{{{{ {value} if {closes} else a.get('{key}') }}}}"
             for key, value in values.items()
         },
     )
@@ -397,7 +409,9 @@ def build_package(config: dict) -> dict:
             template_sensor(
                 f"EM {name} power",
                 # abs(): a load circuit cannot export, so a reversed clamp still reads right.
-                f"{{{{ {num(circuit['power'])} | abs | round(1) }}}}",
+                # W or kW: the units the controller's heater_power input accepts.
+                f"{{{{ ({num(circuit['power'])} * {unit_factor(circuit['power'], 'kW', 1000)})"
+                " | abs | round(1) }}",
                 "W",
                 "power",
                 availability=ok(circuit["power"]),
@@ -408,7 +422,8 @@ def build_package(config: dict) -> dict:
             sensors.append(
                 template_sensor(
                     f"EM {name} energy",
-                    f"{{{{ {num(circuit['energy'])} }}}}",
+                    f"{{{{ ({num(circuit['energy'])}"
+                    f" * {unit_factor(circuit['energy'], 'Wh', 0.001)}) | round(3) }}}}",
                     "kWh",
                     "energy",
                     "total_increasing",

@@ -232,6 +232,39 @@ def test_hot_water_sensors_exist_only_when_the_ct_is_mapped():
     assert "Expected completion** is not exposed" in text
 
 
+def test_hot_water_sensors_do_not_depend_on_the_optional_circuits():
+    """The hot-water interface is the same with or without the AC and oven CTs."""
+    alone = build_package(VARIANTS["hot_water_only"])
+    full = build_package(VARIANTS["three_circuits"])
+
+    def hot_water(package):
+        found = {}
+        for block in package["template"]:
+            for kind in ("sensor", "binary_sensor"):
+                for item in block.get(kind, []):
+                    if "hot water" in item["name"]:
+                        found[item["name"]] = item
+        found.update({i["name"]: i for i in package["sensor"] if "hot water" in i["name"]})
+        return found
+
+    assert hot_water(alone) == hot_water(full)
+    text = build.dump({"hot_water": list(hot_water(full).values())})
+    assert "air_conditioner" not in text and "oven" not in text
+
+
+@pytest.mark.parametrize("document", ["ENTITY_CONTRACT.md", "README.md"])
+def test_documented_entity_ids_are_the_generated_ones(document):
+    text = (DEFAULT_MAP.parent / document).read_text(encoding="utf-8")
+    pattern = r"(?:sensor|binary_sensor|input_number)\.em_[a-z0-9_<>]+"
+    documented = set()
+    for entity in re.findall(pattern, text):
+        keys = ("hot_water", "air_conditioner", "oven") if "<key>" in entity else ("",)
+        documented |= {entity.replace("<key>", key) for key in keys}
+    assert documented
+    created = package_entities(VARIANTS["three_circuits"])
+    assert documented <= created, documented - created
+
+
 def test_a_native_energy_entity_replaces_the_riemann_sum():
     riemann = {item["name"] for item in build_package(VARIANTS["hot_water_only"])["sensor"]}
     native = {item["name"] for item in build_package(VARIANTS["native_energy"])["sensor"]}

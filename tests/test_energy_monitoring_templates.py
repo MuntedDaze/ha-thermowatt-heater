@@ -419,6 +419,55 @@ def test_a_heating_cycle_is_captured_between_element_on_and_off(package):
         assert render(template, at_end, ended, this=kept, trigger=trigger) == attributes[key]
 
 
+def test_an_off_without_a_new_start_never_invents_a_cycle(package):
+    """Meter drop-out: off -> unavailable -> on misses the start. The following
+    on -> off must not be paired with the previous run's start."""
+    last_sensor = entity(package, "EM hot water last cycle")
+    old_start = "2026-11-16T01:00:00+00:00"
+    recorded = previous(
+        4.8, started=old_start, ended="2026-11-16T02:36:00+00:00", duration_minutes=96.0
+    )
+    states = {
+        "sensor.em_hot_water_energy": 830.0,
+        "sensor.em_hot_water_grid_energy": 310.0,
+        "sensor.em_hot_water_solar_energy": 520.0,
+        "sensor.em_hot_water_cycle_start": {
+            "state": old_start,
+            "attributes": {"energy_kwh": 812.4, "grid_kwh": 300.0, "solar_kwh": 512.4},
+        },
+    }
+    later = datetime(2026, 11, 16, 9, 0, tzinfo=timezone.utc)
+    trigger = changed("off", "end")
+    assert render(last_sensor["state"], states, later, this=recorded, trigger=trigger) == 4.8
+    for key in ("started", "ended", "duration_minutes"):
+        template = last_sensor["attributes"][key]
+        value = render(template, states, later, this=recorded, trigger=trigger)
+        assert value == recorded.attributes[key]
+    # A properly started run after that is recorded as usual.
+    states["sensor.em_hot_water_cycle_start"]["state"] = "2026-11-16T08:00:00+00:00"
+    states["sensor.em_hot_water_cycle_start"]["attributes"]["energy_kwh"] = 827.0
+    assert render(last_sensor["state"], states, later, this=recorded, trigger=trigger) == 3.0
+    minutes = last_sensor["attributes"]["duration_minutes"]
+    assert render(minutes, states, later, this=recorded, trigger=trigger) == 60.0
+
+
+def test_circuit_readings_accept_the_units_the_controller_accepts():
+    config = with_meters()
+    config["circuits"][0]["energy"] = "sensor.ct_hot_water_energy"
+    built = build_package(config)
+    power, energy = entity(built, "EM hot water power"), entity(built, "EM hot water energy")
+
+    def reading(value, unit):
+        return {"state": value, "attributes": {"unit_of_measurement": unit}}
+
+    assert render(power["state"], {"sensor.ct_hot_water_power": reading(2987.3, "W")}) == 2987.3
+    assert render(power["state"], {"sensor.ct_hot_water_power": reading(2.9873, "kW")}) == 2987.3
+    assert render(power["state"], {"sensor.ct_hot_water_power": 2987.3}) == 2987.3
+    assert render(energy["state"], {"sensor.ct_hot_water_energy": reading(812.4, "kWh")}) == 812.4
+    assert render(energy["state"], {"sensor.ct_hot_water_energy": reading(812400, "Wh")}) == 812.4
+    assert render(power["availability"], {"sensor.ct_hot_water_power": "unavailable"}) is False
+
+
 def test_a_cycle_with_missing_readings_reports_none_not_a_guess(package):
     last_sensor = entity(package, "EM hot water last cycle")
     states = {
