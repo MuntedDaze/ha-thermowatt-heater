@@ -231,8 +231,10 @@ def parse_options(options):
         and 30 <= number(values["adaptive_poll_stable_minutes"]) <= 90
     ):
         raise ValueError("polling_bounds_invalid")
-    if not isinstance(stamp, str) or (
-        stamp and not re.fullmatch(r"sensor\.[a-z0-9_]+\|(W|kW)", stamp)
+    if (
+        not isinstance(stamp, str)
+        or len(stamp) > 258
+        or (stamp and not re.fullmatch(r"sensor\.[a-z0-9_]+\|(W|kW)", stamp))
     ):
         raise ValueError("heater_meter_verification_invalid")
     notify = values["controller_notify_service"].strip()

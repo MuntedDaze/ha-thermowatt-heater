@@ -130,6 +130,13 @@ updated, with explicit timestamp and duration/measurement shape assertions.
 This follow-up changes the isolated test harness only; controller source stays
 at the tested implementation head. Require green HA jobs on the new head.
 
+Follow-up `21c483f` adds complete entity-count/serialization coverage. Inspection
+of the next real-HA settings stage found the commissioning text record also
+needs a longer native TextEntity bound and a valid synthetic alternate test
+value. The bound is now 258 (entity ID plus unit), matching parsing validation;
+the real service test exercises a >10-character value. No control behaviour,
+bridge or Fable files change in this correction.
+
 ## Current release gates and exact next steps
 
 1. Resume in the original worktree on `codex/smart-controller-next`; inspect

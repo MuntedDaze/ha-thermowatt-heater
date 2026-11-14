@@ -307,6 +307,7 @@ def alternate(key, meta, default):
         return {
             "controller_notify_service": "mobile_app_test",  # 0.7.1: name validated
             "controller_command_topic": "P/TEST999/CMD/MODE",
+            "heater_meter_verification": "sensor.synthetic_hws_power|W",
         }.get(key, "2026-10-05")
     if meta.kind == "time":
         hour, minute = int(default[:2]), int(default[3:5])
