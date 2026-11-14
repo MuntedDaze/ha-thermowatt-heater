@@ -82,7 +82,16 @@
           "peak_morning_start": "Peak morning start",
           "peak_morning_end": "Peak morning end",
           "peak_evening_start": "Peak evening start",
-          "peak_evening_end": "Peak evening end"
+          "peak_evening_end": "Peak evening end",
+          "baseline_c": "Overnight baseline temperature",
+          "normal_storage_c": "Normal weekday storage temperature",
+          "solar_boost_c": "Optional solar storage temperature",
+          "tank_litres": "Tank capacity (L)",
+          "element_kw": "Nominal element power (kW)",
+          "completion_margin_minutes": "Preferred completion before peak (min)",
+          "optional_solar_boost": "Enable optional solar boost",
+          "peak_heating_policy": "Heating during peak periods",
+          "boost_useful_fraction": "Expected useful fraction of extra solar heat"
         }
       },
       "system": {
@@ -103,7 +112,8 @@
           "heater_meter_verification": "Commissioned hot-water power entity and unit",
           "adaptive_polling_shadow": "Compare adaptive polling (shadow only)",
           "adaptive_poll_heating_minutes": "Shadow heating poll maximum",
-          "adaptive_poll_stable_minutes": "Shadow stable poll maximum"
+          "adaptive_poll_stable_minutes": "Shadow stable poll maximum",
+          "controller_four_state_qualified": "Four-state commands qualified (1.3.14)"
         }
       }
     },

@@ -18,7 +18,13 @@ from test_shadow_model import c, m
 
 sp = importlib.import_module(f"{m.__package__}.simple_policy")
 SETTINGS, TARIFFS = c.parse_options({})
-S = sp.PolicySettings(feed_in_rate=SETTINGS.feed_in_rate, tariff_clock=SETTINGS.tariff_clock)
+# Preserve the previous mandatory-70 scenarios as explicit compatibility tests.
+S = sp.PolicySettings(
+    normal_c=70,
+    peak_policy=sp.PEAK_SOLAR,
+    feed_in_rate=SETTINGS.feed_in_rate,
+    tariff_clock=SETTINGS.tariff_clock,
+)
 OFF, BASE, STORE, HOLD = sp.OFF, sp.BASELINE, sp.STORAGE, sp.HOLD
 MIN = timedelta(minutes=1)
 RATE = S.element_kw / S.kwh_per_c  # about 8.2 °C/h
@@ -94,8 +100,10 @@ def test_commands_are_the_three_states_only():
     p = sp.SimplePolicy(S, TARIFFS)
     now = at(SAT, 23)
     assert p.decide(snap(now, OFF)).command == "Manual:45"
-    p60 = sp.SimplePolicy(replace(S, baseline_c=60), TARIFFS)
-    assert p60.decide(snap(now, OFF)).command == "Manual:60"
+    with pytest.raises(ValueError, match="unsupported_target_roles"):
+        sp.SimplePolicy(replace(S, baseline_c=60), TARIFFS)
+    p62 = sp.SimplePolicy(replace(S, baseline_c=62), TARIFFS)
+    assert p62.decide(snap(now, OFF)).command == "Manual:62"
 
 
 def test_no_antibacterial_or_exposure_subsystem():
@@ -407,7 +415,7 @@ def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
     strict = sp.SimplePolicy(replace(S, optional_heat_margin=0.03), TARIFFS)
     feed(strict, now - 11 * MIN, 12, -3.4)
     d = strict.decide(snap(now, BASE, reading=44, forecast=fc(now, 14, 1.1)))
-    assert d.state == STORE  # full cover meets the margin
+    assert d.state == BASE  # projected partial-grid heat does not meet the new useful-heat margin
 
 
 def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():

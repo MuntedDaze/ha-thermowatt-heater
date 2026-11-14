@@ -107,6 +107,16 @@ DEFAULT_OPTIONS = {
     "adaptive_poll_stable_minutes": 90.0,
     "optional_heat_margin_aud_per_kwh": 0.02,
     "pause_min_saving_aud": 0.30,
+    "baseline_c": "45",
+    "normal_storage_c": "62",
+    "solar_boost_c": "70",
+    "tank_litres": 315.0,
+    "element_kw": 3.0,
+    "completion_margin_minutes": 30.0,
+    "optional_solar_boost": True,
+    "peak_heating_policy": "Never schedule heating during peak",
+    "boost_useful_fraction": 0.9,
+    "controller_four_state_qualified": False,
 }
 # 0.7.1 (settings audit): ranges a saved value must respect. Values saved by
 # older versions outside them are brought inside once, by the entry migration
@@ -211,6 +221,8 @@ def parse_options(options):
         "controller_bridge_qualified",
         "controller_three_state_qualified",
         "adaptive_polling_shadow",
+        "optional_solar_boost",
+        "controller_four_state_qualified",
     ):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
@@ -221,6 +233,20 @@ def parse_options(options):
         if not isinstance(values[key], str) or len(values[key]) > 64:
             raise ValueError("controller_setting_invalid")
     stamp = values["heater_meter_verification"]
+    from .targets import validate_roles
+
+    validate_roles(
+        *(number(values[key]) for key in ("baseline_c", "normal_storage_c", "solar_boost_c"))
+    )
+    if (
+        not 50 <= number(values["tank_litres"]) <= 500
+        or not 2 <= number(values["element_kw"]) <= 3.6
+        or not 5 <= number(values["completion_margin_minutes"]) <= 120
+        or not 0 <= number(values["boost_useful_fraction"]) <= 1
+        or values["peak_heating_policy"]
+        not in ("Never schedule heating during peak", "Verified solar-only heating")
+    ):
+        raise ValueError("dual_storage_settings_invalid")
     if not (
         0 <= number(values["optional_heat_margin_aud_per_kwh"]) <= 0.20
         and 0.10 <= number(values["pause_min_saving_aud"]) <= 2

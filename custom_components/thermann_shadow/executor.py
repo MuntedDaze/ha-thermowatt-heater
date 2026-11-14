@@ -23,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
@@ -68,6 +68,8 @@ def controller_config(
         expected_command_topic=expected_topic,
         published_forecasts_enabled=values["forecast_enabled"] is True,
         tariff_verified=values["tariff_verified"] is True,
+        requires_four_states=True,
+        four_state_qualified=values["controller_four_state_qualified"] is True,
     )
 
 
@@ -98,6 +100,20 @@ class Executor:
             values[key] != self.runtime.native_options[key]
             for key in ("optional_heat_margin_aud_per_kwh", "pause_min_saving_aud")
         )
+        economic_change = economic_change or any(
+            values[key] != self.runtime.native_options[key]
+            for key in (
+                "baseline_c",
+                "normal_storage_c",
+                "solar_boost_c",
+                "tank_litres",
+                "element_kw",
+                "completion_margin_minutes",
+                "optional_solar_boost",
+                "peak_heating_policy",
+                "boost_useful_fraction",
+            )
+        )
         self.runtime.set_native_reference(options)
         if economic_change:
             self.reset_policy()
@@ -118,6 +134,20 @@ class Executor:
         settings = self.runtime.settings
         self.policy = SimplePolicy(
             PolicySettings(
+                baseline_c=int(self.runtime.native_options["baseline_c"]),
+                normal_c=int(self.runtime.native_options["normal_storage_c"]),
+                storage_c=int(self.runtime.native_options["solar_boost_c"]),
+                boost_enabled=self.runtime.native_options["optional_solar_boost"],
+                peak_policy=self.runtime.native_options["peak_heating_policy"],
+                element_kw=float(self.runtime.native_options["element_kw"]),
+                kwh_per_c=float(self.runtime.native_options["tank_litres"]) * 4.186 / 3600,
+                peak_start_kw=float(self.runtime.native_options["element_kw"])
+                + settings.export_headroom_kw,
+                soft_target_margin=timedelta(
+                    minutes=float(self.runtime.native_options["completion_margin_minutes"])
+                ),
+                boost_useful_fraction=float(self.runtime.native_options["boost_useful_fraction"]),
+                boost_min_saving=settings.switching_benefit_aud,
                 feed_in_rate=settings.feed_in_rate,
                 tariff_clock=settings.tariff_clock,
                 optional_heat_margin=self.runtime.native_options[
@@ -273,7 +303,7 @@ class Executor:
             # new discretionary solar purchase. Never credit aggregate inference.
             watts = (
                 runtime.circuit.watts
-                if runtime.power_budget is not None and state == STORAGE
+                if runtime.power_budget is not None and state in (STORAGE, "normal_storage")
                 else 0.0
             )
             at = runtime.grid_observed_at
@@ -294,6 +324,14 @@ class Executor:
             forecast=tuple(forecast),
             last_command_at=last,
             heater_meter_valid=runtime.power_budget is not None,
+            optional_allowed=(
+                not controller.enabled
+                or (
+                    len(controller.commands) < self.cfg.max_commands_per_day
+                    and controller.requests_last_24h(now) is not None
+                    and controller.requests_last_24h(now) + 10 <= self.cfg.max_requests_per_day
+                )
+            ),
             measured_element_kw=runtime.circuit.watts / 1000
             if runtime.circuit.valid and runtime.circuit.state == "on"
             else None,

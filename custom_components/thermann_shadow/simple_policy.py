@@ -64,9 +64,12 @@ import math
 from statistics import median
 
 from .model import ELEMENT_KW, HOBART, TANK_KWH_PER_C, Forecast, Tariff, tariff_at
+from .targets import NORMAL, TARGET_C, state_at, validate_roles
 
 OFF, BASELINE, STORAGE, HOLD = "off", "baseline", "storage", "hold"
-STATES = (OFF, BASELINE, STORAGE)
+STATES = (OFF, BASELINE, NORMAL, STORAGE)
+PEAK_NEVER = "Never schedule heating during peak"
+PEAK_SOLAR = "Verified solar-only heating"
 PEAK, DEADLINE, OPPORTUNITY = "peak", "deadline", "opportunity"
 PRICE_TOLERANCE = 0.005  # $/kWh: a later window must beat "now" by this much
 SLOT = timedelta(minutes=5)  # planning grid
@@ -76,7 +79,12 @@ SCAN_HORIZON = timedelta(days=4)
 SAMPLE_SLACK = timedelta(seconds=30)  # timer drift allowed at the start of a sample window
 # Protective peak OFF only. Restarts, holiday and ordinary transitions still wait.
 SPACING_EXEMPT_REASONS = frozenset(
-    {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_meter_unavailable"}
+    {
+        "peak_solar_withdrawn",
+        "peak_meter_unavailable",
+        "peak_heater_meter_unavailable",
+        "peak_lockout",
+    }
 )
 
 
@@ -84,6 +92,11 @@ SPACING_EXEMPT_REASONS = frozenset(
 class PolicySettings:
     baseline_c: int = 45  # owner's agreed baseline (compliance note: SIMPLIFIED_STRATEGY.md §3)
     storage_c: int = 70
+    normal_c: int = 62
+    boost_enabled: bool = True
+    peak_policy: str = PEAK_NEVER
+    boost_useful_fraction: float = 0.9
+    boost_min_saving: float = 0.10
     hysteresis_c: float = 8.0  # Thermann guide p9: reheats about 8 °C below the target
     element_kw: float = ELEMENT_KW
     kwh_per_c: float = TANK_KWH_PER_C
@@ -106,10 +119,12 @@ class PolicySettings:
     meter_max_age: timedelta = timedelta(minutes=3)
 
     def __post_init__(self) -> None:
-        if not 40 <= self.baseline_c <= 65 or not 60 <= self.storage_c <= 70:
-            raise ValueError("policy_targets_out_of_range")
-        if self.storage_c - self.baseline_c < self.hysteresis_c:
-            raise ValueError("policy_targets_too_close")
+        validate_roles(self.baseline_c, self.normal_c, self.storage_c)
+        if (
+            self.peak_policy not in (PEAK_NEVER, PEAK_SOLAR)
+            or not 0 <= self.boost_useful_fraction <= 1
+        ):
+            raise ValueError("policy_preferences_invalid")
         if self.peak_start_kw < self.element_kw or self.solar_floor_kw <= 0:
             raise ValueError("policy_solar_thresholds_invalid")
         if not timedelta(minutes=1) <= self.peak_lead <= self.command_spacing:
@@ -136,6 +151,7 @@ class Snapshot:
     cloud_ready: bool = True
     heater_meter_valid: bool = False  # optional starts require explicit verified input
     measured_element_kw: float | None = None  # verified instantaneous ON power; never inference
+    optional_allowed: bool = True
 
 
 @dataclass(frozen=True)
@@ -294,7 +310,7 @@ class SimplePolicy:
 
     def setpoint(self, state: str | None) -> int | None:
         """The Manual setpoint a policy state requests (None for OFF/unknown)."""
-        return {BASELINE: self.s.baseline_c, STORAGE: self.s.storage_c}.get(state)
+        return TARGET_C.get(state)
 
     def decide(self, snap: Snapshot) -> Decision:
         # 1. The heater's own protections are native in every state: nothing to decide.
@@ -325,6 +341,19 @@ class SimplePolicy:
         return self._send(snap, desired, reason, layer, plan)
 
     def _send(self, snap, desired, reason, layer, plan) -> Decision:
+        plan = {
+            **plan,
+            "desired_target_c": self.setpoint(desired),
+            "heating_role": "owner_override"
+            if reason == "12hr_override"
+            else "park"
+            if desired == OFF
+            else "required"
+            if plan.get("mode") == DEADLINE and desired == state_at(self.s.normal_c)
+            else "baseline"
+            if desired == state_at(self.s.baseline_c)
+            else "optional",
+        }
         spacing_exempt = desired == OFF and reason in SPACING_EXEMPT_REASONS
         if desired == snap.heater_state:
             return Decision(desired, reason, layer, None, plan)
@@ -337,121 +366,209 @@ class SimplePolicy:
             and snap.now - snap.last_command_at < self.s.command_spacing
         ):
             return Decision(HOLD, "command_spacing", 3, None, {**plan, "wanted": desired})
-        payload = {
-            OFF: "off",
-            BASELINE: f"Manual:{self.s.baseline_c}",
-            STORAGE: f"Manual:{self.s.storage_c}",
-        }[desired]
+        payload = "off" if desired == OFF else f"Manual:{self.setpoint(desired)}"
         return Decision(desired, reason, layer, payload, plan)
+
+    def _boost(self, snap, reading, fresh, rate, end, reference_c, *, peak=False, target=None):
+        """One optional-energy test; never a second heating planner."""
+        s, now = self.s, snap.now
+        goal = s.storage_c if target is None else target
+        info = {
+            "boost_eligible": False,
+            "boost_reason": "disabled",
+            "boost_extra_kwh": round(max(0, goal - max(reference_c, reading)) * s.kwh_per_c, 3),
+        }
+
+        def reject(reason):
+            info["boost_reason"] = reason
+            return False, info
+
+        if not s.boost_enabled and target is None:
+            return reject("boost_disabled")
+        if goal <= reference_c:
+            return reject("same_as_normal_target")
+        if not snap.optional_allowed:
+            return reject("optional_budget_reserved_for_essential_heat")
+        if not snap.heater_meter_valid or not self.meter_fresh(now):
+            return reject("verified_circuit_and_grid_required")
+        if not fresh:
+            return reject("fresh_temperature_required")
+        if reading > goal - s.hysteresis_c and snap.measured_element_kw is None:
+            return reject("inside_native_hysteresis_no_verified_heat")
+        if not self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw):
+            return reject("sustained_full_solar_required")
+        hours = max(0, goal - reading) / rate
+        if end is not None and now + timedelta(hours=hours) > end:
+            return reject("boost_cannot_finish_before_peak")
+        horizon = now + timedelta(hours=max(hours, SLOT.total_seconds() / 3600))
+        profile = self.surplus_profile(now, horizon, snap.forecast, self.typical_available(now))
+        later = min((t.rate for t in self.tariffs if t.kind != "peak"), default=0)
+        price = tariff_at(now, self.tariffs, s.tariff_clock).rate
+        cost = sum(self.mixed_cost(kw, price) for kw in profile) / len(profile)
+        if peak:
+            cost = self.mixed_cost(self.typical_available(now), price)
+        extra = info["boost_extra_kwh"]
+        # Explicit demand assumption and a bounded standby allowance. Neither
+        # is learned evidence or permission to weaken measured import guards.
+        use_hours = min(12, max(0, ((end - now).total_seconds() / 3600 if end else 12)))
+        loss = extra * min(0.25, 0.01 * use_hours) * later
+        saving = extra * s.boost_useful_fraction * later - extra * cost - loss
+        info.update(
+            boost_expected_saving_aud=round(saving, 4),
+            boost_standby_allowance_aud=round(loss, 4),
+            boost_useful_fraction=s.boost_useful_fraction,
+            boost_cost_aud_per_kwh=round(cost, 4),
+        )
+        if saving < max(s.boost_min_saving, extra * s.optional_heat_margin):
+            return reject("boost_value_below_switching_margin")
+        info.update(boost_eligible=True, boost_reason="useful_solar_value_exceeds_margin")
+        return True, info
 
     def _policy(self, snap: Snapshot):
         s, now, state = self.s, snap.now, snap.heater_state
+        baseline, normal, boost = (
+            state_at(s.baseline_c),
+            state_at(s.normal_c),
+            state_at(s.storage_c),
+        )
         fresh = (
             snap.reading_c is not None
             and snap.reading_at is not None
             and timedelta(0) <= now - snap.reading_at <= s.reading_max_age
         )
-        # A stale or missing reading is assumed to be just above the baseline's
-        # reheat point: storage then starts earlier, never later.
         reading = snap.reading_c if fresh else s.baseline_c - s.hysteresis_c
-        would_heat = reading <= s.storage_c - s.hysteresis_c
+        rate = self._rate_c_per_hour(snap.heating_c_per_hour, snap.measured_element_kw)
         in_peak = self._kind(now) == "peak"
         peak = None if in_peak else self.next_peak(now)
-        # The REQUESTED setpoint is not the ACHIEVED temperature. Manual 70 holds
-        # the tank between about 62 and 70 °C (Thermann's 8 °C hysteresis); a
-        # reading inside that band has not reached 70, but the thermostat will
-        # not heat until 62 and nothing here forces it to.
+        at_boundary = in_peak or (peak is not None and now >= peak - s.peak_lead)
         plan = {
             "reading_c": reading,
             "reading_fresh": fresh,
             "next_peak": peak,
             "setpoint_c": self.setpoint(state),
-            "storage_target_c": s.storage_c,
-            "target_reached": fresh and reading >= s.storage_c,
-            "thermostat_would_heat_at_storage": would_heat,
+            "normal_target_c": s.normal_c,
+            "boost_target_c": s.storage_c,
+            "baseline_target_c": s.baseline_c,
+            "storage_target_c": s.normal_c,
+            "peak_heating_policy": s.peak_policy,
+            "optional_boost_enabled": s.boost_enabled,
+            "circuit_measurement_available": snap.heater_meter_valid,
+            "boost_eligible": False,
+            "boost_reason": "not_qualified",
+            "target_reached": fresh and reading >= s.normal_c,
+            "thermostat_would_heat_at_storage": reading <= s.normal_c - s.hysteresis_c,
         }
-
-        # 4. Peak (and the short lead before it): measured solar only.
-        if in_peak or (peak is not None and now >= peak - s.peak_lead):
+        if at_boundary:
             plan["mode"] = PEAK
-            later_rate = min((t.rate for t in self.tariffs if t.kind != "peak"), default=0.0)
-            economic = s.feed_in_rate <= later_rate - s.optional_heat_margin
-            plan["optional_saving_aud_per_kwh"] = round(later_rate - s.feed_in_rate, 4)
+            # Lockout precedes all routine economics/forecast/solar decisions.
+            # Explicit owner hold/override/12h Override were handled by decide.
+            if s.peak_policy == PEAK_NEVER:
+                plan["boost_reason"] = "peak_heating_locked_out"
+                return OFF, "peak_lockout", 4, plan
             qualified = self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw)
-            if state == STORAGE:
+            if state in (NORMAL, STORAGE):
                 if not self.meter_fresh(now):
                     return OFF, "peak_meter_unavailable", 4, plan
                 if not snap.heater_meter_valid:
                     return OFF, "peak_heater_meter_unavailable", 4, plan
                 if not in_peak and not qualified:
-                    return OFF, "peak_ahead_no_qualified_solar", 4, plan  # the park
-                # Import above the tolerance, or the surplus no longer covering the
-                # element (checked even while the thermostat has it off).
+                    return OFF, "peak_ahead_no_qualified_solar", 4, plan
                 lost = s.element_kw - s.peak_import_tolerance_kw
                 if self.sustained(
                     now, s.withdraw, lambda x: x[1] > s.peak_import_tolerance_kw or x[2] < lost
                 ):
                     return OFF, "peak_solar_withdrawn", 4, plan
-                if not economic:
+                later = min((t.rate for t in self.tariffs if t.kind != "peak"), default=0)
+                if s.feed_in_rate > later - s.optional_heat_margin:
                     return OFF, "peak_solar_uneconomic", 6, plan
-                return STORAGE, "peak_solar_continues", 4, plan
-            if fresh and would_heat and qualified and snap.heater_meter_valid and economic:
-                return STORAGE, "peak_solar_qualified", 4, plan
+                if not s.boost_enabled and state == STORAGE and normal != STORAGE:
+                    return normal, "peak_normal_solar_only", 4, plan
+                return state, "peak_solar_continues", 4, plan
+            goal = s.storage_c if s.boost_enabled else s.normal_c
+            eligible, info = self._boost(
+                snap, reading, fresh, rate, None, s.baseline_c, peak=True, target=goal
+            )
+            plan.update(info)
+            if eligible:
+                return state_at(goal), "peak_solar_qualified", 4, plan
             return OFF, "peak_no_grid_heating", 4, plan
 
-        rate = self._rate_c_per_hour(snap.heating_c_per_hour, snap.measured_element_kw)
-        grid_rate = tariff_at(now, self.tariffs, s.tariff_clock).rate
         measured = self.typical_available(now)
-        hours = max(0.0, s.storage_c - reading) / rate if would_heat else 0.0
-        need = max(1, math.ceil(hours * 60 / 5))  # slots of heating
-        plan.update(heating_hours=round(hours, 2), measured_kw=measured)
+        price = tariff_at(now, self.tariffs, s.tariff_clock).rate
         local = now.astimezone(HOBART)
         evening = (
             peak is not None
             and peak.astimezone(HOBART).date() == local.date()
             and peak.astimezone(HOBART).hour >= s.evening_peak_from_hour
         )
-
-        # 5/6. Weekday off-peak before the evening peak: 70 °C by the soft target.
+        goal = s.normal_c if evening else s.storage_c
+        would_heat = reading <= goal - s.hysteresis_c
+        # Actual ON evidence can continue toward target inside its hysteresis band.
+        hours = (
+            max(0, goal - reading) / rate
+            if would_heat or snap.measured_element_kw is not None
+            else 0
+        )
+        need = max(1, math.ceil(hours * 60 / 5))
+        plan.update(heating_hours=round(hours, 2), measured_kw=measured)
         if evening:
             plan["mode"] = DEADLINE
             soft = peak - s.soft_target_margin
             latest = soft - timedelta(hours=hours)
             plan.update(soft_target=soft, latest_start=latest)
-            if not would_heat:
-                # Inside the thermostat band (or at 70): no heat would flow now,
-                # so no command. Reported as reached only at the setpoint itself.
+            eligible, info = self._boost(snap, reading, fresh, rate, soft, s.normal_c)
+            plan.update(info)
+            optional_running = state == boost and boost != normal
+            if optional_running:
+                lost = s.element_kw - s.peak_import_tolerance_kw
+                withdrawn = (
+                    not s.boost_enabled
+                    or not snap.heater_meter_valid
+                    or measured is None
+                    or self.sustained(
+                        now, s.withdraw, lambda x: x[1] > s.peak_import_tolerance_kw or x[2] < lost
+                    )
+                )
+                if not withdrawn:
+                    return boost, "weekday_solar_boost_continues", 5, plan
+                return normal, "weekday_solar_boost_withdrawn", 5, plan
+            if eligible:
+                return (
+                    boost,
+                    "weekday_direct_solar_boost" if state != normal else "weekday_solar_boost",
+                    6,
+                    plan,
+                )
+            if not would_heat and snap.measured_element_kw is None:
                 reason = (
                     "storage_target_reached"
                     if plan["target_reached"]
                     else "storage_within_thermostat_band"
                 )
-                return state, reason, 5, plan
+                # Selecting normal is a thermostat request, not a claim that the
+                # probe has reached it or that its element will energise.
+                return (state if normal == STORAGE else normal), reason, 5, plan
             if now >= latest:
-                # Running late (or a draw): heat now and keep heating to the peak.
-                if state == STORAGE:
-                    return STORAGE, "storage_until_peak", 5, plan
+                if state == normal:
+                    return normal, "storage_until_peak", 5, plan
                 late = now + timedelta(hours=hours) > soft + SLOT
                 return (
-                    STORAGE,
+                    normal,
                     "storage_target_may_be_missed" if late else "storage_latest_start",
                     5,
                     plan,
                 )
             costs = self._windows(
-                self.surplus_profile(now, soft, snap.forecast, measured), grid_rate, need
+                self.surplus_profile(now, soft, snap.forecast, measured), price, need
             )
-            if state == STORAGE:
-                # Committed: pause only for a clearly cheaper later window that
-                # leaves room for the restart command and still finishes in time.
-                first = math.ceil(s.command_spacing / SLOT)
-                best = self._cheapest(costs, first)
+            if state == normal:
+                best = self._cheapest(costs, math.ceil(s.command_spacing / SLOT))
                 if best is not None:
                     saving = (costs[0] - costs[best]) * hours * s.element_kw
                     plan.update(best_start=now + best * SLOT, pause_saving=round(saving, 2))
                     if saving >= s.pause_min_saving:
                         return OFF, "storage_paused_for_cheaper_window", 6, plan
-                return STORAGE, "storage_until_peak", 5, plan
+                return normal, "storage_until_peak", 5, plan
             best = self._cheapest(costs)
             plan.update(
                 best_start=now + best * SLOT,
@@ -459,55 +576,27 @@ class SimplePolicy:
                 cost_best=round(costs[best], 4),
             )
             if best == 0:
-                if not snap.forecast and costs[0] > grid_rate - PRICE_TOLERANCE:
-                    # 0.9.1 (audit M4): no published forecast and no measured
-                    # solar worth having. Nothing says now is cheaper than
-                    # later, so grid-only heating waits for the latest start
-                    # (measured solar can still start it sooner). Without this
-                    # a missing forecast silently became grid heating as soon
-                    # as the morning peak ended.
+                if not snap.forecast and costs[0] > price - PRICE_TOLERANCE:
                     plan["waiting_for"] = "latest_start_no_forecast"
                     return state, "storage_waiting_no_forecast", 6, plan
-                return STORAGE, "storage_cheapest_now", 6, plan
+                return normal, "storage_cheapest_now", 6, plan
             return state, "storage_waiting_for_cheaper_window", 6, plan
 
-        # Opportunity: weekday nights and weekends.
         plan["mode"] = OPPORTUNITY
-        if state == STORAGE:
-            if measured is None or not snap.heater_meter_valid:
-                return BASELINE, "solar_opportunity_ended", 5, plan
-            # Optional heat must not import indefinitely on a forecast promise.
-            # The same five-minute tolerance as peak withdrawal avoids toggling
-            # for passing clouds. Return to native 45, preserving essential heat.
+        if state == boost and boost != baseline:
+            if not s.boost_enabled or measured is None or not snap.heater_meter_valid:
+                return baseline, "solar_opportunity_ended", 5, plan
             if self.sustained(now, s.withdraw, lambda x: x[1] > s.peak_import_tolerance_kw):
-                return BASELINE, "solar_opportunity_import", 5, plan
+                return baseline, "solar_opportunity_import", 5, plan
             faded = self.sustained(now, s.withdraw, lambda x: x[2] < s.solar_floor_kw)
             ahead = self.surplus_profile(now, now + timedelta(hours=1), snap.forecast, None)
             returns = sum(ahead) / len(ahead) >= s.solar_floor_kw
-            plan["forecast_next_hour_kw"] = round(sum(ahead) / len(ahead), 2)
             if faded and not returns:
-                return BASELINE, "solar_opportunity_ended", 5, plan
-            return STORAGE, "solar_opportunity_continues", 5, plan
-        finish_by = None if peak is None else peak - s.soft_target_margin
-        if (
-            fresh
-            and would_heat
-            and snap.heater_meter_valid
-            and (finish_by is None or now + timedelta(hours=hours) <= finish_by)
-            and self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw)
-        ):
-            midnight = datetime.combine(
-                local.date() + timedelta(days=1), datetime.min.time(), HOBART
-            )
-            horizon = min(finish_by or midnight, midnight)
-            profile = self.surplus_profile(now, horizon, snap.forecast, measured)
-            costs = self._windows(profile, grid_rate, min(need, len(profile)))
-            best = self._cheapest(costs)
-            plan.update(cost_now=round(costs[0], 4), best_start=now + best * SLOT)
-            if costs[0] > grid_rate - s.optional_heat_margin:
-                plan["waiting_for"] = "more_solar"
-            elif best > 0:
-                plan["waiting_for"] = "cheaper_window_later"
-            else:
-                return STORAGE, "solar_opportunity", 5, plan
-        return BASELINE, "baseline", 5, plan
+                return baseline, "solar_opportunity_ended", 5, plan
+            return boost, "solar_opportunity_continues", 5, plan
+        end = None if peak is None else peak - s.soft_target_margin
+        eligible, info = self._boost(snap, reading, fresh, rate, end, s.baseline_c)
+        plan.update(info)
+        if eligible:
+            return boost, "solar_opportunity", 5, plan
+        return baseline, "baseline", 5, plan

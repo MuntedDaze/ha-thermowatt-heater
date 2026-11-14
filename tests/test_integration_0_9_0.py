@@ -104,10 +104,13 @@ class Rig:
             entry_id="entry1",
             options={
                 "forecast_enabled": True,
+                "normal_storage_c": "70",  # previous-strategy regression fixture
+                "peak_heating_policy": "Verified solar-only heating",
                 "forecast_uncertainty": 0.0,
                 "forecast_house_margin_kw": 0.0,
                 "controller_command_topic": TOPIC,
                 "controller_three_state_qualified": True,
+                "controller_four_state_qualified": True,
                 "heater_meter_verification": "sensor.synthetic_heater_w|W",
             },
         )
@@ -431,9 +434,9 @@ def test_restart_while_confirming_never_resends(rig):
 
 
 def test_enable_is_refused_until_commissioning_is_complete(rig):
-    rig.entry.options["controller_three_state_qualified"] = False
+    rig.entry.options["controller_four_state_qualified"] = False
     rig.executor.configure(rig.entry.options)
-    with pytest.raises(RuntimeError, match="three_state_commands_not_qualified"):
+    with pytest.raises(RuntimeError, match="four_state_commands_not_qualified"):
         rig.enable()
     assert rig.executor.controller.enabled is False
 

@@ -17,8 +17,14 @@ change. A separate draft PR targets `codex/smart-controller-next`.
    Every directed transition, confirmation, owner-mode mismatch and unsupported
    payload is covered; original six transitions retain their semantics. Ruff,
    both strict mypy targets and compileall pass. Native/HA matrices await CI.
-2. Pending: one coordinated normal-62/optional-70 policy, economic/hysteresis
-   tests, optional budgets and strong-solar direct starts.
+2. Implemented: single coordinated required-62/optional-70 policy, strong-solar
+   direct starts, useful-heat/standby/switching economics, native hysteresis and
+   optional-budget fallback to required heat. Separate peak lockout and boost
+   controls; CT-free required operation; owner 12h Override remains 70. OFF
+   unconfirmed notification never claims electrical zero. Full suite: **1128
+   passed** on Python 3.12; 35 focused dual-policy cases passed; Ruff, strict
+   mypy targets and compileall passed. Existing mandatory-70 scenarios are kept
+   as explicit compatibility fixtures. Native/actual HA checks await final CI.
 3. Pending: useful HA configuration, fresh-install defaults and preserving
    existing verification/options, thermal/history/telemetry/polling updates.
 4. Pending: comparative simulations, public docs, installation/upgrade/rollback,
@@ -26,6 +32,12 @@ change. A separate draft PR targets `codex/smart-controller-next`.
 5. Pending: full local/CI verification, draft PR and final handoff.
 
 ## Resume
+
+Completed protocol commit: `fd40b33`. Policy/settings increment commit subject:
+`Coordinate economical normal storage and independently guarded solar boost`.
+An unused migration helper `installation.py` is being prepared for increment 3;
+fresh-install safety, historical tagging and public metadata still need wiring.
+New phase-local checkpoint is this file; retain PR #33's checkpoint unchanged.
 
 Inspect branch/status/log first; never switch or alter another worktree. Continue
 from the current increment, not another broad audit. Python:

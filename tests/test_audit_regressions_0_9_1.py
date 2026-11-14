@@ -72,6 +72,7 @@ def trace(rig):
             "mode": rig.tank.mode,
             "setpoint": rig.tank.setpoint,
             "reading": rig.tank.t,
+            "boost_reason": decision.plan.get("boost_reason") if decision else None,
         }
     )
 
@@ -137,7 +138,11 @@ def test_c1_optional_starts_stop_at_the_configured_limit(cloudy_weekday):
     rig = cloudy_weekday
     morning_peak = [p for p in rig.posts_local() if "08:00" <= p[0] < "11:00" and p[1] == "manual"]
     assert 1 <= len(morning_peak) <= 3, rig.posts_local()
-    assert any(row["reason"] == "daily_command_limit_reached" for row in rig.log)
+    assert any(
+        row["reason"] == "daily_command_limit_reached"
+        or row["boost_reason"] == "optional_budget_reserved_for_essential_heat"
+        for row in rig.log
+    )
 
 
 def test_h1_a_peak_withdrawal_is_not_held_by_the_spacing(cloudy_weekday):
@@ -182,7 +187,12 @@ def test_h1_only_the_peak_withdrawal_is_exempt_in_the_policy():
     assert (
         sp.SPACING_EXEMPT_REASONS
         == ctl.SPACING_EXEMPT_REASONS
-        == {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_meter_unavailable"}
+        == {
+            "peak_solar_withdrawn",
+            "peak_meter_unavailable",
+            "peak_heater_meter_unavailable",
+            "peak_lockout",
+        }
     )
     p = sp.SimplePolicy(S, TARIFFS)
     now = feed(p, at(MON, 9, 0), 6, 2.5, element=True)  # importing 2.5 kW in the peak

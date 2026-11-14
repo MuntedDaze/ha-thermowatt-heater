@@ -31,7 +31,10 @@ def modules():
 def dispatch_case(name, availability, withdrawal=5, later_solar=False):
     m, c, sp, _ = modules()
     settings, tariffs = c.parse_options({})
-    s = replace(sp.PolicySettings(), withdraw=timedelta(minutes=withdrawal))
+    s = replace(
+        sp.PolicySettings(normal_c=70, peak_policy=sp.PEAK_SOLAR),
+        withdraw=timedelta(minutes=withdrawal),
+    )
     policy = sp.SimplePolicy(s, tariffs)
     start = datetime(2026, 11, 16, 9, tzinfo=m.HOBART).astimezone(timezone.utc)
     state, last = sp.OFF, None

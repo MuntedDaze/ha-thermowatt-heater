@@ -27,7 +27,7 @@ from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
 from .measurement import CircuitPower, circuit_power, energy_reading, power_balance
 from .performance import MeasuredHistory
-from .settings import BACKUP_KEY, describe
+from .settings import BACKUP_KEY, describe, _DUAL_PROTECTED
 from .thermal import ThermalObserver
 
 # Measured-vs-forecast PV correction uses a short rolling mean, so one passing
@@ -116,6 +116,10 @@ class ShadowRuntime:
         )
         reset_needed = (
             changed_mapping
+            or any(
+                options.get(key, DEFAULT_OPTIONS[key]) != self.native_options[key]
+                for key in _DUAL_PROTECTED
+            )
             or verification_changed
             or settings != self.settings
             or tariffs != self.tariffs

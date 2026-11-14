@@ -84,14 +84,26 @@ BRIDGE_IN_PROGRESS_RESULTS = {
 # 70 °C heat, the Manual 45 °C baseline, the 12hr Override): optional activity
 # can never use up its budget. Essential commands have their own higher cap, so
 # a fault that loops is still stopped. OFF is never held back.
-OPTIONAL_REASONS = frozenset({"peak_solar_qualified", "solar_opportunity"})
+OPTIONAL_REASONS = frozenset(
+    {
+        "peak_solar_qualified",
+        "solar_opportunity",
+        "weekday_solar_boost",
+        "weekday_direct_solar_boost",
+    }
+)
 ESSENTIAL_EXTRA_COMMANDS = 6
 # Reserve pre-read/POST/two confirmations/possible refresh for two essential
 # transitions. This local estimate never grants additional vendor quota.
 OPTIONAL_EXIT_REQUEST_RESERVE = 10
 # Must match the policy: only justified protective peak OFF bypasses spacing.
 SPACING_EXEMPT_REASONS = frozenset(
-    {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_meter_unavailable"}
+    {
+        "peak_solar_withdrawn",
+        "peak_meter_unavailable",
+        "peak_heater_meter_unavailable",
+        "peak_lockout",
+    }
 )
 FORECAST_ALERT_AFTER = timedelta(minutes=60)
 BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
@@ -113,7 +125,7 @@ def heater_state(mode: str | None, target_c: float | None) -> str | None:
         return OFF
     if mode == "Manual" and target_c is not None:
         for state, value in TARGET_C.items():
-            if abs(target_c - value) < 0.01:
+            if target_c == value:
                 return state
     return None
 
@@ -148,6 +160,8 @@ class ControllerConfig:
     # 0.9.1: automatic control needs the published (EMHASS) forecasts enabled.
     published_forecasts_enabled: bool = True
     tariff_verified: bool = True
+    requires_four_states: bool = False
+    four_state_qualified: bool = False
     command_spacing_minutes: float = 15.0  # the shared spacing rule, enforced here too
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
@@ -161,12 +175,14 @@ class ControllerConfig:
             missing.append("command_topic_not_configured")
         elif self.expected_command_topic and self.command_topic != self.expected_command_topic:
             missing.append("command_topic_does_not_match_heater")
-        if not self.three_state_qualified:
+        if not self.three_state_qualified and not self.requires_four_states:
             missing.append("three_state_commands_not_qualified")
         if not self.published_forecasts_enabled:
             missing.append("published_forecasts_not_enabled")
         if not self.tariff_verified:
             missing.append("tariff_contract_not_verified")
+        if self.requires_four_states and not self.four_state_qualified:
+            missing.append("four_state_commands_not_qualified")
         return missing
 
 
@@ -736,6 +752,8 @@ class Controller:
     ) -> list[str]:
         """Every reason the controller may NOT publish now (empty = eligible)."""
         failures = list(cfg.missing_commissioning())
+        if "62" in payload and not cfg.four_state_qualified and not cfg.requires_four_states:
+            failures.append("four_state_commands_not_qualified")
         now = obs.now
         if not obs.mqtt_ready:
             failures.append("mqtt_not_ready")
@@ -856,6 +874,16 @@ class Controller:
             effects[:] = [e for e in effects if e.kind != "notify"]
             return
         alerts: list[tuple[str, str, str]] = []
+        if want.reason == "peak_lockout" and (self.heater != OFF or self.state == CONFIRMING):
+            alerts.append(
+                (
+                    "peak_lockout_unverified",
+                    "Hot water: peak lockout not yet confirmed",
+                    "Routine peak heating is locked out, but software OFF has not been confirmed. "
+                    "Cloud failures or an in-flight command may delay it. No command is blindly repeated. "
+                    "Software OFF never proves zero electrical power; native protections and owner intervention remain independent.",
+                )
+            )
         if obs.heater_meter_mapped and obs.heater_meter_quality not in ("verified", "unverified"):
             since = _dt(self.heater_meter_missing_since)
             if since is None or since > now:

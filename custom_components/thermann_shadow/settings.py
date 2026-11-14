@@ -491,6 +491,98 @@ CATALOG.update(
         ),
     }
 )
+CATALOG.update(
+    {
+        "baseline_c": Setting(
+            "Overnight baseline temperature",
+            "Everyday",
+            "Supported native thermostat target during permitted nights/weekends; does not prove achieved tank temperature.",
+            unit="°C",
+            kind="select",
+            choices=("45", "62"),
+        ),
+        "normal_storage_c": Setting(
+            "Normal weekday storage temperature",
+            "Everyday",
+            "Required weekday thermostat target. Only bridge-supported values; 62 is the economical default.",
+            unit="°C",
+            kind="select",
+            choices=("62", "70"),
+        ),
+        "solar_boost_c": Setting(
+            "Optional solar storage temperature",
+            "Everyday",
+            "Upper optional target, at least the normal target. Equal targets avoid a separate top-up.",
+            unit="°C",
+            kind="select",
+            choices=("62", "70"),
+        ),
+        "optional_solar_boost": Setting(
+            "Enable optional solar boost",
+            "Everyday",
+            "Optional heat requires verified raw circuit measurement and useful monetary benefit. Independent of the peak policy. 12-hour Override stays 70.",
+            kind="switch",
+        ),
+        "peak_heating_policy": Setting(
+            "Heating during peak periods",
+            "Everyday",
+            "Never takes priority over routine solar opportunities. Solar-only requires verified raw circuit power, fresh grid and all qualifications. Explicit owner override/native protections remain independent.",
+            kind="select",
+            choices=("Never schedule heating during peak", "Verified solar-only heating"),
+        ),
+        "tank_litres": Setting(
+            "Tank capacity",
+            "Advanced",
+            "Nominal tank volume for conservative energy/time estimates, not measured hot-water availability.",
+            50,
+            500,
+            "L",
+        ),
+        "element_kw": Setting(
+            "Nominal element power",
+            "Advanced",
+            "Supported resistive-element planning reference. CT-free operation never treats this as verified draw.",
+            2,
+            3.6,
+            "kW",
+        ),
+        "completion_margin_minutes": Setting(
+            "Preferred completion before peak",
+            "Everyday",
+            "Soft planning margin; required heating may continue until the hard peak boundary.",
+            5,
+            120,
+            "min",
+        ),
+        "boost_useful_fraction": Setting(
+            "Expected useful fraction of extra solar heat",
+            "Advanced",
+            "Planning assumption 0–1 for extra heat used before the next cheap opportunity. Includes a bounded standby-loss allowance. Zero prevents optional boosts; not learned evidence.",
+            0,
+            1,
+        ),
+        "controller_four_state_qualified": Setting(
+            "Four-state commands qualified (1.3.14)",
+            "System",
+            "Only after separately authorised supervised qualification of OFF/45/62/70 transitions. Does not authorise live operation by itself.",
+            kind="switch",
+        ),
+    }
+)
+_DUAL_PROTECTED = frozenset(
+    {
+        "baseline_c",
+        "normal_storage_c",
+        "solar_boost_c",
+        "tank_litres",
+        "element_kw",
+        "completion_margin_minutes",
+        "optional_solar_boost",
+        "peak_heating_policy",
+        "boost_useful_fraction",
+        "controller_four_state_qualified",
+    }
+)
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety
@@ -610,6 +702,8 @@ LOCKED_WHILE_ACTIVE = frozenset(
         "heater_meter_verification",
     }
 )
+PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | _DUAL_PROTECTED
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | _DUAL_PROTECTED
 RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
 assert not set(RESTORED) & LOCKED_WHILE_ACTIVE  # restore/undo never need control off
 
