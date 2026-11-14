@@ -139,6 +139,23 @@ bridge or Fable files change in this correction.
 
 ## Current release gates and exact next steps
 
+Software validation checkpoint: `25eb15d97686d30449e85f043580846f0d896a1c`.
+All **nine final-head PR jobs passed**: Python 3.12/3.13/3.14 (1059 tests each,
+Ruff, both strict mypy targets, compileall, Bash), actual HA Core
+2026.10.4/2026.11.1 including upgrades/serialization/settings, native
+amd64/aarch64 image/MQTT/lifecycle/demand smoke, and Supervisor
+2026.10.5/2026.11.0 schemas. No reviews or inline review threads were submitted
+at inspection; this is not independent review or owner approval.
+
+Implementation and Fable handoff are reviewable in draft PR #33. Local tracked
+changes were committed; only the pre-existing audit directory and `uv.lock`
+remain untracked. PR #27 remains open/draft at the exact audited head. Neither
+bridge source nor manifest/version changed; no release candidate was replaced.
+This documentation checkpoint commit is a continuation anchor; CI must also
+finish on it. The next substantive task is independent backend review, followed
+by separately authorised hardware/held-out validation, not another broad audit
+or a live deployment. Do not merge PR #32 before the backend review/readiness gate.
+
 1. Resume in the original worktree on `codex/smart-controller-next`; inspect
    `git status --short` and `git log -6 --oneline`. Do not touch Fable's worktree,
    the audit directory, `uv.lock`, PR #27, main or the release candidate.
