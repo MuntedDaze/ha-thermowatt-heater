@@ -221,6 +221,9 @@ def test_stale_meter_withdraws_and_never_qualifies():
     assert p.decide(snap(later, OFF, reading=50)).state == OFF
     d = p.decide(snap(later, STORE))
     assert (d.state, d.reason) == (OFF, "peak_meter_unavailable")
+    # A recently issued Manual 70 command must not hold up this protective OFF.
+    d = p.decide(snap(later, STORE, last_command_at=later - 2 * MIN))
+    assert (d.state, d.reason, d.command) == (OFF, "peak_meter_unavailable", "off")
 
 
 def test_after_a_restart_peak_solar_needs_a_fresh_qualification():
@@ -408,15 +411,31 @@ def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
     assert (d.state, d.plan["waiting_for"]) == (BASE, "more_solar")
 
 
-def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():
+def test_weekend_session_survives_brief_cloud_but_stops_sustained_import():
     p = sp.SimplePolicy(S, TARIFFS)
     t0 = feed(p, at(SAT, 13), 10, -0.5, element=True)  # heating: available 3.5 kW
-    now = feed(p, t0 + MIN, 8, 2.7, element=True)  # cloud: available 0.3 kW for 8 min
+    now = feed(p, t0 + MIN, 4, 2.7, element=True)  # 4 minutes: too brief to withdraw
     sun_returns = fc(now, 4, 2.5)
     d = p.decide(snap(now, STORE, reading=55, forecast=sun_returns))
     assert (d.state, d.reason) == (STORE, "solar_opportunity_continues")
+    now = feed(p, now + MIN, 2, 2.7, element=True)  # 6 min importing nearly all 3 kW
+    # Even a confident sunny forecast cannot justify sustained near-full import
+    # for OPTIONAL weekend storage; the measured economics take precedence.
+    d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 2.5)))
+    assert (d.state, d.reason, d.command) == (
+        BASE, "solar_opportunity_import_withdrawn", "Manual:45"
+    )
+    assert d.plan["optional_max_grid_import_kw"] == pytest.approx(2.2)
+
+
+def test_weekend_opportunity_ends_when_solar_and_forecast_both_fade():
+    p = sp.SimplePolicy(S, TARIFFS)
+    t0 = feed(p, at(SAT, 13), 10, -0.5, element=True)
+    now = feed(p, t0 + MIN, 8, 2.7, element=True)
     d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 0.3)))
-    assert (d.state, d.reason, d.command) == (BASE, "solar_opportunity_ended", "Manual:45")
+    assert (d.state, d.reason, d.command) == (
+        BASE, "solar_opportunity_import_withdrawn", "Manual:45"
+    )
 
 
 def test_opportunity_never_starts_what_cannot_finish_before_monday_peak():
