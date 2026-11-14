@@ -93,11 +93,7 @@ class ThermalObserver:
         # circuit meter is configured. Once configured, incomplete readings must
         # not silently contaminate the thermal calibration with inferred 3 kW.
         meter_missing = meter_configured and heater_power_kw is None
-        on = (
-            element == "on"
-            and element_confidence in CONFIDENT
-            and not meter_missing
-        )
+        on = element == "on" and element_confidence in CONFIDENT and not meter_missing
         if meter_missing:
             self.energy_unknown_since_poll = True
             if self.session is not None:
@@ -132,9 +128,7 @@ class ThermalObserver:
         }
         self.anchor = None
 
-    def _end_session(
-        self, now: datetime, mode: str | None, meter_missing: bool = False
-    ) -> None:
+    def _end_session(self, now: datetime, mode: str | None, meter_missing: bool = False) -> None:
         session, self.session = self.session, None
         self.last_heating_end = now
         self.last_end_satisfied = mode == "Manual" and not meter_missing
@@ -188,11 +182,7 @@ class ThermalObserver:
             session, self.pending_end = self.pending_end, None
             session["end_reading"] = reading
             start = session["start_reading"]
-            if (
-                start is not None
-                and session["energy_kwh"] > 0.05
-                and not session.get("meter_gap")
-            ):
+            if start is not None and session["energy_kwh"] > 0.05 and not session.get("meter_gap"):
                 session["observed_c_per_kwh"] = round((reading - start) / session["energy_kwh"], 2)
             self.sessions.append(session)
             self.dirty = True
@@ -326,8 +316,7 @@ class ThermalObserver:
                     [
                         s
                         for s in done
-                        if s.get("energy_source") == "circuit_meter"
-                        and not s.get("after_draw")
+                        if s.get("energy_source") == "circuit_meter" and not s.get("after_draw")
                     ]
                 ),
                 "actual_vs_physical_minutes_median": round(median(ratios), 2) if ratios else None,
