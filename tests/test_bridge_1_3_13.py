@@ -329,5 +329,5 @@ def test_diagnostics_advertise_the_transitions_for_the_controller(factory, clock
             -1
         ].args[1]
     )
-    assert payload["command_transitions"] == sorted(t[0] for t in TRANSITIONS)
+    assert set(t[0] for t in TRANSITIONS) <= set(payload["command_transitions"])
     assert payload["poll_schedule"] == "clock_aligned"

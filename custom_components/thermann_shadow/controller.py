@@ -24,11 +24,12 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 OFF, BASELINE, STORAGE = "off", "baseline", "storage"  # simple_policy states
-TARGET_C = {BASELINE: 45.0, STORAGE: 70.0}
+NORMAL = "normal_storage"
+TARGET_C = {BASELINE: 45.0, NORMAL: 62.0, STORAGE: 70.0}
 # Bridge 1.3.13 payload: "<target>@<prior>"; the bridge re-checks <prior> on a
 # fresh status and refuses anything else (owner changes are never overwritten).
-PAYLOAD_TARGET = {OFF: "off", BASELINE: "Manual:45", STORAGE: "Manual:70"}
-PAYLOAD_PRIOR = {OFF: "off", BASELINE: "45", STORAGE: "70"}
+PAYLOAD_TARGET = {OFF: "off", BASELINE: "Manual:45", NORMAL: "Manual:62", STORAGE: "Manual:70"}
+PAYLOAD_PRIOR = {OFF: "off", BASELINE: "45", NORMAL: "62", STORAGE: "70"}
 PARK_MODE = "Off"
 TOPIC_PREFIX, TOPIC_SUFFIX = "P/", "/CMD/MODE"
 REFRESH_SUFFIX = "/refresh"
@@ -41,6 +42,7 @@ OBSERVING = "observing"
 PARKED = "parked"  # confirmed OFF
 BASELINE_ACTIVE = "baseline_45"  # confirmed Manual 45
 STORAGE_ACTIVE = "storage_70"  # confirmed Manual 70
+NORMAL_ACTIVE = "normal_storage_62"
 CHANGE_REQUESTED = "change_requested"  # policy wants another state; a gate blocks it
 CONFIRMING = "confirming"  # one command published; waiting for observed status
 OWNER_OVERRIDE = "owner_override"
@@ -51,13 +53,14 @@ STATES = (
     PARKED,
     BASELINE_ACTIVE,
     STORAGE_ACTIVE,
+    NORMAL_ACTIVE,
     CHANGE_REQUESTED,
     CONFIRMING,
     OWNER_OVERRIDE,
     FAULT_LOCKED,
 )
-STEADY = {PARKED, BASELINE_ACTIVE, STORAGE_ACTIVE, CHANGE_REQUESTED}
-STATE_OF = {PARKED: OFF, BASELINE_ACTIVE: BASELINE, STORAGE_ACTIVE: STORAGE}
+STEADY = {PARKED, BASELINE_ACTIVE, NORMAL_ACTIVE, STORAGE_ACTIVE, CHANGE_REQUESTED}
+STATE_OF = {PARKED: OFF, BASELINE_ACTIVE: BASELINE, NORMAL_ACTIVE: NORMAL, STORAGE_ACTIVE: STORAGE}
 ACTIVE_OF = {value: key for key, value in STATE_OF.items()}
 EVENT_PREFIXES = ("fault_", "override_")
 

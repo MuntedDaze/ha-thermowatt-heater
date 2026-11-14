@@ -265,10 +265,10 @@ PLAIN_PAYLOADS = {"off", "Off", "Eco", "Auto", "Manual"}
 # any cloud request. "legacy" restores the full 1.3.8 command set and must be
 # chosen explicitly. Read-only monitoring is identical under both.
 COMMAND_POLICIES = ("automation", "legacy")
-# Three-state transitions (1.3.13): "<target>@<prior>". The controller states
+# Guarded transitions (1.3.14): "<target>@<prior>". The controller states
 # the exact state it expects to leave; the FRESH status (<= 60 s) must show it,
 # or the command is refused with no request (an owner change in the app is
-# never overwritten). Targets: software OFF, Manual 45 °C, Manual 70 °C.
+# never overwritten). Closed supported set: OFF, Manual 45/62/70 °C.
 TRANSITIONS = {
     "off@45": ("off", 45),
     "off@70": ("off", 70),
@@ -276,6 +276,12 @@ TRANSITIONS = {
     "Manual:45@70": (45, 70),
     "Manual:70@off": (70, "off"),
     "Manual:70@45": (70, 45),
+    "off@62": ("off", 62),
+    "Manual:62@off": (62, "off"),
+    "Manual:62@45": (62, 45),
+    "Manual:62@70": (62, 70),
+    "Manual:45@62": (45, 62),
+    "Manual:70@62": (70, 62),
 }
 # The 1.3.11 forms stay accepted for the installed controller: Manual:70 from
 # OFF only, off from Manual 70 only.
