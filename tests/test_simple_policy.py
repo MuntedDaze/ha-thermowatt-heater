@@ -116,7 +116,9 @@ def test_owner_layer_then_cloud_gate_then_spacing():
     assert p.decide(snap(now, OFF, override_12h=True)).command == "Manual:70"
     blocked = p.decide(snap(now, STORE, cloud_ready=False))
     assert (blocked.state, blocked.layer, blocked.plan["wanted"]) == (HOLD, 3, OFF)
-    spaced = p.decide(snap(now, STORE, last_command_at=now - 14 * MIN))
+    # Ordinary off-peak transitions still obey spacing; peak meter-loss OFF does not.
+    weekend = at(SAT, 14)
+    spaced = p.decide(snap(weekend, STORE, last_command_at=weekend - 14 * MIN))
     assert (spaced.reason, spaced.command) == ("command_spacing", None)
     assert p.decide(snap(now, STORE, last_command_at=now - 15 * MIN)).command == "off"
 
@@ -662,7 +664,9 @@ def test_sim_no_command_pairs_closer_than_the_spacing_and_no_flapping():
         return base * (0.3 if (loc.minute // 7) % 2 else 1.0)  # clouds every 7 minutes
 
     log, _ = simulate(at(SAT, 6), 14, 44, BASE, patchy)
-    assert len(log["commands"]) <= 4, log["commands"]
+    # Preventing sustained near-full grid import can split an optional solar
+    # session on a repeatedly cloudy day; still bound switching to 3 cycles.
+    assert len(log["commands"]) <= 6, log["commands"]
     log, _ = simulate(at(MON, 6), 14, 44, BASE, patchy)
     assert len(log["commands"]) <= 5, log["commands"]
 
