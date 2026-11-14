@@ -231,6 +231,8 @@ class ShadowRuntime:
                 self.heater.state,
                 self.heater.confidence,
                 mode,
+                heater_power_kw=self.heater_power_kw,
+                meter_configured=heater_mapped,
             )
             if self.thermal_store is not None and self.thermal.should_save(now):
                 self.hass.async_create_task(self.thermal_store.async_save(self.thermal.to_dict()))
