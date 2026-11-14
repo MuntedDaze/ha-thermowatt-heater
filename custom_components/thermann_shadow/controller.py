@@ -83,9 +83,8 @@ BRIDGE_IN_PROGRESS_RESULTS = {
 # a fault that loops is still stopped. OFF is never held back.
 OPTIONAL_REASONS = frozenset({"peak_solar_qualified", "solar_opportunity"})
 ESSENTIAL_EXTRA_COMMANDS = 6
-# 0.9.1 (owner-approved, audit H1): the peak withdrawal alone is exempt from
-# the command spacing (the same set as simple_policy.SPACING_EXEMPT_REASONS).
-SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn"})
+# Must match the policy: only justified protective peak OFF bypasses spacing.
+SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn", "peak_meter_unavailable"})
 FORECAST_ALERT_AFTER = timedelta(minutes=60)
 BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
 BRIDGE_UNEXPECTED_STATE = "unexpected_state_after_command"
@@ -336,6 +335,8 @@ class Controller:
         """After an HA restart: never assume the heater is in the last REQUESTED
         state. Re-inspect from a NEW status; an unresolved intent is reconciled
         from observed status only and is never re-sent."""
+        if (seen := _dt(self.last_poll_seen)) is not None and seen > now:
+            self.last_poll_seen = None
         self.inspect_after = _iso(now)
         if self.state == CONFIRMING and self.intent:
             self.reason = "reconciling_command_after_restart"
@@ -553,7 +554,7 @@ class Controller:
 
     # ------------------------------------------------------------------ helpers
     def _ingest_poll(self, obs: Observation) -> bool:
-        if obs.poll_at is None:
+        if obs.poll_at is None or obs.poll_at > obs.now:
             return False
         seen = _dt(self.last_poll_seen)
         if seen is not None and obs.poll_at <= seen:
@@ -577,7 +578,7 @@ class Controller:
 
     def _fresh_after_inspection(self, obs: Observation) -> bool:
         after = _dt(self.inspect_after)
-        if obs.poll_at is None:
+        if obs.poll_at is None or obs.poll_at > obs.now:
             return False
         return after is None or obs.poll_at > after
 
@@ -742,7 +743,9 @@ class Controller:
             failures.append("no_heater_status")
         else:
             age = (now - obs.poll_at).total_seconds()
-            if age > (cfg.poll_interval_minutes + 5) * 60:
+            if age < 0:
+                failures.append("heater_status_in_future")
+            elif age > (cfg.poll_interval_minutes + 5) * 60:
                 failures.append("heater_status_too_old")
             elif (
                 age > BRIDGE_FRESH_SECONDS

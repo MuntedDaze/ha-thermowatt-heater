@@ -177,7 +177,11 @@ def feed(policy, start, minutes, grid_kw, element=False):
 
 
 def test_h1_only_the_peak_withdrawal_is_exempt_in_the_policy():
-    assert sp.SPACING_EXEMPT_REASONS == ctl.SPACING_EXEMPT_REASONS == {"peak_solar_withdrawn"}
+    assert (
+        sp.SPACING_EXEMPT_REASONS
+        == ctl.SPACING_EXEMPT_REASONS
+        == {"peak_solar_withdrawn", "peak_meter_unavailable"}
+    )
     p = sp.SimplePolicy(S, TARIFFS)
     now = feed(p, at(MON, 9, 0), 6, 2.5, element=True)  # importing 2.5 kW in the peak
     d = p.decide(snap(now, STORE, last_command_at=now - 2 * MIN))
@@ -187,14 +191,14 @@ def test_h1_only_the_peak_withdrawal_is_exempt_in_the_policy():
     blocked = p.decide(snap(later, OFF, reading=45, last_command_at=later - 11 * MIN))
     assert (blocked.reason, blocked.command) == ("command_spacing", None)
     assert blocked.plan["wanted"] == STORE
-    # Ordinary OFF commands still wait: the park, a pause and a meter loss.
+    # Loss of qualified metering is protective OFF, including the pre-peak lead.
     q = sp.SimplePolicy(S, TARIFFS)
     lead = at(MON, 16, 58)
     d = q.decide(snap(lead, STORE, last_command_at=lead - 5 * MIN))
-    assert (d.reason, d.command) == ("command_spacing", None)
+    assert (d.reason, d.command) == ("peak_meter_unavailable", "off")
     peak = at(MON, 18, 0)
     d = q.decide(snap(peak, STORE, last_command_at=peak - 5 * MIN))  # no meter samples
-    assert d.plan["wanted"] == OFF and (d.reason, d.command) == ("command_spacing", None)
+    assert (d.reason, d.command) == ("peak_meter_unavailable", "off")
 
 
 def controller_ready(now, mode="Off", target=70.0):
@@ -610,7 +614,7 @@ def test_n1_manual_45_heating_by_its_own_thermostat_then_a_real_weekend_start(
     tmp_path, monkeypatch
 ):
     class Sunny(Weekend):
-        forecast_pv = staticmethod(lambda loc: 3.2)
+        forecast_pv = staticmethod(lambda loc: 4.2)
 
     # Reading 36.5 °C: the Manual 45 thermostat is heating (it starts at 37 °C).
     rig = Sunny(
@@ -620,7 +624,7 @@ def test_n1_manual_45_heating_by_its_own_thermostat_then_a_real_weekend_start(
         reading=36.5,
         mode="Manual",
         setpoint=45,
-        pv=lambda loc: 3.2,
+        pv=lambda loc: 3.2 if loc.hour < 11 else 4.2,
     )
     rig.enable()
     rig.run(hobart(SAT, 12, 30), element_trace)
@@ -630,18 +634,18 @@ def test_n1_manual_45_heating_by_its_own_thermostat_then_a_real_weekend_start(
     settled = [row for row in heating if row["at"] >= "09:35"]
     assert settled and all((row["measured"] or 0.0) <= 0.0 for row in settled)
     stopped = next(row["at"] for row in rig.log if row["at"] > heating[-1]["at"])
-    # The start comes only from surplus the meter really shows (2.7 kW once the
-    # thermostat is satisfied), held for the full 10 minutes.
+    # The start waits for full-cover surplus (3.7 kW from 11:00), not the
+    # partial-cover 2.7 kW after the baseline thermostat is satisfied.
     start = rig.posts_local()[0]
     assert start[1:] == ("manual", 70), rig.posts_local()
     assert minute_of(start[0]) - minute_of(stopped) >= 10, (stopped, rig.posts_local())
     assert rig.commands() == ["Manual:70@45"]
     # In Manual 70 °C the genuine element IS counted: the meter exports nothing
-    # while it runs, and the surplus still reads about 2.7 kW, so the session holds.
+    # while it runs, and the surplus still reads about 3.7 kW, so the session holds.
     storage = [row for row in rig.log if row["state"] == "storage_70" and row["element"]]
     assert len(storage) >= 20
     later = [row for row in storage if minute_of(row["at"]) >= minute_of(storage[0]["at"]) + 12]
-    assert later and all(2.5 <= row["measured"] <= 2.9 for row in later), later[:3]
+    assert later and all(3.5 <= row["measured"] <= 3.9 for row in later), later[:3]
     assert len(rig.posts) == 1
 
 

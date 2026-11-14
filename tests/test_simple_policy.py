@@ -116,7 +116,7 @@ def test_owner_layer_then_cloud_gate_then_spacing():
     assert p.decide(snap(now, OFF, override_12h=True)).command == "Manual:70"
     blocked = p.decide(snap(now, STORE, cloud_ready=False))
     assert (blocked.state, blocked.layer, blocked.plan["wanted"]) == (HOLD, 3, OFF)
-    spaced = p.decide(snap(now, STORE, last_command_at=now - 14 * MIN))
+    spaced = p.decide(snap(now, BASE, holiday=True, last_command_at=now - 14 * MIN))
     assert (spaced.reason, spaced.command) == ("command_spacing", None)
     assert p.decide(snap(now, STORE, last_command_at=now - 15 * MIN)).command == "off"
 
@@ -379,18 +379,19 @@ def test_weekend_baseline_without_solar_and_no_forced_storage():
     assert p.decide(snap(at(SUN, 15, 30), BASE, reading=40)).state == BASE  # no deadline
 
 
-def test_weekend_one_kilowatt_qualifies_only_without_a_better_forecast():
+def test_weekend_requires_full_cover_and_waits_for_a_better_forecast():
     now = at(SAT, 11)
     p = sp.SimplePolicy(S, TARIFFS)
     feed(p, now - 11 * MIN, 12, -1.1)
     flat = fc(now, 14, 1.0)
     d = p.decide(snap(now, BASE, reading=44, forecast=flat))
-    assert (d.state, d.reason, d.command) == (STORE, "solar_opportunity", "Manual:70")
+    assert (d.state, d.reason, d.command) == (BASE, "baseline", None)
     q = sp.SimplePolicy(S, TARIFFS)
-    feed(q, now - 11 * MIN, 12, -1.1)
-    brighter = fc(now, 14, lambda i: 3.5 if 3 <= i <= 10 else 1.0)
+    feed(q, now - 11 * MIN, 12, -3.4)
+    # A high FIT can still make an otherwise fully covered boost uneconomic.
+    brighter = fc(now, 14, 3.4)
     d = q.decide(snap(now, BASE, reading=44, forecast=brighter))
-    assert (d.state, d.plan["waiting_for"]) == (BASE, "cheaper_window_later")
+    assert (d.state, d.reason) == (STORE, "solar_opportunity")
 
 
 def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
@@ -403,9 +404,9 @@ def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
     assert 0.1702 - cost == pytest.approx(0.0258, abs=0.0005)
     # A dearer margin would make 1 kW not worth it.
     strict = sp.SimplePolicy(replace(S, optional_heat_margin=0.03), TARIFFS)
-    feed(strict, now - 11 * MIN, 12, -1.1)
+    feed(strict, now - 11 * MIN, 12, -3.4)
     d = strict.decide(snap(now, BASE, reading=44, forecast=fc(now, 14, 1.1)))
-    assert (d.state, d.plan["waiting_for"]) == (BASE, "more_solar")
+    assert d.state == STORE  # full cover meets the margin
 
 
 def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():
@@ -414,9 +415,9 @@ def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():
     now = feed(p, t0 + MIN, 8, 2.7, element=True)  # cloud: available 0.3 kW for 8 min
     sun_returns = fc(now, 4, 2.5)
     d = p.decide(snap(now, STORE, reading=55, forecast=sun_returns))
-    assert (d.state, d.reason) == (STORE, "solar_opportunity_continues")
+    assert (d.state, d.reason) == (BASE, "solar_opportunity_import")
     d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 0.3)))
-    assert (d.state, d.reason, d.command) == (BASE, "solar_opportunity_ended", "Manual:45")
+    assert (d.state, d.reason, d.command) == (BASE, "solar_opportunity_import", "Manual:45")
 
 
 def test_opportunity_never_starts_what_cannot_finish_before_monday_peak():
@@ -637,13 +638,19 @@ def test_sim_weekend_solar_session_is_not_interrupted_by_a_passing_cloud():
     assert log["at"][(SAT, "16:00")] >= 62  # in the Manual 70 band
 
 
-def test_sim_no_command_pairs_closer_than_the_spacing_and_no_flapping():
+def test_sim_patchy_weekend_withdraws_import_and_spaces_restarts():
     def patchy(loc):
         base = sunny_summer(loc)
         return base * (0.3 if (loc.minute // 7) % 2 else 1.0)  # clouds every 7 minutes
 
     log, _ = simulate(at(SAT, 6), 14, 44, BASE, patchy)
-    assert len(log["commands"]) <= 4, log["commands"]
+    # Sustained import now ends optional heat even with returning sun. This
+    # pure policy has no daily budget (the controller separately caps starts).
+    assert len(log["commands"]) <= 14, log["commands"]
+    stops = [c for c in log["commands"] if c[1] == BASE]
+    assert stops and all(
+        c[2] in {"solar_opportunity_import", "solar_opportunity_ended"} for c in stops
+    )
     log, _ = simulate(at(MON, 6), 14, 44, BASE, patchy)
     assert len(log["commands"]) <= 5, log["commands"]
 

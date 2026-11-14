@@ -78,11 +78,8 @@ MEASURED_SPAN = timedelta(minutes=30)  # the measured surplus stands in for the 
 SCAN_STEP = timedelta(minutes=15)
 SCAN_HORIZON = timedelta(days=4)
 SAMPLE_SLACK = timedelta(seconds=30)  # timer drift allowed at the start of a sample window
-# 0.9.1 (owner-approved, audit H1): the ONLY command exempt from the command
-# spacing. A peak withdrawal is the import protection itself; holding it for
-# the spacing after a start kept the element on peak grid for up to 15 minutes.
-# Every other command, including the restart after it, still waits.
-SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn"})
+# Protective peak OFF only. Restarts, holiday and ordinary transitions still wait.
+SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn", "peak_meter_unavailable"})
 
 
 @dataclass(frozen=True)
@@ -174,7 +171,9 @@ class SimplePolicy:
         return [smp for smp in self.samples if now - window <= smp[0] <= now]
 
     def meter_fresh(self, now: datetime) -> bool:
-        return bool(self.samples) and now - self.samples[-1][0] <= self.s.meter_max_age
+        return (
+            bool(self.samples) and timedelta(0) <= now - self.samples[-1][0] <= self.s.meter_max_age
+        )
 
     def sustained(self, now: datetime, window: timedelta, test) -> bool:
         """``test`` held for the WHOLE ``window`` (0.9.1): the sample at the
@@ -333,7 +332,7 @@ class SimplePolicy:
         fresh = (
             snap.reading_c is not None
             and snap.reading_at is not None
-            and now - snap.reading_at <= s.reading_max_age
+            and timedelta(0) <= now - snap.reading_at <= s.reading_max_age
         )
         # A stale or missing reading is assumed to be just above the baseline's
         # reheat point: storage then starts earlier, never later.
@@ -453,6 +452,11 @@ class SimplePolicy:
         if state == STORAGE:
             if measured is None:
                 return BASELINE, "solar_opportunity_ended", 5, plan
+            # Optional heat must not import indefinitely on a forecast promise.
+            # The same five-minute tolerance as peak withdrawal avoids toggling
+            # for passing clouds. Return to native 45, preserving essential heat.
+            if self.sustained(now, s.withdraw, lambda x: x[1] > s.peak_import_tolerance_kw):
+                return BASELINE, "solar_opportunity_import", 5, plan
             faded = self.sustained(now, s.withdraw, lambda x: x[2] < s.solar_floor_kw)
             ahead = self.surplus_profile(now, now + timedelta(hours=1), snap.forecast, None)
             returns = sum(ahead) / len(ahead) >= s.solar_floor_kw
@@ -464,7 +468,7 @@ class SimplePolicy:
         if (
             would_heat
             and (finish_by is None or now + timedelta(hours=hours) <= finish_by)
-            and self.sustained(now, s.qualify, lambda x: x[2] >= s.solar_floor_kw)
+            and self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw)
         ):
             midnight = datetime.combine(
                 local.date() + timedelta(days=1), datetime.min.time(), HOBART
