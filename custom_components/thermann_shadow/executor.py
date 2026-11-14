@@ -238,20 +238,25 @@ class Executor:
             state = heater_state(obs.mode, obs.target_c)
             last = _dt(self.shadow[-1]["at"]) if self.shadow else None
         grid = runtime.grid_import_kw
+        meter_mapped = bool(runtime.sources.get("heater_power"))
+        measured_heater_kw = runtime.heater_power_kw if meter_mapped else None
         if grid is not None:
-            # 0.9.1 (audits M2 and N1): the element's 3 kW is added back to the
-            # measured surplus ONLY while the policy is in Manual 70 °C (confirmed,
-            # or requested and awaiting confirmation) and the estimate is at
-            # least medium confidence. In OFF or Manual 45 °C an appliance's load
-            # step read as the element and created solar that was not there. Not
-            # counting a baseline reheat only makes the surplus look smaller.
+            # A configured circuit meter has precedence over aggregate-load
+            # inference. On outage, credit ZERO rather than a guessed 3 kW.
+            # In Manual 45 °C/OFF do not credit existing baseline/other loads.
             estimate = runtime.heater
-            element = (
-                state == STORAGE
+            inferred_on = (
+                not meter_mapped
+                and state == STORAGE
                 and estimate.state == "on"
                 and estimate.confidence in ELEMENT_CONFIDENCE
             )
-            self.policy.add_meter(now, grid, element)
+            self.policy.add_meter(
+                now,
+                grid,
+                inferred_on,
+                measured_heater_kw=measured_heater_kw if state == STORAGE else None,
+            )
         forecast = runtime.forecast.slots if runtime.forecast is not None else ()
         snapshot = Snapshot(
             now=now,
@@ -264,6 +269,7 @@ class Executor:
             and (controller.hold or controller.state == "owner_override"),
             holiday=controller.holiday_active(now),
             override_12h=controller.guest_active(now),
+            heater_power_ready=not meter_mapped or measured_heater_kw is not None,
         )
         decision = self.policy.decide(snapshot)
         self.last_decision = decision
