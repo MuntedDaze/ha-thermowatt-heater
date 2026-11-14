@@ -1,78 +1,59 @@
 # Thermann hot water for Home Assistant
 
-Two parts, for a Thermann Smart Electric water heater (tested on a 315 L / 3 kW unit) connected to the Thermann Control / MyThermowatt cloud:
+An unofficial community bridge and controller for supported Thermann Smart
+Electric heaters using the Thermann Control / MyThermowatt cloud. See the heater
+in Home Assistant, keep a simple overnight baseline, and plan weekday storage
+using your tariff, solar measurements and available forecasts.
 
-| Part | What it does | Installed from |
-| --- | --- | --- |
-| **Thermann Hot Water** (Home Assistant app, `thermowatt-heater/`) | Reads the heater from the cloud every 30 minutes and publishes it to Home Assistant over MQTT. When commands are enabled, it accepts only two: `Manual:70` (heating allowed) and `off` (parked). | Settings → Apps, from this repository |
-| **Thermann Controller** (integration, `custom_components/thermann_shadow`) | Plans when heating is cheapest using tariffs, solar, comfort deadlines and the GoodWe meter, and tells the bridge to allow or park heating. Off by default. | Copied into `custom_components/` |
+**Development candidate: bridge 1.3.14 / controller 0.10.0, draft PR #34.**
+The tested 1.3.13 / 0.9.1 recovery candidate remains in draft PR #33. Neither is
+a production deployment. New 62°C hardware behaviour still needs supervised
+qualification; automatic control is disabled on a fresh installation.
 
-Thermann's own thermostat always decides when the element runs. The controller only allows heating (Manual at 70 °C) or parks the heater (Thermann OFF, which keeps the manufacturer's anti-bacterial and frost protection active). It never changes the temperature setting, the native Schedule or mains power.
+| Part | Purpose |
+|---|---|
+| **Thermann Hot Water** add-on | Fixed cloud polling, MQTT discovery and guarded commands with fresh exact-prior status and cloud readback |
+| **Thermann Controller** integration | One coordinated policy: OFF, baseline 45°C, normal weekday storage 62°C, optional economical solar 70°C |
+| **Independent energy monitoring** | Fable's optional dashboard/reporting in [draft PR #32](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/32); never a controller dependency |
 
-Both are **unofficial community software**, not Thermann products. This project is not affiliated with Thermowatt, Thermann, Reece or Ariston.
+A dedicated hot-water CT is **optional** for baseline and required off-peak
+storage. Verified fresh circuit measurement is required for optional solar
+heating. Users independently choose **Heating during peak periods** and
+**Enable optional solar boost**. CT-free installations default to no routine
+peak heating. The separate 12-hour Override remains at 70°C.
 
-*Names:* the app was called "Thermowatt Smart Boiler" and the integration "Thermann Shadow Planner" / "Hot Water Controller" before 0.8.0 / 1.3.12. Only the display names changed: the app slug, the integration domain (`thermann_shadow`), MQTT topics, entity IDs and saved settings are the same, and no reinstall is needed.
+The native thermostat and protective cycles retain control of the element.
+Cloud OFF is a software request, **not proof of zero electrical consumption**.
+An owner app change pauses automation; unknown outcomes are reported rather
+than replayed. This is a cloud-dependent project, not a local mains isolator,
+temperature/hygiene guarantee or universal water-heater framework.
 
-## Requirements
+- [Start here: capabilities, architecture and limitations](docs/dual-storage/README.md)
+- [Installation, configuration, commissioning and troubleshooting](docs/dual-storage/INSTALLATION.md)
+- [Upgrade and rollback](docs/dual-storage/UPGRADE.md)
+- [One household example: 315 L, GoodWe, EMHASS and fixed-AEST tariff](docs/dual-storage/HOUSEHOLD_EXAMPLE.md)
+- [Backend telemetry for dashboards](docs/dual-storage/TELEMETRY_INTERFACE.md)
+- [Reproducible strategy comparisons](docs/dual-storage/SIMULATIONS.md)
+- [Bridge options and authentication guards](thermowatt-heater/DOCS.md)
+- [Public-distribution review and licence decision](docs/dual-storage/PUBLIC_RELEASE.md)
 
-- Home Assistant OS on amd64 or aarch64, with the Mosquitto broker and the MQTT integration.
-- A Thermann Control / MyThermowatt account for the heater.
-- For the controller: a GoodWe inverter with its meter in Home Assistant (solar, house load, grid). EMHASS forecasts are optional.
+Home Assistant OS with MQTT and amd64/aarch64 add-on support is the tested
+packaging path. GoodWe and EMHASS are supported input examples; a validated
+generic circuit-power entity can supply the optional CT. No cloud credentials,
+household entity IDs or verified meter direction are supplied for new users.
 
-## Install
+The integration domain `thermann_shadow`, add-on slug, MQTT topics and existing
+entity IDs remain for compatibility. Historical three-state guides are retained
+as recovery references. Changelogs: [bridge](CHANGELOG.md) and
+[controller](shadow_controller/CHANGELOG.md).
 
-**Bridge:**
-1. Settings → Apps, open the app store, then ⋮ → Repositories, and add `https://github.com/MuntedDaze/ha-thermowatt-heater`.
-2. Install **Thermann Hot Water**. Set your account details, then `cloud_enabled: true` and `auth_retry_generation: 1`. Leave `commands_enabled: false` for now.
-3. Start it. The heater appears as an MQTT water heater, with diagnostic sensors.
+For development, install `requirements-dev.txt`, run `python -m pytest`,
+`python -m ruff check .` and `python -m ruff format --check .`. CI adds strict
+type checks, three Python versions, actual Home Assistant, native images,
+isolated MQTT/lifecycle tests and Supervisor schema validation. Tests use
+synthetic data and block external networking. See the
+[progress checkpoint](docs/dual-storage/IMPLEMENTATION_PROGRESS.md).
 
-Full options, the authentication safety rules and troubleshooting: [thermowatt-heater/DOCS.md](thermowatt-heater/DOCS.md).
-
-**Controller:**
-1. Copy `custom_components/thermann_shadow` into `/config/custom_components/` and restart Home Assistant once.
-2. Add the integration and map your entities.
-3. Automatic control stays off until the commissioning steps are done.
-
-Guide: [shadow_controller/README.md](shadow_controller/README.md).
-
-## Safety in one paragraph
-
-- **Bridge:**
-  - Cloud access and commands are off until you enable them.
-  - Failed authentication locks rather than retrying, and the lock survives restarts.
-  - It polls every 30 minutes.
-  - Every command is checked against a fresh reading, sent once, never repeated, and confirmed from the heater's reported state.
-- **Controller:**
-  - Sends nothing until it is commissioned and switched on.
-  - Pauses whenever you change the heater in the Thermann app.
-  - Never interrupts heating the heater starts itself while OFF (anti-bacterial or frost protection).
-  - Stops with a clear notification when something does not add up.
-
-## If something goes wrong
-
-- **Hot water now:** in the Thermann app, choose **Manual at 70 °C**. To return to your normal programme, choose **Schedule**.
-- **Stop all automatic control:** turn off *Automatic heater control* in Home Assistant. That never changes the heater.
-- **Bridge authentication locked:** see "Clearing an authentication lock" in [DOCS.md](thermowatt-heater/DOCS.md). Never delete `/data/auth_state.json`.
-
-## Repository layout
-
-| Path | Contents |
-| --- | --- |
-| `thermowatt-heater/` | the bridge add-on, its changelog and DOCS.md (shown in the add-on page) |
-| `custom_components/thermann_shadow/` | the controller integration |
-| `shadow_controller/` | controller guide, commissioning, dashboard data contract, thermal model, upgrade notes |
-| `tests/`, `tools/` | offline tests (no network; synthetic data) and readiness checks |
-| `docs/history/` | earlier reviews, stage reports, upgrade notes and audit evidence, kept for reference |
-| `AGENTS.md` | the owner's development and release rules for this repository |
-
-## Development
-
-```shell
-python -m pip install -r requirements-dev.txt
-python -m pytest
-python -m ruff check . && python -m ruff format --check .
-```
-
-The tests block all network access. CI also builds the add-on for amd64/aarch64, runs it against an isolated MQTT broker, validates the Supervisor schema and loads the integration in real Home Assistant Core.
-
-Changelogs: [bridge](CHANGELOG.md), [controller](shadow_controller/CHANGELOG.md).
+This project is not affiliated with Thermann, Thermowatt, Reece or Ariston.
+No open-source licence has yet been selected; public visibility alone does not
+grant unrestricted redistribution rights.

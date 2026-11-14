@@ -124,7 +124,8 @@ def replay(case, strategy):
                 last_command_at=last_command,
                 heater_meter_valid=case.ct,
                 measured_element_kw=heater_kw if case.ct and element else None,
-                optional_allowed=len(commands) < 8,
+                optional_allowed=len(commands)
+                < int(c.DEFAULT_OPTIONS["controller_max_commands_per_day"]),
                 cloud_ready=pending is None,
             )
         )

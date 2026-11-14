@@ -1,5 +1,8 @@
 # Controller backend contract for Fable
 
+> Versioned 0.9.x / bridge 1.3.13 recovery reference. For the unmerged four-state
+> 0.10.0 / 1.3.14 candidate, see [the current guide](../dual-storage/README.md). The old PR #33 commit remains unchanged.
+
 Schema version 1. Fable owns dashboards, monitoring packages and reporting;
 this branch supplies inputs and backend events only. Entity IDs below are
 fresh-install suggestions; resolve existing IDs via their stable unique-ID

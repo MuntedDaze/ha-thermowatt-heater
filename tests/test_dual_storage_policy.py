@@ -1,11 +1,13 @@
 """Four-state policy and public CT-free/peak settings, offline only."""
 
 from dataclasses import replace
+from datetime import datetime, timedelta
 from itertools import permutations
 import pytest
 
 from test_simple_policy import sp, TARIFFS, at, snap, fc, MIN, MON, SAT, OFF, BASE, STORE
 from test_controller_0_9_0 import ctl, cfg, obs, ready, publishes
+from test_shadow_model import m
 
 NORMAL = sp.NORMAL
 D = sp.PolicySettings()
@@ -189,3 +191,24 @@ def test_forecast_fluctuation_does_not_toggle_a_qualified_boost():
     for forecast in (fc(now, 6, 4), fc(now, 6, 0), ()):
         d = p.decide(snap(now, STORE, reading=58, forecast=forecast, measured_element_kw=3))
         assert d.state == STORE and d.command is None
+
+
+@pytest.mark.parametrize("month,day,local_hour", [(3, 30, 8), (4, 6, 7), (9, 28, 7), (10, 5, 8)])
+@pytest.mark.parametrize("clock", ["standard", "local"])
+def test_peak_lockout_and_return_to_baseline_across_dst_clock_boundaries(
+    month, day, local_hour, clock
+):
+    p = sp.SimplePolicy(replace(D, tariff_clock=clock, boost_enabled=False), TARIFFS)
+    zone = m.STANDARD if clock == "standard" else m.HOBART
+    peak = datetime(2026, month, day, 7, tzinfo=zone).astimezone(m.UTC)
+    if clock == "standard":
+        assert peak.astimezone(m.HOBART).hour == local_hour
+    # A restart has no old measurement qualification; lockout still wins.
+    for minute in (-2, 0, 1):
+        d = p.decide(snap(peak + minute * MIN, NORMAL, heater_meter_valid=False))
+        assert (d.command, d.reason) == ("off", "peak_lockout")
+    after_evening_peak = datetime(2026, month, day, 21, 1, tzinfo=zone).astimezone(m.UTC)
+    assert p.decide(snap(after_evening_peak, OFF, heater_meter_valid=False)).command == "Manual:45"
+    # Reserved OFF is exempt from ordinary spacing, but not the real executor's budgets/guards.
+    d = p.decide(snap(peak - 2 * MIN, NORMAL, last_command_at=peak - timedelta(minutes=3)))
+    assert d.command == "off"

@@ -10,7 +10,7 @@ Raw cost includes grid energy and foregone feed-in earnings. Adjusted cost adds 
 |---|---|---|---:|---:|
 | strong sun direct 70 | 0.890 / 0.612 / 0.890 | 0.890 / 1.106 / 0.890 | 69.7 | 4 / 106 |
 | cloudy off peak | 1.634 / 1.123 / 1.123 | 1.634 / 1.617 / 1.617 | 61.6 | 4 / 106 |
-| patchy optimistic forecast | 1.181 / 0.806 / 0.932 | 1.181 / 1.300 / 1.236 | 64.7 | 10 / 125 |
+| patchy optimistic forecast | 1.181 / 0.806 / 0.806 | 1.181 / 1.300 / 1.300 | 61.6 | 8 / 119 |
 | patchy pessimistic forecast | 1.181 / 0.806 / 0.806 | 1.181 / 1.299 / 1.299 | 61.6 | 4 / 106 |
 | unexpected solar after normal | 1.045 / 0.646 / 0.929 | 1.056 / 1.150 / 0.929 | 69.9 | 5 / 109 |
 | unexpected daytime draw | 1.271 / 0.997 / 1.271 | 1.271 / 1.482 / 1.271 | 70.0 | 4 / 106 |

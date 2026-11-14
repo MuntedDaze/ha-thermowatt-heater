@@ -1,5 +1,8 @@
 # Simplified heating strategy: review and proposal (12 Nov 2026, revised after the owner's clarification)
 
+> Versioned 0.9.x / bridge 1.3.13 recovery reference. For the unmerged four-state
+> 0.10.0 / 1.3.14 candidate, see [the current guide](../docs/dual-storage/README.md). The old PR #33 commit remains unchanged.
+
 **Status: proposal for owner review.** The installed controller (0.7.1) and the
 bridge (1.3.11) are unchanged. This branch adds only a pure, unwired policy
 module (`custom_components/thermann_shadow/simple_policy.py`) and its tests

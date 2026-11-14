@@ -506,19 +506,19 @@
       "simulated_hours": 24.0,
       "required_target_c": 62,
       "peak_import_kwh": 0.0,
-      "off_peak_import_kwh": 2.75,
-      "heater_solar_kwh": 5.0,
-      "lost_feed_in_aud": 0.4638,
-      "net_energy_cost_aud": 0.93185,
-      "standing_loss_kwh": 0.887254,
+      "off_peak_import_kwh": 2.5,
+      "heater_solar_kwh": 4.1,
+      "lost_feed_in_aud": 0.380316,
+      "net_energy_cost_aud": 0.805816,
+      "standing_loss_kwh": 0.848144,
       "useful_draw_kwh": 2.5,
       "unserved_draw_kwh": 0.0,
-      "end_temperature_c": 56.911121,
-      "end_stored_above_15_kwh": 15.350996,
-      "maximum_temperature_c": 65.144457,
-      "temperature_at_evening_peak_c": 64.693017,
+      "end_temperature_c": 53.878182,
+      "end_stored_above_15_kwh": 14.240106,
+      "maximum_temperature_c": 62.05496,
+      "temperature_at_evening_peak_c": 61.58656,
       "required_probe_target_reached_by_peak": true,
-      "storage_shortfall_at_peak_kwh": 0.0,
+      "storage_shortfall_at_peak_kwh": 0.151433,
       "forecast_mae_kw": 0.5,
       "commands": [
         {
@@ -558,18 +558,6 @@
           "reason": "weekday_solar_boost_withdrawn"
         },
         {
-          "at_aest": "2026-11-16T12:10:00+10:00",
-          "state": "storage",
-          "target_c": 70,
-          "reason": "weekday_solar_boost"
-        },
-        {
-          "at_aest": "2026-11-16T12:40:00+10:00",
-          "state": "normal_storage",
-          "target_c": 62,
-          "reason": "weekday_solar_boost_withdrawn"
-        },
-        {
           "at_aest": "2026-11-16T15:58:00+10:00",
           "state": "off",
           "target_c": null,
@@ -582,17 +570,17 @@
           "reason": "baseline"
         }
       ],
-      "command_count": 10,
+      "command_count": 8,
       "modelled_cloud_requests": {
-        "status": 66,
-        "command_post": 10,
+        "status": 62,
+        "command_post": 8,
         "auth_refresh": 49
       },
-      "modelled_cloud_request_count": 125,
+      "modelled_cloud_request_count": 119,
       "common_terminal_stored_kwh": 17.140762,
-      "terminal_replenishment_kwh": 1.789766,
-      "terminal_replenishment_aud": 0.304618,
-      "equal_service_terminal_cost_aud": 1.236468
+      "terminal_replenishment_kwh": 2.900656,
+      "terminal_replenishment_aud": 0.493692,
+      "equal_service_terminal_cost_aud": 1.299508
     },
     {
       "scenario": "patchy_pessimistic_forecast",

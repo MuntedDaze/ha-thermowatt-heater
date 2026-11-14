@@ -209,13 +209,13 @@ CATALOG = {
     "import_positive": Setting(
         "Positive grid means import",
         "System",
-        "OFF means export-positive HK1000. Never change without a load test; restore preserves direction.",
+        "OFF means export-positive. Verify the actual meter with a known load; restore preserves direction.",
         kind="switch",
     ),
     "tariff_clock": Setting(
         "Tariff clock",
         "Advanced",
-        "Confirmed Aurora 93 uses standard (fixed AEST UTC+10), automatically one hour later in Hobart summer.",
+        "Use your verified contract: standard is fixed AEST UTC+10; local is Australia/Hobart with DST. Other time zones are not qualified.",
         choices=("standard", "local"),
         kind="select",
     ),
@@ -526,7 +526,7 @@ CATALOG.update(
         "peak_heating_policy": Setting(
             "Heating during peak periods",
             "Everyday",
-            "Never takes priority over routine solar opportunities. Solar-only requires verified raw circuit power, fresh grid and all qualifications. Explicit owner override/native protections remain independent.",
+            "The Never option takes priority over routine solar opportunities. Solar-only requires verified raw circuit power, fresh grid and all qualifications. Explicit owner override/native protections remain independent.",
             kind="select",
             choices=("Never schedule heating during peak", "Verified solar-only heating"),
         ),

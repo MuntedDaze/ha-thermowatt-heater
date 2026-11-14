@@ -1,5 +1,8 @@
 # Commissioning the simplified controller (controller 0.9.1 + app 1.3.13)
 
+> Versioned 0.9.x / bridge 1.3.13 recovery reference. For the unmerged four-state
+> 0.10.0 / 1.3.14 candidate, see [the current guide](../docs/dual-storage/README.md). The old PR #33 commit remains unchanged.
+
 **Nothing here has been done.** Every step that changes the owner's Home
 Assistant, the app or the heater needs the owner's explicit approval at the
 time. Merging a PR never authorises installation, cloud requests or heater

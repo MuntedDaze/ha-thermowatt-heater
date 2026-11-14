@@ -35,24 +35,38 @@ change. A separate draft PR targets `codex/smart-controller-next`.
    controller 0.10.0. Full suite passed (1140 cases before two added polling
    cases); focused public-installation/polling cases passed, Ruff, strict mypy
    and compileall passed. Actual HA/native/Supervisor matrices still await CI.
-4. In progress: 11 comparative cases / 33 replays implemented, including direct
+4. Implemented: 11 comparative cases / 33 replays implemented, including direct
    70, later top-up, cloudy/patchy/failed forecasts, draw, late boundary, weekends
    and CT-free operation. Equal service, terminal energy and request assumptions
-   are explicit; conservation/reproducibility regressions pass. Public docs,
-   installation/upgrade/rollback, household example and hygiene review pending.
-5. Pending: full local/CI verification, draft PR and final handoff.
+   are explicit; conservation/reproducibility regressions pass. Public README,
+   installation/commissioning/troubleshooting, upgrade/rollback, household example
+   and schema-2 telemetry guide complete. Prior guides are versioned recovery
+   references. Redacted distribution review documents existing application-key
+   uncertainty and removed private key still in Git history; no values exposed
+   or modified. MIT recommended subject to provenance/owner decision; no licence
+   file added. No Fable dashboard/monitoring files changed.
+5. Final verification in progress: **1154 tests passed** locally on Python 3.12;
+   Ruff lint/format, both strict mypy targets, compileall and Git Bash syntax
+   pass. New tests include eight fixed-AEST/Hobart DST boundary/return cases.
+   The actual HA harness now captures and confirms Manual62 (never sent).
+   Draft PR #34 remains draft; final-head CI and handoff remain to record.
 
 ## Resume
 
 Completed protocol commit: `fd40b33`. Policy/settings commit: `1972b16`.
 Increment 3 commit subject: `Preserve upgrades and expose target-aware public configuration`.
-Continue with comparative simulations and public documentation, then verify the
-draft PR's complete CI matrix. No production action has been performed.
+Continue by verifying the final draft PR head's complete CI matrix. No
+production action has been performed. Do not restart implementation or the audit.
 Draft PR: #34, target `codex/smart-controller-next`; increment 3: `201b870`.
 Initial Python CI passed on 3.12/3.13/3.14. Actual HA found a harness assertion
 that assumed an alternative always differed from the recommendation, despite
 preserved historical defaults. Corrected to verify the actual flag accurately;
-both HA matrices need rerunning. Native/Supervisor jobs still in progress.
+all six workflows (both push/PR, 18 jobs) passed at `ee0edcf` after that correction.
+The final documentation/DST/Manual62-harness increment needs its own final-head
+checks before completion. No merge, deployment, live authentication, MQTT
+publication or physical test is authorised. Physical 62-degree transitions,
+CT commissioning/cadence and owner/vendor public-key provenance/revocation
+remain review/commissioning gates, not completed work.
 New phase-local checkpoint is this file; retain PR #33's checkpoint unchanged.
 
 Inspect branch/status/log first; never switch or alter another worktree. Continue

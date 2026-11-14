@@ -618,7 +618,7 @@ async def check_unchanged_mqtt_payload_freshness(hass, entry):
 
 
 async def check_controller(hass, entry, entity_for):
-    """Production controller (0.9.0: OFF / Manual 45 / Manual 70) on REAL HA Core.
+    """Four-state controller, including guarded Manual62, on REAL HA Core.
 
     Fresh install refuses to enable; after commissioning, one poll produces
     exactly one guarded MQTT message (captured here, never sent: the network is
@@ -764,14 +764,14 @@ async def check_controller(hass, entry, entity_for):
         assert entry.options["controller_command_topic"] == "P/TEST123/CMD/MODE"
         await set_setting(hass, entity_for("controller_notify_service"), "text", "")
         executor = hass.data["thermann_shadow"][entry.entry_id].executor
-        wanted = sp.Decision("storage", "real_ha_wiring_check", 5)
+        wanted = sp.Decision("normal_storage", "real_ha_wiring_check", 5)
         executor.decide = lambda now, obs: (wanted, executor.controller.heater)
         hass.config.components.add("mqtt")
         # Parked OFF (Cmd 8) keeping 70, as observed in T3: the guarded transition goes.
         bridge("Off", dt_util.utcnow(), setpoint=70)
         await hass.async_block_till_done()
         commands = [item for item in captured if item[0].endswith("/CMD/MODE")]
-        assert commands == [("P/TEST123/CMD/MODE", "Manual:70@off", 1, False)], captured
+        assert commands == [("P/TEST123/CMD/MODE", "Manual:62@off", 1, False)], captured
         # Activation also asked the bridge for ONE guarded status read.
         assert ("P/TEST123/refresh", "refresh", 0, False) in captured, captured
         assert hass.states.get(status).state == "confirming"
@@ -779,9 +779,9 @@ async def check_controller(hass, entry, entity_for):
             await executor.async_step()
         commands = [item for item in captured if item[0].endswith("/CMD/MODE")]
         assert len(commands) == 1, "duplicate command"
-        bridge("Manual", dt_util.utcnow(), total=202)
+        bridge("Manual", dt_util.utcnow(), total=202, setpoint=62)
         await hass.async_block_till_done()
-        assert hass.states.get(status).state == "storage_70"
+        assert hass.states.get(status).state == "normal_storage_62"
         assert hass.states.get("sensor.thermann_shadow_last_command_result").state == "confirmed"
         assert hass.states.get("sensor.thermann_shadow_commands_in_last_24_hours").state == "1"
         assert await hass.config_entries.async_reload(entry.entry_id)
