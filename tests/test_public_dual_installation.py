@@ -1,5 +1,6 @@
 """Fresh-install safety, preserving migrations and target-labelled learning."""
 
+from dataclasses import replace
 from datetime import timedelta
 import importlib
 import pytest
@@ -118,3 +119,27 @@ def test_completion_62_uses_only_covered_measured_energy_and_reanchors():
     assert later["measured_kwh_since_anchor"] == pytest.approx(1)
     assert later["continuous_minutes_high"] < initial["continuous_minutes_high"]
     assert not later["reported_target_reached"]
+
+
+def test_telemetry_updates_boost_rejection_without_repeating_unchanged_events(
+    tmp_path, monkeypatch
+):
+    rig = Rig(tmp_path, monkeypatch, hobart(MON, 12))
+    obs = rig.executor.observe(rig.now())
+    plan = {"desired_target_c": 62, "heating_role": "required", "boost_eligible": False}
+    decision = sp.Decision(
+        sp.NORMAL, "storage_until_peak", 5, plan={**plan, "boost_reason": "boost_disabled"}
+    )
+    rig.runtime.record_event(rig.now(), obs, decision)
+    previous = rig.runtime.telemetry
+    changed = replace(decision, plan={**plan, "boost_reason": "verified_circuit_and_grid_required"})
+    rig.runtime.record_event(rig.now(), obs, changed)
+    assert rig.runtime.telemetry is not previous
+    assert (
+        rig.runtime.telemetry["heating_plan"]["boost_reason"]
+        == "verified_circuit_and_grid_required"
+    )
+    previous = rig.runtime.telemetry
+    rig.runtime.record_event(rig.now(), obs, changed)
+    assert rig.runtime.telemetry is previous
+    assert not rig.posts

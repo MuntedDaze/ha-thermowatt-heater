@@ -45,11 +45,15 @@ change. A separate draft PR targets `codex/smart-controller-next`.
    uncertainty and removed private key still in Git history; no values exposed
    or modified. MIT recommended subject to provenance/owner decision; no licence
    file added. No Fable dashboard/monitoring files changed.
-5. Final verification in progress: **1154 tests passed** locally on Python 3.12;
+5. Implementation and local verification complete: **1155 tests passed** on Python 3.12;
    Ruff lint/format, both strict mypy targets, compileall and Git Bash syntax
    pass. New tests include eight fixed-AEST/Hobart DST boundary/return cases.
    The actual HA harness now captures and confirms Manual62 (never sent).
-   Draft PR #34 remains draft; final-head CI and handoff remain to record.
+   One final telemetry-event regression was added so a changed
+   boost rejection is recorded even when required heating continues unchanged.
+   Focused telemetry/history checks and the full suite rerun pass.
+   [HANDOFF.md](HANDOFF.md) records the implementation and remaining gates.
+   Exact final-head CI evidence will be recorded in PR #34 after runs settle.
 
 ## Resume
 
@@ -63,11 +67,17 @@ that assumed an alternative always differed from the recommendation, despite
 preserved historical defaults. Corrected to verify the actual flag accurately;
 all six workflows (both push/PR, 18 jobs) passed at `ee0edcf` after that correction.
 The final documentation/DST/Manual62-harness increment needs its own final-head
-checks before completion. No merge, deployment, live authentication, MQTT
+checks before completion. Its Python matrix and actual-HA PR checks passed at
+`d7dd2f0`; remaining native/push checks were still running when this record was
+prepared. Follow PR #34 for the final head/result rather than rerunning work
+already completed. No merge, deployment, live authentication, MQTT
 publication or physical test is authorised. Physical 62-degree transitions,
 CT commissioning/cadence and owner/vendor public-key provenance/revocation
 remain review/commissioning gates, not completed work.
 New phase-local checkpoint is this file; retain PR #33's checkpoint unchanged.
+After the final head is green, the development phase is ready for independent
+review. Final CI results and exact tested head are recorded in PR #34's body;
+consult it on resume rather than assuming a code or deployment task remains.
 
 Inspect branch/status/log first; never switch or alter another worktree. Continue
 from the current increment, not another broad audit. Python:
