@@ -121,6 +121,7 @@ class Snapshot:
     heater_meter_valid: bool = False  # optional starts require explicit verified input
     measured_element_kw: float | None = None  # verified instantaneous ON power; never inference
     optional_allowed: bool = True
+    learned_rates: dict[int, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -237,6 +238,12 @@ class SimplePolicy:
             return physics
         return min(max(observed, 0.5 * physics), 1.5 * physics)
 
+    def _target_rate(self, snap, target):
+        live_nominal = self._rate_c_per_hour(None, snap.measured_element_kw)
+        if target in snap.learned_rates:
+            return min(live_nominal, snap.learned_rates[target])
+        return self._rate_c_per_hour(snap.heating_c_per_hour, snap.measured_element_kw)
+
     def mixed_cost(self, surplus_kw: float, grid_rate: float) -> float:
         """$/kWh of heat when ``surplus_kw`` of solar covers part of the element."""
         solar = min(max(surplus_kw, 0.0), self.s.element_kw)
@@ -334,6 +341,12 @@ class SimplePolicy:
             if desired != OFF
             else 0,
             "desired_target_c": self.setpoint(desired),
+            "planning_rate_c_per_hour": self._target_rate(snap, self.setpoint(desired))
+            if desired != OFF
+            else None,
+            "planning_rate_basis": "learned_conservative_lower_bound"
+            if self.setpoint(desired) in snap.learned_rates
+            else "nominal_or_verified_live_watts",
             "heating_role": "owner_override"
             if reason == "12hr_override"
             else "park"
@@ -363,6 +376,7 @@ class SimplePolicy:
         """One optional-energy test; never a second heating planner."""
         s, now = self.s, snap.now
         goal = s.storage_c if target is None else target
+        rate = self._target_rate(snap, goal)
         info = {
             "boost_eligible": False,
             "boost_reason": "disabled",
@@ -514,6 +528,7 @@ class SimplePolicy:
             and not afternoon_peak_today
         )
         goal = s.normal_c if evening or flat_deadline else s.storage_c
+        rate = self._target_rate(snap, goal)
         would_heat = reading <= goal - s.hysteresis_c
         # Actual ON evidence can continue toward target inside its hysteresis band.
         hours = (

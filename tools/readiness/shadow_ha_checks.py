@@ -1106,6 +1106,12 @@ ADDED_IN_0_9_0 = {
 # Backend-only additions on the separate smart-controller development branch.
 # Existing registry IDs must still be preserved; enumerate additions explicitly.
 ADDED_IN_SMART_DEVELOPMENT = {
+    "setting_learned_planning_enabled",
+    "setting_learning_hardware_qualified",
+    "learning_status",
+    "learning_sessions",
+    "prediction_error",
+    "planning_heating_rate",
     "setting_time_zone",
     "setting_daytime_start",
     "setting_storage_ready_time",

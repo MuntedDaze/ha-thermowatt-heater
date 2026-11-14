@@ -138,6 +138,7 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
             result = {**saved_options(self._entry.options), "sources": dict(user_input)}
             if user_input.get("heater_power") != values.get("heater_power"):
                 result["heater_meter_verification"] = ""
+                result["learning_hardware_qualified"] = False
             return self._finish(before, result, "sources", sources_schema(user_input))
         return self.async_show_form(step_id="sources", data_schema=sources_schema(values))
 

@@ -119,7 +119,9 @@
           "adaptive_poll_heating_minutes": "Shadow heating poll maximum",
           "adaptive_poll_stable_minutes": "Shadow stable poll maximum",
           "controller_four_state_qualified": "Four-state commands qualified (1.3.14)",
-          "adaptive_polling_enabled": "Send adaptive cloud scheduling plans"
+          "adaptive_polling_enabled": "Send adaptive cloud scheduling plans",
+          "learned_planning_enabled": "Use validated conservative learned heating rate",
+          "learning_hardware_qualified": "Heating learning independently qualified"
         }
       }
     },

@@ -576,6 +576,18 @@ CATALOG["adaptive_polling_enabled"] = Setting(
     "Disabled until independent review and supervised validation. Sends bounded expiring hints only; the bridge needs its separate enabled and qualified options. Fixed fallback and every cloud/command guard remain.",
     kind="switch",
 )
+CATALOG["learned_planning_enabled"] = Setting(
+    "Use validated conservative learned heating rate",
+    "System",
+    "Disabled until real independent samples, held-out accuracy and hardware qualification pass. A learned lower bound may advance required heating, never delay it beyond nominal/live-watt planning.",
+    kind="switch",
+)
+CATALOG["learning_hardware_qualified"] = Setting(
+    "Heating learning independently qualified",
+    "System",
+    "Owner commissioning gate, never set from synthetic tests. Remapping the meter, changing its unit or nominal tank/power clears this flag.",
+    kind="switch",
+)
 
 
 CATALOG["time_zone"] = Setting(
@@ -813,6 +825,11 @@ def apply_changes(values, changes):
     """Ordinary edits. After a restore, an edited key leaves the undo snapshot:
     it is the owner's newest decision and must not be reverted by Undo."""
     result = {**values, **changes}
+    if any(
+        key in changes and changes[key] != values.get(key)
+        for key in ("tank_litres", "element_kw", "heater_meter_verification")
+    ):
+        result["learning_hardware_qualified"] = False
     backup = result.get(BACKUP_KEY)
     if isinstance(backup, dict):
         backup = {
@@ -841,6 +858,14 @@ def describe(key, current):
 
 
 LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {"adaptive_polling_enabled"}
+PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
+    "learned_planning_enabled",
+    "learning_hardware_qualified",
+}
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
+    "learned_planning_enabled",
+    "learning_hardware_qualified",
+}
 PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
     "time_zone",
     "daytime_start",

@@ -44,22 +44,32 @@ class MeasuredHistory:
         self.dirty = False
         self._saved_at = None
         self._saved_sessions = 0
+        self.meter_identity = ""
+        self.cycle = None
 
     @property
     def physics(self):
         return self.tank_litres * 4.186 / 3600
 
-    def configure(self, tank_litres, nominal_kw):
-        if (tank_litres, nominal_kw) != (self.tank_litres, self.nominal_kw):
+    def configure(self, tank_litres, nominal_kw, identity=None):
+        identity = self.meter_identity if identity is None else identity
+        if (tank_litres, nominal_kw, identity) != (
+            self.tank_litres,
+            self.nominal_kw,
+            self.meter_identity,
+        ):
             self.last = self.anchor = self.candidate = None
             self.dirty = True
+            self.cycle = None
         self.tank_litres, self.nominal_kw = tank_litres, nominal_kw
+        self.meter_identity = identity
 
     def to_dict(self):
         return {
             "version": 2,
             "tank_litres": self.tank_litres,
             "nominal_kw": self.nominal_kw,
+            "meter_identity": self.meter_identity,
             "integrated_kwh": self.integrated_kwh,
             "covered_seconds": self.covered_seconds,
             "gaps": self.gaps,
@@ -125,6 +135,11 @@ class MeasuredHistory:
                         }
                     )
         obj._saved_sessions = len(obj.sessions)
+        obj.meter_identity = (
+            data.get("meter_identity", "")
+            if isinstance(data.get("meter_identity", ""), str)
+            else ""
+        )
         return obj
 
     def counter_update(self, at, kwh, identity):
@@ -156,16 +171,35 @@ class MeasuredHistory:
                     "target_c": self.last[2][1],
                     "tank_litres": self.tank_litres,
                     "nominal_kw": self.nominal_kw,
+                    "model_version": 1,
+                    "meter_identity": self.meter_identity,
+                    "started_at": self.cycle["started_at"] if self.cycle else c["started_at"],
+                    "complete_start": bool(self.cycle and self.cycle["complete_start"]),
+                    "covered_cycle_energy_kwh": max(0, self.integrated_kwh - self.cycle["energy"])
+                    if self.cycle
+                    else None,
+                    "fit_rise_c": c["rise"],
+                    "fit_hours": c["hours"],
+                    "fit_energy_kwh": c["energy"],
+                    "fit_started_at": c["started_at"],
+                    "fit_ended_at": c["ended_at"],
+                    "temperature_start_c": c["temperature_start_c"],
+                    "temperature_end_c": c["temperature_end_c"],
+                    "quality": "clean_covered_fit",
+                    "possible_draw": False,
+                    "time_basis": "ha_receipt_not_device_acquisition",
                 }
             )
         self.candidate = None
         self.dirty = False
+        self.cycle = None
 
     def update(self, power, temperature, poll_at, mode, target, command_key=None, max_gap=120):
         if not power.valid:
             if self.last is not None:
                 self.gaps += 1
             self.last = self.anchor = self.candidate = None
+            self.cycle = None
             self.dirty = True
             return
         at, watts = power.observed_at, power.watts
@@ -185,12 +219,25 @@ class MeasuredHistory:
                 self.gaps += 1
                 self.anchor = self.candidate = None
                 self.dirty = self.last[1] >= self.nominal_kw * 2000 / 3
+                self.cycle = None
         key = (mode, target, command_key)
         if self.last and key != self.last[2]:
             self.anchor = self.candidate = None
             self.dirty = True
+            self.cycle = None
         if self.last and self.last[1] <= 100 and power.state == "on":
             self.dirty = False  # a new physically observed cycle
+            self.cycle = {
+                "started_at": at.isoformat(),
+                "complete_start": continuous,
+                "energy": self.integrated_kwh,
+            }
+        elif self.cycle is None and power.state == "on":
+            self.cycle = {
+                "started_at": at.isoformat(),
+                "complete_start": False,
+                "energy": self.integrated_kwh,
+            }
         if power.state == "off":
             self._end_session(at)
             self.anchor = None
@@ -221,10 +268,19 @@ class MeasuredHistory:
                     and 0.5 * self.physics <= slope <= 1.5 * self.physics
                 ):
                     if self.candidate is None:
-                        self.candidate = {"rise": 0.0, "energy": 0.0, "hours": 0.0}
+                        self.candidate = {
+                            "rise": 0.0,
+                            "energy": 0.0,
+                            "hours": 0.0,
+                            "started_at": a["at"].isoformat(),
+                            "temperature_start_c": a["temperature"],
+                        }
                     self.candidate["rise"] += rise
                     self.candidate["energy"] += energy
                     self.candidate["hours"] += a["on_hours"]
+                    self.candidate.update(
+                        ended_at=poll_at.isoformat(), temperature_end_c=temperature
+                    )
                 else:
                     self.candidate = None  # draw, stratification spike or incomplete coverage
                     self.dirty = True
@@ -246,6 +302,7 @@ class MeasuredHistory:
             and (target is None or s["target_c"] == target)
             and s.get("tank_litres") == self.tank_litres
             and s.get("nominal_kw") == self.nominal_kw
+            and (not self.meter_identity or s.get("meter_identity") == self.meter_identity)
         ]
         days = {_at(s["at"]).date() for s in rows}
         ready = len(rows) >= 10 and len(days) >= 3

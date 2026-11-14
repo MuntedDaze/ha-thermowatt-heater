@@ -334,6 +334,11 @@ class Executor:
             heater_state=state,
             reading_c=runtime.temperature_c,
             reading_at=runtime.poll_at,
+            learned_rates={
+                target: info["planning_rate_c_per_hour"]
+                for target in (45, 62, 70)
+                if (info := runtime.learning(now, target))["affects_control"]
+            },
             forecast=tuple(forecast),
             last_command_at=last,
             heater_meter_valid=runtime.power_budget is not None,

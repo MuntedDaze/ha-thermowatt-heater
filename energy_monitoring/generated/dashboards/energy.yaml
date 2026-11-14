@@ -300,8 +300,14 @@ views:
     - type: entities
       title: Learning readiness
       entities:
+      - entity: sensor.thermann_shadow_heating_learning_status
+        name: Learning eligibility
+      - entity: sensor.thermann_shadow_clean_heating_learning_sessions
+        name: Clean sessions in current cohort
       - entity: sensor.thermann_shadow_learned_heating_rate
         name: Learned rate (diagnostic)
+      - entity: sensor.thermann_shadow_held_out_heating_prediction_error
+        name: Held-out prediction error
   - type: grid
     cards:
     - type: heading

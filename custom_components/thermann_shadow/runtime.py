@@ -27,6 +27,7 @@ from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
 from .measurement import CircuitPower, circuit_power, energy_reading, power_balance
 from .performance import MeasuredHistory
+from .learning import evaluate, planning
 from .settings import BACKUP_KEY, describe, _DUAL_PROTECTED
 from .thermal import ThermalObserver
 
@@ -101,12 +102,18 @@ class ShadowRuntime:
         self.native_options = dict(DEFAULT_OPTIONS)
         self.history = MeasuredHistory(settings.tank_litres, settings.element_kw)
         self.history_store = None
+        self.history_persistent = False
         self.completion = {}
         self.telemetry = None
         self._event_key = None
 
     def set_native_reference(self, options):
         self.native_options = {**DEFAULT_OPTIONS, **options}
+        self.history.configure(
+            self.settings.tank_litres,
+            self.settings.element_kw,
+            self.native_options["heater_meter_verification"],
+        )
 
     def apply_options(self, options, sources):
         from .config import parse_options
@@ -134,6 +141,8 @@ class ShadowRuntime:
         if reset_needed:
             self.pv_samples.clear()
             self.history.last = self.history.anchor = self.history.candidate = None
+            self.history.cycle = None
+            self.history.dirty = True
             self.estimator.reset()
         if changed_mapping:
             self.boot = dt_util.utcnow()
@@ -144,6 +153,29 @@ class ShadowRuntime:
             # New policy must see the new tariff/settings, not the previous ones.
             self.executor.reset_policy()
         self.update(dt_util.utcnow())
+
+    def learning(self, now, target):
+        metrics = evaluate(
+            list(self.history.sessions),
+            target,
+            self.settings.tank_litres,
+            self.settings.element_kw,
+            self.history.meter_identity,
+            now,
+        )
+        rate, basis = planning(
+            metrics,
+            self.native_options["learned_planning_enabled"],
+            self.native_options["learning_hardware_qualified"],
+            self.circuit.valid,
+            self.history_persistent,
+        )
+        return {
+            **metrics,
+            "planning_rate_c_per_hour": rate,
+            "planning_basis": basis,
+            "affects_control": basis == "learned_conservative_lower_bound",
+        }
 
     def _reading(self, key, attribute=None, entity_id=None):
         entity_id = entity_id or self.sources.get(key)
@@ -333,7 +365,9 @@ class ShadowRuntime:
     async def _save_history(self):
         try:
             await self.history_store.async_save(self.history.to_dict())
+            self.history_persistent = True
         except Exception:  # noqa: BLE001 - diagnostic failure must not disrupt guards
+            self.history_persistent = False
             LOG.warning("Measured heating history could not be saved.")
 
     def record_event(self, now, obs, decision):
@@ -415,6 +449,7 @@ class ShadowRuntime:
                 for key, value in decision.plan.items()
             },
             "calibration": self.history.calibration(obs.target_c),
+            "learning": self.learning(now, int(self.native_options["normal_storage_c"])),
             "polling": self.executor.poll_shadow.summary(),
         }
 
@@ -467,6 +502,13 @@ class ShadowRuntime:
             else "unknown",
         )
         calibration = self.history.calibration(target)
+        learned = self.learning(now, int(self.native_options["normal_storage_c"]))
+        values.update(
+            learning_status=learned["planning_basis"],
+            learning_sessions=learned["sessions"],
+            prediction_error=learned["heldout_mae_minutes"],
+            planning_heating_rate=learned["planning_rate_c_per_hour"],
+        )
         values["learned_heating_rate"] = (
             calibration["on_kw"] / calibration["kwh_per_c"] if calibration["ready"] else None
         )

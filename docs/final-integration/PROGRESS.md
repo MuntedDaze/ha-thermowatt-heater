@@ -39,9 +39,17 @@ New draft PR will target `codex/economic-dual-storage` (PR #34).
    No token-lifetime claim. 18 new scheduling regressions and 141 focused
    schedule/upgrade/source-boundary tests pass. Full final suite/CI still needed.
    Stage-B actual combined HA and all eight workflows passed at `18fd378`.
-4. D: enrich target-labelled measured sessions and robust held-out prediction
-   diagnostics; gate any learned scheduling on real evidence/commissioning and
-   retain conservative nominal lower-rate fallback.
+4. D: implemented richer measured sessions, meter/model/target cohorts and robust
+   whole-day held-out validation (20 complete clean sessions / five days, at
+   least ten training and five held-out sessions). Both learning enable and
+   hardware qualification default false. Persisted history, verified CT and
+   error/coverage bounds are required. A target-specific lower rate is capped
+   at nominal/live-watt physics, so it cannot optimistically delay required heat.
+   Remaps/model/unit changes clear qualification/cohort authority. Diagnostic
+   errors/counts/basis are mapped into the dashboard. Loss/usefulness remain
+   explicitly unidentified without independent demand evidence. 30 focused
+   learning/history/public-installation cases pass; **1350 full tests pass**,
+   Ruff lint/format and both strict mypy targets pass.
    C2 configuration increment implemented before D: actual fresh setup uses HA's
    IANA zone, unverified flat placeholder rates, no forecast/boost authority and
    a 62-degree initial baseline awaiting compliance/appliance verification.
@@ -53,7 +61,8 @@ New draft PR will target `codex/economic-dual-storage` (PR #34).
    disabled forecasts do not create outage alerts. All command guards remain.
    1342 full tests passed and strict model mypy/Ruff passed; 14 new general
    tariff tests cover zones, seasons, service, no-solar commands and cheap windows.
-   Research and unsupported complex products: TARIFFS.md. Final CI still required.
+   Research and unsupported complex products: TARIFFS.md. All eight workflows
+   passed for C2 `224c40b` and C `7b775b6`; final-head CI is still required.
 5. E: comparative polling and full-week end-to-end scenarios including owner,
    restart, cloud/meter failures, CT-free and CT-measured; equal service/terminal
    energy, request categories and detection/error trade-offs must be explicit.

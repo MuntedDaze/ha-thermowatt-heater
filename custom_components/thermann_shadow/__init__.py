@@ -90,7 +90,11 @@ async def async_setup_entry(hass, entry):
         runtime.history = MeasuredHistory.from_dict(saved_history)
     except Exception:  # noqa: BLE001 - observations remain usable without learned history
         runtime.history = MeasuredHistory()
-    runtime.history.configure(settings.tank_litres, settings.element_kw)
+    runtime.history.configure(
+        settings.tank_litres,
+        settings.element_kw,
+        entry.options.get("heater_meter_verification", ""),
+    )
     try:
         runtime.thermal = ThermalObserver.from_dict(await runtime.thermal_store.async_load())
     except Exception:  # noqa: BLE001 - diagnostics only; start empty
