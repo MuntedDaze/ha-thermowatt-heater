@@ -78,11 +78,10 @@ MEASURED_SPAN = timedelta(minutes=30)  # the measured surplus stands in for the 
 SCAN_STEP = timedelta(minutes=15)
 SCAN_HORIZON = timedelta(days=4)
 SAMPLE_SLACK = timedelta(seconds=30)  # timer drift allowed at the start of a sample window
-# 0.9.1 (owner-approved, audit H1): the ONLY command exempt from the command
-# spacing. A peak withdrawal is the import protection itself; holding it for
-# the spacing after a start kept the element on peak grid for up to 15 minutes.
-# Every other command, including the restart after it, still waits.
-SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn"})
+# A protective OFF when solar is lost or peak grid metering disappears must
+# not be held by spacing after a recent solar start. Every other command,
+# including restarting solar heating, still observes the 15-minute spacing.
+SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn", "peak_meter_unavailable"})
 
 
 @dataclass(frozen=True)
@@ -453,6 +452,14 @@ class SimplePolicy:
         if state == STORAGE:
             if measured is None:
                 return BASELINE, "solar_opportunity_ended", 5, plan
+            # This is discretionary heating, unlike the weekday deadline.
+            # A forecast of returning sun must not permit prolonged near-full
+            # element import. Allow the part-load grid import implicit in the
+            # economic 1 kW solar floor, plus the shared 0.2 kW tolerance.
+            max_import = max(0.0, s.element_kw - s.solar_floor_kw + s.peak_import_tolerance_kw)
+            if self.sustained(now, s.withdraw, lambda x: x[1] > max_import):
+                plan["optional_max_grid_import_kw"] = round(max_import, 2)
+                return BASELINE, "solar_opportunity_import_withdrawn", 5, plan
             faded = self.sustained(now, s.withdraw, lambda x: x[2] < s.solar_floor_kw)
             ahead = self.surplus_profile(now, now + timedelta(hours=1), snap.forecast, None)
             returns = sum(ahead) / len(ahead) >= s.solar_floor_kw
