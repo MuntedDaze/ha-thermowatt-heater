@@ -178,7 +178,8 @@ def feed(policy, start, minutes, grid_kw, element=False):
 
 def test_h1_protective_peak_off_is_exempt_in_the_policy():
     assert sp.SPACING_EXEMPT_REASONS == ctl.SPACING_EXEMPT_REASONS == {
-        "peak_solar_withdrawn", "peak_meter_unavailable"
+        "peak_solar_withdrawn",
+        "peak_meter_unavailable",
     }
     p = sp.SimplePolicy(S, TARIFFS)
     now = feed(p, at(MON, 9, 0), 6, 2.5, element=True)  # importing 2.5 kW in the peak
