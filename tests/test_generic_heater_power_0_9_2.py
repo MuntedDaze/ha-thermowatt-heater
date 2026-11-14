@@ -39,9 +39,7 @@ def test_peak_ct_outage_issues_protective_off_despite_recent_start():
     p = sp.SimplePolicy(S, TARIFFS)
     now = at(16, 9)
     p.add_meter(now, 0.1, False)
-    d = p.decide(
-        snap(now, STORE, last_command_at=now - 2 * MIN, heater_power_ready=False)
-    )
+    d = p.decide(snap(now, STORE, last_command_at=now - 2 * MIN, heater_power_ready=False))
     assert (d.state, d.reason, d.command) == (
         OFF,
         "peak_heater_power_unavailable",
