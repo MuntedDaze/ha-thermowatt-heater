@@ -20,6 +20,13 @@ Last updated: 15 Nov 2026. Update this file at the end of each working session.
 - CI job running Home Assistant `check_config` on the package, networking disabled.
 - README (install, verification checks, limits) and `ENTITY_CONTRACT.md`.
 
+- Final review (15 Nov 2026) against Codex's `codex/smart-controller-next` at `b9620a8`:
+  - Contract corrected: the controller's `heater_power` / `heater_energy` map to the raw meter entities, not to `sensor.em_hot_water_power` (the wrapper does not re-report a steady value and hides the sign).
+  - Fixed: a missed start after a meter drop-out could pair the next stop with the previous run's start.
+  - Circuit readings now accept W or kW and Wh or kWh, as the controller does.
+  - All 23 controller and 5 bridge entity IDs in the map exist at `1b29be1` and at `b9620a8`.
+- CI on PR #32: all four workflows passed on the first push (owner-verified), including `check_config` on HA 2026.10.4 and 2026.11.1 with 0 and 3 CT circuits.
+
 ## Not done / not verified
 
 - Nothing is installed in Home Assistant. No template has run inside a real Home Assistant with live entities.

@@ -21,7 +21,7 @@ Power is in W, energy in kWh, money in AUD.
 | `sensor.em_grid_import_power`, `sensor.em_grid_export_power` | Signed meter split into two non-negative values | mean |
 | `sensor.em_solar_power`, `sensor.em_house_power` | Clamped at zero | mean |
 | `sensor.em_solar_self_consumed_power` | solar − export | mean |
-| `sensor.em_solar_forecast_power` | EMHASS current-slot forecast, state only | mean |
+| `sensor.em_solar_forecast_power` | EMHASS current-slot forecast, state only. Present only when `solar.forecast_power` is mapped | mean |
 | `sensor.em_tracked_power`, `sensor.em_untracked_power` | Sum of non-overlapping measured loads; house − tracked. Attribute `raw_residual_w` is the unclamped difference | mean |
 | `sensor.em_tariff_period` | `peak` or `off_peak` | none |
 | `sensor.em_import_price`, `sensor.em_feed_in_price` | AUD/kWh now; unavailable until rates are set | mean |
@@ -35,8 +35,8 @@ Power is in W, energy in kWh, money in AUD.
 
 | Entity | Meaning |
 | --- | --- |
-| `sensor.em_<key>_power` | Absolute circuit power |
-| `sensor.em_<key>_energy` | The meter's kWh total, or the integral of power when it has none |
+| `sensor.em_<key>_power` | Absolute circuit power in W (source may report W or kW) |
+| `sensor.em_<key>_energy` | The meter's total in kWh (source may report Wh or kWh), or the integral of power when it has none |
 
 ### Hot water, once its CT is mapped
 
@@ -64,7 +64,7 @@ Power is in W, energy in kWh, money in AUD.
 | `status_age_start_s`, `status_age_end_s` | Age of that cloud reading at each end: use it to weight or discard the temperature |
 | `tariff_period_at_end` | `peak` or `off_peak` |
 
-Any figure whose inputs were unavailable is `None`. Thermostat micro-cycling produces several short records; a consumer should merge runs separated by less than its own threshold.
+Any figure whose inputs were unavailable is `None`. While grid power is unavailable the grid/solar split pauses but the circuit energy does not, so `grid_kwh + solar_kwh` can be less than the state. If the meter drops out so that a start is missed, the following stop records nothing: a run is lost rather than invented. Thermostat micro-cycling produces several short records; a consumer should merge runs separated by less than its own threshold.
 
 **Retention:** the Recorder keeps these states for its purge period (10 days by default); long-term statistics keep only the numeric totals. A learning module that needs more history should consume each record when the state changes and keep its own fitted parameters, or the owner can raise `recorder.purge_keep_days`.
 
@@ -103,15 +103,44 @@ Useful later, not yet mapped anywhere (say so here before adding them, and a map
 | The solar forecast value the plan used, and its age | Forecast-versus-actual per decision |
 | Plan summary as one sentence | Overview tile |
 
-## 4. What the controller can take from this package
+## 4. The controller's `heater_power` and `heater_energy` inputs
+
+**Map both to the meter's own entities, not to an `em_` sensor.** The controller and this package each read the same raw entity independently:
+
+| Controller source | Entity to use | Same entity in `entity_map.yaml` |
+| --- | --- | --- |
+| `heater_power` | The meter's hot-water channel active power (W or kW) | `circuits[hot_water].power` |
+| `heater_energy` (optional) | The meter's cumulative energy for that channel (Wh or kWh) | `circuits[hot_water].energy` |
+
+Why not `sensor.em_hot_water_power`:
+
+- **Freshness.** The controller requires a report within `grid_max_age_seconds` (120 s), including at a steady 0 W. A template sensor is re-evaluated only when its source value changes, so the wrapper stops reporting while the element is idle and the controller would treat it as stale.
+- **Sign.** The wrapper takes the absolute value so a reversed clamp still reads as consumption. The controller's commissioning deliberately rejects negative watts; the wrapper would hide that.
+- **Independence.** The controller then needs nothing from this package, and nothing from the optional air-conditioner or oven channels. The hot-water sensors here are identical whether or not those channels are mapped (tested).
+
+Both sides accept the same units (W or kW; Wh or kWh) and use the same marginal attribution: grid share = min(element power, grid import), remainder solar.
+
+## 5. What else the controller can take from this package
+
+These are for display, reporting and learning, never as a control input with a freshness requirement.
 
 | Need | Use |
 | --- | --- |
-| Measured element power (replaces inference) | `sensor.em_hot_water_power`, `binary_sensor.em_hot_water_element_on` |
 | Energy per heating run, for the thermal model | `sensor.em_hot_water_last_cycle` |
-| Base load excluding hot water, measured | `sensor.em_house_power` − `sensor.em_hot_water_power` |
+| Debounced "element drawing power" for display | `binary_sensor.em_hot_water_element_on` |
 | Marginal cost of heating now | `sensor.em_import_price`, `sensor.em_feed_in_price`, `sensor.em_grid_export_power` |
 | Whether the inputs can be trusted | `sensor.em_monitoring_health`, `sensor.em_monitoring_quality` |
 | Forecast error | Long-term statistics of `sensor.em_solar_forecast_power` and `sensor.em_solar_power` |
 
-The controller's map option `heater_power` (`OPTIONAL_SOURCES` in `config.py`) is the natural place to point at `sensor.em_hot_water_power`. That is a controller change and is not made here.
+## 6. Behaviour when a source is unavailable
+
+| Source state | Result |
+| --- | --- |
+| Grid, solar, house or circuit power `unavailable`, `unknown` or non-numeric | The dependent `em_` power sensor is `unavailable`, never 0. Integrated energy holds its value and resumes. |
+| A smart plug unavailable | It adds nothing to `em_tracked_power`, so its load shows as untracked; Health lists it under `missing`. |
+| Import or export meter unavailable | Cost and tariff totals hold. The next good reading is compared with the last good one, so energy metered during the gap is still counted, at the price in force when the meter returns. |
+| A meter total goes backwards or jumps more than 20 kWh in one step | Treated as a reset or glitch: the baseline moves and nothing is added. |
+| A rate is unset or zero | The energy is counted in `unpriced_kwh`, not costed at zero silently; Health reads `degraded`. |
+| Hot-water CT unavailable | Element sensor is `unavailable`. A run still on when the meter returns is closed at its real stop; a run that ended during the outage is not recorded. |
+| An entity in the map does not exist | Same as unavailable, and listed under `missing`. |
+| A core source not reported for 300 s | Health reads `critical` and lists it under `stale`. |

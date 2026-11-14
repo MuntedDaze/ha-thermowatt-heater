@@ -56,7 +56,9 @@ A Home Assistant package and dashboard for solar, grid, tariff cost, hot water, 
 2. For any smart plug wired downstream of a clamped circuit, set its `circuit` to that circuit's key.
 3. Regenerate, copy both files again, restart.
 
-Nothing depends on the Shelly model. The package wraps each circuit in its own `sensor.em_<key>_power` and `sensor.em_<key>_energy`, so replacing the meter later keeps the history. A reversed clamp still reads as consumption.
+The controller's own `heater_power` input should be mapped to the same raw meter entity, not to `sensor.em_hot_water_power` (see `ENTITY_CONTRACT.md`, section 4). That is a controller setting and is not changed here.
+
+Nothing depends on the Shelly model. Power may be reported in W or kW and energy in Wh or kWh. The package wraps each circuit in its own `sensor.em_<key>_power` and `sensor.em_<key>_energy`, so replacing the meter later keeps the history. A reversed clamp still reads as consumption.
 
 ## Verification checks
 
