@@ -35,8 +35,11 @@ change. A separate draft PR targets `codex/smart-controller-next`.
    controller 0.10.0. Full suite passed (1140 cases before two added polling
    cases); focused public-installation/polling cases passed, Ruff, strict mypy
    and compileall passed. Actual HA/native/Supervisor matrices still await CI.
-4. Pending: comparative simulations, public docs, installation/upgrade/rollback,
-   household example, redacted public-distribution review and licence options.
+4. In progress: 11 comparative cases / 33 replays implemented, including direct
+   70, later top-up, cloudy/patchy/failed forecasts, draw, late boundary, weekends
+   and CT-free operation. Equal service, terminal energy and request assumptions
+   are explicit; conservation/reproducibility regressions pass. Public docs,
+   installation/upgrade/rollback, household example and hygiene review pending.
 5. Pending: full local/CI verification, draft PR and final handoff.
 
 ## Resume
@@ -45,6 +48,11 @@ Completed protocol commit: `fd40b33`. Policy/settings commit: `1972b16`.
 Increment 3 commit subject: `Preserve upgrades and expose target-aware public configuration`.
 Continue with comparative simulations and public documentation, then verify the
 draft PR's complete CI matrix. No production action has been performed.
+Draft PR: #34, target `codex/smart-controller-next`; increment 3: `201b870`.
+Initial Python CI passed on 3.12/3.13/3.14. Actual HA found a harness assertion
+that assumed an alternative always differed from the recommendation, despite
+preserved historical defaults. Corrected to verify the actual flag accurately;
+both HA matrices need rerunning. Native/Supervisor jobs still in progress.
 New phase-local checkpoint is this file; retain PR #33's checkpoint unchanged.
 
 Inspect branch/status/log first; never switch or alter another worktree. Continue

@@ -403,7 +403,7 @@ async def check_settings_services(hass, entry, runtime, entity_for):
         else:
             assert state.state == expected_state(meta.kind, value), (key, state.state)
         assert state.attributes["current_value"] == stored
-        assert state.attributes["changed_from_recommended"] is True
+        assert state.attributes["changed_from_recommended"] is (stored != DEFAULT_OPTIONS[key]), key
         assert runtime is hass.data["thermann_shadow"][entry.entry_id]  # no reload
         await set_setting(hass, entity_id, meta.kind, current)
         assert entry.options[key] == current or float(entry.options[key]) == current
