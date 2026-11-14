@@ -425,7 +425,9 @@ def test_weekend_session_survives_brief_cloud_but_stops_sustained_import():
     # for OPTIONAL weekend storage; the measured economics take precedence.
     d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 2.5)))
     assert (d.state, d.reason, d.command) == (
-        BASE, "solar_opportunity_import_withdrawn", "Manual:45"
+        BASE,
+        "solar_opportunity_import_withdrawn",
+        "Manual:45",
     )
     assert d.plan["optional_max_grid_import_kw"] == pytest.approx(2.2)
 
@@ -436,7 +438,9 @@ def test_weekend_opportunity_ends_when_solar_and_forecast_both_fade():
     now = feed(p, t0 + MIN, 8, 2.7, element=True)
     d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 0.3)))
     assert (d.state, d.reason, d.command) == (
-        BASE, "solar_opportunity_import_withdrawn", "Manual:45"
+        BASE,
+        "solar_opportunity_import_withdrawn",
+        "Manual:45",
     )
 
 
