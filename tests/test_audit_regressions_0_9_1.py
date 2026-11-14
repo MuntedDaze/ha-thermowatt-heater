@@ -163,7 +163,7 @@ def test_h1_every_other_command_still_respects_the_spacing(cloudy_weekday):
         gap = datetime.fromisoformat(later["created_at"]) - datetime.fromisoformat(
             earlier["created_at"]
         )
-        if later["reason"] != "peak_solar_withdrawn":
+        if later["reason"] not in sp.SPACING_EXEMPT_REASONS:
             assert gap >= timedelta(minutes=15), (earlier["payload"], later["payload"], gap)
 
 
@@ -176,8 +176,10 @@ def feed(policy, start, minutes, grid_kw, element=False):
     return start + minutes * MIN
 
 
-def test_h1_only_the_peak_withdrawal_is_exempt_in_the_policy():
-    assert sp.SPACING_EXEMPT_REASONS == ctl.SPACING_EXEMPT_REASONS == {"peak_solar_withdrawn"}
+def test_h1_protective_peak_off_is_exempt_in_the_policy():
+    assert sp.SPACING_EXEMPT_REASONS == ctl.SPACING_EXEMPT_REASONS == {
+        "peak_solar_withdrawn", "peak_meter_unavailable"
+    }
     p = sp.SimplePolicy(S, TARIFFS)
     now = feed(p, at(MON, 9, 0), 6, 2.5, element=True)  # importing 2.5 kW in the peak
     d = p.decide(snap(now, STORE, last_command_at=now - 2 * MIN))
@@ -187,14 +189,14 @@ def test_h1_only_the_peak_withdrawal_is_exempt_in_the_policy():
     blocked = p.decide(snap(later, OFF, reading=45, last_command_at=later - 11 * MIN))
     assert (blocked.reason, blocked.command) == ("command_spacing", None)
     assert blocked.plan["wanted"] == STORE
-    # Ordinary OFF commands still wait: the park, a pause and a meter loss.
+    # Ordinary OFF commands still wait: the pre-peak park and an economic pause.
     q = sp.SimplePolicy(S, TARIFFS)
     lead = at(MON, 16, 58)
     d = q.decide(snap(lead, STORE, last_command_at=lead - 5 * MIN))
     assert (d.reason, d.command) == ("command_spacing", None)
     peak = at(MON, 18, 0)
     d = q.decide(snap(peak, STORE, last_command_at=peak - 5 * MIN))  # no meter samples
-    assert d.plan["wanted"] == OFF and (d.reason, d.command) == ("command_spacing", None)
+    assert (d.state, d.reason, d.command) == (OFF, "peak_meter_unavailable", "off")
 
 
 def controller_ready(now, mode="Off", target=70.0):
@@ -242,10 +244,11 @@ def published(effects):
     return [effect.payload for effect in effects if effect.kind == "publish"]
 
 
-def test_h1_the_controller_gate_exempts_only_the_peak_withdrawal():
+def test_h1_the_controller_gate_exempts_protective_peak_off_reasons():
     now = at(MON, 9, 0)
     for reason, expected in (
         ("peak_solar_withdrawn", ["off@70"]),
+        ("peak_meter_unavailable", ["off@70"]),
         ("peak_ahead_no_qualified_solar", []),
         ("storage_paused_for_cheaper_window", []),
         ("holiday", []),
