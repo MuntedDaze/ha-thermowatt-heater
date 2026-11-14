@@ -23,7 +23,7 @@ from homeassistant.util import dt as dt_util
 from .config import DEFAULT_OPTIONS, DEFAULT_PV_AC
 from .forecast import build_forecast
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
-from .model import Reading, _fresh, _power, number, tariff_at, timestamp
+from .model import ELEMENT_KW, Reading, _fresh, _power, number, tariff_at, timestamp
 from .settings import BACKUP_KEY, describe
 from .thermal import ThermalObserver
 
@@ -67,6 +67,7 @@ class ShadowRuntime:
         self.heater = HeaterState()
         self.forecast = None
         self.grid_import_kw = None  # signed: import positive; None when stale/unverified
+        self.heater_power_kw = None  # fresh, plausibly metered local circuit power
         self.temperature_c = None
         self.poll_at = None
         self.warnings = []
@@ -190,7 +191,14 @@ class ShadowRuntime:
         house_kw = self._kw("house", now)
         if house_kw is None and pv_ac_now is not None and export_kw is not None:
             house_kw = max(0.0, pv_ac_now - export_kw)
-        heater_power = self._kw("heater_power", now) if self.sources.get("heater_power") else None
+        heater_mapped = bool(self.sources.get("heater_power"))
+        heater_power = self._kw("heater_power", now) if heater_mapped else None
+        if heater_power is not None and not 0 <= heater_power <= ELEMENT_KW * 1.4:
+            heater_power = None  # backwards CT polarity or shared/incorrect circuit
+            self.warnings.append("heater_power_implausible_check_ct_circuit")
+        elif heater_mapped and heater_power is None:
+            self.warnings.append("heater_power_stale_or_unavailable")
+        self.heater_power_kw = heater_power
         status_raw = mode_state.attributes.get("WaterHeaterSts") if mode_state else None
         self.heater = self.estimator.update(
             now,
@@ -258,6 +266,12 @@ class ShadowRuntime:
             else None,
             heater_element_state=self.heater.state,
             heater_state_confidence=self.heater.confidence,
+            heater_power_kw=None
+            if self.heater_power_kw is None
+            else round(self.heater_power_kw, 3),
+            heater_power_source_ready=None
+            if not self.sources.get("heater_power")
+            else self.heater_power_kw is not None,
             storage_target_c=70,
         )
         base, _ = base_load(house_kw, self.heater)
@@ -298,6 +312,11 @@ class ShadowRuntime:
             "local_evaluation_seconds": 60,
             "grid_sign": "import_positive" if self.settings.import_positive else "export_positive",
             "meter_sign_load_test_verified": self.settings.meter_verified,
+            "heater_power_source": self.sources.get("heater_power") or None,
+            "heater_power_kw": self.heater_power_kw,
+            "heater_power_source_ready": None
+            if not self.sources.get("heater_power")
+            else self.heater_power_kw is not None,
             "tariff_contract_verified": self.settings.tariff_verified,
             "tariff_clock": self.settings.tariff_clock,
             "status_fresh": status_ok,
