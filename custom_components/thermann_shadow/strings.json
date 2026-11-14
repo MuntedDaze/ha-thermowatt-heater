@@ -98,7 +98,10 @@
           "controller_confirmation_timeout_minutes": "Command confirmation timeout",
           "controller_max_requests_per_day": "Cloud request budget per day",
           "controller_notify_service": "Notification service",
-          "heater_meter_verification": "Commissioned hot-water power entity and unit"
+          "heater_meter_verification": "Commissioned hot-water power entity and unit",
+          "adaptive_polling_shadow": "Compare adaptive polling (shadow only)",
+          "adaptive_poll_heating_minutes": "Shadow heating poll maximum",
+          "adaptive_poll_stable_minutes": "Shadow stable poll maximum"
         }
       }
     },

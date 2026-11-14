@@ -319,6 +319,7 @@ class ShadowRuntime:
             last.get("id"),
             last.get("status"),
             self.executor.controller.state,
+            self.executor.poll_shadow.last_would_poll,
         )
         if key == self._event_key:
             return
@@ -373,6 +374,7 @@ class ShadowRuntime:
             },
             "completion": dict(self.completion),
             "calibration": self.history.calibration(),
+            "polling": self.executor.poll_shadow.summary(),
         }
 
     # ------------------------------------------------------------------ displays

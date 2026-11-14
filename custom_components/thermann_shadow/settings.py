@@ -444,6 +444,32 @@ CATALOG["heater_meter_verification"] = Setting(
     "Remapping the power sensor clears this record; no relay control is used.",
     kind="text",
 )
+CATALOG.update(
+    {
+        "adaptive_polling_shadow": Setting(
+            "Compare adaptive polling (shadow only)",
+            "System",
+            "Record bounded would-be reads only. Actual bridge polling, authentication, budgets and confirmations are unchanged.",
+            kind="switch",
+        ),
+        "adaptive_poll_heating_minutes": Setting(
+            "Shadow heating poll maximum",
+            "System",
+            "Advisory heating cap, at most 60 minutes. Does not change actual reads.",
+            15,
+            60,
+            "min",
+        ),
+        "adaptive_poll_stable_minutes": Setting(
+            "Shadow stable poll maximum",
+            "System",
+            "Advisory stable cap, at most 90 minutes. Vendor inactivity expiry remains unverified.",
+            30,
+            90,
+            "min",
+        ),
+    }
+)
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety
@@ -516,6 +542,9 @@ PRESERVE_ON_RESTORE = frozenset(
         # at all and is a commissioning requirement, not a preference.
         "forecast_enabled",
         "heater_meter_verification",
+        "adaptive_polling_shadow",
+        "adaptive_poll_heating_minutes",
+        "adaptive_poll_stable_minutes",
     }
 )
 # 0.7.1: settings that change WHERE commands go, WHETHER they may be sent, HOW

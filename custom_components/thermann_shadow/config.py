@@ -102,6 +102,9 @@ DEFAULT_OPTIONS = {
     "controller_execution_latency_minutes": 30.0,
     "controller_notify_service": "",
     "heater_meter_verification": "",  # commissioned entity_id|W (or |kW); no default authority
+    "adaptive_polling_shadow": False,
+    "adaptive_poll_heating_minutes": 60.0,
+    "adaptive_poll_stable_minutes": 90.0,
 }
 # 0.7.1 (settings audit): ranges a saved value must respect. Values saved by
 # older versions outside them are brought inside once, by the entry migration
@@ -205,6 +208,7 @@ def parse_options(options):
         "shower_time_enabled",
         "controller_bridge_qualified",
         "controller_three_state_qualified",
+        "adaptive_polling_shadow",
     ):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
@@ -215,6 +219,11 @@ def parse_options(options):
         if not isinstance(values[key], str) or len(values[key]) > 64:
             raise ValueError("controller_setting_invalid")
     stamp = values["heater_meter_verification"]
+    if not (
+        15 <= number(values["adaptive_poll_heating_minutes"]) <= 60
+        and 30 <= number(values["adaptive_poll_stable_minutes"]) <= 90
+    ):
+        raise ValueError("polling_bounds_invalid")
     if not isinstance(stamp, str) or (
         stamp and not re.fullmatch(r"sensor\.[a-z0-9_]+\|(W|kW)", stamp)
     ):

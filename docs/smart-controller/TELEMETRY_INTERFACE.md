@@ -35,6 +35,7 @@ grid and inverter entities in Recorder for the raw timeline. No custom raw DB.
 | `controller` | `state`, `reason`, `wanted`, `operating_mode`, `last_command` (pending or latest resolved intent) |
 | `completion` | `state`, `basis`, `continuous_minutes_low/high`, `earliest/latest`, `reported_target_reached` |
 | `calibration` | clean `sessions`, `days`, `ready`, `kwh_per_c`, `on_kw`, `affects_control: false` |
+| `polling` | opt-in shadow reason/due/counts, actual fixed schedule unchanged; see POLLING_SHADOW.md |
 
 Cloud time is **bridge receipt time**, not verified device-side acquisition.
 One bottom probe, target selection, status bit and physical consumption are

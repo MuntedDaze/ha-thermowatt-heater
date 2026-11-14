@@ -41,6 +41,7 @@ from .controller import (
     refresh_topic,
 )
 from .model import HOBART
+from .polling import PollContext, PollingShadow
 from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
 
 LOG = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ class Executor:
         self.save_failed = False
         self._saved: dict | None = None
         self._refresh_wanted = False
+        self.poll_shadow = PollingShadow()
         self.reset_policy()
         self.configure(entry.options)
 
@@ -92,6 +94,17 @@ class Executor:
         values = {**DEFAULT_OPTIONS, **options}
         self.cfg = controller_config(values, self._poll_minutes(), self._expected_topic())
         self.runtime.set_native_reference(options)
+        shadow_settings = (
+            values["adaptive_polling_shadow"],
+            values["adaptive_poll_heating_minutes"],
+            values["adaptive_poll_stable_minutes"],
+        )
+        if shadow_settings != (
+            self.poll_shadow.enabled,
+            self.poll_shadow.heating_minutes,
+            self.poll_shadow.stable_minutes,
+        ):
+            self.poll_shadow = PollingShadow(*shadow_settings)
         self.notify_service = str(values["controller_notify_service"]).strip()
 
     def reset_policy(self) -> None:
@@ -338,6 +351,29 @@ class Executor:
                     await self._notify(effect)
                 elif effect.kind == "resolve":
                     self._dismiss(effect.key)
+            actions = [
+                self.runtime.values.get("next_tariff_change"),
+                decision.plan.get("best_start"),
+                decision.plan.get("latest_start"),
+            ]
+            actions = [at for at in actions if at is not None and at >= now]
+            self.poll_shadow.observe(
+                PollContext(
+                    now=now,
+                    status_at=obs.poll_at,
+                    heating=(self.runtime.circuit.state == "on")
+                    if self.runtime.circuit.valid
+                    else None,
+                    command_at=self.controller.last_command_at(),
+                    confirming=self.controller.state == CONFIRMING,
+                    uncertain=self.runtime.temperature_c is None,
+                    decision_at=min(actions) if actions else None,
+                    completion_at=_dt(self.runtime.completion.get("earliest")),
+                    cloud_ready=obs.cloud_health == "ok"
+                    and obs.auth_mode == "authorized"
+                    and not obs.cooldown_seconds,
+                )
+            )
             self.runtime.record_event(now, obs, decision)
         self._notify_listeners()
 

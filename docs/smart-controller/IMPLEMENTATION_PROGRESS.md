@@ -29,7 +29,9 @@ Keep untracked `review-1b29be1/` and `uv.lock` untouched.
    draw/gap/command-change exclusion and bounded save cadence; conditional ETA
    ranges with idle/unknown suppression. Calibration requires ≥10 independent
    sessions on ≥3 days and remains diagnostic pending held-out/hardware evidence.
-4. Pending: bounded adaptive polling shadow comparison; fixed polling unchanged.
+4. Implemented: one advisory scheduler, explicit flag default off; bounded
+   heating/stable caps, consequential reasons, command-status reuse, deduplication
+   and guard-aware blockage. Actual fixed bridge polling/auth/budgets unchanged.
 5. Pending: economic comparison scenarios and guarded planning improvements.
 6. Interface/documentation only: Fable implements dashboards separately.
 
@@ -79,6 +81,15 @@ contract. Ordinary history writes are ≤15-minute cadence plus session completi
 and unload; an abrupt crash may lose unsaved integrated intervals. Native meter
 counter/HA Recorder remain primary. No raw DB or dashboard changes.
 Increment 3 commit subject: `Collect measured heating history and controller telemetry`.
+Commit: `ac6643d`.
+
+Increment 4: **1041 passed**, Python 3.12; Ruff lint/format, both strict mypy
+targets and compileall pass. Comparison-enabled and disabled mocked bridge runs
+produce identical HTTP and command counts. Injected timing tests cover caps,
+duplicate callbacks, command-read reuse, imminent decisions, future status and
+guard blockage. Real missed-event/detection-delay claims need independent event
+truth; shadow telemetry explicitly labels that limitation. See POLLING_SHADOW.md.
+Increment 4 commit subject: `Compare bounded adaptive polling without changing cloud traffic`.
 
 Isolation independently verified: Fable's registered worktree is
 `C:/Users/jacob/Documents/ChatGPT/ha-thermowatt-heater-fable`, branch
