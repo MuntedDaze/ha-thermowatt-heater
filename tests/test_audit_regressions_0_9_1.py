@@ -183,6 +183,7 @@ def test_h1_protective_peak_off_is_exempt_in_the_policy():
         == {
             "peak_solar_withdrawn",
             "peak_meter_unavailable",
+            "peak_heater_power_unavailable",
         }
     )
     p = sp.SimplePolicy(S, TARIFFS)
@@ -255,6 +256,7 @@ def test_h1_the_controller_gate_exempts_protective_peak_off_reasons():
     for reason, expected in (
         ("peak_solar_withdrawn", ["off@70"]),
         ("peak_meter_unavailable", ["off@70"]),
+        ("peak_heater_power_unavailable", ["off@70"]),
         ("peak_ahead_no_qualified_solar", []),
         ("storage_paused_for_cheaper_window", []),
         ("holiday", []),
