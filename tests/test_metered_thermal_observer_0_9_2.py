@@ -13,17 +13,27 @@ thermal = importlib.import_module(f"{m.__package__}.thermal")
 def test_verified_ct_integrates_actual_watts_not_nominal_three_kw():
     obs = thermal.ThermalObserver()
     start = local(hour=11)
-    obs.update(start, 45, start, "off", "verified", "Manual", heater_power_kw=0, meter_configured=True)
+    obs.update(
+        start, 45, start, "off", "verified", "Manual", heater_power_kw=0, meter_configured=True
+    )
     for minute in range(1, 121):
         at = start + timedelta(minutes=minute)
         reading_at = at if minute % 30 == 0 else start + timedelta(minutes=(minute // 30) * 30)
         temp = 45 + round(minute / 120 * 17)
         obs.update(
-            at, temp, reading_at, "on", "verified", "Manual",
-            heater_power_kw=2.6, meter_configured=True,
+            at,
+            temp,
+            reading_at,
+            "on",
+            "verified",
+            "Manual",
+            heater_power_kw=2.6,
+            meter_configured=True,
         )
     done = start + timedelta(minutes=121)
-    obs.update(done, 63, done, "off", "verified", "Manual", heater_power_kw=0, meter_configured=True)
+    obs.update(
+        done, 63, done, "off", "verified", "Manual", heater_power_kw=0, meter_configured=True
+    )
     assert len(obs.sessions) == 1
     session = obs.sessions[0]
     assert session["energy_source"] == "circuit_meter"
@@ -37,17 +47,32 @@ def test_verified_ct_integrates_actual_watts_not_nominal_three_kw():
 def test_meter_outage_excludes_incomplete_session_from_training():
     obs = thermal.ThermalObserver()
     start = local(hour=12)
-    obs.update(start, 45, start, "off", "verified", "Manual", heater_power_kw=0, meter_configured=True)
+    obs.update(
+        start, 45, start, "off", "verified", "Manual", heater_power_kw=0, meter_configured=True
+    )
     for minute in range(1, 32):
         at = start + timedelta(minutes=minute)
         obs.update(
-            at, 48 if minute >= 30 else 45,
+            at,
+            48 if minute >= 30 else 45,
             start + timedelta(minutes=30) if minute >= 30 else start,
-            "on", "verified", "Manual", heater_power_kw=2.8, meter_configured=True,
+            "on",
+            "verified",
+            "Manual",
+            heater_power_kw=2.8,
+            meter_configured=True,
         )
     lost = start + timedelta(minutes=32)
-    obs.update(lost, 48, start + timedelta(minutes=30), "unknown", "low", "Manual",
-               heater_power_kw=None, meter_configured=True)
+    obs.update(
+        lost,
+        48,
+        start + timedelta(minutes=30),
+        "unknown",
+        "low",
+        "Manual",
+        heater_power_kw=None,
+        meter_configured=True,
+    )
     end = start + timedelta(minutes=60)
     obs.update(end, 53, end, "off", "verified", "Manual", heater_power_kw=0, meter_configured=True)
     assert len(obs.sessions) == 1
