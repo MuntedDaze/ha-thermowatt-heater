@@ -85,7 +85,9 @@ OPTIONAL_REASONS = frozenset({"peak_solar_qualified", "solar_opportunity"})
 ESSENTIAL_EXTRA_COMMANDS = 6
 # Both protective peak OFF reasons bypass spacing, matching the pure policy.
 # A new heating start and all other reasons still respect command spacing.
-SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn", "peak_meter_unavailable"})
+SPACING_EXEMPT_REASONS = frozenset(
+    {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_power_unavailable"}
+)
 FORECAST_ALERT_AFTER = timedelta(minutes=60)
 BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
 BRIDGE_UNEXPECTED_STATE = "unexpected_state_after_command"
