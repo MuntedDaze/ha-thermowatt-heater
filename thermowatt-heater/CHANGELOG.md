@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.14] - Four-state guarded commands (unreleased development candidate)
+
+- Adds only the six missing exact-prior transitions involving Manual 62 to the
+  OFF/45/70 protocol; the advertised closed set now has twelve transitions.
+- Existing guarded commands, old controller compatibility, authentication,
+  credentials, request/backoff budgets, pending-command storage and bounded
+  confirmation remain unchanged. No POST is retried.
+- Listed as a breaking version so installation requires a deliberate upgrade.
+  Pair with controller 0.10.0 after review and separate physical commissioning.
+  PR #27/#33 and bridge 1.3.13/controller 0.9.1 checkpoints are preserved.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

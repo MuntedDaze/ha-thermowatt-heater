@@ -55,6 +55,11 @@ SENSORS = {
     "cloud_poll_interval": ("Cloud poll interval", "s"),
     "learned_heating_rate": ("Learned heating rate", "°C/h"),
     "prediction_confidence": ("Heating prediction confidence", None),
+    "normal_storage_target_c": ("Normal storage target", "°C"),
+    "solar_boost_target_c": ("Solar boost target", "°C"),
+    "peak_heating_policy": ("Peak heating policy", None),
+    "optional_boost_enabled": ("Optional solar boost enabled", None),
+    "circuit_measurement_mode": ("Circuit measurement mode", None),
 }
 TIMESTAMPS = {
     "peak_start",
@@ -84,6 +89,11 @@ CONTROLLER_SENSORS = {
     "request_budget_remaining": ("Cloud request budget remaining", "requests"),
     "next_adaptive_poll": ("Shadow next adaptive poll", None),
     "adaptive_poll_interval": ("Shadow adaptive poll interval", "s"),
+    "desired_temperature": ("Desired thermostat temperature", "°C"),
+    "heating_requirement": ("Heating requirement", None),
+    "boost_eligibility": ("Solar boost eligibility", None),
+    "boost_reason": ("Solar boost reason", None),
+    "planned_heat_kwh": ("Planned heating energy estimate", "kWh"),
 }
 CONTROLLER_TIMESTAMPS = {
     "next_heating_start",

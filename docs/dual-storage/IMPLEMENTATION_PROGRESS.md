@@ -25,18 +25,26 @@ change. A separate draft PR targets `codex/smart-controller-next`.
    passed** on Python 3.12; 35 focused dual-policy cases passed; Ruff, strict
    mypy targets and compileall passed. Existing mandatory-70 scenarios are kept
    as explicit compatibility fixtures. Native/actual HA checks await final CI.
-3. Pending: useful HA configuration, fresh-install defaults and preserving
-   existing verification/options, thermal/history/telemetry/polling updates.
+3. Implemented: fresh-install defaults start unverified with no household entity
+   mappings; migration preserves old explicit choices and effective defaults.
+   Tank/power, closed temperature roles, peak/boost and economic preferences are
+   HA settings. Target/model-tagged measured history uses a separate v2 store;
+   legacy rows are preserved, unclassified and excluded from calibration.
+   Telemetry schema 2 covers all four states and advisory poll reasons recognise
+   normal/boost decisions and completions. Candidate metadata: bridge 1.3.14,
+   controller 0.10.0. Full suite passed (1140 cases before two added polling
+   cases); focused public-installation/polling cases passed, Ruff, strict mypy
+   and compileall passed. Actual HA/native/Supervisor matrices still await CI.
 4. Pending: comparative simulations, public docs, installation/upgrade/rollback,
    household example, redacted public-distribution review and licence options.
 5. Pending: full local/CI verification, draft PR and final handoff.
 
 ## Resume
 
-Completed protocol commit: `fd40b33`. Policy/settings increment commit subject:
-`Coordinate economical normal storage and independently guarded solar boost`.
-An unused migration helper `installation.py` is being prepared for increment 3;
-fresh-install safety, historical tagging and public metadata still need wiring.
+Completed protocol commit: `fd40b33`. Policy/settings commit: `1972b16`.
+Increment 3 commit subject: `Preserve upgrades and expose target-aware public configuration`.
+Continue with comparative simulations and public documentation, then verify the
+draft PR's complete CI matrix. No production action has been performed.
 New phase-local checkpoint is this file; retain PR #33's checkpoint unchanged.
 
 Inspect branch/status/log first; never switch or alter another worktree. Continue

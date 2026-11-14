@@ -71,6 +71,8 @@ class Settings:
     standing_loss_c_per_hour: float = 0.2  # owner assumption, not a measurement
     wait_benefit_aud_per_kwh: float = 0.05
     pv_ac_limit_kw: float = 5.0  # one GoodWe GW5000 inverter, shared by both arrays
+    tank_litres: float = 315.0
+    element_kw: float = 3.0
     base_load_source: str = "measured_only"
     shower_time_enabled: bool = False
     # Household times used when a day has no peak (weekends); the weekday
@@ -210,6 +212,8 @@ def validate_settings(settings: Settings) -> None:
         or not 0 <= settings.standing_loss_c_per_hour <= 2
         or not 0 <= settings.wait_benefit_aud_per_kwh <= 0.5
         or not 1 <= settings.pv_ac_limit_kw <= 30
+        or not 50 <= settings.tank_litres <= 500
+        or not 2 <= settings.element_kw <= 3.6
         or not isinstance(settings.shower_time, time)
         or settings.shower_time.tzinfo is not None
         or not time(0) <= settings.shower_time <= time(11, 59)

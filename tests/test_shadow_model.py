@@ -86,11 +86,11 @@ def test_bad_settings_rejected(option, value):
         c.parse_options({option: value})
 
 
-def test_sources_defaults_match_owner_and_validate_only_provisional_sign():
+def test_fresh_defaults_are_unverified_and_legacy_ids_remain_for_migration():
     settings, _ = c.parse_options({})
-    assert settings.import_positive is False
-    assert settings.meter_verified is settings.tariff_verified is True
-    assert settings.tariff_clock == "standard"
+    assert settings.import_positive is True
+    assert settings.meter_verified is False and settings.tariff_verified is False
+    assert settings.tariff_clock == "local"
     assert c.DEFAULT_SOURCES["heater"] == "water_heater.home_boiler_home"
     assert c.DEFAULT_SOURCES["mode"] == "sensor.home_boiler_home_vendor_mode"
 
@@ -126,7 +126,7 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
     assert "refresh_topic(self.cfg.command_topic)" in executor
     assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.9.1"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.10.0"
     assert manifest["integration_type"] == "hub"
     assert "mqtt" not in manifest.get("dependencies", [])  # loads without MQTT
 
@@ -150,8 +150,17 @@ def runtime(monkeypatch):
         states=SimpleNamespace(get=states.get),
         config=SimpleNamespace(units=SimpleNamespace(temperature_unit="°C")),
     )
-    settings, tariffs = c.parse_options({})
-    instance = module.ShadowRuntime(hass, c.DEFAULT_SOURCES, settings, tariffs)
+    settings, tariffs = c.parse_options(
+        {
+            "meter_verified": True,
+            "tariff_verified": True,
+            "import_positive": False,
+            "tariff_clock": "standard",
+        }
+    )
+    instance = module.ShadowRuntime(
+        hass, {**c.DEFAULT_SOURCES, "pv_ac": c.DEFAULT_PV_AC}, settings, tariffs
+    )
 
     def report(key, value, attrs=None, at=None):
         entity = c.DEFAULT_PV_AC if key == "pv_ac" else c.DEFAULT_SOURCES[key]

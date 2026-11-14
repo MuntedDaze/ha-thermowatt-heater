@@ -23,7 +23,9 @@ class CircuitPower:
         return self.quality == "verified"
 
 
-def circuit_power(reading: Reading | None, entity, verification, now, boot, max_age=120):
+def circuit_power(
+    reading: Reading | None, entity, verification, now, boot, max_age=120, nominal_kw=3.0
+):
     if reading is None:
         return CircuitPower()
     try:
@@ -33,16 +35,19 @@ def circuit_power(reading: Reading | None, entity, verification, now, boot, max_
             watts *= 1000
         elif reading.unit != "W":
             return CircuitPower(quality="unit_invalid")
-        if not 0 <= watts <= 3800:
+        if not 0 <= watts <= nominal_kw * 3800 / 3:
             return CircuitPower(watts, reading.observed_at, quality="power_implausible")
-        if 100 < watts < 2000:
+        if 100 < watts < nominal_kw * 2000 / 3:
             return CircuitPower(watts, reading.observed_at, quality="power_ambiguous")
         if entity == "sensor.em_hot_water_power":
             return CircuitPower(watts, reading.observed_at, quality="wrapper_not_raw_meter")
         if verification != f"{entity}|{reading.unit}":
             return CircuitPower(watts, reading.observed_at, quality="unverified")
         return CircuitPower(
-            watts, reading.observed_at, "on" if watts >= 2000 else "off", "verified"
+            watts,
+            reading.observed_at,
+            "on" if watts >= nominal_kw * 2000 / 3 else "off",
+            "verified",
         )
     except (ValueError, TypeError, OverflowError):
         return CircuitPower(quality="stale_or_invalid")

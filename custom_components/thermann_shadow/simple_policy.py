@@ -1,57 +1,21 @@
-"""Pure three-state controller policy; the executor supplies verified inputs.
+"""One pure policy for OFF, baseline 45, normal storage 62 and optional solar 70.
 
-Development changes require owner approval before merge or live operation.
+The native thermostat controls the element. Fresh cloud status supplies the
+reported setting/temperature; only a commissioned, fresh circuit meter verifies
+physical heating. CT-free installations retain baseline and required off-peak
+storage, with nominal physics used solely for conservative planning.
 
-Three heater states, chosen from the tariff calendar, the Thermann reading, the
-EMHASS forecast and LOCAL meter samples (GoodWe, about once a minute; never a
-cloud request):
+Owner holds and the explicit 12-hour 70-degree Override take precedence. Routine
+peak heating is parked unless the user selects verified solar-only operation.
+The single weekday planner meets the normal target before peak; a shared solar
+qualification may select optional storage directly or as a later top-up when
+useful heat exceeds its opportunity cost, standby allowance and switching margin.
+Weekends retain baseline without mandatory normal storage. Small forecast
+changes do not toggle an already qualified boost; measured loss/import withdraws
+it. All sends still pass the separate executor and bridge guards.
 
-  OFF       Thermann software OFF.
-  BASELINE  Manual 45 °C, the owner's agreed baseline: weekday nights after the
-            evening peak, and weekends. Never in a peak.
-  STORAGE   Manual 70 °C: heat stored for the evening, or solar heating.
-
-The heater runs its own protections (antibacterial cycle, frost protection) in
-every state (Thermann guide p10). This policy does not detect, schedule or
-replace them.
-
-The tariff calendar decides the mode:
-
-  PEAK         a peak period, or the last ``peak_lead`` before one (the shortest
-               lead the bridge timing allows). OFF, or STORAGE while MEASURED
-               solar qualifies. The same rule applies to every peak.
-  DEADLINE     weekday off-peak before the evening peak. Heat to 70 °C in the
-               cheapest window that finishes by the SOFT target (peak minus
-               ``soft_target_margin``), using the EMHASS forecast, the measured
-               surplus and the tariff. Start at once when waiting would miss
-               the soft target. Once started, keep heating until the peak
-               unless a later window saves at least ``pause_min_saving``, can
-               still finish by the soft target, and leaves room for the extra
-               command. The soft target is a planning buffer: heating that has
-               not finished by then continues until the peak.
-  OPPORTUNITY  every other off-peak time: weekday nights and whole weekends.
-               BASELINE, plus STORAGE while measured solar (at least
-               full element cover) makes heating worth it now and no cheaper
-               window is forecast later that day. Sustained import or lost
-               measurement returns to baseline regardless of a sunny forecast.
-
-Precedence, highest first:
-
-  1. The heater's own protections: native, in every state (no decision here).
-  2. Owner: app change / hold (HOLD), holiday (OFF), 12hr Override (STORAGE).
-  3. Cloud, authentication, freshness, command spacing and the reserved peak
-     command slot: may only BLOCK sending, never choose a state.
-  4. Peak import restriction (PEAK mode).
-  5. Hot water before the evening peak, and the baseline (DEADLINE / OPPORTUNITY).
-  6. Forecast economics (only ever moves an off-peak start or pauses for a
-     clearly cheaper window).
-
-Shared safeguards: one solar qualification (10 min), one withdrawal (5 min),
-one command spacing (15 min) and the peak lead (2 min). No minimum run, minimum
-rest or fallback timer: the thermostat, not this policy, switches the element.
-
-Pure: no Home Assistant, no I/O. One instance per controller keeps the meter
-samples; ``decide`` is deterministic for a given history.
+No I/O or learning authority. Adaptive polling and historical calibration remain
+advisory. OFF is a software setting, never proof of zero electrical consumption.
 """
 
 from __future__ import annotations
@@ -179,7 +143,9 @@ class SimplePolicy:
         """One local sample: grid import positive, export negative. ``element_on``
         is the caller's element estimate (house-load step); None counts as off,
         which can only make solar look SMALLER (never a costly start)."""
-        if not math.isfinite(grid_kw) or (heater_kw is not None and not 0 <= heater_kw <= 3.8):
+        if not math.isfinite(grid_kw) or (
+            heater_kw is not None and not 0 <= heater_kw <= self.s.element_kw * 3.8 / 3
+        ):
             self.samples.clear()
             return
         if self.samples and at <= self.samples[-1][0]:
@@ -188,7 +154,9 @@ class SimplePolicy:
         # The runtime always supplies actual CT kW explicitly.
         measured = heater_kw if heater_kw is not None else self.s.element_kw if element_on else 0.0
         available = -grid_kw + measured
-        self.samples.append((at, max(0.0, grid_kw), available, measured >= 2.0))
+        self.samples.append(
+            (at, max(0.0, grid_kw), available, measured >= self.s.element_kw * 2 / 3)
+        )
         cutoff = at - 2 * max(self.s.qualify, self.s.withdraw)
         while self.samples and self.samples[0][0] < cutoff:
             self.samples.popleft()
@@ -255,7 +223,8 @@ class SimplePolicy:
         # completion than nominal physics from a momentary high plateau.
         power = (
             min(self.s.element_kw, measured_kw)
-            if measured_kw is not None and 2 <= measured_kw <= 3.8
+            if measured_kw is not None
+            and self.s.element_kw * 2 / 3 <= measured_kw <= self.s.element_kw * 3.8 / 3
             else self.s.element_kw
         )
         physics = power / self.s.kwh_per_c
@@ -343,6 +312,13 @@ class SimplePolicy:
     def _send(self, snap, desired, reason, layer, plan) -> Decision:
         plan = {
             **plan,
+            "planned_heat_kwh": round(
+                max(0, (self.setpoint(desired) or 0) - plan.get("reading_c", self.s.baseline_c))
+                * self.s.kwh_per_c,
+                3,
+            )
+            if desired != OFF
+            else 0,
             "desired_target_c": self.setpoint(desired),
             "heating_role": "owner_override"
             if reason == "12hr_override"
@@ -421,6 +397,7 @@ class SimplePolicy:
         )
         if saving < max(s.boost_min_saving, extra * s.optional_heat_margin):
             return reject("boost_value_below_switching_margin")
+        info["boost_heating_hours"] = round(hours, 2)
         info.update(boost_eligible=True, boost_reason="useful_solar_value_exceeds_margin")
         return True, info
 

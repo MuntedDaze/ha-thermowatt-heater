@@ -20,6 +20,8 @@ class PollContext:
     decision_at: datetime | None = None
     completion_at: datetime | None = None
     cloud_ready: bool = True
+    desired_target_c: int | None = None
+    reported_target_c: int | None = None
 
 
 class PollingShadow:
@@ -34,8 +36,10 @@ class PollingShadow:
         self.reused_confirmations = 0
         self.reason = "disabled" if not enabled else "awaiting_status"
         self._blocked_until = None
+        self.desired_target_c = self.reported_target_c = None
 
     def observe(self, c: PollContext):
+        self.desired_target_c, self.reported_target_c = c.desired_target_c, c.reported_target_c
         status = c.status_at if c.status_at and c.status_at <= c.now else None
         new_status = status is not None and (self.actual_seen is None or status > self.actual_seen)
         if new_status:
@@ -69,6 +73,9 @@ class PollingShadow:
             due, reason = min(due, self.virtual_at + timedelta(minutes=15)), "uncertain_or_recovery"
         for when, why in ((c.decision_at, "before_decision"), (c.completion_at, "near_completion")):
             if when and c.now <= when and when - timedelta(minutes=10) < due:
+                target = c.desired_target_c if why == "before_decision" else c.reported_target_c
+                if target in (62, 70):
+                    why += "_normal_62" if target == 62 else "_boost_70"
                 due, reason = (
                     max(self.virtual_at + timedelta(minutes=5), when - timedelta(minutes=10)),
                     why,
@@ -99,6 +106,8 @@ class PollingShadow:
             "heating_max_minutes": self.heating_minutes,
             "stable_max_minutes": self.stable_minutes,
             "reason": self.reason,
+            "desired_target_c": self.desired_target_c,
+            "reported_target_c": self.reported_target_c,
             "next_due": self.next_due.isoformat() if self.next_due else None,
             "last_would_poll": self.last_would_poll.isoformat() if self.last_would_poll else None,
             "would_status_reads": self.would_polls,

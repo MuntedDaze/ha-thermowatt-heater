@@ -91,7 +91,8 @@
           "completion_margin_minutes": "Preferred completion before peak (min)",
           "optional_solar_boost": "Enable optional solar boost",
           "peak_heating_policy": "Heating during peak periods",
-          "boost_useful_fraction": "Expected useful fraction of extra solar heat"
+          "boost_useful_fraction": "Expected useful fraction of extra solar heat",
+          "boost_min_saving_aud": "Minimum benefit of optional solar boost (AUD)"
         }
       },
       "system": {

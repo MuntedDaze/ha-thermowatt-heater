@@ -121,7 +121,7 @@ def test_event_contract_records_source_times_and_deduplicates(tmp_path, monkeypa
     rig = Rig(tmp_path, monkeypatch, hobart(MON, 12))
     rig.run(hobart(MON, 12, 2))
     event = rig.runtime.telemetry
-    assert event["schema_version"] == 1 and event["power"]["quality"] == "verified"
+    assert event["schema_version"] == 2 and event["power"]["quality"] == "verified"
     assert event["thermann"]["time_basis"] == "bridge_receipt_not_device_acquisition"
     assert event["calibration"]["affects_control"] is False
     drive(rig.executor.async_step(rig.now()))

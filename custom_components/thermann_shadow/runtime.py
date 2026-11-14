@@ -21,7 +21,7 @@ import math
 
 from homeassistant.util import dt as dt_util
 
-from .config import DEFAULT_OPTIONS, DEFAULT_PV_AC
+from .config import DEFAULT_OPTIONS
 from .forecast import build_forecast
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
@@ -96,7 +96,7 @@ class ShadowRuntime:
         self.thermal = ThermalObserver()
         self.thermal_store = None
         self.native_options = dict(DEFAULT_OPTIONS)
-        self.history = MeasuredHistory()
+        self.history = MeasuredHistory(settings.tank_litres, settings.element_kw)
         self.history_store = None
         self.completion = {}
         self.telemetry = None
@@ -135,6 +135,7 @@ class ShadowRuntime:
         if changed_mapping:
             self.boot = dt_util.utcnow()
         self.sources, self.settings, self.tariffs = sources, settings, tariffs
+        self.history.configure(settings.tank_litres, settings.element_kw)
         self.set_native_reference(options)
         if self.executor is not None and reset_needed:
             # New policy must see the new tariff/settings, not the previous ones.
@@ -217,7 +218,7 @@ class ShadowRuntime:
         if not settings.meter_verified:
             self.warnings.append("meter_direction_not_verified_no_measured_solar_used")
         pv_ac_now = None
-        pv_ac_entity = self.sources.get("pv_ac") or DEFAULT_PV_AC
+        pv_ac_entity = self.sources.get("pv_ac")
         value = self._kw("pv_ac", now, entity_id=pv_ac_entity)
         if value is not None and value >= 0:
             pv_ac_now = value
@@ -244,6 +245,7 @@ class ShadowRuntime:
             now,
             self.boot,
             settings.grid_max_age_seconds,
+            nominal_kw=settings.element_kw,
         )
         self.circuit_energy_kwh = energy_reading(
             self._reading("heater_energy"), now, self.boot, settings.grid_max_age_seconds
@@ -288,7 +290,7 @@ class ShadowRuntime:
                 energy_source.observed_at, self.circuit_energy_kwh, identity
             )
         self.completion = self.history.completion(
-            now, temperature, self.poll_at, target, self.circuit
+            now, temperature if mode == "Manual" else None, self.poll_at, target, self.circuit
         )
         if self.history_store is not None and self.history.should_save(now):
             self.hass.async_create_task(self._save_history())
@@ -353,7 +355,7 @@ class ShadowRuntime:
             return
         self._event_key = key
         self.telemetry = {
-            "schema_version": 1,
+            "schema_version": 2,
             "at": now.isoformat(),
             "power": {
                 "watts": self.circuit.watts,
@@ -401,7 +403,11 @@ class ShadowRuntime:
                 "last_command": dict(last),
             },
             "completion": dict(self.completion),
-            "calibration": self.history.calibration(),
+            "heating_plan": {
+                key: value.isoformat() if isinstance(value, datetime) else value
+                for key, value in decision.plan.items()
+            },
+            "calibration": self.history.calibration(obs.target_c),
             "polling": self.executor.poll_shadow.summary(),
         }
 
@@ -430,7 +436,16 @@ class ShadowRuntime:
             else None,
             heater_element_state=self.heater.state,
             heater_state_confidence=self.heater.confidence,
-            storage_target_c=70,
+            storage_target_c=float(self.native_options["normal_storage_c"]),
+            normal_storage_target_c=float(self.native_options["normal_storage_c"]),
+            solar_boost_target_c=float(self.native_options["solar_boost_c"]),
+            peak_heating_policy=self.native_options["peak_heating_policy"],
+            optional_boost_enabled="on" if self.native_options["optional_solar_boost"] else "off",
+            circuit_measurement_mode="ct_free"
+            if not self.sources.get("heater_power")
+            else "measured"
+            if self.circuit.valid
+            else "meter_fault",
             heater_measured_w=self.circuit.watts if self.circuit.valid else None,
             heater_meter_state=self.circuit.state,
             heater_meter_quality=self.circuit.quality,
@@ -443,7 +458,7 @@ class ShadowRuntime:
             if self.completion.get("latest")
             else "unknown",
         )
-        calibration = self.history.calibration()
+        calibration = self.history.calibration(target)
         values["learned_heating_rate"] = (
             calibration["on_kw"] / calibration["kwh_per_c"] if calibration["ready"] else None
         )
@@ -499,7 +514,7 @@ class ShadowRuntime:
             },
             "shadow_mode": not self.controller_active,
             "controller_active": self.controller_active,
-            "policy": "simplified_three_state (SIMPLIFIED_STRATEGY.md)",
+            "policy": "four_state_dual_storage (docs/dual-storage)",
             "additional_cloud_requests": 0,
             "local_evaluation_seconds": 60,
             "grid_sign": "import_positive" if self.settings.import_positive else "export_positive",

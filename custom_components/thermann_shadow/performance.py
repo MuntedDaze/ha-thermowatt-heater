@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import math
 from statistics import median
 
-from .model import TANK_KWH_PER_C, UTC
+from .model import UTC
 
 MAX_SESSIONS = 40
 SAVE_INTERVAL = timedelta(minutes=15)
@@ -29,7 +29,8 @@ def _finite(value):
 
 
 class MeasuredHistory:
-    def __init__(self):
+    def __init__(self, tank_litres=315.0, nominal_kw=3.0):
+        self.tank_litres, self.nominal_kw = tank_litres, nominal_kw
         self.integrated_kwh = 0.0
         self.covered_seconds = 0.0
         self.gaps = 0
@@ -44,9 +45,21 @@ class MeasuredHistory:
         self._saved_at = None
         self._saved_sessions = 0
 
+    @property
+    def physics(self):
+        return self.tank_litres * 4.186 / 3600
+
+    def configure(self, tank_litres, nominal_kw):
+        if (tank_litres, nominal_kw) != (self.tank_litres, self.nominal_kw):
+            self.last = self.anchor = self.candidate = None
+            self.dirty = True
+        self.tank_litres, self.nominal_kw = tank_litres, nominal_kw
+
     def to_dict(self):
         return {
-            "version": 1,
+            "version": 2,
+            "tank_litres": self.tank_litres,
+            "nominal_kw": self.nominal_kw,
             "integrated_kwh": self.integrated_kwh,
             "covered_seconds": self.covered_seconds,
             "gaps": self.gaps,
@@ -59,8 +72,16 @@ class MeasuredHistory:
     @classmethod
     def from_dict(cls, data):
         obj = cls()
-        if not isinstance(data, dict) or data.get("version") != 1:
+        if not isinstance(data, dict) or data.get("version") not in (1, 2):
             return obj
+        if (
+            data["version"] == 2
+            and _finite(data.get("tank_litres"))
+            and _finite(data.get("nominal_kw"))
+            and 50 <= data["tank_litres"] <= 500
+            and 2 <= data["nominal_kw"] <= 3.6
+        ):
+            obj.configure(data["tank_litres"], data["nominal_kw"])
         for key in (
             "integrated_kwh",
             "covered_seconds",
@@ -87,11 +108,22 @@ class MeasuredHistory:
                     isinstance(row, dict)
                     and _at(row.get("at")) is not None
                     and _finite(row.get("kwh_per_c"))
-                    and 0.5 * TANK_KWH_PER_C <= row["kwh_per_c"] <= 1.5 * TANK_KWH_PER_C
+                    and _finite(row.get("tank_litres", 315))
+                    and 50 <= row.get("tank_litres", 315) <= 500
+                    and 0.5 * row.get("tank_litres", 315) * 4.186 / 3600
+                    <= row["kwh_per_c"]
+                    <= 1.5 * row.get("tank_litres", 315) * 4.186 / 3600
                     and _finite(row.get("kw"))
-                    and 2 <= row["kw"] <= 3.8
+                    and 0.5 <= row["kw"] <= 5
                 ):
-                    obj.sessions.append(row)
+                    obj.sessions.append(
+                        {
+                            **row,
+                            "target_c": row.get("target_c") if data["version"] == 2 else None,
+                            "legacy_unclassified": data["version"] == 1
+                            or row.get("legacy_unclassified", False),
+                        }
+                    )
         obj._saved_sessions = len(obj.sessions)
         return obj
 
@@ -104,7 +136,10 @@ class MeasuredHistory:
         if old:
             hours = (at - _at(old["at"])).total_seconds() / 3600
             delta = kwh - old["kwh"]
-            if identity != old["identity"] or not 0 <= delta <= 3.8 * hours + 0.02:
+            if (
+                identity != old["identity"]
+                or not 0 <= delta <= self.nominal_kw * 3.8 / 3 * hours + 0.02
+            ):
                 self.counter_epochs += 1  # reset, remap or impossible jump: re-anchor
             else:
                 self.counter_delta_kwh += delta
@@ -118,6 +153,9 @@ class MeasuredHistory:
                     "at": at.isoformat(),
                     "kwh_per_c": c["energy"] / c["rise"],
                     "kw": c["energy"] / c["hours"],
+                    "target_c": self.last[2][1],
+                    "tank_litres": self.tank_litres,
+                    "nominal_kw": self.nominal_kw,
                 }
             )
         self.candidate = None
@@ -141,12 +179,12 @@ class MeasuredHistory:
             if continuous:
                 self.integrated_kwh += (watts + self.last[1]) / 2 / 1000 * seconds / 3600
                 self.covered_seconds += seconds
-                if self.last[1] >= 2000 and watts >= 2000:
+                if self.last[1] >= self.nominal_kw * 2000 / 3 and power.state == "on":
                     on_hours = seconds / 3600
             else:
                 self.gaps += 1
                 self.anchor = self.candidate = None
-                self.dirty = self.last[1] >= 2000
+                self.dirty = self.last[1] >= self.nominal_kw * 2000 / 3
         key = (mode, target, command_key)
         if self.last and key != self.last[2]:
             self.anchor = self.candidate = None
@@ -169,7 +207,7 @@ class MeasuredHistory:
             and poll_at is not None
             and 0 <= (at - poll_at).total_seconds() <= 120
         )
-        if valid_temp and power.state == "on" and mode == "Manual" and target in (45, 70):
+        if valid_temp and power.state == "on" and mode == "Manual" and target in (45, 62, 70):
             if self.anchor and poll_at > self.anchor["at"]:
                 a = self.anchor
                 hours = (poll_at - a["at"]).total_seconds() / 3600
@@ -180,7 +218,7 @@ class MeasuredHistory:
                     1 / 3 <= hours <= 1.5
                     and a["on_hours"] >= 0.95 * hours
                     and rise >= 2
-                    and 0.5 * TANK_KWH_PER_C <= slope <= 1.5 * TANK_KWH_PER_C
+                    and 0.5 * self.physics <= slope <= 1.5 * self.physics
                 ):
                     if self.candidate is None:
                         self.candidate = {"rise": 0.0, "energy": 0.0, "hours": 0.0}
@@ -199,15 +237,25 @@ class MeasuredHistory:
                 }
         self.last = (at, watts, key)
 
-    def calibration(self):
-        days = {_at(s["at"]).date() for s in self.sessions}
-        ready = len(self.sessions) >= 10 and len(days) >= 3
+    def calibration(self, target=None):
+        rows = [
+            s
+            for s in self.sessions
+            if not s.get("legacy_unclassified", False)
+            and s.get("target_c") in (45, 62, 70)
+            and (target is None or s["target_c"] == target)
+            and s.get("tank_litres") == self.tank_litres
+            and s.get("nominal_kw") == self.nominal_kw
+        ]
+        days = {_at(s["at"]).date() for s in rows}
+        ready = len(rows) >= 10 and len(days) >= 3
         return {
-            "sessions": len(self.sessions),
+            "sessions": len(rows),
             "days": len(days),
             "ready": ready,
-            "kwh_per_c": median(s["kwh_per_c"] for s in self.sessions) if ready else TANK_KWH_PER_C,
-            "on_kw": median(s["kw"] for s in self.sessions) if ready else 3.0,
+            "target_c": target,
+            "kwh_per_c": median(s["kwh_per_c"] for s in rows) if ready else self.physics,
+            "on_kw": median(s["kw"] for s in rows) if ready else self.nominal_kw,
             "affects_control": False,
         }
 
@@ -224,7 +272,7 @@ class MeasuredHistory:
         if (
             temperature is None
             or poll_at is None
-            or target not in (45, 70)
+            or target not in (45, 62, 70)
             or not 0 <= (now - poll_at).total_seconds() <= 45 * 60
         ):
             return result
@@ -232,10 +280,16 @@ class MeasuredHistory:
         if not power.valid or power.state != "on":
             result["state"] = "idle_next_cut_in_unknown" if power.valid else "meter_unknown"
             return result
-        c = self.calibration()
+        c = self.calibration(target)
         energy = max(0.0, target - temperature) * c["kwh_per_c"]
-        # No subtraction of unobserved heat/draws; wide conditional interval.
-        low, high = energy * 0.67 / 3.8 * 60, energy * 1.5 / 2.0 * 60
+        # Only covered measured energy since this genuine temperature anchor
+        # reduces the estimate. Unknown draws still invalidate any guarantee.
+        covered = 0.0
+        if self.anchor and self.anchor["at"] == poll_at and self.last and self.last[2][1] == target:
+            covered = max(0, self.integrated_kwh - self.anchor["energy"])
+        low = max(0, energy * 0.67 - covered * 1.03) / (self.nominal_kw * 3.8 / 3) * 60
+        high = max(0, energy * 1.5 - covered * 0.97) / (self.nominal_kw * 2 / 3) * 60
+        result["measured_kwh_since_anchor"] = round(covered, 4)
         result.update(
             state="conditional_continuous_heating",
             basis="measured_sessions" if c["ready"] else result["basis"],

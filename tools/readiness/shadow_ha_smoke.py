@@ -1,7 +1,6 @@
 """Run inside the official HA Core image with --network none, never on owner HA."""
 
 import asyncio
-from dataclasses import replace
 from datetime import timedelta
 import json
 import logging
@@ -213,7 +212,9 @@ async def main():
         runtime.update(now)
         assert runtime.values["temperature"] == 63
         assert runtime.values["target"] == 70
-        assert runtime.values["measured_net_export_kw"] == 1.501
+        assert runtime.values["measured_net_export_kw"] == -1.501
+        assert runtime.grid_import_kw is None and not runtime.settings.meter_verified
+        assert not runtime.settings.tariff_verified
         assert runtime.values["pv"] == 2.322
         assert runtime.values["requests_since_start"] == 0
         assert runtime.values["current_price_aud"] in {0.170200, 0.361878}
@@ -240,7 +241,17 @@ async def main():
             assert flow["errors"] == {"base": "invalid_settings"}, flow
             assert entry.options == {}, entry.options
         # Explicit synthetic-only qualified settings exercise planning on real HA states.
-        runtime.settings = replace(runtime.settings, meter_verified=True, tariff_verified=True)
+        hass.config_entries.async_update_entry(
+            entry,
+            options={
+                **entry.options,
+                "meter_verified": True,
+                "tariff_verified": True,
+                "import_positive": False,
+                "tariff_clock": "standard",
+            },
+        )
+        await hass.async_block_till_done()
         runtime.update(now)
         assert runtime.grid_import_kw is not None  # verified meter: signed import used
         hass.states.async_set(
@@ -288,6 +299,7 @@ async def main():
             for key, value in DEFAULT_OPTIONS.items()
             if SETTINGS_CATALOG[key].group in ("Everyday", "Advanced")
         }
+        preferences["tariff_clock"] = "standard"
         saved = await hass.config_entries.options.async_configure(flow["flow_id"], preferences)
         assert saved["type"] == "create_entry"
         await hass.async_block_till_done()

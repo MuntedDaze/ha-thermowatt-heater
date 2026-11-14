@@ -8,6 +8,7 @@ import voluptuous as vol
 from .config import (
     DEFAULT_OPTIONS,
     DEFAULT_SOURCES,
+    CLOUD_SOURCES,
     OPTIONAL_SOURCES,
     DOMAIN,
     parse_options,
@@ -21,7 +22,9 @@ from .settings import CATALOG, apply_changes, locked_changes, locked_message
 def sources_schema(values):
     return vol.Schema(
         {
-            vol.Required(key, default=values.get(key, default)): selector.EntitySelector(
+            (vol.Required if key in CLOUD_SOURCES else vol.Optional)(
+                key, **({"default": values[key]} if values.get(key) else {})
+            ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="water_heater" if key == "heater" else "sensor"
                 )
@@ -73,7 +76,7 @@ def options_schema(values, groups=("Everyday", "Advanced", "System")):
 
 class ShadowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    MINOR_VERSION = 3
+    MINOR_VERSION = 4
 
     async def async_step_user(self, user_input=None):
         await self.async_set_unique_id("thermann_shadow_315l")
@@ -82,7 +85,7 @@ class ShadowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             for entity in user_input.values():
                 cv.entity_id(entity)
             return self.async_create_entry(title=ENTRY_TITLE, data=user_input)
-        return self.async_show_form(step_id="user", data_schema=sources_schema(DEFAULT_SOURCES))
+        return self.async_show_form(step_id="user", data_schema=sources_schema({}))
 
     @staticmethod
     @callback

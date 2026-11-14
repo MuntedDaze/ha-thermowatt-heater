@@ -1,5 +1,24 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.10.0 — economical dual storage (unreleased development candidate)
+
+- Default roles: overnight/weekend Manual 45, required weekday Manual 62,
+  optional economically useful solar storage to 70; 12-hour Override remains 70.
+  Direct sunny-day 70 and later top-ups share one policy. Native hysteresis and
+  protective/owner/confirmation guards remain authoritative.
+- Independent peak policy (default Never) and optional-boost switch. CT-free
+  required heating remains supported; optional solar requires verified circuit
+  measurements, never nominal power or aggregate inference.
+- Supported temperature selections only, configurable nominal volume/power,
+  useful-heat assumption and preferred completion margin. New installations
+  select their own source entities and start unverified. Entry 1.4 migration
+  materializes old defaults without resetting explicit options or mappings.
+- New history sidecar v2 tags actual targets and model parameters; old history
+  remains intact. Untagged old sessions are retained as unclassified diagnostics.
+  Adaptive polling remains shadow; calibration remains diagnostic.
+- Requires bridge 1.3.14 and separately completed four-state qualification.
+  Upgrade/rollback: `docs/dual-storage/UPGRADE.md`. No installation or merge.
+
 ## 0.9.1 — corrections from the independent audit of 13 Nov 2026 (owner approval required)
 
 Fixes to 0.9.0 found by the audit of `main` `04a8d3d`. The strategy is unchanged. Nothing here was installed; 0.9.0 was never enabled. No app change: Thermann Hot Water stays **1.3.13**.

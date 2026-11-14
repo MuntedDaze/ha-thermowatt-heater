@@ -177,10 +177,10 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
 
     assert run({"morning_threshold_c": 40.0})["options"]["morning_threshold_c"] == 42.0
     assert run({"morning_threshold_c": 45.0})["options"]["morning_threshold_c"] == 45.0
-    assert run({})["minor_version"] == 3
+    assert run({})["minor_version"] == 4
     # 1.2 entries keep their threshold and only get the 0.7.1 range check.
     assert run({"morning_threshold_c": 40.0}, minor=2)["options"]["morning_threshold_c"] == 40.0
-    assert run({"morning_threshold_c": 40.0}, minor=3) == {}
+    assert run({"morning_threshold_c": 40.0}, minor=4) == {}
     # 0.7.1: out-of-range values move to the nearest allowed value; others stay.
     moved = run(
         {
@@ -195,6 +195,12 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
         minor=2,
     )["options"]
     assert moved == {
+        "meter_verified": True,
+        "tariff_verified": True,
+        "import_positive": False,
+        "tariff_clock": "standard",
+        "sources": {"pv_ac": c.DEFAULT_PV_AC},
+        "peak_heating_policy": "Never schedule heating during peak",
         "status_max_age_minutes": 35.0,
         "forecast_max_age_minutes": 35.0,
         "peak_rate": 2.0,
@@ -205,7 +211,9 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
     }
     c.parse_options(moved)  # the migrated entry loads
     untouched = c.saved_options({})
-    assert run(dict(untouched), minor=2)["options"] == untouched
+    preserved = run(dict(untouched), minor=2)["options"]
+    assert all(preserved[key] == value for key, value in untouched.items())
+    assert preserved["sources"] == {"pv_ac": c.DEFAULT_PV_AC}
 
 
 # --- Review of ac38eaf (ChatGPT): satisfied lifetime, block rules, presentation ----

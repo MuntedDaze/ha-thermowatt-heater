@@ -7,6 +7,8 @@ from datetime import time
 from .model import Settings, Tariff, number, validate_tariffs, validate_settings
 
 DOMAIN = "thermann_shadow"
+# Legacy IDs remain solely for migration and documented household examples.
+CLOUD_SOURCES = frozenset({"heater", "mode", "last_poll", "cloud_health", "requests"})
 DEFAULT_SOURCES = {
     "heater": "water_heater.home_boiler_home",
     "mode": "sensor.home_boiler_home_vendor_mode",
@@ -34,10 +36,10 @@ DEFAULT_PV_AC = "sensor.goodwe_inverter_total_power"
 LEGACY_MORNING_THRESHOLD_C = 40.0
 DEFAULT_OPTIONS = {
     "paused": False,
-    "meter_verified": True,  # owner-reported HK1000 load test; direction preserved
-    "tariff_verified": True,  # owner-confirmed Tariff 93, fixed AEST
-    "import_positive": False,
-    "tariff_clock": "standard",
+    "meter_verified": False,
+    "tariff_verified": False,
+    "import_positive": True,
+    "tariff_clock": "local",
     "target_c": 70.0,
     "morning_threshold_c": 42.0,
     "morning_preferred_c": 45.0,
@@ -116,6 +118,7 @@ DEFAULT_OPTIONS = {
     "optional_solar_boost": True,
     "peak_heating_policy": "Never schedule heating during peak",
     "boost_useful_fraction": 0.9,
+    "boost_min_saving_aud": 0.10,
     "controller_four_state_qualified": False,
 }
 # 0.7.1 (settings audit): ranges a saved value must respect. Values saved by
@@ -135,6 +138,8 @@ REST_BEYOND_LATENCY_MINUTES = 30.0
 NOTIFY_SERVICE_PATTERN = re.compile(r"^[a-z0-9_]{1,64}$")
 # Readable reasons for rejected settings (ValueError codes from parse_options).
 REJECTION_MESSAGES = {
+    "unsupported_target_roles": "Use only supported 45/62/70 targets, with baseline no higher than normal and normal no higher than solar boost.",
+    "dual_storage_settings_invalid": "Check tank capacity (50–500 L), nominal element (2–3.6 kW), completion margin (5–120 minutes), useful-heat fraction (0–1) and the peak policy.",
     "settings_invalid": "A value is outside its allowed range.",
     "morning_preferred_below_minimum": "The morning preferred reserve cannot be below the morning minimum.",
     "morning_times_order": "Morning times must be before noon, with the preferred time not after the hard deadline.",
@@ -243,6 +248,7 @@ def parse_options(options):
         or not 2 <= number(values["element_kw"]) <= 3.6
         or not 5 <= number(values["completion_margin_minutes"]) <= 120
         or not 0 <= number(values["boost_useful_fraction"]) <= 1
+        or not 0 <= number(values["boost_min_saving_aud"]) <= 2
         or values["peak_heating_policy"]
         not in ("Never schedule heating during peak", "Verified solar-only heating")
     ):

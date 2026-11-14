@@ -15,6 +15,8 @@ class ShadowSelect(SettingEntity, SelectEntity):
 
     @property
     def current_option(self):
+        if self.key in {"baseline_c", "normal_storage_c", "solar_boost_c"}:
+            return str(int(float(self.current)))
         return self.current
 
     async def async_select_option(self, option):

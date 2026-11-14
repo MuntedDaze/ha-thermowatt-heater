@@ -30,7 +30,7 @@ def modules():
 
 def dispatch_case(name, availability, withdrawal=5, later_solar=False):
     m, c, sp, _ = modules()
-    settings, tariffs = c.parse_options({})
+    settings, tariffs = c.parse_options({"tariff_clock": "standard"})
     s = replace(
         sp.PolicySettings(normal_c=70, peak_policy=sp.PEAK_SOLAR),
         withdraw=timedelta(minutes=withdrawal),

@@ -112,6 +112,7 @@ class Executor:
                 "optional_solar_boost",
                 "peak_heating_policy",
                 "boost_useful_fraction",
+                "boost_min_saving_aud",
             )
         )
         self.runtime.set_native_reference(options)
@@ -147,7 +148,7 @@ class Executor:
                     minutes=float(self.runtime.native_options["completion_margin_minutes"])
                 ),
                 boost_useful_fraction=float(self.runtime.native_options["boost_useful_fraction"]),
-                boost_min_saving=settings.switching_benefit_aud,
+                boost_min_saving=float(self.runtime.native_options["boost_min_saving_aud"]),
                 feed_in_rate=settings.feed_in_rate,
                 tariff_clock=settings.tariff_clock,
                 optional_heat_margin=self.runtime.native_options[
@@ -412,6 +413,7 @@ class Executor:
                 self.runtime.values.get("next_tariff_change"),
                 decision.plan.get("best_start"),
                 decision.plan.get("latest_start"),
+                now if decision.command else None,
             ]
             actions = [at for at in actions if at is not None and at >= now]
             self.poll_shadow.observe(
@@ -429,6 +431,8 @@ class Executor:
                     cloud_ready=obs.cloud_health == "ok"
                     and obs.auth_mode == "authorized"
                     and not obs.cooldown_seconds,
+                    desired_target_c=decision.plan.get("desired_target_c"),
+                    reported_target_c=obs.target_c if obs.mode == "Manual" else None,
                 )
             )
             self.runtime.record_event(now, obs, decision)
@@ -518,6 +522,11 @@ class Executor:
             if plan.get("measured_kw") is None
             else round(plan["measured_kw"], 2),
             "shadow_command": self.shadow[-1]["would_send"] if self.shadow else None,
+            "desired_temperature": plan.get("desired_target_c"),
+            "heating_requirement": plan.get("heating_role"),
+            "boost_eligibility": "eligible" if plan.get("boost_eligible") else "unavailable",
+            "boost_reason": plan.get("boost_reason"),
+            "planned_heat_kwh": plan.get("planned_heat_kwh"),
         }
 
     def plan_details(self) -> dict:
@@ -560,6 +569,13 @@ class Executor:
             "fault": summary["fault"] or "none",
             "operating_mode": summary["operating_mode"],
             "guest_mode_ends": _parse(summary["guest_until"]),
+            "desired_temperature": decision.plan.get("desired_target_c") if decision else None,
+            "heating_requirement": decision.plan.get("heating_role") if decision else None,
+            "boost_eligibility": "eligible"
+            if decision and decision.plan.get("boost_eligible")
+            else "unavailable",
+            "boost_reason": decision.plan.get("boost_reason") if decision else None,
+            "planned_heat_kwh": decision.plan.get("planned_heat_kwh") if decision else None,
             "request_budget_remaining": max(
                 0, self.cfg.max_requests_per_day - summary["requests_last_24h"]
             )

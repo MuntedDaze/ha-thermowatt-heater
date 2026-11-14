@@ -66,6 +66,19 @@ def test_cloud_backoff_and_confirmation_remain_authoritative():
         assert s.observe(context(95))
 
 
+@pytest.mark.parametrize("target,label", [(62, "normal_62"), (70, "boost_70")])
+def test_four_state_decisions_and_completion_advance_advisory_reads(target, label):
+    for field, reason in (("decision_at", "before_decision"), ("completion_at", "near_completion")):
+        s = p.PollingShadow(True)
+        event = {field: START + 30 * MIN, "desired_target_c": target, "reported_target_c": target}
+        assert not s.observe(context(0, **event))
+        assert s.reason == f"{reason}_{label}"
+        assert s.next_due == START + 20 * MIN
+        assert not s.observe(context(20, confirming=True, **event))
+        assert s.summary()["extra_cloud_requests"] == 0
+        assert s.summary()["desired_target_c"] == target
+
+
 def test_future_status_not_accepted_and_unsafe_bounds_rejected():
     s = p.PollingShadow(True)
     s.observe(context(0, status_at=START + MIN))

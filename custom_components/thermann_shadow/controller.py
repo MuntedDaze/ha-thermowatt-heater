@@ -1,6 +1,6 @@
-"""Production executor state machine (0.9.0). The ONLY code that may request a
-Thermann mode change, and only through the bridge's guarded three-state MQTT
-payloads (Thermann Hot Water app >= 1.3.13).
+"""Guarded four-state executor. The ONLY code that may request a
+Thermann mode change, and only through the bridge's guarded four-state MQTT
+payloads (Thermann Hot Water app >= 1.3.14).
 
 Pure logic: no Home Assistant imports, no I/O. ``executor.py`` builds the
 observations, persists the returned state BEFORE publishing, and performs the
@@ -177,12 +177,12 @@ class ControllerConfig:
             missing.append("command_topic_does_not_match_heater")
         if not self.three_state_qualified and not self.requires_four_states:
             missing.append("three_state_commands_not_qualified")
+        if self.requires_four_states and not self.four_state_qualified:
+            missing.append("four_state_commands_not_qualified")
         if not self.published_forecasts_enabled:
             missing.append("published_forecasts_not_enabled")
         if not self.tariff_verified:
             missing.append("tariff_contract_not_verified")
-        if self.requires_four_states and not self.four_state_qualified:
-            missing.append("four_state_commands_not_qualified")
         return missing
 
 
@@ -902,7 +902,8 @@ class Controller:
         else:
             self.heater_meter_missing_since = None
         if (
-            self.state == STORAGE_ACTIVE
+            self.state in {STORAGE_ACTIVE, NORMAL_ACTIVE}
+            and self.heater in TARGET_C
             and obs.poll_at is not None
             and 0 <= (now - obs.poll_at).total_seconds() <= (cfg.poll_interval_minutes + 5) * 60
             and obs.element == "off"
@@ -912,14 +913,14 @@ class Controller:
             since = _dt(self.storage_idle_since)
             if (
                 obs.temperature_c is not None
-                and obs.temperature_c <= TARGET_C[STORAGE] - 8 - 2
+                and obs.temperature_c <= TARGET_C[self.heater] - 8 - 2
                 and now - since >= timedelta(minutes=15)
             ):
                 alerts.append(
                     (
                         "storage_not_heating",
-                        "Hot water: Manual 70 °C but not heating",
-                        f"Manual 70 °C is confirmed and the reading is {obs.temperature_c} °C, but "
+                        "Hot water: Manual target confirmed but not heating",
+                        f"Manual {TARGET_C[self.heater]} °C is confirmed and the reading is {obs.temperature_c} °C, but "
                         "the element has been off for 15 minutes. No command is repeated. Check "
                         "the heater and its power supply.",
                     )

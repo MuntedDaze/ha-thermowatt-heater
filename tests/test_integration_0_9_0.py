@@ -104,6 +104,10 @@ class Rig:
             entry_id="entry1",
             options={
                 "forecast_enabled": True,
+                "meter_verified": True,
+                "tariff_verified": True,
+                "import_positive": False,
+                "tariff_clock": "standard",
                 "normal_storage_c": "70",  # previous-strategy regression fixture
                 "peak_heating_policy": "Verified solar-only heating",
                 "forecast_uncertainty": 0.0,
@@ -118,6 +122,7 @@ class Rig:
             **c.DEFAULT_SOURCES,
             "forecast_pv": FORECAST_PV,
             "forecast_load": FORECAST_LOAD,
+            "pv_ac": c.DEFAULT_PV_AC,
             "heater_power": "sensor.synthetic_heater_w",
         }
         self.hass = SimpleNamespace(

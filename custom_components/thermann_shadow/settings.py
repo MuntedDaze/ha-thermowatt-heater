@@ -583,6 +583,15 @@ _DUAL_PROTECTED = frozenset(
         "controller_four_state_qualified",
     }
 )
+CATALOG["boost_min_saving_aud"] = Setting(
+    "Minimum benefit of optional solar boost",
+    "Advanced",
+    "Expected net dollars saved must exceed this per boost as well as the existing per-kWh margin; avoids extra commands for trivial benefit.",
+    0,
+    2,
+    "AUD",
+)
+_DUAL_PROTECTED = _DUAL_PROTECTED | {"boost_min_saving_aud"}
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety
@@ -605,6 +614,10 @@ ORIGINAL_DEFAULTS = MappingProxyType(
         # Recommendations changed in 0.4.0 by owner requirement; what shipped first:
         "morning_threshold_c": 40.0,
         "morning_time": "07:00",
+        "meter_verified": True,
+        "tariff_verified": True,
+        "import_positive": False,
+        "tariff_clock": "standard",
     }
 )
 

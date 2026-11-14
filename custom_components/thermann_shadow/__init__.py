@@ -81,11 +81,16 @@ async def async_setup_entry(hass, entry):
     runtime.thermal_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.thermal")
     from .performance import MeasuredHistory
 
-    runtime.history_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.measured_history")
+    legacy_history_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.measured_history")
+    runtime.history_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.measured_history_v2")
     try:
-        runtime.history = MeasuredHistory.from_dict(await runtime.history_store.async_load())
+        saved_history = await runtime.history_store.async_load()
+        if saved_history is None:
+            saved_history = await legacy_history_store.async_load()
+        runtime.history = MeasuredHistory.from_dict(saved_history)
     except Exception:  # noqa: BLE001 - observations remain usable without learned history
         runtime.history = MeasuredHistory()
+    runtime.history.configure(settings.tank_litres, settings.element_kw)
     try:
         runtime.thermal = ThermalObserver.from_dict(await runtime.thermal_store.async_load())
     except Exception:  # noqa: BLE001 - diagnostics only; start empty
@@ -121,7 +126,7 @@ async def async_migrate_entry(hass, entry):
     Only the exact old default is moved; any value the owner chose is kept.
     Major version stays 1, so a 0.3.0 rollback can still load the entry.
     """
-    if entry.version != 1 or entry.minor_version >= 3:
+    if entry.version != 1 or entry.minor_version >= 4:
         return True
     options = dict(entry.options)
     if entry.minor_version < 2 and options.get("morning_threshold_c") == LEGACY_MORNING_THRESHOLD_C:
@@ -129,12 +134,15 @@ async def async_migrate_entry(hass, entry):
     # 1.2 -> 1.3 (0.7.1, settings audit): values outside the tightened ranges
     # move to the nearest allowed value, and each is logged. A 0.7.0 rollback
     # still loads a 1.3 entry (same major version).
-    options, changes = migrate_0_7_1(options)
+    options, changes = migrate_0_7_1(options) if entry.minor_version < 3 else (options, {})
     for key, (old, new) in changes.items():
         logging.getLogger(__name__).warning(
             "Setting %s was %s, outside the range allowed since 0.7.1; now %s.", key, old, new
         )
-    hass.config_entries.async_update_entry(entry, options=options, minor_version=3)
+    from .installation import preserve_existing
+
+    options = preserve_existing(options, getattr(entry, "data", {}))
+    hass.config_entries.async_update_entry(entry, options=options, minor_version=4)
     return True
 
 

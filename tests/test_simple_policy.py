@@ -17,7 +17,7 @@ import pytest
 from test_shadow_model import c, m
 
 sp = importlib.import_module(f"{m.__package__}.simple_policy")
-SETTINGS, TARIFFS = c.parse_options({})
+SETTINGS, TARIFFS = c.parse_options({"tariff_clock": "standard"})
 # Preserve the previous mandatory-70 scenarios as explicit compatibility tests.
 S = sp.PolicySettings(
     normal_c=70,
