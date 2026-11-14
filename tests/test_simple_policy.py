@@ -116,7 +116,9 @@ def test_owner_layer_then_cloud_gate_then_spacing():
     assert p.decide(snap(now, OFF, override_12h=True)).command == "Manual:70"
     blocked = p.decide(snap(now, STORE, cloud_ready=False))
     assert (blocked.state, blocked.layer, blocked.plan["wanted"]) == (HOLD, 3, OFF)
-    spaced = p.decide(snap(now, STORE, last_command_at=now - 14 * MIN))
+    # Ordinary off-peak transitions still obey spacing; peak meter-loss OFF does not.
+    weekend = at(SAT, 14)
+    spaced = p.decide(snap(weekend, STORE, last_command_at=weekend - 14 * MIN))
     assert (spaced.reason, spaced.command) == ("command_spacing", None)
     assert p.decide(snap(now, STORE, last_command_at=now - 15 * MIN)).command == "off"
 
@@ -221,6 +223,9 @@ def test_stale_meter_withdraws_and_never_qualifies():
     assert p.decide(snap(later, OFF, reading=50)).state == OFF
     d = p.decide(snap(later, STORE))
     assert (d.state, d.reason) == (OFF, "peak_meter_unavailable")
+    # A recently issued Manual 70 command must not hold up this protective OFF.
+    d = p.decide(snap(later, STORE, last_command_at=later - 2 * MIN))
+    assert (d.state, d.reason, d.command) == (OFF, "peak_meter_unavailable", "off")
 
 
 def test_after_a_restart_peak_solar_needs_a_fresh_qualification():
@@ -408,15 +413,35 @@ def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
     assert (d.state, d.plan["waiting_for"]) == (BASE, "more_solar")
 
 
-def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():
+def test_weekend_session_survives_brief_cloud_but_stops_sustained_import():
     p = sp.SimplePolicy(S, TARIFFS)
     t0 = feed(p, at(SAT, 13), 10, -0.5, element=True)  # heating: available 3.5 kW
-    now = feed(p, t0 + MIN, 8, 2.7, element=True)  # cloud: available 0.3 kW for 8 min
+    now = feed(p, t0 + MIN, 4, 2.7, element=True)  # 4 minutes: too brief to withdraw
     sun_returns = fc(now, 4, 2.5)
     d = p.decide(snap(now, STORE, reading=55, forecast=sun_returns))
     assert (d.state, d.reason) == (STORE, "solar_opportunity_continues")
+    now = feed(p, now + MIN, 2, 2.7, element=True)  # 6 min importing nearly all 3 kW
+    # Even a confident sunny forecast cannot justify sustained near-full import
+    # for OPTIONAL weekend storage; the measured economics take precedence.
+    d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 2.5)))
+    assert (d.state, d.reason, d.command) == (
+        BASE,
+        "solar_opportunity_import_withdrawn",
+        "Manual:45",
+    )
+    assert d.plan["optional_max_grid_import_kw"] == pytest.approx(2.2)
+
+
+def test_weekend_opportunity_ends_when_solar_and_forecast_both_fade():
+    p = sp.SimplePolicy(S, TARIFFS)
+    t0 = feed(p, at(SAT, 13), 10, -0.5, element=True)
+    now = feed(p, t0 + MIN, 8, 2.7, element=True)
     d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 0.3)))
-    assert (d.state, d.reason, d.command) == (BASE, "solar_opportunity_ended", "Manual:45")
+    assert (d.state, d.reason, d.command) == (
+        BASE,
+        "solar_opportunity_import_withdrawn",
+        "Manual:45",
+    )
 
 
 def test_opportunity_never_starts_what_cannot_finish_before_monday_peak():
@@ -643,7 +668,9 @@ def test_sim_no_command_pairs_closer_than_the_spacing_and_no_flapping():
         return base * (0.3 if (loc.minute // 7) % 2 else 1.0)  # clouds every 7 minutes
 
     log, _ = simulate(at(SAT, 6), 14, 44, BASE, patchy)
-    assert len(log["commands"]) <= 4, log["commands"]
+    # Preventing sustained near-full grid import can split an optional solar
+    # session on a repeatedly cloudy day; still bound switching to 3 cycles.
+    assert len(log["commands"]) <= 6, log["commands"]
     log, _ = simulate(at(MON, 6), 14, 44, BASE, patchy)
     assert len(log["commands"]) <= 5, log["commands"]
 
