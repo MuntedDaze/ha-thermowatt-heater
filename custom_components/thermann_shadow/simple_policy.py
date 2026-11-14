@@ -81,7 +81,9 @@ SAMPLE_SLACK = timedelta(seconds=30)  # timer drift allowed at the start of a sa
 # A protective OFF when solar is lost or peak grid metering disappears must
 # not be held by spacing after a recent solar start. Every other command,
 # including restarting solar heating, still observes the 15-minute spacing.
-SPACING_EXEMPT_REASONS = frozenset({"peak_solar_withdrawn", "peak_meter_unavailable"})
+SPACING_EXEMPT_REASONS = frozenset(
+    {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_power_unavailable"}
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +140,9 @@ class Snapshot:
     holiday: bool = False
     override_12h: bool = False
     cloud_ready: bool = True
+    # A configured dedicated heater-power sensor is missing or invalid. For
+    # optional solar heating we never rely on the aggregate-load estimator.
+    heater_power_ready: bool = True
 
 
 @dataclass(frozen=True)
@@ -159,12 +164,30 @@ class SimplePolicy:
 
     # --- local meter ---------------------------------------------------------------
 
-    def add_meter(self, at: datetime, grid_kw: float, element_on: bool | None) -> None:
-        """One local sample: grid import positive, export negative. ``element_on``
-        is the caller's element estimate (house-load step); None counts as off,
-        which can only make solar look SMALLER (never a costly start)."""
-        available = -grid_kw + (self.s.element_kw if element_on else 0.0)
-        self.samples.append((at, max(0.0, grid_kw), available, bool(element_on)))
+    def add_meter(
+        self,
+        at: datetime,
+        grid_kw: float,
+        element_on: bool | None,
+        *,
+        measured_heater_kw: float | None = None,
+    ) -> None:
+        """One local sample: positive grid means import. When available, an
+        actual circuit reading takes precedence over a nominal 3 kW estimate.
+        The caller must never supply an inferred value as measured watts."""
+        if measured_heater_kw is not None:
+            if (
+                not math.isfinite(measured_heater_kw)
+                or not 0 <= measured_heater_kw <= self.s.element_kw * 1.4
+            ):
+                raise ValueError("heater_power_out_of_range")
+            credit_kw = measured_heater_kw
+            on = measured_heater_kw > 2.0
+        else:
+            credit_kw = self.s.element_kw if element_on else 0.0
+            on = bool(element_on)
+        available = -grid_kw + credit_kw
+        self.samples.append((at, max(0.0, grid_kw), available, on))
         cutoff = at - 2 * max(self.s.qualify, self.s.withdraw)
         while self.samples and self.samples[0][0] < cutoff:
             self.samples.popleft()
@@ -359,6 +382,8 @@ class SimplePolicy:
             plan["mode"] = PEAK
             qualified = self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw)
             if state == STORAGE:
+                if not snap.heater_power_ready:
+                    return OFF, "peak_heater_power_unavailable", 4, plan
                 if not self.meter_fresh(now):
                     return OFF, "peak_meter_unavailable", 4, plan
                 if not in_peak and not qualified:
@@ -371,6 +396,8 @@ class SimplePolicy:
                 ):
                     return OFF, "peak_solar_withdrawn", 4, plan
                 return STORAGE, "peak_solar_continues", 4, plan
+            if not snap.heater_power_ready:
+                return OFF, "peak_no_verified_heater_power", 4, plan
             if would_heat and qualified:
                 return STORAGE, "peak_solar_qualified", 4, plan
             return OFF, "peak_no_grid_heating", 4, plan
@@ -450,6 +477,8 @@ class SimplePolicy:
         # Opportunity: weekday nights and weekends.
         plan["mode"] = OPPORTUNITY
         if state == STORAGE:
+            if not snap.heater_power_ready:
+                return BASELINE, "solar_opportunity_heater_power_unavailable", 5, plan
             if measured is None:
                 return BASELINE, "solar_opportunity_ended", 5, plan
             # This is discretionary heating, unlike the weekday deadline.
@@ -470,6 +499,7 @@ class SimplePolicy:
         finish_by = None if peak is None else peak - s.soft_target_margin
         if (
             would_heat
+            and snap.heater_power_ready
             and (finish_by is None or now + timedelta(hours=hours) <= finish_by)
             and self.sustained(now, s.qualify, lambda x: x[2] >= s.solar_floor_kw)
         ):
