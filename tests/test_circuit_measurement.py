@@ -71,6 +71,47 @@ def test_verification_is_bound_to_entity_and_unit():
         assert not meter.circuit_power(reading, ENTITY, stamp, NOW, NOW - MIN).valid
 
 
+def test_reversed_ct_sign_is_preserved_for_commissioning_diagnostics():
+    result = read(-3000)
+    assert result.watts == -3000 and not result.valid and result.state == "unknown"
+
+
+def test_steady_zero_requires_real_republication_not_repeated_evaluation():
+    reading = m.Reading(0, NOW, "W")
+    for second, valid in [(0, True), (120, True), (121, False), (300, False)]:
+        result = meter.circuit_power(
+            reading, ENTITY, f"{ENTITY}|W", NOW + timedelta(seconds=second), NOW - MIN
+        )
+        assert result.valid is valid
+    recovered = meter.circuit_power(
+        m.Reading(0, NOW + 5 * MIN, "W"), ENTITY, f"{ENTITY}|W", NOW + 5 * MIN, NOW - MIN
+    )
+    assert recovered.valid and recovered.state == "off"
+
+
+def test_dashboard_absolute_power_wrapper_cannot_qualify_control():
+    result = meter.circuit_power(
+        m.Reading(0, NOW, "W"),
+        "sensor.em_hot_water_power",
+        "sensor.em_hot_water_power|W",
+        NOW,
+        NOW - MIN,
+    )
+    assert result.quality == "wrapper_not_raw_meter" and not result.valid
+
+
+def test_steady_zero_runtime_loss_is_visible_and_does_not_contact_cloud(rig):
+    rig.report("sensor.synthetic_heater_w", 0, {"unit_of_measurement": "W"})
+    rig.runtime.update(rig.now())
+    assert rig.runtime.circuit.valid
+    initial = rig.bridge.usage.total
+    rig.t += 121
+    rig.runtime.update(rig.now())
+    assert not rig.runtime.circuit.valid and rig.runtime.circuit.state == "unknown"
+    assert any("report_cadence" in warning for warning in rig.runtime.warnings)
+    assert rig.bridge.usage.total == initial and not rig.posts
+
+
 @pytest.mark.parametrize(
     "grid,heater,available,solar,imported",
     [

@@ -16,7 +16,8 @@ economic permission) is gone.
 
 import logging
 from collections import deque
-from datetime import timedelta
+from datetime import datetime, timedelta
+import math
 
 from homeassistant.util import dt as dt_util
 
@@ -35,6 +36,18 @@ PV_AVERAGE_MINUTES = 15
 CLOUD_HEALTH = {"ok", "disabled", "auth_locked", "quota_limited", "backoff", "unavailable"}
 
 LOG = logging.getLogger(__name__)
+
+
+def background_poll_due(now, seconds, health, schedule):
+    if (
+        health != "ok"
+        or schedule != "clock_aligned"
+        or type(seconds) not in (int, float)
+        or not math.isfinite(seconds)
+        or not 60 <= seconds <= 7200
+    ):
+        return None
+    return datetime.fromtimestamp((math.floor(now.timestamp() / seconds) + 1) * seconds, now.tzinfo)
 
 
 def next_tariff_change(now, tariffs, clock):
@@ -101,22 +114,27 @@ class ShadowRuntime:
             options.get("heater_meter_verification", "")
             != self.native_options["heater_meter_verification"]
         )
-        if (
+        reset_needed = (
             changed_mapping
             or verification_changed
             or settings != self.settings
             or tariffs != self.tariffs
-        ):
+            or any(
+                options.get(key, DEFAULT_OPTIONS[key]) != self.native_options[key]
+                for key in ("optional_heat_margin_aud_per_kwh", "pause_min_saving_aud")
+            )
+        )
+        if reset_needed:
             self.pv_samples.clear()
             self.history.last = self.history.anchor = self.history.candidate = None
             self.estimator.reset()
-            if self.executor is not None:
-                # Meter evidence was gathered under the old mapping or sign.
-                self.executor.reset_policy()
         if changed_mapping:
             self.boot = dt_util.utcnow()
         self.sources, self.settings, self.tariffs = sources, settings, tariffs
         self.set_native_reference(options)
+        if self.executor is not None and reset_needed:
+            # New policy must see the new tariff/settings, not the previous ones.
+            self.executor.reset_policy()
         self.update(dt_util.utcnow())
 
     def _reading(self, key, attribute=None, entity_id=None):
@@ -226,6 +244,12 @@ class ShadowRuntime:
         self.circuit_energy_kwh = energy_reading(
             self._reading("heater_energy"), now, self.boot, settings.grid_max_age_seconds
         )
+        if self.sources.get("heater_energy") == "sensor.em_hot_water_energy":
+            self.circuit_energy_kwh = None
+        if self.sources.get("heater_power") and not self.circuit.valid:
+            self.warnings.append(
+                "heater_meter_invalid_optional_heat_blocked_check_raw_report_cadence"
+            )
         paired = (
             self.circuit.valid
             and self.grid_observed_at is not None
@@ -407,6 +431,17 @@ class ShadowRuntime:
             heater_meter_state=self.circuit.state,
             heater_meter_quality=self.circuit.quality,
             heater_energy_kwh=self.circuit_energy_kwh,
+            heater_raw_w=self.circuit.watts,
+            expected_completion=datetime.fromisoformat(self.completion["latest"])
+            if self.completion.get("latest")
+            else None,
+            prediction_confidence="provisional_range"
+            if self.completion.get("latest")
+            else "unknown",
+        )
+        calibration = self.history.calibration()
+        values["learned_heating_rate"] = (
+            calibration["on_kw"] / calibration["kwh_per_c"] if calibration["ready"] else None
         )
         base, _ = base_load(house_kw, self.heater)
         values["base_load_kw"] = None if base is None else round(base, 3)
@@ -414,6 +449,15 @@ class ShadowRuntime:
         values["cloud_health"] = (
             health.value if health and health.value in CLOUD_HEALTH else "unrecognised"
         )
+        cloud = self.hass.states.get(self.sources.get("cloud_health", ""))
+        attrs = cloud.attributes if cloud else {}
+        seconds = attrs.get("poll_interval_seconds")
+        values["next_cloud_poll"] = (
+            background_poll_due(now, seconds, values["cloud_health"], attrs.get("poll_schedule"))
+            if status_ok
+            else None
+        )
+        values["cloud_poll_interval"] = seconds if values["next_cloud_poll"] is not None else None
         try:
             current = tariff_at(now, self.tariffs, self.settings.tariff_clock)
             change = next_tariff_change(now, self.tariffs, self.settings.tariff_clock)

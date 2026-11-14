@@ -34,9 +34,11 @@ def circuit_power(reading: Reading | None, entity, verification, now, boot, max_
         elif reading.unit != "W":
             return CircuitPower(quality="unit_invalid")
         if not 0 <= watts <= 3800:
-            return CircuitPower(quality="power_implausible")
+            return CircuitPower(watts, reading.observed_at, quality="power_implausible")
         if 100 < watts < 2000:
             return CircuitPower(watts, reading.observed_at, quality="power_ambiguous")
+        if entity == "sensor.em_hot_water_power":
+            return CircuitPower(watts, reading.observed_at, quality="wrapper_not_raw_meter")
         if verification != f"{entity}|{reading.unit}":
             return CircuitPower(watts, reading.observed_at, quality="unverified")
         return CircuitPower(

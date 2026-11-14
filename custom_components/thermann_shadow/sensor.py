@@ -1,6 +1,6 @@
 """Only sensors: estimates deliberately have no energy-measurement state class."""
 
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .naming import RETIRED_SENSORS as RETIRED  # noqa: F401 (re-exported)
@@ -49,8 +49,22 @@ SENSORS = {
     "heater_meter_state": ("Hot water measured element state", None),
     "heater_meter_quality": ("Hot water meter quality", None),
     "heater_energy_kwh": ("Hot water circuit energy", "kWh"),
+    "heater_raw_w": ("Hot water signed raw power", "W"),
+    "expected_completion": ("Expected heating completion", None),
+    "next_cloud_poll": ("Next cloud poll", None),
+    "cloud_poll_interval": ("Cloud poll interval", "s"),
+    "learned_heating_rate": ("Learned heating rate", "°C/h"),
+    "prediction_confidence": ("Heating prediction confidence", None),
 }
-TIMESTAMPS = {"peak_start", "planned_start", "latest_start", "next_tariff_change", "soft_target"}
+TIMESTAMPS = {
+    "peak_start",
+    "planned_start",
+    "latest_start",
+    "next_tariff_change",
+    "soft_target",
+    "expected_completion",
+    "next_cloud_poll",
+}
 CONTROLLER_SENSORS = {
     "controller_state": ("Automatic control state", None),
     "controller_reason": ("Automatic control reason", None),
@@ -67,12 +81,16 @@ CONTROLLER_SENSORS = {
     "fault": ("Controller fault", None),
     "operating_mode": ("Hot water operating mode", None),
     "guest_mode_ends": ("12hr Override ends", None),
+    "request_budget_remaining": ("Cloud request budget remaining", "requests"),
+    "next_adaptive_poll": ("Shadow next adaptive poll", None),
+    "adaptive_poll_interval": ("Shadow adaptive poll interval", "s"),
 }
 CONTROLLER_TIMESTAMPS = {
     "next_heating_start",
     "next_heating_stop",
     "last_command_time",
     "guest_mode_ends",
+    "next_adaptive_poll",
 }
 
 
@@ -105,6 +123,9 @@ class ShadowSensor(SensorEntity):
         self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
         if key in TIMESTAMPS:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        if key in {"cloud_poll_interval", "adaptive_poll_interval"}:
+            self._attr_device_class = SensorDeviceClass.DURATION
+            self._attr_state_class = SensorStateClass.MEASUREMENT
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.runtime.subscribe(self.async_write_ha_state))
@@ -125,9 +146,8 @@ class ControllerSensor(ShadowSensor):
 
     def __init__(self, runtime, entry, key, name, unit):
         super().__init__(runtime, entry, key, name, unit)
-        self._attr_device_class = (
-            SensorDeviceClass.TIMESTAMP if key in CONTROLLER_TIMESTAMPS else None
-        )
+        if key in CONTROLLER_TIMESTAMPS:
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     async def async_added_to_hass(self):
         await super().async_added_to_hass()

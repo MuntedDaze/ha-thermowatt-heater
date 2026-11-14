@@ -10,6 +10,23 @@ kW. Optionally map `heater_energy` to cumulative import Wh or kWh on that same
 circuit. A shared circuit cannot qualify the heater. Oven, AC and plug sensors
 are not controller inputs. Fable owns monitoring packages and dashboards.
 
+Map the raw meter entities directly, shared independently with Fable's mapping.
+Never use `sensor.em_hot_water_power` or `sensor.em_hot_water_energy`. The former
+takes an absolute value and may stop reporting unchanged zero; it hides sign
+and freshness evidence. The controller refuses those known wrappers. Negative
+raw W are retained in diagnostics and `Hot water signed raw power`, never
+qualified or silently made positive. No dashboard package is required.
+
+Steady-zero freshness is an installation acceptance requirement. Verify actual
+HA `last_reported` advances within 120 seconds while idle, including overnight.
+A polling meter may legitimately republish unchanged zero; a value-change-only
+source cannot be accepted by this controller without independent liveness.
+Re-evaluation, cloud status or dashboard activity does not renew a raw report.
+At 121 seconds the state becomes unknown, warnings name the report-cadence
+problem, optional heat is blocked/withdrawn and essential off-peak heat remains.
+Do not increase the age limit merely to hide a non-reporting source. Validate
+the actual integration and device; no suitable reporting cadence is assumed.
+
 Leave `heater_meter_verification` empty until every applicable check is signed
 off. Then record `sensor.actual_entity|W` (or `|kW`) under System. This records
 installation knowledge, not an automatically discovered fact. Remapping clears

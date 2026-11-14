@@ -470,6 +470,27 @@ CATALOG.update(
         ),
     }
 )
+CATALOG.update(
+    {
+        "optional_heat_margin_aud_per_kwh": Setting(
+            "Optional heat minimum saving",
+            "Advanced",
+            "Minimum prospective saving against off-peak grid, including lost feed-in value. "
+            "Does not relax measured-power or import guards.",
+            0,
+            0.20,
+            "AUD/kWh",
+        ),
+        "pause_min_saving_aud": Setting(
+            "Minimum saving to pause weekday heat",
+            "Advanced",
+            "A later window must save this much and still fit before the soft target.",
+            0.10,
+            2,
+            "AUD",
+        ),
+    }
+)
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety
@@ -545,6 +566,8 @@ PRESERVE_ON_RESTORE = frozenset(
         "adaptive_polling_shadow",
         "adaptive_poll_heating_minutes",
         "adaptive_poll_stable_minutes",
+        "optional_heat_margin_aud_per_kwh",
+        "pause_min_saving_aud",
     }
 )
 # 0.7.1: settings that change WHERE commands go, WHETHER they may be sent, HOW
@@ -582,6 +605,8 @@ LOCKED_WHILE_ACTIVE = frozenset(
         "grid_max_age_seconds",
         "forecast_enabled",
         "sources",
+        "optional_heat_margin_aud_per_kwh",
+        "pause_min_saving_aud",
         "heater_meter_verification",
     }
 )

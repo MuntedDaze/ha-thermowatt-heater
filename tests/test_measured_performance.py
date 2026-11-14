@@ -128,3 +128,13 @@ def test_event_contract_records_source_times_and_deduplicates(tmp_path, monkeypa
     assert rig.runtime.telemetry is event
     json.dumps(event, allow_nan=False)
     assert not rig.posts
+
+
+def test_fixed_next_poll_uses_utc_clock_and_is_unknown_during_backoff(tmp_path, monkeypatch):
+    rig = Rig(tmp_path, monkeypatch, hobart(MON, 12))
+    runtime = rig.runtime_module
+    due = runtime.background_poll_due(START, 1800, "ok", "clock_aligned")
+    assert due.timestamp() % 1800 == 0 and 0 < (due - START).total_seconds() <= 1800
+    assert runtime.background_poll_due(START, 1800, "backoff", "clock_aligned") is None
+    assert runtime.background_poll_due(START, 1800, "ok", None) is None
+    assert runtime.background_poll_due(START, float("nan"), "ok", "clock_aligned") is None

@@ -65,6 +65,8 @@
         "description": "Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later in summer) and must increase. The tariff contract can only be changed while Automatic heater control is off. Every change is checked together with the rest of the configuration; an invalid combination saves nothing.",
         "data": {
           "forecast_enabled": "Use published forecasts",
+          "optional_heat_margin_aud_per_kwh": "Optional heat minimum saving (AUD/kWh)",
+          "pause_min_saving_aud": "Minimum saving to pause weekday heat (AUD)",
           "forecast_uncertainty": "Forecast uncertainty margin",
           "forecast_house_margin_kw": "Extra forecast household load",
           "tariff_clock": "Tariff clock",

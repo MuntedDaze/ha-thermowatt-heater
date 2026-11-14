@@ -83,6 +83,9 @@ BRIDGE_IN_PROGRESS_RESULTS = {
 # a fault that loops is still stopped. OFF is never held back.
 OPTIONAL_REASONS = frozenset({"peak_solar_qualified", "solar_opportunity"})
 ESSENTIAL_EXTRA_COMMANDS = 6
+# Reserve pre-read/POST/two confirmations/possible refresh for two essential
+# transitions. This local estimate never grants additional vendor quota.
+OPTIONAL_EXIT_REQUEST_RESERVE = 10
 # Must match the policy: only justified protective peak OFF bypasses spacing.
 SPACING_EXEMPT_REASONS = frozenset(
     {"peak_solar_withdrawn", "peak_meter_unavailable", "peak_heater_meter_unavailable"}
@@ -141,6 +144,7 @@ class ControllerConfig:
     max_commands_per_day: int = 8
     # 0.9.1: automatic control needs the published (EMHASS) forecasts enabled.
     published_forecasts_enabled: bool = True
+    tariff_verified: bool = True
     command_spacing_minutes: float = 15.0  # the shared spacing rule, enforced here too
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
@@ -158,6 +162,8 @@ class ControllerConfig:
             missing.append("three_state_commands_not_qualified")
         if not self.published_forecasts_enabled:
             missing.append("published_forecasts_not_enabled")
+        if not self.tariff_verified:
+            missing.append("tariff_contract_not_verified")
         return missing
 
 
@@ -195,6 +201,8 @@ class Observation:
 
     now: datetime
     poll_at: datetime | None = None  # bridge last_successful_poll
+    heater_meter_mapped: bool = False
+    heater_meter_quality: str | None = None
     mode: str | None = None  # vendor mode: Manual/Schedule/Eco/Off/Holiday/Unknown
     target_c: float | None = None
     temperature_c: float | None = None
@@ -303,6 +311,7 @@ class Controller:
     holiday_return: str | None = None
     refusal: str | None = None
     forecast_missing_since: str | None = None
+    heater_meter_missing_since: str | None = None
 
     # ------------------------------------------------------------------ persistence
     def to_dict(self) -> dict:
@@ -634,6 +643,7 @@ class Controller:
             result_at is not None
             and published is not None
             and result_at >= published - timedelta(seconds=5)
+            and result_at <= obs.now
             and last.get("payload") == intent.get("payload")
         )
         if bridge_fresh:
@@ -670,6 +680,7 @@ class Controller:
             and obs.poll_at is not None
             and published is not None
             and obs.poll_at > published
+            and obs.poll_at <= obs.now
         )
         in_progress = bridge_fresh and result in BRIDGE_IN_PROGRESS_RESULTS
         conclusive = after_publish and not in_progress
@@ -779,6 +790,13 @@ class Controller:
             failures.append("request_accounting_unavailable")
         elif used >= cfg.max_requests_per_day and target != OFF:
             failures.append("daily_cloud_request_budget_reached")
+        elif (
+            used is not None
+            and reason in OPTIONAL_REASONS
+            and target != OFF
+            and used + OPTIONAL_EXIT_REQUEST_RESERVE > cfg.max_requests_per_day
+        ):
+            failures.append("optional_exit_request_reserve")
         return failures
 
     def _decide(
@@ -835,8 +853,27 @@ class Controller:
             effects[:] = [e for e in effects if e.kind != "notify"]
             return
         alerts: list[tuple[str, str, str]] = []
+        if obs.heater_meter_mapped and obs.heater_meter_quality not in ("verified", "unverified"):
+            since = _dt(self.heater_meter_missing_since)
+            if since is None or since > now:
+                self.heater_meter_missing_since = _iso(now)
+                since = now
+            if now - since >= timedelta(minutes=5):
+                alerts.append(
+                    (
+                        "heater_meter_unavailable",
+                        "Hot water: raw circuit meter unavailable",
+                        f"Circuit power is {obs.heater_meter_quality or 'unknown'}. Optional solar heat is blocked; "
+                        "essential off-peak heat retains its normal guards. Check the raw meter entity, sign, units "
+                        "and last_reported cadence, including steady 0 W. Repeated evaluations do not prove liveness.",
+                    )
+                )
+        else:
+            self.heater_meter_missing_since = None
         if (
             self.state == STORAGE_ACTIVE
+            and obs.poll_at is not None
+            and 0 <= (now - obs.poll_at).total_seconds() <= (cfg.poll_interval_minutes + 5) * 60
             and obs.element == "off"
             and obs.element_confidence in {"verified", "high"}
         ):
@@ -858,14 +895,15 @@ class Controller:
                 )
         else:
             self.storage_idle_since = None
-        if obs.poll_at is None or (now - obs.poll_at) > timedelta(
+        if obs.poll_at is None or not timedelta(0) <= now - obs.poll_at <= timedelta(
             minutes=2 * cfg.poll_interval_minutes + 5
         ):
             alerts.append(
                 (
                     "status_stale",
                     "Hot water: heater status missing",
-                    "No fresh Thermann status for over an hour. Automatic commands are paused. "
+                    "Thermann status is missing, future-dated or beyond the configured freshness window. "
+                    "Automatic commands require a valid status. "
                     "Check the Thermann Hot Water app and cloud health.",
                 )
             )
@@ -915,8 +953,8 @@ class Controller:
                 (
                     "evening_target_at_risk",
                     "Hot water: 70 °C may not be reached before the peak",
-                    "Heating continues on off-peak power until the peak starts "
-                    f"(expected reading about {want.plan.get('expected_reading_at_peak')} °C).",
+                    "Heating continues on permitted off-peak power until the peak starts. "
+                    "The bottom-sensor model cannot promise completion; inspect the last observed temperature and time.",
                 )
             )
         cooldown = timedelta(hours=cfg.notification_cooldown_hours)

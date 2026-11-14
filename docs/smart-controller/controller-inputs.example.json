@@ -2,13 +2,15 @@
   "development_example_only": true,
   "hardware_commissioned": false,
   "sources": {
-    "heater_power": "sensor.replace_with_exclusive_hot_water_active_power",
-    "heater_energy": "sensor.replace_with_optional_same_circuit_total_energy"
+    "heater_power": "sensor.replace_with_raw_hot_water_channel_active_power",
+    "heater_energy": "sensor.replace_with_raw_same_channel_cumulative_energy"
   },
   "options": {
     "heater_meter_verification": ""
   },
   "grid_convention": "Existing import_positive option; normalized backend import is positive",
   "verification_format_after_authorized_commissioning": "sensor.actual_entity|W",
+  "raw_input_requirement": "Use the meter's entities directly, never sensor.em_hot_water_power or sensor.em_hot_water_energy",
+  "steady_zero_requirement": "Raw last_reported must advance within 120 seconds even at steady 0 W; otherwise remain unknown and block optional heat",
   "optional_load_channels": "Not controller dependencies; dashboard mappings belong to Fable"
 }

@@ -67,6 +67,7 @@ def controller_config(
         poll_interval_minutes=poll_minutes,
         expected_command_topic=expected_topic,
         published_forecasts_enabled=values["forecast_enabled"] is True,
+        tariff_verified=values["tariff_verified"] is True,
     )
 
 
@@ -93,7 +94,13 @@ class Executor:
 
         values = {**DEFAULT_OPTIONS, **options}
         self.cfg = controller_config(values, self._poll_minutes(), self._expected_topic())
+        economic_change = any(
+            values[key] != self.runtime.native_options[key]
+            for key in ("optional_heat_margin_aud_per_kwh", "pause_min_saving_aud")
+        )
         self.runtime.set_native_reference(options)
+        if economic_change:
+            self.reset_policy()
         shadow_settings = (
             values["adaptive_polling_shadow"],
             values["adaptive_poll_heating_minutes"],
@@ -110,7 +117,14 @@ class Executor:
     def reset_policy(self) -> None:
         settings = self.runtime.settings
         self.policy = SimplePolicy(
-            PolicySettings(feed_in_rate=settings.feed_in_rate, tariff_clock=settings.tariff_clock),
+            PolicySettings(
+                feed_in_rate=settings.feed_in_rate,
+                tariff_clock=settings.tariff_clock,
+                optional_heat_margin=self.runtime.native_options[
+                    "optional_heat_margin_aud_per_kwh"
+                ],
+                pause_min_saving=self.runtime.native_options["pause_min_saving_aud"],
+            ),
             self.runtime.tariffs,
         )
 
@@ -199,6 +213,8 @@ class Executor:
         states, sources = self.hass.states, self.runtime.sources
         obs = Observation(now=now, mqtt_ready="mqtt" in self.hass.config.components)
         obs.poll_at = self.runtime.poll_at
+        obs.heater_meter_mapped = bool(self.runtime.sources.get("heater_power"))
+        obs.heater_meter_quality = self.runtime.circuit.quality
         mode = states.get(sources.get("mode", ""))
         if mode is not None and mode.state in VENDOR_MODES:
             obs.mode = mode.state
@@ -278,6 +294,9 @@ class Executor:
             forecast=tuple(forecast),
             last_command_at=last,
             heater_meter_valid=runtime.power_budget is not None,
+            measured_element_kw=runtime.circuit.watts / 1000
+            if runtime.circuit.valid and runtime.circuit.state == "on"
+            else None,
             owner_override=controller.enabled
             and (controller.hold or controller.state == "owner_override"),
             holiday=controller.holiday_active(now),
@@ -503,6 +522,19 @@ class Executor:
             "fault": summary["fault"] or "none",
             "operating_mode": summary["operating_mode"],
             "guest_mode_ends": _parse(summary["guest_until"]),
+            "request_budget_remaining": max(
+                0, self.cfg.max_requests_per_day - summary["requests_last_24h"]
+            )
+            if summary["requests_last_24h"] is not None
+            else None,
+            "next_adaptive_poll": self.poll_shadow.next_due,
+            "adaptive_poll_interval": (
+                self.poll_shadow.next_due - self.poll_shadow.virtual_at
+            ).total_seconds()
+            if self.poll_shadow.enabled
+            and self.poll_shadow.next_due
+            and self.poll_shadow.virtual_at
+            else None,
         }
 
     def details(self) -> dict:

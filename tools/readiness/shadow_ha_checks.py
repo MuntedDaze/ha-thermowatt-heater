@@ -903,7 +903,7 @@ async def _upgrade_from_0_6(folder, version):
         )
         assert not [key for key in after if is_retired(entry.entry_id, key)], after
         added = {key.removeprefix(f"{entry.entry_id}_") for key in set(after) - set(before)}
-        assert added <= ADDED_IN_0_7_0 | ADDED_IN_0_9_0, added
+        assert added <= ADDED_IN_0_7_0 | ADDED_IN_0_9_0 | ADDED_IN_SMART_DEVELOPMENT, added
         for unique_id, entity_id in after.items():
             if not unique_id.endswith(RETIRED_SUFFIXES):
                 assert hass.states.get(entity_id) is not None, entity_id
@@ -1085,4 +1085,29 @@ ADDED_IN_0_9_0 = {
     "setting_controller_three_state_qualified",
     "holiday_departure_date",
     "holiday_return_date",
+}
+
+# Backend-only additions on the separate smart-controller development branch.
+# Existing registry IDs must still be preserved; enumerate additions explicitly.
+ADDED_IN_SMART_DEVELOPMENT = {
+    "setting_optional_heat_margin_aud_per_kwh",
+    "setting_pause_min_saving_aud",
+    "heater_measured_w",
+    "heater_meter_state",
+    "heater_meter_quality",
+    "heater_energy_kwh",
+    "controller_telemetry",
+    "setting_heater_meter_verification",
+    "setting_adaptive_polling_shadow",
+    "setting_adaptive_poll_heating_minutes",
+    "setting_adaptive_poll_stable_minutes",
+    "heater_raw_w",
+    "expected_completion",
+    "next_cloud_poll",
+    "cloud_poll_interval",
+    "learned_heating_rate",
+    "prediction_confidence",
+    "request_budget_remaining",
+    "next_adaptive_poll",
+    "adaptive_poll_interval",
 }

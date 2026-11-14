@@ -5,6 +5,11 @@ this branch supplies inputs and backend events only. Entity IDs below are
 fresh-install suggestions; resolve existing IDs via their stable unique-ID
 suffix and the actual HA registry. Do not assume a Shelly model or installation.
 
+Handoff reviewed against PR #32 commit
+`4c078f0802faaafc5d5fcc4264af7894b28fc95c`, `energy_monitoring/ENTITY_CONTRACT.md`.
+Neither branch imports the other. Both read the same raw hot-water CT entities.
+The dashboard wrappers are explicitly unsuitable as controller inputs.
+
 | Unique-ID suffix | Suggested sensor | Meaning |
 |---|---|---|
 | `heater_measured_w` | `sensor.thermann_shadow_hot_water_measured_power` | Verified actual circuit W, null when invalid |
@@ -12,6 +17,24 @@ suffix and the actual HA registry. Do not assume a Shelly model or installation.
 | `heater_meter_quality` | `sensor.thermann_shadow_hot_water_meter_quality` | `verified`, `missing`, `unverified`, `power_ambiguous`, `power_implausible`, `unit_invalid`, `stale_or_invalid` |
 | `heater_energy_kwh` | `sensor.thermann_shadow_hot_water_circuit_energy` | Normalized optional device counter; resets possible; not integrated estimates |
 | `controller_telemetry` | `sensor.thermann_shadow_controller_telemetry` | State = decision reason; attributes = schema below |
+| `heater_raw_w` | `sensor.thermann_shadow_hot_water_signed_raw_power` | Signed normalized raw watts for CT verification; invalid sign never authorizes control |
+| `expected_completion` | `sensor.thermann_shadow_expected_heating_completion` | timestamp; conservative end of conditional continuous-heating range; unknown when idle/unreliable |
+| `next_cloud_poll` | `sensor.thermann_shadow_next_cloud_poll` | timestamp; next clock-aligned fixed background slot only when bridge healthy and schedule known; confirmations can read sooner |
+| `cloud_poll_interval` | `sensor.thermann_shadow_cloud_poll_interval` | seconds, duration/measurement; actual fixed bridge interval |
+| `next_adaptive_poll` | `sensor.thermann_shadow_shadow_next_adaptive_poll` | timestamp, hypothetical only; flag off means unknown |
+| `adaptive_poll_interval` | `sensor.thermann_shadow_shadow_adaptive_poll_interval` | seconds, duration/measurement; shadow suggestion, never actual interval |
+| `learned_heating_rate` | `sensor.thermann_shadow_learned_heating_rate` | °C/h from ≥10 clean sessions/≥3 days; unknown until eligible; diagnostic |
+| `prediction_confidence` | `sensor.thermann_shadow_heating_prediction_confidence` | `provisional_range` or `unknown`; no claim of tank-wide temperature |
+| `request_budget_remaining` | `sensor.thermann_shadow_cloud_request_budget_remaining` | controller estimate over rolling 24 h; unknown if accounting missing; not a vendor quota |
+
+Fable mapping keys: `expected_completion` → expected_heating_completion;
+`next_poll` → next_cloud_poll; `poll_interval` → cloud_poll_interval. These
+expose the actual fixed schedule while adaptive remains shadow only. Map shadow
+entities separately and label them hypothetical. Future learned-rate, confidence
+and request-budget keys are proposed here for Fable to add in its own branch.
+Fable's interrupted-CT cycle capture remains independent; this backend likewise
+invalidates learning after a CT gap and does not invent a missed cycle or bridge
+missing data. No Fable file or PR is merged by this work.
 
 Use original meter entities with their native HA power/energy state classes for
 Recorder/statistics and Energy Dashboard. The controller's observed summaries

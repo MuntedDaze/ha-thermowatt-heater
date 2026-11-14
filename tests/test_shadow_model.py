@@ -112,7 +112,13 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
                 assert (node.module or "").split(".")[0] not in forbidden
             if isinstance(node, ast.Attribute) and node.attr in actuation:
                 seen.setdefault(path.name, set()).add(node.attr)
-        assert "_attr_state_class" not in source
+        if "_attr_state_class" in source:
+            # Only the actual/advisory polling durations are measurement
+            # statistics. Tank models and estimated energy remain unclassified.
+            assert path.name == "sensor.py"
+            assert 'if key in {"cloud_poll_interval", "adaptive_poll_interval"}' in source
+            assert "SensorStateClass.MEASUREMENT" in source
+            assert "SensorStateClass.TOTAL" not in source
     assert seen == {"executor.py": {"async_publish", "async_call"}}
     executor = (PACKAGE / "executor.py").read_text()
     # One command publish, and one guarded on-demand status request (refresh topic only).

@@ -105,6 +105,8 @@ DEFAULT_OPTIONS = {
     "adaptive_polling_shadow": False,
     "adaptive_poll_heating_minutes": 60.0,
     "adaptive_poll_stable_minutes": 90.0,
+    "optional_heat_margin_aud_per_kwh": 0.02,
+    "pause_min_saving_aud": 0.30,
 }
 # 0.7.1 (settings audit): ranges a saved value must respect. Values saved by
 # older versions outside them are brought inside once, by the entry migration
@@ -219,6 +221,11 @@ def parse_options(options):
         if not isinstance(values[key], str) or len(values[key]) > 64:
             raise ValueError("controller_setting_invalid")
     stamp = values["heater_meter_verification"]
+    if not (
+        0 <= number(values["optional_heat_margin_aud_per_kwh"]) <= 0.20
+        and 0.10 <= number(values["pause_min_saving_aud"]) <= 2
+    ):
+        raise ValueError("economic_setting_out_of_range")
     if not (
         15 <= number(values["adaptive_poll_heating_minutes"]) <= 60
         and 30 <= number(values["adaptive_poll_stable_minutes"]) <= 90

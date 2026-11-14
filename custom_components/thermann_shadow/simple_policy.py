@@ -135,6 +135,7 @@ class Snapshot:
     override_12h: bool = False
     cloud_ready: bool = True
     heater_meter_valid: bool = False  # optional starts require explicit verified input
+    measured_element_kw: float | None = None  # verified instantaneous ON power; never inference
 
 
 @dataclass(frozen=True)
@@ -233,8 +234,15 @@ class SimplePolicy:
 
     # --- heating arithmetic --------------------------------------------------------------
 
-    def _rate_c_per_hour(self, observed: float | None) -> float:
-        physics = self.s.element_kw / self.s.kwh_per_c  # about 8.2 °C/h for 315 L, 3 kW
+    def _rate_c_per_hour(self, observed: float | None, measured_kw=None) -> float:
+        # Slower measured watts advance a required start. Never assume faster
+        # completion than nominal physics from a momentary high plateau.
+        power = (
+            min(self.s.element_kw, measured_kw)
+            if measured_kw is not None and 2 <= measured_kw <= 3.8
+            else self.s.element_kw
+        )
+        physics = power / self.s.kwh_per_c
         if observed is None or observed <= 0:
             return physics
         return min(max(observed, 0.5 * physics), 1.5 * physics)
@@ -366,6 +374,9 @@ class SimplePolicy:
         # 4. Peak (and the short lead before it): measured solar only.
         if in_peak or (peak is not None and now >= peak - s.peak_lead):
             plan["mode"] = PEAK
+            later_rate = min((t.rate for t in self.tariffs if t.kind != "peak"), default=0.0)
+            economic = s.feed_in_rate <= later_rate - s.optional_heat_margin
+            plan["optional_saving_aud_per_kwh"] = round(later_rate - s.feed_in_rate, 4)
             qualified = self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw)
             if state == STORAGE:
                 if not self.meter_fresh(now):
@@ -381,12 +392,14 @@ class SimplePolicy:
                     now, s.withdraw, lambda x: x[1] > s.peak_import_tolerance_kw or x[2] < lost
                 ):
                     return OFF, "peak_solar_withdrawn", 4, plan
+                if not economic:
+                    return OFF, "peak_solar_uneconomic", 6, plan
                 return STORAGE, "peak_solar_continues", 4, plan
-            if fresh and would_heat and qualified and snap.heater_meter_valid:
+            if fresh and would_heat and qualified and snap.heater_meter_valid and economic:
                 return STORAGE, "peak_solar_qualified", 4, plan
             return OFF, "peak_no_grid_heating", 4, plan
 
-        rate = self._rate_c_per_hour(snap.heating_c_per_hour)
+        rate = self._rate_c_per_hour(snap.heating_c_per_hour, snap.measured_element_kw)
         grid_rate = tariff_at(now, self.tariffs, s.tariff_clock).rate
         measured = self.typical_available(now)
         hours = max(0.0, s.storage_c - reading) / rate if would_heat else 0.0
