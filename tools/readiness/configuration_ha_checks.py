@@ -82,7 +82,7 @@ async def check_configuration(hass, entry):
         ]
         == "70"
     )
-    await hass.config_entries.options.async_abort(result["flow_id"])
+    hass.config_entries.options.async_abort(result["flow_id"])
 
     # The unchanged active-control lock applies to converted prices and the
     # guided schedule. Stub only the switch's state, never any command transport.
@@ -96,12 +96,12 @@ async def check_configuration(hass, entry):
         result = await submit(flow, {**data, "off_peak_rate": 25})
         assert result["errors"] == {"base": "locked_while_active"}, result
         assert dict(entry.options) == before
-        await hass.config_entries.options.async_abort(result["flow_id"])
+        hass.config_entries.options.async_abort(result["flow_id"])
         flow = await open_page("schedule")
         result = await submit(flow, {"action": "save"})
         assert result["errors"] == {"base": "locked_while_active"}, result
         assert dict(entry.options) == before
-        await hass.config_entries.options.async_abort(result["flow_id"])
+        hass.config_entries.options.async_abort(result["flow_id"])
     finally:
         hass.data[DOMAIN][entry.entry_id] = real_runtime
 
@@ -137,7 +137,7 @@ async def check_configuration(hass, entry):
     flow = await submit(flow, {"action": "save"})
     assert flow["errors"] == {"base": "invalid_settings"}, flow
     assert dict(entry.options) == before
-    await hass.config_entries.options.async_abort(flow["flow_id"])
+    hass.config_entries.options.async_abort(flow["flow_id"])
 
     # Clearing an optional mapping must not reinsert the suggested old value;
     # remapping the circuit still invalidates its qualifications exactly as before.
