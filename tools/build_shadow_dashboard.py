@@ -573,86 +573,16 @@ def templates(node):
     return found
 
 
-SOURCE_LABELS = {
-    "pv": "PV production (display and forecast correction)",
-    "forecast_pv": "Optional published PV forecast",
-    "forecast_load": "Optional household load forecast or measured baseline",
-    "import_energy": "Cumulative grid import (not used; kept for reference)",
-    "export_energy": "Cumulative grid export (not used; kept for reference)",
-    "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
-    "heater_power": "Optional heater power sensor (element detection)",
-}
-OPTIONS_STEPS = {
-    "init": (
-        "Settings",
-        "Choose what to change. Settings are also available as controls on "
-        "the device page. System settings, the tariff contract and the sensor mappings can "
-        "only be changed while Automatic heater control is off.",
-    ),
-    "sources": (
-        "Sensor mappings",
-        "Which Home Assistant entities the controller reads. Reading only: nothing here sends "
-        "a command or contacts the cloud. Changing a mapping restarts the meter evidence; "
-        "it needs Automatic heater control off.",
-    ),
-    "preferences": (
-        "Tariff and forecast settings",
-        "Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later "
-        "in summer) and must increase. The tariff contract can only be changed while Automatic "
-        "heater control is off. Every change is checked together with the rest of the "
-        "configuration; an invalid combination saves nothing.",
-    ),
-    "system": (
-        "System and commissioning",
-        "Command destination, three-state qualification, budgets, data freshness and "
-        "verification. Except for the notification service, these can only be changed while "
-        "Automatic heater control is off. The command topic must be the one the bridge "
-        "announced for your heater.",
-    ),
-}
-
-
 def main():
     (ROOT / "shadow_controller/dashboard.yaml").write_text(
         yaml.safe_dump(build(), sort_keys=False, allow_unicode=True, width=100),
         encoding="utf-8",
         newline="\n",
     )
-    for filename in (PACKAGE / "strings.json", PACKAGE / "translations/en.json"):
-        data = json.loads(filename.read_text(encoding="utf-8"))
-        user = data["config"]["step"]["user"]
-        user["description"] = (
-            "Unofficial community integration, not a Thermann product. Automatic control "
-            "stays off until you commission it. "
-            "Read local HA states only; no heater commands, MQTT writes or cloud requests. "
-            "Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered "
-            "Forecast.Solar watts) with forecast_generated_at, and a household load "
-            "forecast or measured baseline."
-        )
-        user["data"].update(SOURCE_LABELS)
-        steps = {}
-        for step_id, (title, description) in OPTIONS_STEPS.items():
-            steps[step_id] = {"title": title, "description": description}
-        steps["init"]["menu_options"] = {
-            "preferences": OPTIONS_STEPS["preferences"][0],
-            "system": OPTIONS_STEPS["system"][0],
-            "sources": OPTIONS_STEPS["sources"][0],
-        }
-        steps["sources"]["data"] = dict(user["data"])
-        for step_id, groups in (("preferences", ("Everyday", "Advanced")), ("system", ("System",))):
-            steps[step_id]["data"] = {
-                key: meta.name for key, meta in settings.CATALOG.items() if meta.group in groups
-            }
-        data["options"] = {
-            "step": steps,
-            "error": {
-                "invalid_settings": "Nothing saved. {detail}",
-                "locked_while_active": "{detail}",
-            },
-        }
-        filename.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
-        )
+    # Configuration translations have their own presentation catalogue.
+    from build_configuration_strings import main as build_configuration_strings
+
+    build_configuration_strings()
 
 
 if __name__ == "__main__":

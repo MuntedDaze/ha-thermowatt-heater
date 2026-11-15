@@ -1,5 +1,8 @@
 # Thermann Controller
 
+For the new four-section configuration screens, inline help, cents/percent units
+and guided tariff editing, see the [beginner settings walkthrough](../docs/configuration/SETTINGS.md).
+
 Current development candidate: **0.10.0** with bridge **1.3.14**, in draft PR #34.
 
 Start with the [four-state guide](../docs/dual-storage/README.md),

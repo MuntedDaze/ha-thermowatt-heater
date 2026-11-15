@@ -127,7 +127,7 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
     assert "refresh_topic(self.cfg.command_topic)" in executor
     assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.13.0"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.14.0"
     assert manifest["integration_type"] == "hub"
     assert "mqtt" not in manifest.get("dependencies", [])  # loads without MQTT
 
@@ -188,12 +188,12 @@ def test_custom_settings_and_dashboard_have_no_control_actions():
 
     translation = json.loads((PACKAGE / "strings.json").read_text(encoding="utf-8"))
     steps = translation["options"]["step"]
-    shown = set(steps["preferences"]["data"]) | set(steps["system"]["data"])
+    forms = importlib.import_module(f"{package.__name__}.configuration")
+    shown = [k for page in forms.PAGES for k in steps[page]["data"]]
     catalog = importlib.import_module(f"{package.__name__}.settings")
-    # 0.8.0: every setting is on exactly one Configure page, except retired ones.
-    assert shown == set(c.DEFAULT_OPTIONS) - catalog.RETIRED
-    assert not set(steps["preferences"]["data"]) & set(steps["system"]["data"])
-    assert set(steps["init"]["menu_options"]) == {"preferences", "system", "sources"}
+    assert set(shown) == set(c.DEFAULT_OPTIONS) - catalog.RETIRED
+    assert len(shown) == len(set(shown))
+    assert set(steps["init"]["menu_options"]) == set(forms.MENUS["init"])
     dashboard = yaml.safe_load(
         (ROOT / "shadow_controller/dashboard.yaml").read_text(encoding="utf-8")
     )

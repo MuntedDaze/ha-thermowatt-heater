@@ -3,24 +3,41 @@
   "config": {
     "step": {
       "user": {
-        "title": "Thermann Controller: sensor mappings",
-        "description": "Unofficial community integration, not a Thermann product. Automatic control stays off until you commission it. Read local HA states only; no heater commands, MQTT writes or cloud requests. Optional forecast mappings: a PV forecast (EMHASS forecasts list or buffered Forecast.Solar watts) with forecast_generated_at, and a household load forecast or measured baseline.",
+        "title": "Connect existing heater and meter readings",
+        "description": "Unofficial community integration. Choose the five required bridge readings; all solar, forecast and circuit-meter fields are optional and may be left blank. Reads local Home Assistant states only, with no cloud access or heater commands during setup. Automatic control stays off. You can change these mappings later in Settings.",
         "data": {
-          "heater": "Water heater (temperature attributes only)",
-          "mode": "Native vendor mode",
-          "last_poll": "Last successful cloud poll (timestamp)",
-          "cloud_health": "Cloud health",
-          "requests": "Bridge local lifetime request attempts",
-          "grid": "Signed NET grid power (W or kW)",
-          "pv": "PV production (display and forecast correction)",
-          "house": "House consumption (display only)",
-          "import_energy": "Cumulative grid import (not used; kept for reference)",
-          "export_energy": "Cumulative grid export (not used; kept for reference)",
-          "forecast_pv": "Optional published PV forecast",
-          "forecast_load": "Optional household load forecast or measured baseline",
-          "pv_ac": "Optional inverter AC output",
-          "heater_power": "Hot-water circuit active power (W/kW; commissioning required)",
-          "heater_energy": "Optional same-circuit cumulative import energy (Wh/kWh)"
+          "heater": "Heater temperature and target",
+          "mode": "Heater's reported operating mode",
+          "last_poll": "Last successful cloud check",
+          "cloud_health": "Bridge cloud connection status",
+          "requests": "Bridge's total cloud request attempts",
+          "grid": "Net power bought from or sent to the grid",
+          "pv": "Solar panel production",
+          "house": "Whole-house electricity use",
+          "import_energy": "Total electricity bought from the grid",
+          "export_energy": "Total electricity sent to the grid",
+          "forecast_pv": "Forecast solar production",
+          "forecast_load": "Forecast household electricity use",
+          "pv_ac": "Inverter's usable AC output",
+          "heater_power": "Dedicated hot-water circuit power (optional)",
+          "heater_energy": "Dedicated hot-water circuit energy (optional)"
+        },
+        "data_description": {
+          "heater": "Select the existing Thermann bridge water-heater entity. Reads its temperature attributes only; selecting it sends no command. Cloud status does not prove physical element ON/OFF.",
+          "mode": "Select the bridge's vendor-mode sensor, which distinguishes Manual, OFF and other native modes. Required for owner-change protection and exact-prior checks; do not substitute an inferred power status.",
+          "last_poll": "Select the bridge's last-successful-poll timestamp sensor. It must describe a real successful observation, not a template's update time. An old observation cannot be treated as fresh.",
+          "cloud_health": "Select the existing bridge cloud-health sensor. Faults and outages conservatively restrict control; choosing a different label cannot clear a real fault.",
+          "requests": "Select the bridge local-lifetime request-attempt sensor, including persistent/complete accounting attributes. Used by request budgets; not a manually reset daily counter.",
+          "grid": "Optional signed W or kW net grid sensor. Verify its positive direction below. Buying and exporting must have opposite signs; an unsigned consumption sensor is unsuitable. Basic tariff operation can run without it.",
+          "pv": "Optional solar-production W/kW sensor, for display and forecast correction. Panel/DC production is not evidence of usable AC surplus and cannot verify the heater element.",
+          "house": "Optional household W/kW consumption sensor, for display. This does not replace net grid power or the dedicated hot-water circuit meter.",
+          "import_energy": "Optional cumulative kWh import sensor retained for reference. It does not authorise heater commands or prove current circuit power.",
+          "export_energy": "Optional cumulative kWh export sensor retained for reference. It does not prove current solar surplus.",
+          "forecast_pv": "Optional EMHASS solar-forecast series, or supported buffered Forecast.Solar watts, with its original forecast_generated_at timestamp. Predicts future production, not guaranteed spare power. Leave unmapped when forecasts are off.",
+          "forecast_load": "Optional timestamped EMHASS household-load forecast or supported measured baseline. Used with solar forecasts; neither forecast is required for basic tariff heating. Stale forecasts are ignored.",
+          "pv_ac": "Optional W/kW AC-output sensor, consistent with the grid meter. Existing unmapped installations retain the legacy GoodWe total-power fallback; map your actual inverter for other equipment. Do not substitute panel/DC power.",
+          "heater_power": "Optional raw signed W/kW active-power entity for the exclusive heater circuit, from any validated meter. Do not use sensor.em_hot_water_power or a dashboard template. Leave unmapped before the CT is installed. Required storage still works; optional solar-only boost needs commissioning. A failed commissioned meter is a fault, not measured zero.",
+          "heater_energy": "Optional raw cumulative import-energy Wh/kWh entity for the same circuit. Keep the power sign unchanged; energy must be validated cumulative import. This improves measurements and does not control a relay."
         }
       }
     },
@@ -32,109 +49,368 @@
     "step": {
       "init": {
         "title": "Settings",
-        "description": "Choose what to change. Settings are also available as controls on the device page. System settings, the tariff contract and the sensor mappings can only be changed while Automatic heater control is off.",
+        "description": "Everyday choices are in Hot Water. Electricity Tariffs describes your bill; Solar & Meters connects optional readings. Advanced/System is for experienced users and supervised commissioning. Turn off Automatic heater control before changing protected settings. Each page saves separately; closing without saving leaves it unchanged.",
         "menu_options": {
-          "preferences": "Tariff and forecast settings",
-          "system": "System and commissioning",
-          "sources": "Sensor mappings"
+          "hot_water": "Hot Water",
+          "electricity": "Electricity Tariffs",
+          "solar_meters": "Solar & Meters",
+          "advanced": "Advanced/System"
+        }
+      },
+      "hot_water": {
+        "title": "Hot Water",
+        "description": "Choose thermostat targets and permitted heating. Your saved temperatures are retained. The owner's agreed example is 45°C baseline / 62°C normal / 70°C optional solar, with peak OFF. It is not a universal hygiene recommendation. Follow the appliance instructions and your plumber's advice. {detail}",
+        "data": {
+          "baseline_c": "Night and weekend temperature",
+          "normal_storage_c": "Normal weekday storage temperature",
+          "solar_boost_c": "Optional solar storage temperature",
+          "optional_solar_boost": "Enable optional solar boost",
+          "peak_heating_policy": "Heating during peak periods",
+          "completion_margin_minutes": "Aim to finish heating this much early",
+          "daytime_start": "Weekday heating window starts",
+          "storage_ready_time": "Weekday hot water ready by",
+          "baseline_start": "Return to night temperature at"
+        },
+        "data_description": {
+          "baseline_c": "Thermostat target during permitted baseline hours. Your saved household choice is retained. Only supported temperatures are offered; a setpoint does not prove whole-tank temperature or hygiene compliance. Follow appliance and plumbing requirements.",
+          "normal_storage_c": "Required weekday thermostat target, for example 62°C in the owner's agreed strategy. It must be at least the baseline. This is a target, not a guarantee of hot-water quantity.",
+          "solar_boost_c": "Upper target for worthwhile extra solar heating, for example 70°C. Must be at least normal storage. Equal targets avoid a separate top-up; choosing a target alone does not enable boosting.",
+          "optional_solar_boost": "Allow extra storage only with commissioned hot-water circuit measurement and all economic and safety checks. Leave off if you do not want extra heat. Required storage still works without a circuit meter; the separate 12-hour Override is unchanged.",
+          "peak_heating_policy": "Never schedule heating takes priority even with high solar export. The solar-only choice requires verified circuit power and every existing safeguard. Owner overrides and native protective cycles remain possible. Cloud OFF is not proof of zero electricity use.",
+          "completion_margin_minutes": "Minutes reserved before the required finish time; 30 minutes is a useful planning starting point. Required heating may continue to the hard peak boundary. This is a planning allowance, not extra permission to heat during peak.",
+          "daytime_start": "Household local time, for example 09:00. Used when the plan has no peak deadline. Must be before the ready time. Tariff peak boundaries take priority on time-of-use plans. Leave seconds at 00 if Home Assistant shows them.",
+          "storage_ready_time": "Household local time, for example 16:00, when there is no peak deadline. After the window starts and before the baseline returns. A planning goal, not a temperature or hygiene guarantee. Leave seconds at 00 if Home Assistant shows them.",
+          "baseline_start": "Household local time, for example 21:00, when there is no peak deadline. Must follow the ready time. The peak policy still applies. Leave seconds at 00 if Home Assistant shows them."
+        }
+      },
+      "electricity": {
+        "title": "Electricity Tariffs",
+        "description": "Use your actual retailer's usage prices and times, not a network tariff assumed to be your bill. Start with Plan, prices and clock. Flat plans need no time periods. The two-peak example and the guided custom schedule are alternative schedules for the same tariff model; the chosen plan type decides which is active.",
+        "menu_options": {
+          "prices": "Plan, prices and clock",
+          "peak_times": "Two-peak example hours",
+          "schedule": "Guided electricity schedule",
+          "tariff_json": "Advanced schedule data"
+        }
+      },
+      "solar_meters": {
+        "title": "Solar & Meters",
+        "description": "Everything here is optional for basic tariff-based heating. Without a dedicated hot-water circuit meter, normal required heating uses conservative estimates; electrical ON/OFF is unverified and optional solar-only boost is unavailable. A missing previously commissioned meter remains a fault.",
+        "menu_options": {
+          "solar": "Solar forecasts and grid meter",
+          "sources": "Solar and meter readings"
+        }
+      },
+      "advanced": {
+        "title": "Advanced/System",
+        "description": "Engineering and commissioning settings. Leave qualifications, learning and adaptive control off until separately approved checks pass. These pages do not enable automatic heating. Existing command verification, fault locks and owner protections still apply.",
+        "menu_options": {
+          "equipment": "Equipment and savings",
+          "polling": "Cloud checks and data age",
+          "commissioning": "Commissioning and safeguards",
+          "bridge_sources": "Bridge status readings"
+        }
+      },
+      "prices": {
+        "title": "Plan, prices and clock",
+        "description": "Prices below are Australian cents per kWh (25 means $0.25/kWh). Check the retail contract's tax basis consistently. Off-peak is usually cheaper, peak usually dearer, and shoulder is the period between them. Daily supply charges do not affect heating-window choices. Your saved values are prefilled, not replaced by example prices. {detail}",
+        "data": {
+          "tariff_profile": "Electricity plan type",
+          "time_zone": "Household time zone",
+          "tariff_clock": "Clock used by your electricity contract",
+          "off_peak_rate": "Off-peak or flat electricity price",
+          "peak_rate": "Peak electricity price",
+          "shoulder_rate": "Shoulder electricity price",
+          "feed_in_rate": "Payment for exported solar electricity",
+          "tariff_verified": "I have checked my electricity contract"
+        },
+        "data_description": {
+          "tariff_profile": "Flat rate uses the off-peak/flat price all day, with no peak periods. The Aurora example uses the editable two-peak schedule; verify it against your retail contract. Custom uses the guided weekly/seasonal schedule. Selecting a plan does not verify it.",
+          "time_zone": "Search for your IANA zone, for example Australia/Hobart or Australia/Perth. New setup uses Home Assistant's zone. Household times follow this zone; the separate tariff clock decides whether electricity periods follow daylight saving.",
+          "tariff_clock": "Local time follows daylight saving in the chosen zone. Fixed standard time keeps its standard UTC offset all year (for example AEST UTC+10 in Hobart). During summer those tariff times can differ from the wall clock. Check your retailer's contract.",
+          "off_peak_rate": "Australian cents per kWh imported from the grid, for example 25 means $0.25/kWh. Off-peak is the usually cheaper period; on a flat plan this price applies all day. Use your actual retail usage price, not the daily supply charge or a network tariff.",
+          "peak_rate": "Australian cents per kWh during peak periods, usually the expensive hours. Example: 40 means $0.40/kWh. Used only by periods marked peak; the peak-heating policy still applies even if another price happens to be cheaper.",
+          "shoulder_rate": "Australian cents per kWh in periods between peak and off-peak, if your contract has them. Example: 30 means $0.30/kWh. Used only by custom periods marked shoulder; otherwise retained without effect.",
+          "feed_in_rate": "Australian cents per kWh your retailer pays for exported solar, for example 8 means $0.08/kWh. Using solar for hot water gives up this payment, so the controller includes it as a cost. Use your contract's rate; time-varying export prices are not modelled.",
+          "tariff_verified": "Confirm only after checking retail prices, every period, weekends, seasons, time zone and tariff clock. Automatic control needs this verification. Saving a form is not verification; changing a price does not check the bill for you."
+        }
+      },
+      "peak_times": {
+        "title": "Two-peak example hours",
+        "description": "These hours apply only when the Aurora-style two-peak example is selected. They are tariff-clock times, not necessarily the summer wall clock. Other plans should use the guided custom schedule. All four times must increase. {detail}",
+        "data": {
+          "peak_morning_start": "Morning peak starts",
+          "peak_morning_end": "Morning peak ends",
+          "peak_evening_start": "Afternoon peak starts",
+          "peak_evening_end": "Afternoon peak ends",
+          "weekend_peak": "Apply the example peak hours on weekends too"
+        },
+        "data_description": {
+          "peak_morning_start": "Only for the Aurora-style two-peak plan. Time uses your tariff clock, which may differ from the household wall clock in summer. All four times must increase in order. Check your retail contract; custom plans use the guided schedule instead. Leave seconds at 00 if Home Assistant shows them.",
+          "peak_morning_end": "Only for the Aurora-style two-peak plan. Time uses your tariff clock, which may differ from the household wall clock in summer. All four times must increase in order. Check your retail contract; custom plans use the guided schedule instead. Leave seconds at 00 if Home Assistant shows them.",
+          "peak_evening_start": "Only for the Aurora-style two-peak plan. Time uses your tariff clock, which may differ from the household wall clock in summer. All four times must increase in order. Check your retail contract; custom plans use the guided schedule instead. Leave seconds at 00 if Home Assistant shows them.",
+          "peak_evening_end": "Only for the Aurora-style two-peak plan. Time uses your tariff clock, which may differ from the household wall clock in summer. All four times must increase in order. Check your retail contract; custom plans use the guided schedule instead. Leave seconds at 00 if Home Assistant shows them.",
+          "weekend_peak": "Only affects the Aurora-style two-peak plan. Off means all weekend hours are off-peak. Follow your actual contract; custom schedules specify weekdays separately."
+        }
+      },
+      "tariff_json": {
+        "title": "Advanced schedule data",
+        "description": "Expert alternative; most users should choose the guided schedule. This edits the saved custom table, but does not select Custom automatically. JSON rate overrides use dollars/kWh. Every day in every month needs complete coverage without overlaps. {detail}",
+        "data": {
+          "tariff_periods": "Advanced schedule data (JSON)"
+        },
+        "data_description": {
+          "tariff_periods": "Expert alternative to the guided schedule editor. Days are 0=Monday to 6=Sunday; months are 1–12; start/end are HH:MM. kind is off_peak, shoulder or peak. Optional rate is dollars/kWh, not the cents shown elsewhere. Every minute of every day/month must be covered exactly once. Nothing saves if invalid."
+        }
+      },
+      "solar": {
+        "title": "Solar forecasts and grid meter",
+        "description": "Forecasts predict future solar and household demand; they do not prove spare electricity. Basic tariff control needs neither solar nor EMHASS. Verified grid export can help choose required off-peak heating without a circuit meter; optional solar-only heating still requires one. {detail}",
+        "data": {
+          "forecast_enabled": "Use solar and household forecasts",
+          "forecast_uncertainty": "Forecast safety allowance",
+          "forecast_house_margin_kw": "Extra allowance for household appliances",
+          "forecast_max_age_minutes": "Ignore forecasts older than",
+          "pv_ac_limit_kw": "Maximum usable inverter output",
+          "meter_verified": "Grid meter readings have been checked",
+          "import_positive": "Positive grid power means buying electricity"
+        },
+        "data_description": {
+          "forecast_enabled": "Use timestamped predictions of solar production and household demand to choose economical required heating windows. Optional: leave off without solar/EMHASS. Missing or old forecasts cause conservative nominal planning, not assumed free solar. Optional boost still requires a commissioned circuit meter.",
+          "forecast_uncertainty": "Percentage to subtract from predicted solar and add to predicted household demand. Example: 25% is stored as 0.25. Larger values are more cautious; forecasts never guarantee surplus electricity.",
+          "forecast_house_margin_kw": "Additional kW reserved for competing appliances beyond the forecast. Example: 0.3 kW is 300 W. Higher values reduce assumed solar available for heating.",
+          "forecast_max_age_minutes": "Minutes since the forecast was generated, not when an old forecast was republished. For 30-minute EMHASS updates use at least 35 minutes; 120 is a starting example. Old forecasts are ignored rather than treated as future solar.",
+          "pv_ac_limit_kw": "Combined AC output limit in kW for the inverter represented by your solar readings. Example: a 5 kW inverter can have more than 5 kW of panels. Forecast output above this limit is clipped; use the inverter rating, not panel capacity.",
+          "meter_verified": "Confirm only after checking net grid power, units, sign and freshness with a known load/export test. This verifies the grid meter, not the separate hot-water circuit meter. Never turn it on merely to clear a warning.",
+          "import_positive": "On: positive net power is grid import and negative is export. Off: positive is export. Verify using a known household load and your meter's documentation; a reversed sign can make costly import look like surplus solar."
         }
       },
       "sources": {
-        "title": "Sensor mappings",
-        "description": "Which Home Assistant entities the controller reads. Reading only: nothing here sends a command or contacts the cloud. Changing a mapping restarts the meter evidence; it needs Automatic heater control off.",
+        "title": "Solar and meter readings",
+        "description": "Select existing Home Assistant readings, not device names. Leave optional fields blank when equipment is absent. This page only reads local states. Changing the hot-water power mapping clears its commissioning/learning qualification. Bridge status mappings are in Advanced/System.",
         "data": {
-          "heater": "Water heater (temperature attributes only)",
-          "mode": "Native vendor mode",
-          "last_poll": "Last successful cloud poll (timestamp)",
-          "cloud_health": "Cloud health",
-          "requests": "Bridge local lifetime request attempts",
-          "grid": "Signed NET grid power (W or kW)",
-          "pv": "PV production (display and forecast correction)",
-          "house": "House consumption (display only)",
-          "import_energy": "Cumulative grid import (not used; kept for reference)",
-          "export_energy": "Cumulative grid export (not used; kept for reference)",
-          "forecast_pv": "Optional published PV forecast",
-          "forecast_load": "Optional household load forecast or measured baseline",
-          "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
-          "heater_power": "Hot-water circuit active power (W/kW; commissioning required)",
-          "heater_energy": "Optional same-circuit cumulative import energy (Wh/kWh)"
-        }
-      },
-      "preferences": {
-        "title": "Tariff and forecast settings",
-        "description": "Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later in summer) and must increase. The tariff contract can only be changed while Automatic heater control is off. Every change is checked together with the rest of the configuration; an invalid combination saves nothing.",
-        "data": {
-          "forecast_enabled": "Use published forecasts",
-          "optional_heat_margin_aud_per_kwh": "Optional heat minimum saving",
-          "pause_min_saving_aud": "Minimum saving to pause weekday heat",
-          "forecast_uncertainty": "Forecast uncertainty margin",
-          "forecast_house_margin_kw": "Extra forecast household load",
-          "tariff_clock": "Tariff clock",
-          "tariff_profile": "Tariff periods mode",
-          "weekend_peak": "Use peak periods on weekends",
-          "off_peak_rate": "Off-peak import price",
-          "peak_rate": "Peak import price",
-          "shoulder_rate": "Shoulder import price",
-          "feed_in_rate": "Export compensation",
-          "pv_ac_limit_kw": "Inverter AC output limit",
-          "forecast_max_age_minutes": "Maximum forecast generation age",
-          "tariff_periods": "Custom weekly tariff periods",
-          "peak_morning_start": "Peak morning start",
-          "peak_morning_end": "Peak morning end",
-          "peak_evening_start": "Peak evening start",
-          "peak_evening_end": "Peak evening end",
-          "baseline_c": "Overnight baseline temperature",
-          "normal_storage_c": "Normal weekday storage temperature",
-          "solar_boost_c": "Optional solar storage temperature",
-          "tank_litres": "Tank capacity",
-          "element_kw": "Nominal element power",
-          "completion_margin_minutes": "Preferred completion before peak",
-          "optional_solar_boost": "Enable optional solar boost",
-          "peak_heating_policy": "Heating during peak periods",
-          "boost_useful_fraction": "Expected useful fraction of extra solar heat",
-          "boost_min_saving_aud": "Minimum benefit of optional solar boost",
-          "time_zone": "Household time zone",
-          "daytime_start": "Weekday storage window starts",
-          "storage_ready_time": "Weekday storage ready time without peak",
-          "baseline_start": "Return to overnight baseline without peak"
-        }
-      },
-      "system": {
-        "title": "System and commissioning",
-        "description": "Command destination, three-state qualification, budgets, data freshness and verification. Except for the notification service, these can only be changed while Automatic heater control is off. The command topic must be the one the bridge announced for your heater.",
-        "data": {
-          "meter_verified": "Meter sign and units verified",
-          "tariff_verified": "Tariff contract verified",
-          "import_positive": "Positive grid means import",
-          "status_max_age_minutes": "Maximum cloud poll age",
-          "grid_max_age_seconds": "Maximum power reading age",
-          "controller_command_topic": "Controller command topic",
-          "controller_three_state_qualified": "Three-state commands qualified (1.3.13)",
-          "controller_max_commands_per_day": "Maximum commands per day",
-          "controller_confirmation_timeout_minutes": "Command confirmation timeout",
-          "controller_max_requests_per_day": "Cloud request budget per day",
-          "controller_notify_service": "Notification service",
-          "heater_meter_verification": "Commissioned hot-water power entity and unit",
-          "adaptive_polling_shadow": "Compare adaptive polling (shadow only)",
-          "adaptive_poll_heating_minutes": "Shadow heating poll maximum",
-          "adaptive_poll_stable_minutes": "Shadow stable poll maximum",
-          "controller_four_state_qualified": "Four-state commands qualified (1.3.14)",
-          "adaptive_polling_enabled": "Send adaptive cloud scheduling plans",
-          "learned_planning_enabled": "Use validated conservative learned heating rate",
-          "learning_hardware_qualified": "Heating learning independently qualified",
-          "event_aware_polling_enabled": "Allow longer checks during quiet periods",
-          "owner_change_check_minutes": "Maximum time between app-change checks (minutes)"
+          "grid": "Net power bought from or sent to the grid",
+          "pv": "Solar panel production",
+          "house": "Whole-house electricity use",
+          "import_energy": "Total electricity bought from the grid",
+          "export_energy": "Total electricity sent to the grid",
+          "forecast_pv": "Forecast solar production",
+          "forecast_load": "Forecast household electricity use",
+          "pv_ac": "Inverter's usable AC output",
+          "heater_power": "Dedicated hot-water circuit power (optional)",
+          "heater_energy": "Dedicated hot-water circuit energy (optional)"
         },
         "data_description": {
-          "adaptive_polling_enabled": "Let the existing bridge schedule cloud observations. Requires its separate enable/qualification. No direct heater command is sent by this setting; keep off until review.",
-          "event_aware_polling_enabled": "Check a confirmed quiet baseline or OFF less often. Temperatures still expire normally and app changes can be detected later. Requires the bridge’s separate longer-check qualification.",
-          "owner_change_check_minutes": "Healthy-cloud limit of 30–90 minutes between quiet checks. Longer saves requests but delays noticing app changes; brief changes can be missed and outages can delay checks further."
+          "grid": "Optional signed W or kW net grid sensor. Verify its positive direction below. Buying and exporting must have opposite signs; an unsigned consumption sensor is unsuitable. Basic tariff operation can run without it.",
+          "pv": "Optional solar-production W/kW sensor, for display and forecast correction. Panel/DC production is not evidence of usable AC surplus and cannot verify the heater element.",
+          "house": "Optional household W/kW consumption sensor, for display. This does not replace net grid power or the dedicated hot-water circuit meter.",
+          "import_energy": "Optional cumulative kWh import sensor retained for reference. It does not authorise heater commands or prove current circuit power.",
+          "export_energy": "Optional cumulative kWh export sensor retained for reference. It does not prove current solar surplus.",
+          "forecast_pv": "Optional EMHASS solar-forecast series, or supported buffered Forecast.Solar watts, with its original forecast_generated_at timestamp. Predicts future production, not guaranteed spare power. Leave unmapped when forecasts are off.",
+          "forecast_load": "Optional timestamped EMHASS household-load forecast or supported measured baseline. Used with solar forecasts; neither forecast is required for basic tariff heating. Stale forecasts are ignored.",
+          "pv_ac": "Optional W/kW AC-output sensor, consistent with the grid meter. Existing unmapped installations retain the legacy GoodWe total-power fallback; map your actual inverter for other equipment. Do not substitute panel/DC power.",
+          "heater_power": "Optional raw signed W/kW active-power entity for the exclusive heater circuit, from any validated meter. Do not use sensor.em_hot_water_power or a dashboard template. Leave unmapped before the CT is installed. Required storage still works; optional solar-only boost needs commissioning. A failed commissioned meter is a fault, not measured zero.",
+          "heater_energy": "Optional raw cumulative import-energy Wh/kWh entity for the same circuit. Keep the power sign unchanged; energy must be validated cumulative import. This improves measurements and does not control a relay."
+        }
+      },
+      "equipment": {
+        "title": "Equipment and savings",
+        "description": "Advanced planning assumptions, not new heater qualifications. Use appliance-label ratings; estimates do not prove actual element operation or whole-tank temperature. Do not adjust assumptions just to make a prediction look better. {detail}",
+        "data": {
+          "tank_litres": "Hot-water tank capacity",
+          "element_kw": "Heater element rating",
+          "boost_useful_fraction": "Extra stored heat likely to be used",
+          "boost_min_saving_aud": "Minimum saving for an extra solar boost",
+          "optional_heat_margin_aud_per_kwh": "Minimum saving per unit of optional heat",
+          "pause_min_saving_aud": "Minimum saving before waiting for a better window"
+        },
+        "data_description": {
+          "tank_litres": "Nominal litres from the appliance label, for example 315 L. Used for conservative heating estimates, not measured hot-water availability. Changing it clears learned-planning hardware qualification.",
+          "element_kw": "Nominal electrical kW from the appliance label, for example 3 kW. Without a circuit meter this estimates heating time only; it never proves the element is on. Changing it clears learned-planning hardware qualification.",
+          "boost_useful_fraction": "Estimated percentage of extra boosted heat used before the next cheap heating opportunity. Example: 90%. Lower values make extra boosting less attractive; 0% prevents it. This assumption is not learned evidence.",
+          "boost_min_saving_aud": "Australian dollars expected to be saved per boost, for example $0.10. Avoids extra commands for trivial benefit. The per-kWh margin and all measured-power guards also apply.",
+          "optional_heat_margin_aud_per_kwh": "Australian cents per kWh saved against off-peak grid heating, including lost solar export income. Example: 2 means $0.02/kWh. This does not relax circuit-measurement or grid-import checks.",
+          "pause_min_saving_aud": "Australian dollars a later window must save, for example $0.30. Heating must still fit before the planning deadline. Increasing this reduces changes for small estimated savings."
+        }
+      },
+      "polling": {
+        "title": "Cloud checks and data age",
+        "description": "Advanced: preview and actual adaptive checks are different. Longer quiet intervals reduce requests but delay noticing app changes. Default-off qualification gates and the original fixed fallback remain. A fresh command prior and confirmation are always required. {detail}",
+        "data": {
+          "adaptive_polling_shadow": "Preview adaptive cloud checks",
+          "adaptive_polling_enabled": "Allow adaptive cloud checks",
+          "event_aware_polling_enabled": "Allow longer checks during quiet periods",
+          "owner_change_check_minutes": "Longest quiet-period check interval",
+          "adaptive_poll_heating_minutes": "Preview: longest check interval while heating",
+          "adaptive_poll_stable_minutes": "Preview: longest check interval while stable",
+          "status_max_age_minutes": "Maximum age of temperature used for planning",
+          "grid_max_age_seconds": "Maximum age of local power readings"
+        },
+        "data_description": {
+          "adaptive_polling_shadow": "Record when adaptive polling would read the cloud, without changing actual bridge requests. Safe starting mode for comparison; it does not enable adaptive polling or automatic heating.",
+          "adaptive_polling_enabled": "Advanced, default off. Requires independent review, supervised validation and the bridge's separate enabled/qualified options. Sends bounded expiring polling hints; original fixed fallback, authentication, request budgets and command confirmations remain.",
+          "event_aware_polling_enabled": "Advanced, default off. Requires adaptive polling and a qualified bridge. A confirmed baseline/OFF period can be checked less often, while temperatures still expire normally. App changes may be detected later, and brief changes can be missed. Command-prior checks and confirmation are unchanged.",
+          "owner_change_check_minutes": "Minutes between ordinary observations with healthy cloud, 30–90. Start with 60 only after qualification. Longer saves requests but delays detecting app changes; outages delay them further. Only used when longer quiet checks are enabled.",
+          "adaptive_poll_heating_minutes": "Minutes, up to 60, used by the advisory polling model. This preview setting alone does not change actual cloud reads. Use the reviewed bridge and actual polling telemetry to assess real requests.",
+          "adaptive_poll_stable_minutes": "Minutes, up to 90, used by the advisory polling model. This alone does not change actual cloud reads; vendor inactivity expiry remains unverified.",
+          "status_max_age_minutes": "Minutes before a cloud heater observation is too old for temperature-sensitive planning; 45 is the existing starting value for 30-minute fixed checks. This does not schedule a refresh or relax the bridge's exact-prior command checks. Quiet holds use separate bounded rules.",
+          "grid_max_age_seconds": "Seconds before local grid observations are considered stale; 120 is an example. Missing or stale data resets economic holds and cannot authorise solar-only heating. Changing this does not trigger cloud requests."
+        }
+      },
+      "commissioning": {
+        "title": "Commissioning and safeguards",
+        "description": "Advanced; do not tick qualifications to bypass a warning. Follow separately approved supervised commissioning. Saving this form neither authorises physical tests nor turns on automatic control. Leave command address/CT record blank if not commissioned. {detail}",
+        "data": {
+          "controller_command_topic": "Bridge command address (MQTT topic)",
+          "controller_three_state_qualified": "Legacy OFF / 45 / 70 command tests completed",
+          "controller_four_state_qualified": "OFF / 45 / 62 / 70 command tests completed",
+          "heater_meter_verification": "Hot-water meter commissioning record",
+          "learned_planning_enabled": "Use qualified heating-performance learning",
+          "learning_hardware_qualified": "Meter and heater checked for learning",
+          "controller_max_commands_per_day": "Optional command budget per 24 hours",
+          "controller_max_requests_per_day": "Cloud request budget per 24 hours",
+          "controller_confirmation_timeout_minutes": "Time allowed to confirm a command",
+          "controller_notify_service": "Phone notification service"
+        },
+        "data_description": {
+          "controller_command_topic": "Commissioning only. Copy the exact mode-command topic announced by your existing bridge. Blank prevents controller commands. Do not guess it or point at another appliance; keep automatic control off while changing it.",
+          "controller_three_state_qualified": "Historical commissioning record retained for existing installations. Set only after separately approved supervised tests, including owner-change refusal. It does not replace four-state qualification or authorise heater operation.",
+          "controller_four_state_qualified": "Commissioning only, default off. Set only after separately approved supervised testing of every required transition and refusal case. This record does not itself authorise automatic control or physical operation.",
+          "heater_meter_verification": "Expert commissioning record: verified_entity_id|W or verified_entity_id|kW. Requires an exclusive circuit, correct signed units, reporting cadence and OFF/ON/outage tests. Leave blank for CT-free operation. A saved record is not proof the meter is currently available; remapping clears it.",
+          "learned_planning_enabled": "Advanced, default off. Requires real independent measured sessions, held-out accuracy and hardware qualification. A conservative learned rate may start required heating earlier; it cannot delay heating beyond nominal/live-power planning. Learning cannot establish whole-tank temperature.",
+          "learning_hardware_qualified": "Commissioning gate, default off. Confirm only using real qualified measurements, never synthetic tests. Changing the power mapping, its commissioned units, tank capacity or element rating clears this gate.",
+          "controller_max_commands_per_day": "Whole commands in a rolling 24 hours; 6 is the existing starting value. Optional solar starts stop at this budget. Essential transitions have the existing extra allowance, and OFF is not blocked by this optional budget. This is not a new permission to issue commands.",
+          "controller_max_requests_per_day": "Whole locally accounted HTTP attempts in a rolling 24 hours; 220 is the existing starting value. Commands are refused when this safety budget is exhausted. Polling, authentication and confirmation all cost requests; this setting does not bypass bridge limits.",
+          "controller_confirmation_timeout_minutes": "Minutes before an unconfirmed command fault-locks automatic control; 65 is the existing starting value. Allow at least a normal poll interval plus margin. A timeout does not prove that a command failed or safely permit a blind retry.",
+          "controller_notify_service": "Optional Home Assistant notify service name, for example mobile_app_jacobs_phone, without notify. in front. Blank keeps Home Assistant's persistent notifications only. Choose an existing notification service; saving this field sends no message."
+        }
+      },
+      "bridge_sources": {
+        "title": "Bridge status readings",
+        "description": "Required readings from the existing Thermann bridge. Selecting entities reads their states; it neither contacts the vendor nor sends heater commands. Change mappings only with automatic control off.",
+        "data": {
+          "heater": "Heater temperature and target",
+          "mode": "Heater's reported operating mode",
+          "last_poll": "Last successful cloud check",
+          "cloud_health": "Bridge cloud connection status",
+          "requests": "Bridge's total cloud request attempts"
+        },
+        "data_description": {
+          "heater": "Select the existing Thermann bridge water-heater entity. Reads its temperature attributes only; selecting it sends no command. Cloud status does not prove physical element ON/OFF.",
+          "mode": "Select the bridge's vendor-mode sensor, which distinguishes Manual, OFF and other native modes. Required for owner-change protection and exact-prior checks; do not substitute an inferred power status.",
+          "last_poll": "Select the bridge's last-successful-poll timestamp sensor. It must describe a real successful observation, not a template's update time. An old observation cannot be treated as fresh.",
+          "cloud_health": "Select the existing bridge cloud-health sensor. Faults and outages conservatively restrict control; choosing a different label cannot clear a real fault.",
+          "requests": "Select the bridge local-lifetime request-attempt sensor, including persistent/complete accounting attributes. Used by request budgets; not a manually reset daily counter."
+        }
+      },
+      "schedule": {
+        "title": "Guided electricity schedule",
+        "description": "Edits stay in this draft until you choose Save and use. Closing cancels the draft. Save selects Custom but never verifies your contract. Cover every minute of all weekdays and months exactly once, up to 32 periods. Midnight to midnight means all day; an end earlier than the start crosses midnight. Month selection follows the current tariff-clock date, including overnight tails.\n\n{periods}\n\n{detail}",
+        "data": {
+          "action": "What would you like to do?",
+          "period": "Period to edit or remove"
+        },
+        "data_description": {
+          "action": "Add or edit periods as needed, then explicitly Save and use. Invalid schedules save nothing. Removal needs confirmation.",
+          "period": "Choose a numbered period from the draft above. Not needed when adding or saving. Rates shown use the prices saved on the Prices page unless the period has its own override."
+        }
+      },
+      "period": {
+        "title": "Edit an electricity period",
+        "description": "This changes the draft only. Use your retailer's actual periods, including weekends and seasonal differences. All months are selected initially. The full schedule is validated on final Save; gaps and overlaps must be fixed before anything is stored.",
+        "data": {
+          "days": "Days this period starts",
+          "start": "Starts at",
+          "end": "Ends at",
+          "kind": "Type of period",
+          "months": "Months when this period applies",
+          "use_rate": "Use a different price for this period",
+          "rate": "This period's electricity price"
+        },
+        "data_description": {
+          "days": "Select weekdays with the picker; × removes a selected day. An overnight period continues into the next day; provide complete coverage of every day.",
+          "start": "Time on the selected tariff clock. Same start and end means a full day, not zero hours. Leave seconds at 00 if shown.",
+          "end": "End is exclusive: 07:00–10:00 ends as 10:00 begins. An earlier end crosses midnight. Use 00:00 for midnight and leave seconds at 00 if shown.",
+          "kind": "Off-peak means permitted low-cost hours, shoulder intermediate hours, and peak invokes your peak-heating policy. A cheap price does not cancel a peak restriction.",
+          "months": "All 12 means year-round. Use the picker to add months or × to remove them. For seasonal plans, every day of every month must still be covered. Overnight month matching follows the current tariff-clock date.",
+          "use_rate": "Leave off to use the matching off-peak, shoulder or peak price from the Prices page. On allows a midday discount or seasonal override. No additional pricing engine is created.",
+          "rate": "Australian cents/kWh, for example 15 means $0.15/kWh. Ignored when the separate-price switch is off. Limited to the same supported non-negative retail-price range."
+        },
+        "submit": "Update draft"
+      },
+      "delete_period": {
+        "title": "Remove this draft period?",
+        "description": "Removal changes this draft only. Replace any uncovered hours before the final Save; the stored schedule stays unchanged until then.",
+        "data": {
+          "confirm": "Remove the selected period"
+        },
+        "data_description": {
+          "confirm": "Leave off to keep it and return to the draft. Closing the whole flow discards all draft changes."
         }
       }
     },
     "error": {
       "invalid_settings": "Nothing saved. {detail}",
-      "locked_while_active": "{detail}"
+      "locked_while_active": "{detail}",
+      "choose_period": "Choose a period to edit/remove, or add a period (maximum 32).",
+      "invalid_period": "Choose at least one day and month, valid times and a supported price. The draft was not changed."
+    }
+  },
+  "selector": {
+    "tariff_profile": {
+      "options": {
+        "flat": "Flat rate — one price all day",
+        "aurora_93": "Aurora-style two-peak example (verify your contract)",
+        "custom": "Custom weekly / seasonal schedule"
+      }
+    },
+    "tariff_clock": {
+      "options": {
+        "standard": "Fixed standard time — no daylight saving",
+        "local": "Local time — follows daylight saving"
+      }
+    },
+    "days": {
+      "options": {
+        "0": "Monday",
+        "1": "Tuesday",
+        "2": "Wednesday",
+        "3": "Thursday",
+        "4": "Friday",
+        "5": "Saturday",
+        "6": "Sunday"
+      }
+    },
+    "months": {
+      "options": {
+        "1": "January",
+        "2": "February",
+        "3": "March",
+        "4": "April",
+        "5": "May",
+        "6": "June",
+        "7": "July",
+        "8": "August",
+        "9": "September",
+        "10": "October",
+        "11": "November",
+        "12": "December"
+      }
+    },
+    "period_kind": {
+      "options": {
+        "off_peak": "Off-peak / low-cost",
+        "shoulder": "Shoulder / intermediate",
+        "peak": "Peak / restricted heating"
+      }
+    },
+    "schedule_action": {
+      "options": {
+        "edit": "Edit a period",
+        "add": "Add a period",
+        "delete": "Remove a period",
+        "save": "Save and use this custom schedule"
+      }
     }
   }
 }

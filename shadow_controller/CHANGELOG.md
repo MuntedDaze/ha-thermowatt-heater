@@ -1,5 +1,18 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.14.0 — configuration usability (unmerged development)
+
+- Four topical options menus with native inline descriptions for every active
+  setting and mapping; everyday choices separate from advanced commissioning.
+- Prices display in cents/kWh and fractions as percentages, preserving precise
+  stored values and native entity units/IDs. Supported target roles are unchanged.
+- Guided draft weekly/seasonal tariff editor with explicit final save, existing
+  validation/active-control locks, and advanced JSON retained.
+- Optional mappings use clearable suggested values; mapping qualification
+  invalidation remains intact. No controller/bridge protocol, tariff engine,
+  stored defaults or safety gate changes. No entry schema migration required.
+- Real isolated Home Assistant flow/browser checks and beginner settings guide.
+
 ## 0.13.0 — independent-audit remediation (unreleased)
 
 - Follow-up: retain the parked-OFF warning through fault-locked/unknown-current

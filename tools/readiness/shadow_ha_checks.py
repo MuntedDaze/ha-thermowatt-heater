@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.13.0"
+CURRENT_VERSION = "0.14.0"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -164,10 +164,25 @@ def kept(entry_id, ids):
 
 
 async def options_page(hass, entry, page, data):
-    """0.8.0 Configure: a menu (preferences / system / sources), one page per save."""
+    """Use the real topical options-flow menus, one page per save."""
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     assert flow["type"] == "menu", flow
-    assert set(flow["menu_options"]) == {"preferences", "system", "sources"}, flow
+    assert set(flow["menu_options"]) == {"hot_water", "electricity", "solar_meters", "advanced"}, (
+        flow
+    )
+    parent = (
+        "solar_meters"
+        if page in {"sources", "solar"}
+        else "electricity"
+        if page in {"prices", "peak_times", "schedule", "tariff_json"}
+        else "advanced"
+        if page != "hot_water"
+        else None
+    )
+    if parent:
+        flow = await hass.config_entries.options.async_configure(
+            flow["flow_id"], {"next_step_id": parent}
+        )
     flow = await hass.config_entries.options.async_configure(
         flow["flow_id"], {"next_step_id": page}
     )
@@ -521,11 +536,27 @@ async def check_forecasts(hass, entry, entity_for):
     emhass_state(hass, pv_id, "p_pv_forecast", 4500, now)
     emhass_state(hass, load_id, "p_load_forecast", 600, now)
     mapping = {**DEFAULT_SOURCES, "forecast_pv": pv_id, "forecast_load": load_id}
-    saved = await options_page(hass, entry, "sources", mapping)
+    from custom_components.thermann_shadow.config import CLOUD_SOURCES, DEFAULT_OPTIONS
+
+    saved = await options_page(
+        hass, entry, "sources", {k: v for k, v in mapping.items() if k not in CLOUD_SOURCES}
+    )
     assert saved["type"] == "create_entry", saved
     await hass.async_block_till_done()
-    values = page_values(entry, ("Everyday", "Advanced"))
-    saved = await options_page(hass, entry, "preferences", {**values, "forecast_enabled": True})
+    from custom_components.thermann_shadow.configuration import PAGES, display_value
+
+    saved = await options_page(
+        hass,
+        entry,
+        "solar",
+        {
+            **{
+                k: display_value(k, entry.options.get(k, DEFAULT_OPTIONS[k]))
+                for k in PAGES["solar"]
+            },
+            "forecast_enabled": True,
+        },
+    )
     assert saved["type"] == "create_entry", saved
     await hass.async_block_till_done()
     runtime = hass.data["thermann_shadow"][entry.entry_id]

@@ -13,14 +13,15 @@ cause **zero** Thermann requests. Nothing here touches the Thermowatt add-on.
 ## What the planner needs
 
 Two optional entities, mapped in **Settings → Devices & services → Thermann
-Controller → Configure → Sensor mappings**:
+Controller → Configure → Solar & Meters → Solar and meter readings**:
 
 | Mapping | Accepted shapes | Required attributes |
 |---|---|---|
 | **Optional published PV forecast** | EMHASS-style `forecasts` list *or* Forecast.Solar-style `watts` mapping | `unit_of_measurement` `W`/`kW`, `forecast_generated_at` |
 | **Optional household load forecast or measured baseline** | EMHASS-style `forecasts` list *or* a plain numeric sensor (flat baseline) | list: `unit_of_measurement`, `forecast_generated_at`; numeric: `unit_of_measurement` only |
 
-Then turn on **Use published forecasts** on the Settings dashboard.
+Then choose **Solar forecasts and grid meter → Use solar and household forecasts**.
+Every field explains its units and limitations. [Settings walkthrough](../docs/configuration/SETTINGS.md).
 
 `forecast_generated_at` must be an offset-aware ISO timestamp of when the forecast
 was actually **calculated** — not when it was last republished. After an HA
