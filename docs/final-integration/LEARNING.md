@@ -10,6 +10,9 @@ sets either commissioning fact or supplies real heater evidence.
 The existing compact `.measured_history_v2` sidecar retains covered CT-integrated
 energy and optional native-counter epochs. HA Recorder retains original meter,
 temperature and controller events. No second raw-sample database is added.
+The bounded session list retains up to 120 rows so all three targets can retain
+the minimum evidence simultaneously; the former 40-row limit could not hold
+three independent 20-session cohorts. This does not lower any fit gate.
 Gaps/restarts are never filled with nominal watts. Native counter deltas can
 recover total energy across a gap but cannot invent the missing timing,
 tariff/solar allocation or a heating cycle.

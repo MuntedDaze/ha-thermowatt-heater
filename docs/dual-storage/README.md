@@ -1,5 +1,10 @@
 # Four-state controller candidate
 
+Historical PR #34 checkpoint. Current integrated development, including common
+household configuration and disabled-by-default adaptive/learning code, is
+described in the [current guide](../final-integration/COMPLETION_MATRIX.md).
+The following records the unchanged PR #34 candidate, not fresh setup defaults.
+
 This guide describes bridge **1.3.14** and controller **0.10.0**, under review in
 [draft PR #34](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/34). It does
 not authorise an installation, live test, automatic-control enable or heater

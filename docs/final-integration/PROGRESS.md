@@ -11,10 +11,10 @@ worktree is untouched. Owner untracked `review-1b29be1/` and `uv.lock` preserved
 
 Implement combined read-only monitoring/dashboard, real disabled-by-default
 guarded adaptive polling, validated learning architecture, week-long integrated
-simulations and release/commissioning documentation. No main/protected-branch
+simulations and practical future-ready configuration/commissioning documentation. No main/protected-branch
 merge, installation, real Thermann/MQTT/authentication, heater operation,
 credential/history rewrite, licence selection or release publication.
-New draft PR will target `codex/economic-dual-storage` (PR #34).
+Draft PR #35 targets `codex/economic-dual-storage` (PR #34).
 
 ## Stages
 
@@ -69,30 +69,41 @@ New draft PR will target `codex/economic-dual-storage` (PR #34).
    No-solar/no-household-meter maps generate seven valid read-only views with
    unavailable measurements, not empty entity IDs or invented starting totals.
    163 monitoring tests pass; real HA adds a minimal no-solar check_config case.
-   Stage D `1434652` passed all eight workflows. E replay is still in progress.
-6. E: comparative polling and full-week end-to-end scenarios including owner,
-   restart, cloud/meter failures, CT-free and CT-measured; equal service/terminal
-   energy, request categories and detection/error trade-offs must be explicit.
-7. F: compatible candidate metadata, plain-language docs, existing security
-   findings and future owner rollout plan, requirements matrix and independent-review
-   handoff. Full local suite and all applicable final-head CI required.
+   Stage D `1434652` and B2 `f0dd80b` passed all eight workflows.
+6. E: commit `d5538d2`; eight real-worker synthetic weeks compare fixed30/fixed60/old-shadow/
+   adaptive with CT/no-CT, draws, owner changes, outage/backoff and restart.
+   Reproducible JSON and tests conserve energy/service/terminal storage and
+   disclose missed targets, unconfirmed peak OFF, prediction and detection limits.
+   Removed redundant actual latest-start reads while already storing, preserving
+   the old shadow comparison. CT:624 vs740 HTTP (15.7% fewer); CT-free:730 vs713
+   (2.4% more). No blanket API/bill saving or real thermal-accuracy claim.
+   Bounded history now retains120 rows rather than40 so all three >=20-session
+   cohorts can coexist; a restart regression verifies each target independently.
+7. F: candidate metadata1.3.15/0.11.0, both bridge changelogs, controller
+   changelog, plain README, installation/rollback/tariff/interface/learning/
+   simulation guides, completion matrix and independent-review handoff delivered.
+   Public distribution/licence administration deferred. Existing secret findings
+   are referenced without printing, rotating or rewriting anything.
 
-## Targeted integration findings
+## Validation checkpoint
 
-- Fable maps still describe the 0.9.1 baseline and omit already available
-  completion/poll/learning/62-degree telemetry. Update only the combined branch.
-- Fable's HA workflow validates the monitoring package alone. Add combined
-  component/package/template/entity checks without external networking.
-- The bridge has one clock-aligned poll timer; shadow suggestions currently have
-  no actuation interface. Extend this authority rather than adding a cloud loop.
-- Existing command/status freshness must not be silently relaxed by adaptive
-  scheduling. Anchor hints to actual successful status; advance consequential
-  reads, reuse confirmation and fall back if the controller/lease is absent.
-- Learning records lack session/error/validation detail and held-out gating;
-  nominal model remains the only scheduling authority until real gates pass.
-- Reassess power-source freshness and strict map validation: numeric stale
-  sensors currently remain available to derived monitoring energy even though
-  Health reports staleness. Do not hide outages as zero measurements.
+Local full snapshot: 1371 tests (Python3.12.14), Ruff lint/format, both strict
+mypy targets, compileall, generated-file consistency and Bash syntax pass.
+Actual HA/combined package, native image/MQTT/lifecycle and Supervisor checks run
+in CI; all eight workflows passed the preceding B2 head `f0dd80b`.
+At construction of this final commit, final-head CI still needs verification.
+The exact tested SHA and final CI results are recorded in draft PR #35 and the
+completion report, avoiding a self-referencing post-CI documentation commit.
+Never infer final-head success from an earlier SHA.
+
+## Resolved integration findings
+
+Fable's baseline was integrated by ancestry, then combined mappings, current
+verified tariff prices, stale-source availability and optional no-meter views
+were corrected locally. Actual HA validates package0/3CT/minimal variants and
+renders combined templates/entity registry. One bridge timer owns bounded real
+adaptive plans; shadow counts remain separate. Validated target-specific learning
+uses persisted provenance and conservative gates, with no hardware authority.
 
 ## Resume
 
@@ -108,10 +119,12 @@ Retain the closed 45/62/70 set until independent hardware evidence supports more
 Government/network/retailer sources have been researched; document their distinct
 roles and conditional offers without copying current prices as defaults.
 
-Inspect branch/status first. Do not switch/reset existing PR branches or touch
-Fable's worktree. A–D are delivered. Finish E/F, commit logical increments and
-push only draft PR #35's integration branch. Python runtime:
+Implementation A–F is delivered. Verify final-head CI from #35 if resuming,
+then obtain independent review and separate owner approvals for merge/live work.
+No additional speculative features or public-release administration are needed.
+Do not switch/reset existing PR branches or touch Fable's worktree. Retain owner
+untracked `review-1b29be1/` and `uv.lock`. Python runtime:
 `C:/Users/jacob/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`,
-PYTHONPATH = absolute `.test-deps`. Use UTF-8 explicitly for text reads/writes.
+PYTHONPATH = absolute `.test-deps`. Use UTF-8 for text reads/writes.
 Do not print the existing application key or historical private-key material.
-Independent review and all physical/production gates remain outstanding.
+Independent review and every physical/production approval remain outstanding.

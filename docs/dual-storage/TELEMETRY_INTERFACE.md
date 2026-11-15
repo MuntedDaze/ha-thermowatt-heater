@@ -1,5 +1,8 @@
 # Backend contract for four-state dashboards
 
+Historical PR #34 contract. The [combined interface deltas](../final-integration/TELEMETRY.md)
+describe actual adaptive scheduling, validated learning and the integrated map.
+
 Controller 0.10.0, event **schema 2**. This extends the
 [PR #33 schema-1 contract](../smart-controller/TELEMETRY_INTERFACE.md).
 Fable owns `energy_monitoring/**`, its tests/workflow and dashboard/reporting.

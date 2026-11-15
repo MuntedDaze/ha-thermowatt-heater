@@ -2,7 +2,7 @@
 
 *Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
-Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Bridge 1.3.14 is an unmerged development candidate; the new 62°C hardware transitions are not yet physically qualified. See the [candidate guide](https://github.com/MuntedDaze/ha-thermowatt-heater/blob/codex/economic-dual-storage/docs/dual-storage/README.md).
+Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Bridge 1.3.15 is an unmerged, uninstalled development candidate; new four-state hardware behaviour still requires supervised qualification. See the [current candidate guide](../docs/final-integration/COMPLETION_MATRIX.md). Public distribution is deferred.
 
 **Defaults are safe:** cloud access off, commands off, polling every 30 minutes.
 
@@ -18,6 +18,8 @@ poll_interval_minutes: 30
 poll_interval_unit: minutes
 min_cloud_retry_minutes: 60
 on_demand_refresh_enabled: false
+adaptive_polling_enabled: false
+adaptive_polling_qualified: false
 auth_retry_generation: 0
 ```
 
@@ -26,9 +28,10 @@ auth_retry_generation: 0
 | `cloud_enabled` | Allows this add-on to use the cloud at all. |
 | `commands_enabled` | Allows MQTT heater commands. Leave `false` for read-only use. |
 | `command_policy` | `automation` (default) accepts only the exact-prior transition allowlist below, plus the two retained legacy forms, and refuses unsupported payloads before a cloud request. `legacy` restores the older, broader command set; only choose it deliberately. |
-| `poll_interval_minutes` + `poll_interval_unit` | Background polling: 1–120 minutes, or 60–7200 seconds. 30 minutes is recommended. From 1.3.13 polls are clock-aligned (with 30 minutes: :00 and :30). A restart reads once, then rejoins the clock slots. An on-demand, command or confirmation read never moves the schedule, and a due poll is skipped (the slot kept) when the heater was read in the last 3 minutes. |
+| `poll_interval_minutes` + `poll_interval_unit` | Fixed background polling: 1–120 minutes, or 60–7200 seconds. Default 30 minutes, clock-aligned (:00/:30). Restart reads once, then rejoins slots. In fixed mode, guarded reads keep the slots and a due poll reuses status from the last 3 minutes. Optional adaptive mode below uses the same worker with a successful-read anchor instead. |
 | `min_cloud_retry_minutes` | First wait after an ordinary cloud error, 5–1440 minutes (default 60). Repeated errors double it, up to 24 hours. A success resets it. |
 | `on_demand_refresh_enabled` | Optional read-only refresh on `P/<serial>/refresh`, at most one read per 5 minutes. Off by default; the controller does not need it. |
+| `adaptive_polling_enabled` + `adaptive_polling_qualified` | Both false by default. Both plus controller plan enable and fixed interval ≥15 minutes are required for bridge-owned bounded adaptive status scheduling. Requires independent qualification. Missing/expired plans select fixed fallback; auth/backoff/quotas/confirmation retain priority. See the [wire contract and telemetry](../docs/final-integration/TELEMETRY.md). |
 | `auth_retry_generation` | Increase by one to allow **one** new authentication attempt after a lock (see below). 0 starts locked. |
 
 Options are read from `/data/options.json` (`!secret` works). Credentials are never logged or passed on the command line.

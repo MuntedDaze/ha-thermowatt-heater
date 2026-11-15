@@ -1,5 +1,8 @@
 # Installation and commissioning
 
+Historical PR #34 procedure. Use the [current owner plan](../final-integration/INSTALLATION.md)
+for the integrated candidate, including HA-default IANA zones and no-solar setup.
+
 For the unmerged 1.3.14 / 0.10.0 candidate. These are future owner procedures,
 not commands executed by development. Review [upgrade and rollback](UPGRADE.md)
 before changing a working system. No hardware commissioning or automatic-control

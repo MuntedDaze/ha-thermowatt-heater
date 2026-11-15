@@ -94,7 +94,10 @@ Do these once after installing, and again after adding a meter.
 
 - **Grid import/export power:** the signed meter power, split by `grid.export_positive`.
 - **Solar used at home:** solar − export, never below zero.
-- **Tariff period:** Aurora Tariff 93 runs on fixed AEST all year, so with `clock: standard` the period is taken from UTC+10 and does not move with daylight saving. Public holidays are treated as ordinary weekdays, as the controller does.
+- **Tariff period:** combined mode reads the controller's selected IANA/contract
+  clock and verified schedule. In the legacy standalone Aurora example only,
+  `clock: standard` uses UTC+10. Public holidays follow their weekday; no separate
+  holiday-price calendar is implemented.
 - **Cost and earnings:** each step of the import or export meter is multiplied by the price in force when it arrives and added to a running total. A later rate change does not re-price earlier energy. Energy that arrives while a rate is unset is counted in the sensor's `unpriced_kwh` attribute instead of being costed at zero silently.
 - **Hot water, grid versus solar:** the heater is the load you can move, so it is charged with the import it causes: grid = min(element power, grid import); the rest is solar.
 - **Imported cost versus solar opportunity cost:** *imported cost* is grid energy × import price and is on your bill. *Solar opportunity cost* is solar energy × feed-in rate: income you gave up by not exporting. They are separate sensors and are never added together.
@@ -105,6 +108,12 @@ Do these once after installing, and again after adding a meter.
 
 - **No backfill.** Cost, peak/off-peak and solar/grid totals start at zero on the day of installation. Solar, import, export and smart-plug history that Home Assistant already has is used as is.
 - **Sensors report at different moments.** GoodWe updates every few tens of seconds, plugs less often. Live *untracked* and the hot-water split can be briefly off around a switch; the energy totals average this out.
+- **Costs are monitoring estimates, not bill reconciliation.** A cumulative-meter
+  step is priced when its report arrives. A step spanning a price boundary or
+  an outage cannot reveal the earlier interval's exact tariff/solar allocation.
+  Recovered total kWh is not recovered timing. `unpriced_kwh` tracks missing-price
+  steps, not every source of billing uncertainty. Use suitable interval-meter
+  data and the actual contract for bill verification.
 - **Integrated energy.** Where a meter has no kWh total, energy is the integral of power (left Riemann sum, capped at 5-minute steps). It is slightly less exact than a metered total.
 - **Unavailable sources.** An unavailable reading makes the dependent sensor unavailable, not zero. A smart plug that is offline contributes nothing to the tracked sum, so its load appears as untracked until it returns; Health lists it.
 - **Inverter asleep at night.** If the solar entity goes unavailable overnight, set `solar.zero_when_unavailable: true`.
