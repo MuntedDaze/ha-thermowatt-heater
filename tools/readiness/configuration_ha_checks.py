@@ -58,6 +58,27 @@ async def check_configuration(hass, entry):
         assert dict(entry.options) == before, page
 
     before = deepcopy(dict(entry.options))
+    # Blank command address, CT record and notification address are deliberately
+    # optional in the real frontend. Its omission of empty fields is a no-op.
+    data = {
+        k: display_value(k, before[k])
+        for k in PAGES["commissioning"]
+        if k
+        not in {
+            "controller_command_topic",
+            "heater_meter_verification",
+            "controller_notify_service",
+        }
+    }
+    result = await submit(await open_page("commissioning"), data)
+    assert result["type"] == "create_entry" and dict(entry.options) == before, result
+    hass.config_entries.async_update_entry(
+        entry, options={**before, "controller_notify_service": "mobile_app_synthetic"}
+    )
+    await hass.async_block_till_done()
+    result = await submit(await open_page("commissioning"), data)
+    assert result["type"] == "create_entry" and dict(entry.options) == before, result
+
     for page in ("sources", "bridge_sources"):
         keys = [
             k

@@ -55,7 +55,7 @@ async function main() {
         }
         await configure.click();
         await expect(page.getByText("Hot Water", { exact: true })).toBeVisible();
-        if (id === "hot_water") await page.screenshot({ path: `${output}/menu-${width}.png` });
+        if (id === "hot_water") await page.screenshot({ animations: "disabled", path: `${output}/menu-${width}.png` });
         for (const target of [...parents, ...(id === "period" ? [] : [id])]) {
           await page.getByText(steps[target].title, { exact: true }).last().click();
         }
@@ -82,15 +82,15 @@ async function main() {
           return all.some(form => form.scrollWidth > form.clientWidth + 2);
         });
         if (overflow) throw new Error(`Horizontal form overflow: ${id} ${width}`);
-        await page.screenshot({ path: `${output}/${id}-${width}.png` });
+        await page.screenshot({ animations: "disabled", path: `${output}/${id}-${width}.png` });
         const labels = Object.values(steps[id].data || {});
         if (labels.length) {
           // Some native floating labels use display:contents. Scroll the real
           // form's container instead of asking that label to have its own box.
           await page.locator("ha-form").last().evaluate(form => form.scrollIntoView({ block: "end", behavior: "instant" }));
-          await page.screenshot({ path: `${output}/${id}-bottom-${width}.png` });
+          await page.screenshot({ animations: "disabled", path: `${output}/${id}-bottom-${width}.png` });
         }
-        if (["hot_water", "prices", "sources"].includes(id)) {
+        if (!["schedule", "period"].includes(id)) {
           const before = await snapshot();
           const saved = page.waitForResponse(response => response.url().includes("/options/flow/") && response.request().method() === "POST");
           await page.getByRole("button", { name: "Submit", exact: true }).click();
@@ -103,7 +103,7 @@ async function main() {
     }
     fs.writeFileSync(`${output}/frontend-results.json`, JSON.stringify({ real_home_assistant: true, reports }, null, 2));
   } catch (error) {
-    await page.screenshot({ path: `${output}/failure.png` });
+    await page.screenshot({ animations: "disabled", path: `${output}/failure.png` });
     const text = await page.evaluate(() => {
       const parts = [];
       function walk(root) {

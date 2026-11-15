@@ -78,7 +78,10 @@ def options_schema(values, keys):
             if unit(key):
                 config["unit_of_measurement"] = unit(key)
             validator = selector.NumberSelector(config)
-        fields[vol.Required(key, default=display_value(key, values[key]))] = validator
+        if meta.kind == "text":
+            fields[vol.Optional(key, description={"suggested_value": values[key]})] = validator
+        else:
+            fields[vol.Required(key, default=display_value(key, values[key]))] = validator
     return vol.Schema(fields)
 
 
@@ -259,6 +262,10 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
         errors = {}
         if user_input is not None:
             before = {**values, "sources": self._current_sources()}
+            user_input = {
+                **{k: "" for k in PAGES[step_id] if CATALOG[k].kind == "text"},
+                **user_input,
+            }
             values = apply_changes(values, stored_changes(values, user_input))
             try:
                 parse_options(values)

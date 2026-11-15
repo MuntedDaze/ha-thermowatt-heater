@@ -304,6 +304,10 @@ for _key, _label in (
         "Only for the Aurora-style two-peak plan. Time uses your tariff clock, which may differ from the household wall clock in summer. All four times must increase in order. Check your retail contract; custom plans use the guided schedule instead.",
     )
 
+for _key, (_label, _help) in list(FIELDS.items()):
+    if CATALOG[_key].kind == "time":
+        FIELDS[_key] = (_label, _help + " Leave seconds at 00 if Home Assistant shows them.")
+
 SOURCES = {
     "heater": (
         "Heater temperature and target",
