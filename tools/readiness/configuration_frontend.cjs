@@ -23,7 +23,10 @@ async function main() {
   const reports = [];
   let confirmedHttp = false;
   const fieldText = label => new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\*?$`);
-  const field = label => page.getByText(fieldText(label)).or(page.getByLabel(label, { exact: false })).filter({ visible: true }).first();
+  const field = label => page.getByText(fieldText(label))
+    .or(page.getByLabel(label, { exact: false }))
+    .or(page.getByRole("button", { name: label, exact: true }))
+    .filter({ visible: true }).first();
   const snapshot = () => page.evaluate(() => document.querySelector("home-assistant").hass.callApi("GET", "thermann_ui_snapshot"));
   const paths = {
     hot_water: [], prices: ["electricity"], peak_times: ["electricity"],
