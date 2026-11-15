@@ -82,7 +82,9 @@ async function main() {
         await page.screenshot({ path: `${output}/${id}-${width}.png` });
         const labels = Object.values(steps[id].data || {});
         if (labels.length) {
-          await field(labels.at(-1)).scrollIntoViewIfNeeded();
+          // Some native floating labels use display:contents. Scroll the real
+          // form's container instead of asking that label to have its own box.
+          await page.locator("ha-form").last().evaluate(form => form.scrollIntoView({ block: "end", behavior: "instant" }));
           await page.screenshot({ path: `${output}/${id}-bottom-${width}.png` });
         }
         if (["hot_water", "prices", "sources"].includes(id)) {
