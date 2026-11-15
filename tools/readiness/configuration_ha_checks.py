@@ -108,6 +108,7 @@ async def check_configuration(hass, entry):
         flow = await open_page("schedule")
         result = await submit(flow, {"action": "save"})
         assert result["errors"] == {"base": "locked_while_active"}, result
+        assert "periods" in result["description_placeholders"]
         assert dict(entry.options) == before
         hass.config_entries.options.async_abort(result["flow_id"])
     finally:
@@ -145,6 +146,19 @@ async def check_configuration(hass, entry):
     flow = await submit(flow, {"action": "save"})
     assert flow["errors"] == {"base": "invalid_settings"}, flow
     assert dict(entry.options) == before
+    hass.config_entries.options.async_abort(flow["flow_id"])
+
+    # A completely empty draft remains editable, cannot save, and cancellation
+    # leaves the original persisted tariff untouched.
+    flow = await open_page("schedule")
+    for _ in json.loads(entry.options["tariff_periods"]):
+        flow = await submit(flow, {"action": "delete", "period": "0"})
+        flow = await submit(flow, {"confirm": True})
+    assert "period" not in {str(k) for k in flow["data_schema"].schema}
+    flow = await submit(flow, {"action": "save"})
+    assert flow["errors"] == {"base": "invalid_settings"}
+    flow = await submit(flow, {"action": "add"})
+    assert flow["step_id"] == "period" and dict(entry.options) == before
     hass.config_entries.options.async_abort(flow["flow_id"])
 
     # Clearing an optional mapping must not reinsert the suggested old value;

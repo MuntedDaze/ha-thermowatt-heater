@@ -185,11 +185,16 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
         locked = locked_changes(before, result)
         if locked and control_active(self.hass, self._entry):
             self._locked = locked_message(locked)
+            placeholders = {"detail": self._locked}
+            if step_id == "schedule":
+                from .configuration_text import schedule_summary
+
+                placeholders["periods"] = schedule_summary(self._rows, before)
             return self.async_show_form(
                 step_id=step_id,
                 data_schema=schema,
                 errors={"base": "locked_while_active"},
-                description_placeholders={"detail": self._locked},
+                description_placeholders=placeholders,
             )
         return self.async_create_entry(title="", data=result)
 
@@ -277,27 +282,27 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
     def _schedule_schema(self):
         from .configuration_text import DAYS, KINDS
 
-        return vol.Schema(
-            {
-                vol.Required("action", default="edit"): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=["edit", "add", "delete", "save"],
-                        translation_key="schedule_action",
-                    )
-                ),
-                vol.Optional("period"): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            {
-                                "value": str(i),
-                                "label": f"{i + 1}. {', '.join(DAYS[d][:3] for d in r['days'])}: {r['start']}–{r['end']} — {KINDS[r['kind']]}",
-                            }
-                            for i, r in enumerate(self._rows)
-                        ]
-                    )
-                ),
-            }
-        )
+        fields = {
+            vol.Required("action", default="edit"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=["edit", "add", "delete", "save"],
+                    translation_key="schedule_action",
+                )
+            ),
+        }
+        if self._rows:
+            fields[vol.Optional("period")] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {
+                            "value": str(i),
+                            "label": f"{i + 1}. {', '.join(DAYS[d][:3] for d in r['days'])}: {r['start']}–{r['end']} — {KINDS[r['kind']]}",
+                        }
+                        for i, r in enumerate(self._rows)
+                    ]
+                )
+            )
+        return vol.Schema(fields)
 
     async def async_step_schedule(self, user_input=None):
         values = saved_options(self._entry.options)
@@ -352,6 +357,7 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
             except (ValueError, TypeError, KeyError, OverflowError):
                 errors["base"] = "invalid_period"
             else:
+                self._locked = ""
                 if self._row_index is None:
                     self._rows.append(row)
                 else:
