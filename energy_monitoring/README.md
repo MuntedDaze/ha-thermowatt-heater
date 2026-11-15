@@ -2,7 +2,17 @@
 
 A Home Assistant package and dashboard for solar, grid, tariff cost, hot water, appliances and monitoring health. It complements the Thermann Controller and is independent of it.
 
-**Read-only.** It creates sensors and four tariff-rate helpers. It calls no service, publishes nothing to MQTT, never writes to the heater and has no buttons. Nothing in this folder is installed automatically: every step below is done by the owner.
+**Read-only.** It creates sensors and tariff/supply-charge helpers. It calls no service, publishes nothing to MQTT, never writes to the heater and has no buttons. Nothing in this folder is installed automatically: every step below is a future owner procedure after approval.
+
+The combined development candidate uses `tariff.source: controller`: configure
+your actual retail prices, windows and tariff verification in Thermann
+Controller. The Costs view reads the same current prices, including shoulder
+and seasonal/midday windows; only the daily supply charge is edited here.
+Zero is accepted as free pricing only when explicitly verified in the controller.
+The original `standalone` two-price helper mode is still available for independent
+monitoring installations. It does not represent the controller's advanced windows.
+All grid/solar/house mappings can be blank for no-solar/no-meter households.
+Unknown energy/cost is not measured zero. Basic heater control works independently.
 
 ## Files
 
@@ -42,7 +52,10 @@ A Home Assistant package and dashboard for solar, grid, tariff cost, hot water, 
      packages: !include_dir_named packages
    ```
 3. **Check and restart.** *Developer tools → YAML → Check configuration*, then restart Home Assistant.
-4. **Set the four rates** in *Settings → Devices & services → Helpers* (or on the Costs view): `EM peak import rate`, `EM off-peak import rate`, `EM feed-in rate`, `EM daily supply charge`. Take them from your Aurora bill, including GST. Until the three per-kWh rates are above zero, costs are not counted and Health reads *degraded*.
+4. **Configure prices from your own retail contract.** In the combined mode,
+   configure and verify the controller tariff, then set the daily supply charge
+   on Costs. In `standalone` mode only, set the four rate helpers there. The
+   legacy Aurora/GoodWe mappings are one household example, not universal defaults.
 5. **Configure the Energy dashboard** (*Settings → Dashboards → Energy*):
    - Grid consumption: your import meter, *Use an entity with current price* → `sensor.em_import_price`.
    - Return to grid: your export meter, price entity → `sensor.em_feed_in_price`.

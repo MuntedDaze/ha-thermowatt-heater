@@ -335,14 +335,12 @@ views:
       entity: sensor.em_import_price
       name: Import price now
     - type: entities
-      title: Rates (edit here when your tariff changes)
+      title: Controller prices (configure tariffs in Thermann Controller)
       entities:
-      - entity: input_number.em_peak_rate
-        name: Peak import rate
-      - entity: input_number.em_off_peak_rate
-        name: Off-peak import rate
-      - entity: input_number.em_feed_in_rate
-        name: Feed-in rate
+      - entity: sensor.em_feed_in_price
+        name: Feed-in price now
+      - entity: sensor.thermann_shadow_tariff_verification
+        name: Controller tariff verification
       - entity: input_number.em_daily_supply_charge
         name: Daily supply charge
   - type: grid
@@ -403,6 +401,34 @@ views:
     - type: statistic
       entity: sensor.em_grid_import_off_peak_energy
       name: Off-peak · this year
+      period:
+        calendar:
+          period: year
+      stat_type: change
+    - type: statistic
+      entity: sensor.em_grid_import_shoulder_energy
+      name: Shoulder · today
+      period:
+        calendar:
+          period: day
+      stat_type: change
+    - type: statistic
+      entity: sensor.em_grid_import_shoulder_energy
+      name: Shoulder · this week
+      period:
+        calendar:
+          period: week
+      stat_type: change
+    - type: statistic
+      entity: sensor.em_grid_import_shoulder_energy
+      name: Shoulder · this month
+      period:
+        calendar:
+          period: month
+      stat_type: change
+    - type: statistic
+      entity: sensor.em_grid_import_shoulder_energy
+      name: Shoulder · this year
       period:
         calendar:
           period: year
@@ -514,7 +540,7 @@ views:
   - type: grid
     cards:
     - type: statistics-graph
-      title: Peak and off-peak import per day
+      title: Import per day by tariff
       chart_type: bar
       period: day
       days_to_show: 30
@@ -525,6 +551,8 @@ views:
         name: Peak
       - entity: sensor.em_grid_import_off_peak_energy
         name: Off-peak
+      - entity: sensor.em_grid_import_shoulder_energy
+        name: Shoulder
       grid_options:
         columns: full
     - type: statistics-graph

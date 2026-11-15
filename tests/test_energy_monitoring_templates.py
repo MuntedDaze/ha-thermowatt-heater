@@ -29,6 +29,7 @@ def with_meters(**changes):
     import yaml
 
     raw = yaml.safe_load(DEFAULT_MAP.read_text(encoding="utf-8"))
+    raw["tariff"]["source"] = "standalone"  # original monitoring-only tariff cases
     for circuit in raw["circuits"]:
         circuit["power"] = f"sensor.ct_{circuit['key']}_power"
     raw.update(changes)

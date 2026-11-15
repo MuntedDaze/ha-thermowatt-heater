@@ -28,6 +28,9 @@ house:
   power: sensor.goodwe_inverter_house_consumption            # W [verified]
 
 tariff:
+  # Combined installation: the controller is the single tariff authority.
+  # "standalone" is the legacy monitoring-only peak/off-peak helper model below.
+  source: controller
   # Aurora Tariff 93 runs on fixed AEST (UTC+10) all year: "standard".
   # "local" follows Home Assistant's local time including daylight saving.
   clock: standard
@@ -83,6 +86,9 @@ appliances:
 # (four-state combined candidate). Verify actual registry IDs before installation.
 # Household meter/appliance mappings above are examples, not verified for new users.
 hot_water:
+  import_price: sensor.thermann_shadow_current_import_price
+  feed_in_price: sensor.thermann_shadow_configured_feed_in_rate
+  tariff_verification: sensor.thermann_shadow_tariff_verification
   mode: sensor.thermann_shadow_thermann_mode
   target: sensor.thermann_shadow_thermann_target
   tank_temperature: sensor.thermann_shadow_bottom_temperature

@@ -50,20 +50,20 @@ def validate(raw: dict) -> dict:
         "version": 1,
         "currency": str(raw.get("currency") or "AUD"),
         "grid": {
-            "power": _entity(grid.get("power"), "grid.power", True),
+            "power": _entity(grid.get("power"), "grid.power"),
             "export_positive": _boolean(grid.get("export_positive", True), "grid.export_positive"),
-            "import_energy": _entity(grid.get("import_energy"), "grid.import_energy", True),
-            "export_energy": _entity(grid.get("export_energy"), "grid.export_energy", True),
+            "import_energy": _entity(grid.get("import_energy"), "grid.import_energy"),
+            "export_energy": _entity(grid.get("export_energy"), "grid.export_energy"),
         },
         "solar": {
-            "power": _entity(solar.get("power"), "solar.power", True),
-            "energy": _entity(solar.get("energy"), "solar.energy", True),
+            "power": _entity(solar.get("power"), "solar.power"),
+            "energy": _entity(solar.get("energy"), "solar.energy"),
             "forecast_power": _entity(solar.get("forecast_power"), "solar.forecast_power"),
             "zero_when_unavailable": _boolean(
                 solar.get("zero_when_unavailable", False), "solar.zero_when_unavailable"
             ),
         },
-        "house": {"power": _entity(house.get("power"), "house.power", True)},
+        "house": {"power": _entity(house.get("power"), "house.power")},
     }
 
     tariff = raw.get("tariff") or {}
@@ -91,6 +91,9 @@ def validate(raw: dict) -> dict:
             raise ValueError(f"{where}: must end after it starts, on the same day")
         windows.append({"days": sorted(set(days)), "start": first, "end": last})
     result["tariff"] = {"clock": clock, "utc_offset_hours": offset, "peak_windows": windows}
+    result["tariff"]["source"] = tariff.get("source", "standalone")
+    if result["tariff"]["source"] not in ("standalone", "controller"):
+        raise ValueError("tariff.source: choose standalone or controller")
     for key in RATE_KEYS:
         result["tariff"][f"{key}_entity"] = _entity(
             tariff.get(f"{key}_entity"), f"tariff.{key}_entity"
@@ -161,6 +164,13 @@ def validate(raw: dict) -> dict:
         str(key): _entity(value, f"hot_water.{key}")
         for key, value in (raw.get("hot_water") or {}).items()
     }
+    if result["tariff"]["source"] == "controller" and not all(
+        result["hot_water"].get(key)
+        for key in ("current_tariff", "import_price", "feed_in_price", "tariff_verification")
+    ):
+        raise ValueError(
+            "tariff.source: controller period, prices and verification mappings required"
+        )
     freshness = raw.get("freshness_seconds") or {}
     result["freshness_seconds"] = {
         group: freshness.get(group, default)

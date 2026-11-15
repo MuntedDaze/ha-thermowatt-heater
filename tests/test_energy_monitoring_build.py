@@ -44,7 +44,9 @@ FORBIDDEN_WORDS = ("water_heater.", "switch.", "button.", "mqtt", "homeassistant
 
 
 def raw_map():
-    return yaml.safe_load(DEFAULT_MAP.read_text(encoding="utf-8"))
+    raw = yaml.safe_load(DEFAULT_MAP.read_text(encoding="utf-8"))
+    raw["tariff"]["source"] = "standalone"  # preserve the original independent package cases
+    return raw
 
 
 def variant(meters=0, **edits):
@@ -65,6 +67,7 @@ def variant(meters=0, **edits):
 
 
 VARIANTS = {
+    "controller_tariffs": load(),
     "no_meter": variant(0),
     "hot_water_only": variant(1),
     "two_circuits": variant(2),
@@ -79,6 +82,14 @@ VARIANTS = {
     ),
     "local_clock_no_forecast": variant(1, tariff__clock="local", solar__forecast_power=""),
 }
+
+_minimal = raw_map()
+for _group in ("grid", "solar", "house"):
+    for _key, _value in _minimal[_group].items():
+        if isinstance(_value, str):
+            _minimal[_group][_key] = ""
+_minimal["appliances"] = []
+VARIANTS["no_solar_or_household_meters"] = validate(_minimal)
 
 
 def walk(node, path=()):
@@ -323,7 +334,6 @@ def test_health_summary_markdown_renders():
     "edits,message",
     [
         ({"version": 2}, "version"),
-        ({"grid__power": ""}, "grid.power"),
         ({"grid__power": "Not An Entity"}, "not an entity ID"),
         ({"tariff__clock": "utc"}, "tariff.clock"),
         ({"tariff__utc_offset_hours": 30}, "utc_offset_hours"),

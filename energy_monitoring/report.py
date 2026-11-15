@@ -42,6 +42,7 @@ def columns(config: dict) -> list[tuple[str, str, str]]:
         ("sensor.em_solar_self_consumed_energy", "Solar used", "kWh"),
         ("sensor.em_grid_import_peak_energy", "Peak import", "kWh"),
         ("sensor.em_grid_import_off_peak_energy", "Off-peak import", "kWh"),
+        ("sensor.em_grid_import_shoulder_energy", "Shoulder import", "kWh"),
         ("sensor.em_grid_import_cost", "Import cost", unit),
         ("sensor.em_grid_export_earnings", "Feed-in", unit),
     ]
@@ -54,7 +55,7 @@ def columns(config: dict) -> list[tuple[str, str, str]]:
         ]
     result += [(s["energy"], s["name"], "kWh") for s in tracked_sources(config) if s["energy"]]
     result.append(("sensor.em_untracked_energy", "Untracked", "kWh"))
-    return list(dict.fromkeys(result))
+    return list(dict.fromkeys(row for row in result if row[0]))
 
 
 def request(config: dict) -> str:

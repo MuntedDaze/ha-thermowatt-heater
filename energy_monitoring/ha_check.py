@@ -29,8 +29,14 @@ CONFIGURATION = (
 )
 
 
-def write(out: Path, meters: int) -> None:
+def write(out: Path, meters: int, minimal: bool = False) -> None:
     raw = yaml.safe_load(DEFAULT_MAP.read_text(encoding="utf-8"))
+    if minimal:
+        for group in ("grid", "solar", "house"):
+            for key, value in raw[group].items():
+                if isinstance(value, str):
+                    raw[group][key] = ""
+        raw["appliances"] = []
     for index, circuit in enumerate(raw["circuits"][:meters]):
         circuit["power"] = f"sensor.synthetic_ct_{circuit['key']}_power"
         if index == 1:  # one circuit with a native energy entity, the rest integrated
@@ -48,8 +54,9 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--meters", type=int, default=0, choices=range(4))
+    parser.add_argument("--minimal", action="store_true", help="no solar or household meters")
     args = parser.parse_args(argv)
-    write(args.out, args.meters)
+    write(args.out, args.meters, args.minimal)
     print(f"wrote {args.out}")
     return 0
 

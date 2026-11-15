@@ -58,6 +58,8 @@ SENSORS = {
     "normal_storage_target_c": ("Normal storage target", "°C"),
     "adaptive_polling_status": ("Actual adaptive polling status", None),
     "learning_status": ("Heating learning status", None),
+    "tariff_verification": ("Tariff verification", None),
+    "feed_in_rate_aud": ("Configured feed in rate", "AUD/kWh"),
     "learning_sessions": ("Clean heating learning sessions", None),
     "prediction_error": ("Held out heating prediction error", "min"),
     "planning_heating_rate": ("Planning heating rate", "°C/h"),

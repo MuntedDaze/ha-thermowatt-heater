@@ -46,6 +46,8 @@ def heading(text, icon=None):
 
 
 def tile(entity, name, **more):
+    if not entity:
+        return note(f"{name}: not configured")
     return {"type": "tile", "entity": entity, "name": name, **more}
 
 
@@ -55,6 +57,8 @@ def note(text):
 
 def statistic(entity, name, period="day"):
     """A long-term-statistics total for the current calendar period."""
+    if not entity:
+        return note(f"{name}: not configured")
     return {
         "type": "statistic",
         "entity": entity,
@@ -69,6 +73,9 @@ def periods(entity, label):
 
 
 def bars(title, entities, period="day", days=30, stat="change", chart="bar"):
+    entities = [(entity, name) for entity, name in entities if entity]
+    if not entities:
+        return note(f"{title}: not configured")
     return {
         "type": "statistics-graph",
         "title": title,
@@ -82,6 +89,9 @@ def bars(title, entities, period="day", days=30, stat="change", chart="bar"):
 
 
 def history(title, entities, hours=24):
+    entities = [(entity, name) for entity, name in entities if entity]
+    if not entities:
+        return note(f"{title}: not configured")
     return {
         "type": "history-graph",
         "title": title,
@@ -92,6 +102,9 @@ def history(title, entities, hours=24):
 
 
 def rows(title, pairs):
+    pairs = [(entity, name) for entity, name in pairs if entity]
+    if not pairs:
+        return note(f"{title}: not configured")
     return {
         "type": "entities",
         "title": title,
@@ -417,6 +430,17 @@ def costs_view(config):
             strict=True,
         )
     ]
+    if config["tariff"]["source"] == "controller":
+        rates = [
+            ("sensor.em_feed_in_price", "Feed-in price now"),
+            (config["hot_water"]["tariff_verification"], "Controller tariff verification"),
+            (rate_entity(config, "daily_supply_charge"), "Daily supply charge"),
+        ]
+    rate_title = (
+        "Controller prices (configure tariffs in Thermann Controller)"
+        if config["tariff"]["source"] == "controller"
+        else "Rates (edit here when your tariff changes)"
+    )
     return view(
         "Costs",
         "costs",
@@ -425,12 +449,13 @@ def costs_view(config):
             heading("Tariff", "mdi:clock-time-four-outline"),
             tile("sensor.em_tariff_period", "Period now"),
             tile("sensor.em_import_price", "Import price now"),
-            rows("Rates (edit here when your tariff changes)", rates),
+            rows(rate_title, rates),
         ),
         section(
             heading("Grid import by tariff", "mdi:transmission-tower-import"),
             *periods("sensor.em_grid_import_peak_energy", "Peak"),
             *periods("sensor.em_grid_import_off_peak_energy", "Off-peak"),
+            *periods("sensor.em_grid_import_shoulder_energy", "Shoulder"),
         ),
         section(
             heading("Spending and earnings", "mdi:cash"),
@@ -450,10 +475,11 @@ def costs_view(config):
         ),
         section(
             bars(
-                "Peak and off-peak import per day",
+                "Import per day by tariff",
                 [
                     ("sensor.em_grid_import_peak_energy", "Peak"),
                     ("sensor.em_grid_import_off_peak_energy", "Off-peak"),
+                    ("sensor.em_grid_import_shoulder_energy", "Shoulder"),
                 ],
             ),
             bars(
@@ -614,6 +640,7 @@ def health_view(config):
             "entities": [
                 {"entity": entity, "name": name, "secondary_info": "last-updated"}
                 for entity, name in pairs
+                if entity
             ],
         }
 

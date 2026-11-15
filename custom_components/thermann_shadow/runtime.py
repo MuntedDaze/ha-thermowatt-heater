@@ -481,6 +481,8 @@ class ShadowRuntime:
             storage_target_c=float(self.native_options["normal_storage_c"]),
             normal_storage_target_c=float(self.native_options["normal_storage_c"]),
             baseline_target_c=float(self.native_options["baseline_c"]),
+            tariff_verification="verified" if self.settings.tariff_verified else "unverified",
+            feed_in_rate_aud=self.settings.feed_in_rate,
             solar_boost_target_c=float(self.native_options["solar_boost_c"]),
             peak_heating_policy=self.native_options["peak_heating_policy"],
             optional_boost_enabled="on" if self.native_options["optional_solar_boost"] else "off",

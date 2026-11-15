@@ -1,6 +1,23 @@
 # Integration contract: energy monitoring ↔ Thermann Controller
 
-Baseline: controller 0.9.1 at `1b29be1` (PR #27). This file is the interface between this package and the controller work. Neither side imports the other; they meet only through Home Assistant entities.
+Combined candidate: controller 0.11.0 / bridge 1.3.15 on draft PR #35,
+integrating Fable's unchanged reviewed checkpoint `4c078f0` before the changes
+described here. The original PR #32 branch/worktree remains untouched. Neither
+side imports the other; they meet only through Home Assistant entities.
+
+The default `tariff.source: controller` reads the verified controller period,
+import price and constant feed-in price. It supports its flat, shoulder,
+multi-window and seasonal configuration without a second scheduling engine.
+Unverified/unavailable prices do not become free electricity. A verified zero
+rate is valid and is distinguished from missing price in `unpriced_kwh`.
+`standalone` retains the original monitoring-only two-price helper clock;
+it is not suitable for representing complex controller tariffs.
+
+All household grid/solar/house mappings can be empty. Unmeasured readings and
+uninitialised energy/cost totals remain unavailable; this package is never a
+requirement for basic CT-free/no-solar heater control. Power-derived integration
+has gaps when the original source expires, including steady zero with no fresh
+reports. No template heartbeat is accepted as new raw evidence.
 
 ## Rules
 
@@ -23,10 +40,10 @@ Power is in W, energy in kWh, money in AUD.
 | `sensor.em_solar_self_consumed_power` | solar − export | mean |
 | `sensor.em_solar_forecast_power` | EMHASS current-slot forecast, state only. Present only when `solar.forecast_power` is mapped | mean |
 | `sensor.em_tracked_power`, `sensor.em_untracked_power` | Sum of non-overlapping measured loads; house − tracked. Attribute `raw_residual_w` is the unclamped difference | mean |
-| `sensor.em_tariff_period` | `peak` or `off_peak` | none |
+| `sensor.em_tariff_period` | `peak`, `off_peak` or `shoulder` | none |
 | `sensor.em_import_price`, `sensor.em_feed_in_price` | AUD/kWh now; unavailable until rates are set | mean |
 | `sensor.em_house_energy`, `sensor.em_solar_self_consumed_energy`, `sensor.em_untracked_energy` | Integrated from the powers above | sum |
-| `sensor.em_grid_import_peak_energy`, `sensor.em_grid_import_off_peak_energy` | Import meter steps by tariff period | sum |
+| `sensor.em_grid_import_peak_energy`, `sensor.em_grid_import_off_peak_energy`, `sensor.em_grid_import_shoulder_energy` | Import meter steps by tariff period | sum |
 | `sensor.em_grid_import_cost`, `sensor.em_grid_export_earnings`, `sensor.em_solar_self_consumption_savings` | Running totals priced at the moment of each step. Attribute `unpriced_kwh` | sum |
 | `sensor.em_monitoring_health` | `ok`, `degraded` or `critical`. Attributes `missing`, `stale`, `rates_set`, `tariff_matches_controller` | none |
 | `sensor.em_monitoring_quality` | Percentage of monitored sources available and fresh | mean |
@@ -42,7 +59,7 @@ Power is in W, energy in kWh, money in AUD.
 
 | Entity | Meaning |
 | --- | --- |
-| `binary_sensor.em_hot_water_element_on` | Power above `element_on_watts` (default 1000 W), on after 30 s, off after 60 s. **A measurement**, unlike the controller's meter-inferred `heater_element_state` |
+| `binary_sensor.em_hot_water_element_on` | Display threshold (default 1000 W), on after 30 s, off after 60 s. Uses absolute power; controller qualification instead uses the raw signed source and stricter freshness |
 | `sensor.em_hot_water_grid_power`, `sensor.em_hot_water_solar_power` | Marginal attribution: grid = min(element, grid import) |
 | `sensor.em_hot_water_grid_energy`, `sensor.em_hot_water_solar_energy` | Integrals of the two above |
 | `sensor.em_hot_water_grid_cost` | Imported cost of heating |

@@ -49,3 +49,16 @@ jobs:
           if grep -E "Failed config|Invalid config|ERROR|Traceback" "$RUNNER_TEMP/check.txt"; then
             exit 1
           fi
+      - name: Minimal no-solar package, without networking
+        if: matrix.meters == 0
+        run: |
+          set -o pipefail
+          python energy_monitoring/ha_check.py --out "$RUNNER_TEMP/minimal" --minimal
+          chmod -R a+rwX "$RUNNER_TEMP/minimal"
+          docker run --rm --network none --entrypoint python3 \
+            --mount "type=bind,src=$RUNNER_TEMP/minimal,dst=/config" \
+            ghcr.io/home-assistant/home-assistant:${{ matrix.version }} \
+            -m homeassistant --script check_config --config /config | tee "$RUNNER_TEMP/minimal.txt"
+          if grep -E "Failed config|Invalid config|ERROR|Traceback" "$RUNNER_TEMP/minimal.txt"; then
+            exit 1
+          fi

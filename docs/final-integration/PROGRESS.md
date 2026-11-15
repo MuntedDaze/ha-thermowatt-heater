@@ -63,11 +63,18 @@ New draft PR will target `codex/economic-dual-storage` (PR #34).
    tariff tests cover zones, seasons, service, no-solar commands and cheap windows.
    Research and unsupported complex products: TARIFFS.md. All eight workflows
    passed for C2 `224c40b` and C `7b775b6`; final-head CI is still required.
-5. E: comparative polling and full-week end-to-end scenarios including owner,
+5. B2: combined dashboard now reads the controller's verified current tariff
+   and prices, including legitimate zero rates, shoulder and seasonal/midday
+   windows. The original standalone monitoring-only helper mode remains explicit.
+   No-solar/no-household-meter maps generate seven valid read-only views with
+   unavailable measurements, not empty entity IDs or invented starting totals.
+   163 monitoring tests pass; real HA adds a minimal no-solar check_config case.
+   Stage D `1434652` passed all eight workflows. E replay is still in progress.
+6. E: comparative polling and full-week end-to-end scenarios including owner,
    restart, cloud/meter failures, CT-free and CT-measured; equal service/terminal
    energy, request categories and detection/error trade-offs must be explicit.
-6. F: compatible candidate metadata, public docs, prioritised security/licence
-   remediation and rollout plan, requirements matrix and independent-review
+7. F: compatible candidate metadata, plain-language docs, existing security
+   findings and future owner rollout plan, requirements matrix and independent-review
    handoff. Full local suite and all applicable final-head CI required.
 
 ## Targeted integration findings
@@ -102,8 +109,8 @@ Government/network/retailer sources have been researched; document their distinc
 roles and conditional offers without copying current prices as defaults.
 
 Inspect branch/status first. Do not switch/reset existing PR branches or touch
-Fable's worktree. Finish staged merge and stage B, commit logical increments and
-push a separate draft PR. Python runtime:
+Fable's worktree. A–D are delivered. Finish E/F, commit logical increments and
+push only draft PR #35's integration branch. Python runtime:
 `C:/Users/jacob/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`,
 PYTHONPATH = absolute `.test-deps`. Use UTF-8 explicitly for text reads/writes.
 Do not print the existing application key or historical private-key material.

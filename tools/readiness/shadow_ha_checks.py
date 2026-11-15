@@ -1106,6 +1106,8 @@ ADDED_IN_0_9_0 = {
 # Backend-only additions on the separate smart-controller development branch.
 # Existing registry IDs must still be preserved; enumerate additions explicitly.
 ADDED_IN_SMART_DEVELOPMENT = {
+    "tariff_verification",
+    "feed_in_rate_aud",
     "setting_learned_planning_enabled",
     "setting_learning_hardware_qualified",
     "learning_status",

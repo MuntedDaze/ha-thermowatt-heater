@@ -49,15 +49,21 @@ def sensor_id(name: str) -> str:
 
 
 def num(entity: str) -> str:
+    if not entity:
+        return "(0)"
     return f"(states('{entity}') | float(0))"
 
 
 def ok(*entities: str) -> str:
+    if not all(entities):
+        return "{{ false }}"
     return "{{ " + " and ".join(f"is_number(states('{entity}'))" for entity in entities) + " }}"
 
 
 def fresh_power(entity, age, units=None):
     """Availability follows the original report, never a template heartbeat."""
+    if not entity:
+        return "{{ false }}"
     unit = f" and s.attributes.get('unit_of_measurement') in {list(units)!r}" if units else ""
     fresh = f" and 0 <= (now() - s.last_reported).total_seconds() <= {age}" if age else ""
     return (
@@ -109,6 +115,12 @@ def accumulator(name, factor, unit, device_class, state_class, digits, priced=Fa
     that is negative (meter replaced or reset) or implausibly large only moves
     the baseline. ``factor`` is evaluated when the step arrives.
     """
+    price = FEED_IN_PRICE if FEED_IN_PRICE in factor else IMPORT_PRICE
+    valid = (
+        f"is_number(states('{price}')) and ({num(price)} > 0 or state_attr('{price}', 'zero_rate_verified') == true)"
+        if priced
+        else "true"
+    )
     step = (
         f"{THIS_ATTRIBUTES}\n"
         "{% set last = a.get('last_reading') %}\n"
@@ -117,12 +129,14 @@ def accumulator(name, factor, unit, device_class, state_class, digits, priced=Fa
         "{% set d = (new | float(0)) - (last | float(0)) if is_number(new) and is_number(last)"
         " else 0 %}\n"
         f"{{% set d = d if 0 < d <= {MAX_STEP_KWH} else 0 %}}\n"
-        f"{{% set f = {factor} %}}\n"
+        f"{{% set priced_ok = {valid} %}}\n"
+        f"{{% set f = {factor} if priced_ok else 0 %}}\n"
     )
     attributes = {"last_reading": step + "{{ new | float(0) if is_number(new) else last }}"}
     if priced:
         attributes["unpriced_kwh"] = (
-            step + "{{ ((a.get('unpriced_kwh') | float(0)) + (d if f <= 0 else 0)) | round(3) }}"
+            step
+            + "{{ ((a.get('unpriced_kwh') | float(0)) + (d if not priced_ok else 0)) | round(3) }}"
         )
     return template_sensor(
         name,
@@ -132,6 +146,8 @@ def accumulator(name, factor, unit, device_class, state_class, digits, priced=Fa
         device_class,
         state_class,
         attributes=attributes,
+        availability=THIS_ATTRIBUTES
+        + "{{ is_number(a.get('last_reading')) or (trigger is defined and trigger.to_state is defined and trigger.to_state and is_number(trigger.to_state.state)) }}",
     )
 
 
@@ -183,7 +199,7 @@ def monitored_items(config: dict) -> list[tuple[str, str, int, int]]:
             items.append((appliance["power"], f"{appliance['name']} power", age["appliances"], 0))
         if appliance["energy"]:
             items.append((appliance["energy"], f"{appliance['name']} energy", 0, 0))
-    return items
+    return [item for item in items if item[0]]
 
 
 def health_block(config: dict) -> dict:
@@ -204,6 +220,8 @@ def health_block(config: dict) -> dict:
     rates = " and ".join(
         f"{num(rate_entity(config, key))} > 0" for key in RATE_KEYS if key != "daily_supply_charge"
     )
+    if config["tariff"]["source"] == "controller":
+        rates = f"states('{config['hot_water']['tariff_verification']}') == 'verified'"
     attributes = {
         "missing": scan + "{{ ns.missing }}",
         "stale": scan + "{{ ns.stale }}",
@@ -232,8 +250,12 @@ def health_block(config: dict) -> dict:
             ),
             template_sensor(
                 "EM monitoring quality",
-                scan + f"{{{{ (100 * ({len(items)} - (ns.missing | count) - (ns.stale | count))"
-                f" / {len(items)}) | round(1) }}}}",
+                (
+                    scan
+                    + f"{{{{ (100 * ({len(items)} - (ns.missing | count) - (ns.stale | count)) / {len(items)}) | round(1) }}}}"
+                )
+                if items
+                else "{{ none }}",
                 "%",
                 icon="mdi:gauge",
             ),
@@ -329,6 +351,12 @@ def cycle_block(config: dict, circuit: dict) -> dict:
 
 def build_package(config: dict) -> dict:
     grid, solar, house = config["grid"], config["solar"], config["house"]
+    grid = {
+        **grid,
+        "import_energy": grid["import_energy"] or "sensor.em_unmapped_source",
+        "export_energy": grid["export_energy"] or "sensor.em_unmapped_source",
+    }
+    solar = {**solar, "energy": solar["energy"] or "sensor.em_unmapped_source"}
     currency = config["currency"]
     price_unit = f"{currency}/kWh"
     sign = "-" if grid["export_positive"] else ""
@@ -336,6 +364,9 @@ def build_package(config: dict) -> dict:
     peak, off_peak, feed_in, supply = (rate_entity(config, key) for key in RATE_KEYS)
 
     sensors = [
+        template_sensor(
+            "EM unmapped source", "{{ none }}", state_class=None, availability="{{ false }}"
+        ),
         template_sensor(
             "EM grid import power",
             f"{{{{ [0, {sign}{num(grid['power'])}] | max | round(1) }}}}",
@@ -398,6 +429,24 @@ def build_package(config: dict) -> dict:
             icon="mdi:cash-plus",
         ),
     ]
+    if config["tariff"]["source"] == "controller":
+        hw = config["hot_water"]
+        for sensor in sensors:
+            name = sensor["name"]
+            if name == "EM tariff period":
+                sensor.update(
+                    state=f"{{{{ states('{hw['current_tariff']}') }}}}",
+                    availability=f"{{{{ states('{hw['current_tariff']}') in ['peak','off_peak','shoulder'] and states('{hw['tariff_verification']}') == 'verified' }}}}",
+                )
+            if name in ("EM import price", "EM feed in price"):
+                source = hw["import_price"] if name == "EM import price" else hw["feed_in_price"]
+                sensor.update(
+                    state=f"{{{{ states('{source}') | float(none) }}}}",
+                    availability=f"{{{{ is_number(states('{source}')) and 0 <= {num(source)} <= 2 and states('{hw['tariff_verification']}') == 'verified' }}}}",
+                    attributes={
+                        "zero_rate_verified": f"{{{{ states('{hw['tariff_verification']}') == 'verified' }}}}"
+                    },
+                )
     if solar["forecast_power"]:
         # State only: the EMHASS forecast array stays out of the Recorder.
         sensors.append(
@@ -491,6 +540,10 @@ def build_package(config: dict) -> dict:
                 energy_total(
                     "EM grid import off peak energy",
                     f"1 if states('{TARIFF}') == 'off_peak' else 0",
+                ),
+                energy_total(
+                    "EM grid import shoulder energy",
+                    f"1 if states('{TARIFF}') == 'shoulder' else 0",
                 ),
                 money_total("EM grid import cost", num(IMPORT_PRICE), currency),
             ],
