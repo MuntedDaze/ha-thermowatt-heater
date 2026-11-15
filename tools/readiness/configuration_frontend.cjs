@@ -55,6 +55,7 @@ async function main() {
         }
         await configure.click();
         await expect(page.getByText("Hot Water", { exact: true })).toBeVisible();
+        await expect(page.getByText(steps.init.description, { exact: true })).toBeVisible();
         if (id === "hot_water") await page.screenshot({ animations: "disabled", path: `${output}/menu-${width}.png` });
         for (const target of [...parents, ...(id === "period" ? [] : [id])]) {
           await page.getByText(steps[target].title, { exact: true }).last().click();

@@ -7,7 +7,7 @@ worthwhile surplus solar for extra storage. Savings depend on your demand,
 electricity contract and heater; they are not guaranteed.
 
 **Configuration usability candidate: controller 0.14.0, bridge unchanged at 1.3.17.**
-This separate development branch improves settings screens. It is not installed
+[Draft PR #38](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/38) improves settings screens. It is not installed
 or approved for deployment. Automatic heating, adaptive polling and learned
 planning retain all existing qualification requirements. Public distribution is
 deferred.

@@ -100,11 +100,44 @@ are part of this UI work. Installation needs separate owner approval.
 
 ## Frontend verification
 
-The development checks use actual official Home Assistant images, native forms,
-translations and selectors, with a real browser at desktop and phone widths.
-They are isolated from the installed system. Screenshot inspection and results
-will be recorded here after the checks complete. YAML or Python checks alone do
-not establish frontend usability.
+The configuration was exercised in official Home Assistant **2026.10.4 and
+2026.11.1**, with a real Chromium browser at **1280×960** and **390×844**. All
+12 form pages were checked at both widths for rendered labels, inline help and
+horizontal overflow. Each settings/mapping page was also submitted unchanged
+through the actual frontend and compared with its saved options. Guided draft
+editing, invalid schedules, cancellation, clearing optional text/mappings,
+active-control locks and entity identities have real HA backend regression tests.
+
+Screenshots were manually inspected for readable labels, wrapping, units,
+scrolling, tariff summaries and beginner instructions. This caught and corrected
+misnumbered Markdown periods and overly long headings. Empty commissioning text
+fields are optional rather than being presented as mandatory. Home Assistant's
+native picker appearance varies slightly between these two supported versions.
+Long forms scroll vertically; the submit button remains at the bottom.
+
+The screenshots below are unedited captures from an isolated, synthetic
+installation, not the owner's live system. They show example household values,
+not verified prices or permission to enable any feature. Capture source:
+`8d9eff2bdbe1a24775649562de11ed74a0e20256`, HA 2026.11.1,
+[real-frontend CI run](https://github.com/MuntedDaze/ha-thermowatt-heater/actions/runs/43729092473).
+The complete desktop/phone screenshots for both versions are in that run's
+`configuration-ui-*` artifacts. Final-head CI is linked in
+[draft PR #38](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/38).
+
+| See the actual screens | What to notice |
+|---|---|
+| [Hot Water on a phone](screenshots/hot_water-390.png) | Supported targets and explanations directly below the controls |
+| [Retail prices on desktop](screenshots/prices-bottom-1280.png) | Saved precision retained while displaying cents/kWh |
+| [Solar settings on a phone](screenshots/solar-390.png) | Optional forecasts and a visible percentage allowance |
+| [Seasonal period editor on a phone](screenshots/period-bottom-390.png) | Month chips, optional price override and Update draft |
+| [Advanced settings on a phone](screenshots/commissioning-bottom-390.png) | Budgets, confirmation timeout and an optional notification address |
+
+![Hot Water settings with visible inline help](screenshots/hot_water-390.png)
+
+These checks cover the standard English frontend/light theme on the two listed
+HA versions. They do not constitute a usability study with novice participants,
+a check of every theme/browser, physical commissioning or installation approval.
+No live Home Assistant or vendor service was contacted.
 
 Engineering references: [HA form descriptions and menus](https://contributors.home-assistant.io/core/integrations/flow-steps/),
 [HA translation conventions](https://contributors.home-assistant.io/core/integrations/translations/),
