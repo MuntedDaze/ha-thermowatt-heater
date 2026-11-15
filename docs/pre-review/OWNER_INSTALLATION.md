@@ -146,7 +146,8 @@ flags off. Existing master state is preserved, which is why it was disabled firs
 
 ## 6. Map your real entities
 
-In Thermann Controller → Configure → Sources, select actual entities from
+In Thermann Controller → Configure → Solar & Meters → Solar and meter readings,
+select actual optional entities from
 Developer tools → States. IDs below are recorded household examples, not automatic
 discovery or proof the registry still uses them. If renamed, choose the actual ID.
 
@@ -174,8 +175,12 @@ subtracts inferred element watts to create optional-solar authority.
 
 ## 7. Verify your household settings and hygiene
 
-Configure → Preferences/System. Disable automatic control before changing
-critical settings.
+Configure now separates **Hot Water**, **Electricity Tariffs**, **Solar & Meters**
+and **Advanced/System**. Bridge status mappings are under Advanced/System; the
+optional solar/meter mappings are under Solar & Meters. Every field has inline
+help. Prices display c/kWh and allowances display percentages; existing values
+are preserved. [Settings walkthrough](../configuration/SETTINGS.md). Disable
+automatic control before changing critical settings.
 
 - Household zone: **Australia/Hobart**. Tariff clock: **standard**, fixed AEST.
   Verify Aurora 93 retail contract, rates and feed-in price against your bill.

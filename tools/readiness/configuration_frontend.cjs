@@ -33,7 +33,16 @@ async function main() {
       for (const [id, parents] of Object.entries(paths)) {
         await page.goto("http://127.0.0.1:8123/config/integrations/integration/thermann_shadow");
         // Open the actual options dialog through the integration's own control.
-        await page.getByRole("button", { name: /Configure|Settings/i }).last().click();
+        const configure = page.getByRole("button", { name: "Configure", exact: true }).last();
+        await expect(configure).toBeVisible();
+        // Fresh disposable HA asks to confirm its loopback-only HTTP binding.
+        // This is the isolated fixture, never the owner's installed HA.
+        const pending = page.locator("dialog-http-pending-config");
+        if (await pending.isVisible()) {
+          await pending.getByRole("button", { name: "Confirm", exact: true }).click();
+          await expect(pending).not.toBeVisible();
+        }
+        await configure.click();
         await expect(page.getByText("Hot Water", { exact: true })).toBeVisible();
         if (id === "hot_water") await page.screenshot({ path: `${output}/menu-${width}.png` });
         for (const target of [...parents, id]) {

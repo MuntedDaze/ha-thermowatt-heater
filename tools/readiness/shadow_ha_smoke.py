@@ -178,7 +178,6 @@ async def main():
         )
         assert result["type"] == "form"
         from custom_components.thermann_shadow.config import (
-            DEFAULT_OPTIONS,
             DEFAULT_SOURCES,
             DOMAIN,
         )
@@ -232,23 +231,23 @@ async def main():
         hass.config_entries.async_update_entry(entry, options={})
         await hass.async_block_till_done()
         # Real config/options flows reject bad tariffs; owner can edit mappings.
-        flow = await hass.config_entries.options.async_init(entry.entry_id)
-        assert flow["type"] == "menu", flow  # 0.8.0: preferences / system / sources
-        flow = await hass.config_entries.options.async_configure(
-            flow["flow_id"], {"next_step_id": "preferences"}
-        )
-        assert flow["step_id"] == "preferences"
-        # The stored custom table is validated in BOTH profiles; an invalid
-        # table must re-show the form with an error, never create an entry.
-        for bad in (
-            {"tariff_periods": "[]"},
-            {"tariff_profile": "custom", "tariff_periods": "[]"},
-            {"peak_morning_end": "17:00:00"},
-        ):
-            flow = await hass.config_entries.options.async_configure(flow["flow_id"], bad)
-            assert flow["type"] == "form" and flow["step_id"] == "preferences", flow
+        from shadow_ha_checks import options_page
+
+        for profile in ("aurora_93", "custom"):
+            original_options = {"tariff_profile": profile}
+            hass.config_entries.async_update_entry(entry, options=original_options)
+            await hass.async_block_till_done()
+            flow = await options_page(hass, entry, "tariff_json", {"tariff_periods": "[]"})
+            assert flow["type"] == "form" and flow["step_id"] == "tariff_json", flow
             assert flow["errors"] == {"base": "invalid_settings"}, flow
-            assert entry.options == {}, entry.options
+            assert dict(entry.options) == original_options
+            hass.config_entries.options.async_abort(flow["flow_id"])
+        hass.config_entries.async_update_entry(entry, options={})
+        await hass.async_block_till_done()
+        flow = await options_page(hass, entry, "peak_times", {"peak_morning_end": "17:00:00"})
+        assert flow["errors"] == {"base": "invalid_settings"}, flow
+        assert entry.options == {}
+        hass.config_entries.options.async_abort(flow["flow_id"])
         # Explicit synthetic-only qualified settings exercise planning on real HA states.
         hass.config_entries.async_update_entry(
             entry,
@@ -301,15 +300,13 @@ async def main():
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
-        from custom_components.thermann_shadow.settings import CATALOG as SETTINGS_CATALOG
+        from custom_components.thermann_shadow.configuration import PAGES, display_value
+        from custom_components.thermann_shadow.config import saved_options
 
-        preferences = {
-            key: value
-            for key, value in DEFAULT_OPTIONS.items()
-            if SETTINGS_CATALOG[key].group in ("Everyday", "Advanced")
-        }
+        values = saved_options(entry.options)
+        preferences = {key: display_value(key, values[key]) for key in PAGES["prices"]}
         preferences["tariff_clock"] = "standard"
-        saved = await hass.config_entries.options.async_configure(flow["flow_id"], preferences)
+        saved = await options_page(hass, entry, "prices", preferences)
         assert saved["type"] == "create_entry"
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED
