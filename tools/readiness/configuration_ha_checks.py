@@ -10,6 +10,8 @@ async def check_configuration(hass, entry):
     from custom_components.thermann_shadow.config import (
         CLOUD_SOURCES,
         DEFAULT_OPTIONS,
+        DEFAULT_SOURCES,
+        OPTIONAL_SOURCES,
         saved_options,
     )
     from custom_components.thermann_shadow.configuration import MENUS, PAGES, display_value
@@ -57,7 +59,13 @@ async def check_configuration(hass, entry):
 
     before = deepcopy(dict(entry.options))
     for page in ("sources", "bridge_sources"):
-        keys = [k for k in before["sources"] if (k in CLOUD_SOURCES) == (page == "bridge_sources")]
+        keys = [
+            k
+            for k in before["sources"]
+            if k in (DEFAULT_SOURCES | OPTIONAL_SOURCES)
+            and (k in CLOUD_SOURCES) == (page == "bridge_sources")
+            and before["sources"][k]
+        ]
         result = await submit(await open_page(page), {k: before["sources"][k] for k in keys})
         assert result["type"] == "create_entry", result
         assert dict(entry.options) == before
@@ -142,7 +150,11 @@ async def check_configuration(hass, entry):
     # Clearing an optional mapping must not reinsert the suggested old value;
     # remapping the circuit still invalidates its qualifications exactly as before.
     flow = await open_page("sources")
-    mapping = {k: v for k, v in before["sources"].items() if k not in CLOUD_SOURCES}
+    mapping = {
+        k: v
+        for k, v in before["sources"].items()
+        if k in (DEFAULT_SOURCES | OPTIONAL_SOURCES) and k not in CLOUD_SOURCES and v
+    }
     result = await submit(flow, {**mapping, "heater_power": "sensor.synthetic_new_power"})
     assert result["type"] == "create_entry", result
     assert entry.options["heater_meter_verification"] == ""

@@ -78,6 +78,7 @@ async def main():
     result = await hass.config_entries.flow.async_configure(flow["flow_id"], sources)
     assert result["type"] == "create_entry", result
     entry = result["result"]
+    sources = {**sources, "forecast_pv": "", "future_source": "sensor.synthetic_preserved"}
     options = {
         **DEFAULT_OPTIONS,
         "sources": sources,

@@ -424,8 +424,10 @@ def period_from_form(form, original=None):
         kind=form["kind"],
         months=[int(v) for v in form["months"]],
     )
-    _minute(form["start"])
-    _minute(form["end"])
+    for key in ("start", "end"):
+        minute = _minute(form[key])
+        if original and key in original and _minute(original[key]) == minute:
+            row[key] = original[key]
     if form["use_rate"]:
         previous = row.get("rate")
         shown = display_value("off_peak_rate", previous) if previous is not None else None

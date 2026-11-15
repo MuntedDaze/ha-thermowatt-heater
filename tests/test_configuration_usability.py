@@ -89,6 +89,18 @@ def test_guided_noop_preserves_original_json_including_precise_overrides():
     assert "months" not in edited
 
 
+def test_guided_noop_keeps_valid_legacy_seconds_and_month_order():
+    row = {
+        "days": [6, 5],
+        "start": "10:00:00",
+        "end": "12:00:00",
+        "kind": "shoulder",
+        "months": [12, 1, 2],
+    }
+    form = {**form_for(row), "start": "10:00", "end": "12:00"}
+    assert ui.period_from_form(form, row) == row
+
+
 def test_seasonal_weekday_midday_and_overnight_schedule_uses_existing_model():
     rows = []
     for months, rate in [(list(range(1, 7)), 0.15), (list(range(7, 13)), 0.20)]:

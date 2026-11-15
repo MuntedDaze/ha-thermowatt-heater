@@ -212,7 +212,11 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
                 cv.entity_id(entity)
             # Omitted optional fields mean deliberately unmapped. Keep the
             # other page's mappings (and unknown keys) exactly as stored.
-            updated = {k: v for k, v in values.items() if k not in keys} | user_input
+            updated = {
+                k: v
+                for k, v in values.items()
+                if k not in keys or (v == "" and k not in user_input)
+            } | user_input
             before = {**saved_options(self._entry.options), "sources": values}
             result = {**saved_options(self._entry.options), "sources": updated}
             if updated.get("heater_power") != values.get("heater_power"):

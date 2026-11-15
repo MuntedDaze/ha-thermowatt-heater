@@ -21,6 +21,7 @@ async function main() {
   const page = await context.newPage();
   page.setDefaultTimeout(20000);
   const reports = [];
+  let confirmedHttp = false;
   const paths = {
     hot_water: [], prices: ["electricity"], peak_times: ["electricity"],
     tariff_json: ["electricity"], schedule: ["electricity"], solar: ["solar_meters"],
@@ -38,9 +39,13 @@ async function main() {
         // Fresh disposable HA asks to confirm its loopback-only HTTP binding.
         // This is the isolated fixture, never the owner's installed HA.
         const pending = page.locator("dialog-http-pending-config");
-        if (await pending.isVisible()) {
-          await pending.getByRole("button", { name: "Confirm", exact: true }).click();
-          await expect(pending).not.toBeVisible();
+        if (!confirmedHttp) {
+          // The dialog host has no box itself. Wait for its actual button;
+          // checking the host's visibility races the initial WS notification.
+          const confirm = pending.getByRole("button", { name: "Confirm", exact: true });
+          await confirm.click();
+          await expect(confirm).not.toBeVisible();
+          confirmedHttp = true;
         }
         await configure.click();
         await expect(page.getByText("Hot Water", { exact: true })).toBeVisible();
@@ -69,6 +74,7 @@ async function main() {
         if (overflow) throw new Error(`Horizontal form overflow: ${id} ${width}`);
         await page.screenshot({ path: `${output}/${id}-${width}.png` });
         reports.push({ page: id, width, labels: Object.keys(steps[id].data || {}).length, inline_help: true, overflow: false });
+        console.log(`Rendered ${id} at ${width}px with inline help`);
       }
     }
     fs.writeFileSync(`${output}/frontend-results.json`, JSON.stringify({ real_home_assistant: true, reports }, null, 2));
