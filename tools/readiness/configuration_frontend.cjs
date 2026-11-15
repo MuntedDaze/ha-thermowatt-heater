@@ -23,6 +23,7 @@ async function main() {
   const reports = [];
   let confirmedHttp = false;
   const fieldText = label => new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\*?$`);
+  const field = label => page.getByText(fieldText(label)).or(page.getByLabel(label, { exact: false })).filter({ visible: true }).first();
   const snapshot = () => page.evaluate(() => document.querySelector("home-assistant").hass.callApi("GET", "thermann_ui_snapshot"));
   const paths = {
     hot_water: [], prices: ["electricity"], peak_times: ["electricity"],
@@ -60,7 +61,7 @@ async function main() {
           await page.getByRole("button", { name: "Submit", exact: true }).click();
         }
         for (const label of Object.values(steps[id].data || {})) {
-          await expect(page.getByText(fieldText(label)).first()).toBeVisible();
+          await expect(field(label)).toBeVisible();
         }
         // Check actual rendered inline help, not just downloaded translations.
         for (const help of Object.values(steps[id].data_description || {})) {
@@ -81,7 +82,7 @@ async function main() {
         await page.screenshot({ path: `${output}/${id}-${width}.png` });
         const labels = Object.values(steps[id].data || {});
         if (labels.length) {
-          await page.getByText(fieldText(labels.at(-1))).first().scrollIntoViewIfNeeded();
+          await field(labels.at(-1)).scrollIntoViewIfNeeded();
           await page.screenshot({ path: `${output}/${id}-bottom-${width}.png` });
         }
         if (["hot_water", "prices", "sources"].includes(id)) {

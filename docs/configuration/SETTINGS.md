@@ -42,7 +42,7 @@ summer wall clock. Check which clock your contract specifies.
 
 The Aurora-style two-peak plan is a labelled example with editable hours and a
 weekend switch. It is not the default contract for every household. For a custom
-plan, use **Guided weekly and seasonal schedule**:
+plan, use **Guided electricity schedule**:
 
 1. The summary shows the active plan and a separate draft table.
 2. Choose **Edit a period** and its number, or **Add a period**.
@@ -56,7 +56,8 @@ plan, use **Guided weekly and seasonal schedule**:
    Only a valid full schedule is stored and selected. It never ticks contract
    verification for you. Closing instead discards the draft.
 
-Use 00:00 for midnight. Equal start and end means all day; an end earlier than
+Home Assistant may show seconds or AM/PM according to your profile. Leave seconds
+at 00; this controller uses whole-minute schedules. Use 00:00 for midnight. Equal start and end means all day; an end earlier than
 the start crosses midnight. End times are exclusive. Season matching uses the
 current tariff-clock date, including overnight tails. Up to 32 periods fit the
 existing supported tariff model. Conditional free power, demand/tier charges,

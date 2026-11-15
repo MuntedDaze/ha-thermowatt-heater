@@ -89,8 +89,8 @@
         "menu_options": {
           "prices": "Plan, prices and clock",
           "peak_times": "Two-peak example hours",
-          "schedule": "Guided weekly and seasonal schedule",
-          "tariff_json": "Advanced: raw schedule data"
+          "schedule": "Guided electricity schedule",
+          "tariff_json": "Advanced schedule data"
         }
       },
       "solar_meters": {
@@ -105,9 +105,9 @@
         "title": "Advanced/System",
         "description": "Engineering and commissioning settings. Leave qualifications, learning and adaptive control off until separately approved checks pass. These pages do not enable automatic heating. Existing command verification, fault locks and owner protections still apply.",
         "menu_options": {
-          "equipment": "Equipment and economic assumptions",
-          "polling": "Cloud checks and data freshness",
-          "commissioning": "Advanced: commissioning and command safeguards",
+          "equipment": "Equipment and savings",
+          "polling": "Cloud checks and data age",
+          "commissioning": "Commissioning and safeguards",
           "bridge_sources": "Bridge status readings"
         }
       },
@@ -154,7 +154,7 @@
         }
       },
       "tariff_json": {
-        "title": "Advanced: raw schedule data",
+        "title": "Advanced schedule data",
         "description": "Expert alternative; most users should choose the guided schedule. This edits the saved custom table, but does not select Custom automatically. JSON rate overrides use dollars/kWh. Every day in every month needs complete coverage without overlaps. {detail}",
         "data": {
           "tariff_periods": "Advanced schedule data (JSON)"
@@ -214,7 +214,7 @@
         }
       },
       "equipment": {
-        "title": "Equipment and economic assumptions",
+        "title": "Equipment and savings",
         "description": "Advanced planning assumptions, not new heater qualifications. Use appliance-label ratings; estimates do not prove actual element operation or whole-tank temperature. Do not adjust assumptions just to make a prediction look better. {detail}",
         "data": {
           "tank_litres": "Hot-water tank capacity",
@@ -234,7 +234,7 @@
         }
       },
       "polling": {
-        "title": "Cloud checks and data freshness",
+        "title": "Cloud checks and data age",
         "description": "Advanced: preview and actual adaptive checks are different. Longer quiet intervals reduce requests but delay noticing app changes. Default-off qualification gates and the original fixed fallback remain. A fresh command prior and confirmation are always required. {detail}",
         "data": {
           "adaptive_polling_shadow": "Preview adaptive cloud checks",
@@ -258,7 +258,7 @@
         }
       },
       "commissioning": {
-        "title": "Advanced: commissioning and command safeguards",
+        "title": "Commissioning and safeguards",
         "description": "Advanced; do not tick qualifications to bypass a warning. Follow separately approved supervised commissioning. Saving this form neither authorises physical tests nor turns on automatic control. Leave command address/CT record blank if not commissioned. {detail}",
         "data": {
           "controller_command_topic": "Bridge command address (MQTT topic)",
@@ -304,7 +304,7 @@
         }
       },
       "schedule": {
-        "title": "Guided weekly and seasonal schedule",
+        "title": "Guided electricity schedule",
         "description": "Edits stay in this draft until you choose Save and use. Closing cancels the draft. Save selects Custom but never verifies your contract. Cover every minute of all weekdays and months exactly once, up to 32 periods. Midnight to midnight means all day; an end earlier than the start crosses midnight. Month selection follows the current tariff-clock date, including overnight tails.\n\n{periods}\n\n{detail}",
         "data": {
           "action": "What would you like to do?",

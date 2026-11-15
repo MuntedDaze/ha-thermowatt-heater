@@ -11,13 +11,13 @@ TITLES = {
     "advanced": "Advanced/System",
     "prices": "Plan, prices and clock",
     "peak_times": "Two-peak example hours",
-    "schedule": "Guided weekly and seasonal schedule",
-    "tariff_json": "Advanced: raw schedule data",
+    "schedule": "Guided electricity schedule",
+    "tariff_json": "Advanced schedule data",
     "solar": "Solar forecasts and grid meter",
     "sources": "Solar and meter readings",
-    "equipment": "Equipment and economic assumptions",
-    "polling": "Cloud checks and data freshness",
-    "commissioning": "Advanced: commissioning and command safeguards",
+    "equipment": "Equipment and savings",
+    "polling": "Cloud checks and data age",
+    "commissioning": "Commissioning and safeguards",
     "bridge_sources": "Bridge status readings",
 }
 DESCRIPTIONS = {
@@ -89,7 +89,7 @@ def schedule_summary(rows, values):
         rate = row.get("rate", values[f"{row['kind']}_rate"])
         price = display_value("off_peak_rate", rate)
         lines.append(
-            f"- {i + 1}. {days}; {season}; {row['start']}–{row['end']}; {KINDS[row['kind']]}; {price:g} c/kWh"
+            f"- **Period {i + 1}**: {days}; {season}; {row['start']}–{row['end']}; {KINDS[row['kind']]}; {price:g} c/kWh"
         )
     return "\n".join(lines)
 
