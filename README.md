@@ -6,11 +6,11 @@ unnecessary extra heating. With a commissioned hot-water meter, it can also use
 worthwhile surplus solar for extra storage. Savings depend on your demand,
 electricity contract and heater; they are not guaranteed.
 
-**Development candidate: bridge 1.3.17 / controller 0.13.0,
-[draft PR #37](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/37).** Unmerged and uninstalled.
-Public distribution is deferred. Automatic heating, adaptive polling and learned
-planning require independent review and separately approved commissioning.
-Nothing in this development has operated the owner’s heater.
+**Configuration usability candidate: controller 0.14.0, bridge unchanged at 1.3.17.**
+This separate development branch improves settings screens. It is not installed
+or approved for deployment. Automatic heating, adaptive polling and learned
+planning retain all existing qualification requirements. Public distribution is
+deferred.
 
 ## How the parts fit together
 
@@ -56,6 +56,16 @@ unavailable until dedicated measurement is commissioned. A failed previously
 commissioned meter raises a fault; missing readings never become measured zero.
 
 ## Heating choices you can change
+
+Open **Settings → Devices & services → Thermann Controller → Configure/settings**.
+Choose **Hot Water**, **Electricity Tariffs**, **Solar & Meters** or
+**Advanced/System**. Each field now explains what it does, its units and relevant
+cautions. Everyday choices are separate from commissioning. Prices show cents
+per kWh and forecast allowances show percentages. A guided day/time editor
+handles custom electricity periods without writing JSON. Your saved household
+settings and entity IDs are retained.
+[Where to find each setting and how the forms work](docs/configuration/SETTINGS.md).
+
 
 | Everyday choice | What it means |
 |---|---|
