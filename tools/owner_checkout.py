@@ -22,6 +22,18 @@ class StageError(RuntimeError):
     """Deliberately public, bounded error code; raw subprocess errors stay private."""
 
 
+def locate(slug, roots=ROOTS):
+    if not re.fullmatch(r"[0-9a-f]{8}_thermowatt_boiler", slug):
+        raise StageError("use_existing_full_repository_addon_slug")
+    prefix = slug.split("_")[0]
+    # Supervisor path migrations may leave aliases. Count distinct resolved
+    # caches, not two spellings of the same directory; distinct copies refuse.
+    repos = {(root / prefix).resolve() for root in roots if (root / prefix).is_dir()}
+    if len(repos) != 1:
+        raise StageError("expected_one_existing_repository_cache")
+    return repos.pop()
+
+
 def git(repo, *args, optional=False):
     result = subprocess.run(
         [
@@ -129,17 +141,14 @@ def main(argv=None):
     parser.add_argument("--stage", action="store_true", help="owner-approved source checkout only")
     args = parser.parse_args(argv)
     try:
-        prefix = args.slug.split("_")[0]
-        repos = [root / prefix for root in ROOTS if (root / prefix).is_dir()]
-        if len(repos) != 1:
-            raise StageError("expected_one_existing_repository_cache")
+        repo = locate(args.slug)
         record = Path(__file__).resolve().parent.parent / "owner-checkout-record.json"
         if args.stage:
             if Path("/data/share") not in record.parents:
                 raise StageError("run_reviewed_helper_from_data_share")
-            plan = stage(repos[0], args.slug, args.commit, record)
+            plan = stage(repo, args.slug, args.commit, record)
         else:
-            plan = inspect(repos[0], args.slug, args.commit)
+            plan = inspect(repo, args.slug, args.commit)
         print(json.dumps(plan, indent=2))
         return 0
     except StageError as error:

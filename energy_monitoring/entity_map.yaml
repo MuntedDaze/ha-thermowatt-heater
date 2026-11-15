@@ -136,7 +136,7 @@ hot_water:
   boost_reason: sensor.thermann_shadow_solar_boost_reason
   planned_heat: sensor.thermann_shadow_planned_heating_energy_estimate
   prediction_confidence: sensor.thermann_shadow_heating_prediction_confidence
-  nominal_heating_time: sensor.thermann_shadow_nominal_time_if_heating_stays_on
+  nominal_heating_time: sensor.thermann_shadow_continuous_heating_time_estimate
   learning_status: sensor.thermann_shadow_heating_learning_status
   learning_sessions: sensor.thermann_shadow_clean_heating_learning_sessions
   prediction_error: sensor.thermann_shadow_held_out_heating_prediction_error

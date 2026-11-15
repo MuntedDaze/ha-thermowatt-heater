@@ -6,7 +6,8 @@ unnecessary extra heating. With a commissioned hot-water meter, it can also use
 worthwhile surplus solar for extra storage. Savings depend on your demand,
 electricity contract and heater; they are not guaranteed.
 
-**Development candidate: bridge 1.3.16 / controller 0.12.0.** Unmerged and uninstalled.
+**Development candidate: bridge 1.3.16 / controller 0.12.0,
+[draft PR #36](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/36).** Unmerged and uninstalled.
 Public distribution is deferred. Automatic heating, adaptive polling and learned
 planning require independent review and separately approved commissioning.
 Nothing in this development has operated the owner’s heater.
@@ -49,7 +50,7 @@ owner protection and guarded dynamic polling all work without a CT. Available
 verified grid export and forecasts can help choose economical **required off-peak** heating. Nominal tank size/power provide estimates only.
 
 Without a CT, electrical ON/OFF and an exact completion clock remain unknown.
-“Nominal minutes if heating stays on” is a conditional duration, not proof the
+“Continuous heating time estimate” is a conditional duration, not proof the
 element is on or a promise of ready water. Optional solar-only boost stays
 unavailable until dedicated measurement is commissioned. A failed previously
 commissioned meter raises a fault; missing readings never become measured zero.

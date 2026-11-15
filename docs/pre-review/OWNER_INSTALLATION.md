@@ -39,6 +39,8 @@ visual verification on your actual frontend; automated YAML tests cannot do that
    the **full installed ID** from the page URL (for example
    `12345678_thermowatt_boiler`), its source repository and configured polling.
    Your ID may have a different eight-character prefix. Do not use the example ID.
+   If it starts `local_` or comes from another repository, this helper refuses;
+   preserve that installation and obtain a reviewed source-path plan instead.
 4. Record controller version, source mappings, entity names, tariff/rates/clock,
    command topic and qualification choices privately. Do not post screenshots
    containing account addresses, MQTT passwords, device serials or tokens.
@@ -104,6 +106,16 @@ check before proceeding. Do not edit Supervisor’s installed-app JSON or `/data
 From Proxmox, select the **existing HAOS VM → Console**. At the HA prompt enter
 `login` to reach the HAOS host shell, as described in the
 [official host-console guide](https://contributors.home-assistant.io/os/operating-system/debugging/). This is not a Home Assistant service call.
+Before executing the helper, verify its transferred hash against the trusted
+ZIP manifest entry `tools/owner_checkout.py`:
+
+```sh
+docker exec hassio_supervisor sha256sum /data/share/thermann-reviewed/tools/owner_checkout.py
+```
+
+Compare the hash before running the Python inspection command below. If the file
+is missing, hash differs, or you are unsure, stop.
+
 Set two shell variables, copying your actual installed ID and the manifest SHA:
 
 ```sh
@@ -112,7 +124,7 @@ thermann_review='FULL_40_CHARACTER_REVIEWED_SHA'
 docker exec hassio_supervisor python3 /data/share/thermann-reviewed/tools/owner_checkout.py --slug "$thermann_addon" --commit "$thermann_review"
 ```
 
-The default command only inspects the existing source cache: expected public
+The default Python command only inspects the existing source cache: expected public
 origin, matching ID/path, clean working files, original branch/commit and whether
 the reviewed object is already cached. It prints no private options/auth state.
 If it refuses, stop and ask for help. It will not discard local changes.
@@ -197,7 +209,7 @@ discovery or proof the registry still uses them. If renamed, choose the actual I
 | Signed HK1000 grid power | `sensor.goodwe_inverter_meter_active_power`; verify your export-positive sign |
 | PV generation | `sensor.goodwe_inverter_pv_power` |
 | Household consumption | `sensor.goodwe_inverter_house_consumption` |
-| Inverter AC power | The actual AC-output sensor, often `sensor.goodwe_inverter_active_power`; verify units and identity |
+| Inverter AC power | Historic mapping `sensor.goodwe_inverter_total_power`; confirm the actual AC-output identity and W/kW units |
 | PV forecast | `sensor.p_pv_forecast`, with genuine `forecast_generated_at` |
 | Household forecast | `sensor.p_load_forecast`, same timestamp/units requirements |
 | Heater power / heater energy | **Empty until Shelly commissioning**; commissioning identity also empty |
@@ -281,7 +293,7 @@ deliberate recovery procedure; do not restart or change generation repeatedly.
 Compare mode/target/probe to the vendor app; inspect successful-poll timestamps,
 health and request categories. Confirm the planned62°C weekday storage and peak
 OFF are only wishes while disabled. CT-free physical element state and completion
-clock must show unknown. Nominal minutes mean **if heating continues at nominal
+clock must show unknown. The continuous-heating estimate means **if the element runs at nominal
 power**, not a measured ON state, deadline promise or shower-volume guarantee.
 Verify the seven views and all actual setting labels on your display.
 
@@ -328,6 +340,12 @@ Only after reviewing that baseline and separately approving dynamic polling:
    this is intentionally unknown passive data, not permission for a stale command.
 5. Compare actual outcomes. Disable the event-aware/adaptive flags to return to
    the original fixed30 policy if savings or reliability do not justify it.
+
+For a separately approved **read-only inactivity check**, keep commands and
+automatic control off, temporarily use fixed 60-minute bridge polling, and observe
+refresh/health over equal periods. Restore 30 before an automatic-control trial.
+This tests session inactivity without enabling heater commands. Do not change
+authentication generations or retry locks for this experiment.
 
 Synthetic savings are not a guarantee of your vendor session behaviour. The
 20-minute refresh heuristic remains request-driven and unchanged. Authentication

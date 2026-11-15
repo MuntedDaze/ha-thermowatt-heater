@@ -157,3 +157,35 @@ adaptive flags restores ordinary fixed polling. Native protections, overrides
 and software-versus-physical OFF limitations remain. See the
 [owner guide](OWNER_INSTALLATION.md) and [review handoff](HANDOFF.md).
 
+
+## Additional multi-day failures
+
+`python tools/pre_review_failure_replay.py --output docs/pre-review/FAILURE_RESULTS.json`
+reproduces six additional weeks: fixed-30/fixed-60/event-aware 60, with and without
+CT. Tuesday 01:15–02:00 AEST drops only scheduling messages; ordinary command
+messages are unaffected. The event-aware runs drop 45 plans, observe lease expiry,
+and make a real fixed-recovery status read during that gap. No replacement HTTP
+loop is added in HA.
+
+On Sunday the first refresh at/after 02:00 AEST returns a synthetic 401. Every
+strategy ends persistently blocked, with **zero HTTP after refresh rejection**
+and only the initial password login. No authentication generation is increased
+or lock reset. Failure times differ with observation phase. Counts below describe
+unavailable cloud control, not extra optimisation savings.
+
+| CT | Strategy | Total HTTP | Status / refresh attempts | Pre-command / POST / confirmation | Adjusted cost AUD | Worst age incl failure min |
+|---|---|---:|---:|---:|---:|---:|
+| no | fixed_30 | 624 | 282 / 291 | 10 / 20 / 20 | 7.0018 | 1350.0 |
+| no | fixed_60 | 335 | 137 / 147 | 12 / 19 / 19 | 7.4589 | 1380.0 |
+| no | event_aware_60 | 406 | 183 / 181 | 1 / 20 / 20 | 7.0018 | 1349.7 |
+| yes | fixed_30 | 651 | 280 / 291 | 19 / 30 / 30 | 5.9299 | 1350.0 |
+| yes | fixed_60 | 363 | 136 / 150 | 20 / 28 / 28 | 6.3035 | 1380.0 |
+| yes | event_aware_60 | 452 | 190 / 189 | 12 / 30 / 30 | 5.9299 | 1322.7 |
+
+The JSON reports all daily targets/deficits, energy, costs, counters and fault
+annotations. The Sunday failure occurs while an existing baseline is selected,
+with no later required weekday in this replay; it does not prove Monday control
+would remain available. The heater’s simulated native thermostat continues,
+but cloud state/confirmation cannot be trusted after the fault. Owner recovery
+is deliberately left outstanding. Never count locked-out requests as savings
+or infer real hot-water comfort from the uniform-tank demand model.

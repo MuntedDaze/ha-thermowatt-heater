@@ -124,6 +124,11 @@
           "learning_hardware_qualified": "Heating learning independently qualified",
           "event_aware_polling_enabled": "Allow longer checks during quiet periods",
           "owner_change_check_minutes": "Maximum time between app-change checks (minutes)"
+        },
+        "data_description": {
+          "adaptive_polling_enabled": "Let the existing bridge schedule cloud observations. Requires its separate enable/qualification. No direct heater command is sent by this setting; keep off until review.",
+          "event_aware_polling_enabled": "Check a confirmed quiet baseline or OFF less often. Temperatures still expire normally and app changes can be detected later. Requires the bridge’s separate longer-check qualification.",
+          "owner_change_check_minutes": "Healthy-cloud limit of 30–90 minutes between quiet checks. Longer saves requests but delays noticing app changes; brief changes can be missed and outages can delay checks further."
         }
       }
     },

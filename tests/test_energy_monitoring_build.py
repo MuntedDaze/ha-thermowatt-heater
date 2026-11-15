@@ -240,10 +240,10 @@ def test_hot_water_sensors_exist_only_when_the_ct_is_mapped():
     assert not {entity for entity in without if "hot_water" in entity}
     text = build.dump(build_dashboard(VARIANTS["no_meter"]))
     assert "The hot-water CT is not mapped yet" in text
-    assert "Expected completion" in text
+    assert "Estimated finish (conditional)" in text
     assert VARIANTS["no_meter"]["hot_water"]["expected_completion"] in text
     unmapped = variant(0, hot_water__expected_completion="")
-    assert "Expected completion** is not exposed" in build.dump(build_dashboard(unmapped))
+    assert "Estimated finish** is not mapped" in build.dump(build_dashboard(unmapped))
 
 
 def test_hot_water_sensors_do_not_depend_on_the_optional_circuits():

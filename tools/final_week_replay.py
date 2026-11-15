@@ -366,7 +366,7 @@ class Week(Rig):
         }
 
 
-def results(strategies=None):
+def results(strategies=None, week_class=Week):
     strategies = strategies or [
         (name, name, False, 60)
         for name in ("fixed_30", "fixed_60", "previous_shadow", "actual_adaptive")
@@ -389,7 +389,9 @@ def results(strategies=None):
                         str(path), json.loads(json.dumps(data))
                     ),
                 )
-                row = Week(Path(folder), patch, strategy, ct, event_aware, owner_minutes).run_week()
+                row = week_class(
+                    Path(folder), patch, strategy, ct, event_aware, owner_minutes
+                ).run_week()
                 row["strategy"] = label
                 rows.append(row)
         group = rows[-len(strategies) :]

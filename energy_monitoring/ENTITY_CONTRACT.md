@@ -6,7 +6,7 @@ described here. The original PR #32 branch/worktree remains untouched. Neither
 side imports the other; they meet only through Home Assistant entities.
 
 The added `hot_water.nominal_heating_time` maps
-`sensor.thermann_shadow_nominal_time_if_heating_stays_on`: conditional minutes
+`sensor.thermann_shadow_continuous_heating_time_estimate`: conditional minutes
 from a fresh probe to the current supported target at nominal power. It is
 unknown for stale probes and is never physical ON/OFF verification or a promised
 completion clock. The Hot water view explains this explicitly for CT-free use.

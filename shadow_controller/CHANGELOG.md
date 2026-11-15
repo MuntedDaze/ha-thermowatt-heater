@@ -13,6 +13,11 @@
   no CT-free element verification or promised wall-clock completion is invented.
 - Full-week HTTP-category comparisons include60/90min quiet limits, critical
   versus passive stale temperature and owner-change/detection/outage trade-offs.
+- Fixes Restore/Undo’s cached preference list being finalised before later
+  protected time-zone/service/poll/learning settings were added. Those choices
+  now survive actual Restore/Undo; old unsafe Undo payloads are refused.
+- Adds six-week plan-loss/refresh-rejection comparisons: fixed recovery and a
+  persistent auth lock produce no follow-up HTTP; unavailable control is not savings.
 - Provides beginner guides, an exact-commit local owner bundle and guarded same-ID
   source-cache staging for later owner approval. No install/start or private-state
   edit occurs in the helper. Existing entries, IDs/options/migrations are retained.

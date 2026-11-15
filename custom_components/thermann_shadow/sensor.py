@@ -51,7 +51,7 @@ SENSORS = {
     "heater_energy_kwh": ("Hot water circuit energy", "kWh"),
     "heater_raw_w": ("Hot water signed raw power", "W"),
     "expected_completion": ("Expected heating completion", None),
-    "nominal_heating_minutes": ("Nominal time if heating stays on", "min"),
+    "nominal_heating_minutes": ("Continuous heating time estimate", "min"),
     "next_cloud_poll": ("Next cloud poll", None),
     "cloud_poll_interval": ("Cloud poll interval", "s"),
     "learned_heating_rate": ("Learned heating rate", "°C/h"),

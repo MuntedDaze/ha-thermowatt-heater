@@ -87,6 +87,47 @@ def test_new_quiet_authority_is_default_off_locked_and_preserved():
             c.parse_options({"owner_change_check_minutes": value})
 
 
+def test_actual_restore_and_undo_preserve_all_new_critical_choices():
+    settings = importlib.import_module(f"{m.__package__}.settings")
+    protected = {
+        "event_aware_polling_enabled": True,
+        "owner_change_check_minutes": 90,
+        "time_zone": "Australia/Perth",
+        "daytime_start": "08:30",
+        "storage_ready_time": "14:00",
+        "baseline_start": "20:00",
+        "learned_planning_enabled": True,
+        "learning_hardware_qualified": True,
+    }
+    current = {**c.DEFAULT_OPTIONS, **protected, "forecast_uncertainty": 0.4}
+    restored = settings.recommended_options(current)
+    for key, value in protected.items():
+        assert restored[key] == value and key not in settings.RESTORED
+    assert restored["forecast_uncertainty"] == c.DEFAULT_OPTIONS["forecast_uncertainty"]
+    undone = settings.undo_restore(restored)
+    assert undone["forecast_uncertainty"] == 0.4
+    assert all(undone[key] == value for key, value in protected.items())
+
+
+def test_requested_event_mode_without_bridge_v2_permission_sends_no_v1_plan(tmp_path, monkeypatch):
+    from test_integration_0_9_0 import Rig, hobart, drive
+
+    rig = Rig(tmp_path, monkeypatch, hobart(MON, 23), reading=45, mode="Manual", setpoint=45)
+    options = {
+        **rig.entry.options,
+        "adaptive_polling_enabled": True,
+        "event_aware_polling_enabled": True,
+    }
+    rig.entry.options.update(options)
+    rig.runtime.apply_options(options, rig.sources)
+    rig.executor.configure(options)
+    observation = rig.executor.observe(rig.now())
+    decision, _ = rig.executor.decide(rig.now(), observation)
+    drive(rig.executor._publish_poll_plan(rig.now(), observation, decision, None))
+    assert not any(topic.endswith("/poll_plan") for topic, _ in rig.ha_publishes)
+    assert not rig.bridge.poll_hints and rig.posts == []
+
+
 def test_ct_free_verified_export_can_choose_required_heat_but_never_optional_boost():
     now = at(MON, 11)
     policy = sp.SimplePolicy(sp.PolicySettings(), TARIFFS)

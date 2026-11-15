@@ -109,7 +109,7 @@ views:
       content: Element power appears here once the hot-water CT is mapped.
     - type: tile
       entity: sensor.thermann_shadow_expected_heating_completion
-      name: Expected completion
+      name: Estimated finish (conditional)
   - type: grid
     cards:
     - type: heading
@@ -237,9 +237,9 @@ views:
       - entity: sensor.thermann_shadow_heating_time_needed
         name: Heating time needed
       - entity: sensor.thermann_shadow_expected_heating_completion
-        name: Expected completion
-      - entity: sensor.thermann_shadow_nominal_time_if_heating_stays_on
-        name: Nominal minutes if heating stays on
+        name: Estimated finish (conditional)
+      - entity: sensor.thermann_shadow_continuous_heating_time_estimate
+        name: Time if heating continuously
     - type: markdown
       content: Without a commissioned hot-water meter, electrical ON/OFF and a completion clock are unknown. Nominal minutes assume continuous heating at the configured power; the native thermostat may wait, water use may change the estimate, and an old temperature expires. This is not a promise of ready hot water.
     - type: markdown

@@ -1,6 +1,7 @@
 # Focused independent-review handoff
 
-Branch `codex/polling-owner-readiness`, stacked on preserved draft PR #35 exact
+[Draft PR #36](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/36), branch
+`codex/polling-owner-readiness`, stacked on preserved draft PR #35 exact
 `8d2b1e4a8c2c52818b73ddb082b7625c789b4425`. Candidate bridge 1.3.16 / controller 0.12.0.
 No existing tested PR branch/worktree was modified. No merge, install, live HA,
 vendor access/authentication/MQTT, heater command or automatic enable occurred.
@@ -23,7 +24,16 @@ Public-release administration and unrelated features remain out of scope.
 
 [Polling report](POLLING.md) explains the rejected 40-minute-phase experiment,
 all category savings and explicit detection/unknown-temperature trade-offs.
-The full suite/static and final-head CI evidence belongs in the new draft PR
+An additional six-week failure comparison drops plans and rejects a Sunday
+refresh: fixed recovery is exercised and every strategy remains blocked with
+zero further HTTP; those counts are not savings. Restore/Undo now finalises its
+protected set after every extension, preserving time-zone/service-window/quiet
+limit/learning choices in actual round-trip tests. Old preference Undo data that
+contains protected keys is refused rather than silently changing control facts.
+
+Local full suite **1403 tests passed**, plus focused final owner/poll cases and
+static checks. The exact final count/SHA and final-head CI evidence belongs in
+draft PR #36
 and completion report. Do not infer it from the preserved PR #35 checkpoint.
 
 ## Reviewer focus

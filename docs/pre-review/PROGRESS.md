@@ -49,55 +49,65 @@ quotas, tariff verification, migrations and raw CT boundaries remain mandatory.
 6. Run full existing/added tests, static checks and applicable final-head CI.
    Commit/push increments and new draft PR; leave all existing drafts unchanged.
 
-## Resume
+## Current checkpoint / resume
 
-Implementation delivered locally (awaiting commit/final-head CI): explicit default-off quiet-period flag
-and30–90min owner bound; v2 wire purpose/owner cap with v1 unchanged; active
-temperature plans rejoin half-hour slots and pre-boundary reads align with the
-real2min policy lead. Controller passive alert deadline is separate from all
-unchanged command gates and45min temperature validity. Cold baselines and mapped
-CT faults cannot use long quiet leases. Verified raw GoodWe export informs only
-required off-peak economics. New nominal-duration sensor is conditional, never
-ON/OFF or a wall time. Dashboard map/HA registry additions included.
+Draft PR #36: https://github.com/MuntedDaze/ha-thermowatt-heater/pull/36
+Base remains PR #35 (`codex/thermann-final-integration`, exact8d2b1e4).
+First implementation commit `7c9eb5b1e8cea7aa4f7f5d9d0f707944643eec34` is pushed.
+The next finalisation commit includes clearer conditional display labels/form
+help, actual Restore/Undo preservation, complete failure replays and owner ZIP
+transfer/path-alias safeguards. No algorithmic expansion beyond this scope.
 
-20 new focused tests pass (night app changes30/60/90, quiet auth no keepalive,
-failed refresh locks, fixed lease fallback, v2 limits, unchanged command freshness,
-CT-free required export and nominal duration). Added separate bridge v2 qualification
-(defaultfalse even for existing v1-qualified users); missing v2 support/qualification
-sends no plans and selects fixed fallback. Translation/forms/registry updated.
-Full1397 tests passed before that final server gate/metadata increment; latest140
-focused tests pass. Final full suite and all final-head CI still required. Earlier
-full attempt found missing new form labels; fixed and verified. Report regenerations
-finished; both JSON files include critical-temperature/stale-command metrics.
+Delivered:
+- Explicit default-off v2 quiet permission on BOTH bridge and controller, selected
+  healthy owner bound30–90min; old v1 qualification cannot silently grant it.
+  Missing v2 support/qualification sends no plans and uses fixed fallback.
+- Stable confirmed baseline/Never-peak OFF holds, warm-baseline/mapped-CT checks,
+  expiring monotonic lease and original fixed recovery. Active planning rejoins
+  half-hour observations; observations align with real decisions/two-minute OFF
+  lead.45min temperature and60sec bridge command prior remain separate/unchanged.
+- Verified raw GoodWe export informs required off-peak economics only. Conditional
+  continuous-heating duration never asserts ON/OFF or a completion clock.
+- Actual Restore/Undo now calculates its cached preference set AFTER protected
+  extensions, preserving timezone/service-window/poll/learning choices. Older
+  unsafe Undo data containing protected keys is refused. No default is enabled.
+- Eight ordinary week comparisons: CT-free447 vs713 requests(37.3% fewer),
+  measured493 vs740(33.4% fewer) with quiet60, equal cost/service/target outcomes.
+  Passive unknown temperature increases; required-plan unknown minutes stay12/0,
+  same as fixed30. Owner-change detection45 vs15min in this phase; bounds and
+  missed short changes explicit. Quiet90 is studied, not initial recommendation.
+- Six failure weeks:45 dropped plans trigger actual fixed reads; Sunday refresh401
+  leaves every strategy persistently blocked with zero subsequent HTTP. No auth
+  generation changes or savings claim from unavailable control. Both JSON reports
+  and legacy comparison are reproducible; deficits/cost/categories remain visible.
+- Plain README,13-step Proxmox/HAOS CT-free owner guide, correct historic GoodWe
+  AC mapping(total_power), visual-review checklist, later Shelly/recovery plan.
+- Source-only staging helper: existing repository-backed identity, exact SHA,
+  clean/public-origin/path checks, alias deduplication, local immutable named pin,
+  recovery record; no container install/start/private options/auth edit. Local_
+  or other-repository installations are refused pending their own reviewed plan.
+- Exact-commit local ZIP/manifest builder; excludes runtime/private files, keys,
+  .git/untracked files and historical audit payloads. Includes source and linked
+  guides/generator. Owner checks ZIP and transferred helper hash before use.
+- Actual Supervisor2026.10.5/2026.11.0 GitRepo.load/catalog/schema smoke added to
+  isolated CI. Both native architectures and actual HA passed first-head checks.
 
-First40min active experiment reduced HTTP but worsened CT-free outage timing/cost;
-replaced with aligned active slots. Revised pre-cold-guard replay: no-CT447 vs713
-and CT493 vs740 at quiet60, same cost/target outcomes; healthy owner detection
-can take60min rather than30. Quiet90 is comparative, not initial recommendation.
-Final regenerated values remain447/713 and493/740 at60, preserving required
-temperature freshness/cost/target outcomes; passive temperatures intentionally
-expire. Quiet90 comparison365/420 requests is not an initial recommendation.
+Validation: full local **1403 tests passed**, plus latest25 focused owner/poll
+cases after path-alias handling. Ruff lint/format, both strict mypy targets,
+compileall/generated files and Bash syntax passed earlier; rerun final static/
+link consistency as needed. No active exec sessions at construction of this
+checkpoint. Final-head CI is still required; exact final SHA/26 jobs and bundle
+SHA256 will be recorded in PR #36 / completion report rather than a self-referencing
+post-CI commit. Never infer final success from7c9eb5b or the prior8d2b1e4 checks.
 
-Installation research: official HA repository IDs include URL#branch, so adding
-a branch repository creates a different full add-on identity and cannot be the
-in-place upgrade method. Official Supervisor2026.11.0 GitRepo.load preserves a
-named local checkout, validates origin/fsck; pull uses the active branch. Prepare
-a guarded source-cache checkout to a *local pinned review branch* in the existing
-repository, then Supervisor restart/read catalog/update while the existing add-on
-is stopped and watchdog/autostart off. This is advanced developer staging, not a
-normal public-store install; needs explicit owner approval and actual-version
-checks. Never delete/re-add the add-on or edit private auth/options JSON. Still
-implemented: reviewable source-only helper, reproducible exact-commit bundle,
-disposable-Git tests, actual isolated Supervisor load/catalog smoke and workflow,
-13-step owner guide, plain README, full comparison regressions, version/changelog
-candidate1.3.16/0.12.0. Helper never installs/starts a container or edits private
-data/options/auth; source pin is version-dependent advanced staging and needs
-owner approval. Remaining: first commit/push/new stacked draft PR, final local
-tests/static/docs checks, fix any actual CI issue, final-head26 jobs, build local
-owner bundle from final tested SHA and record SHA256 in handoff. No public release.
+Remaining finalisation only: commit/push the final delta, inspect/resolve all
+final-head CI and reviews, build the ignored `owner-staging/` ZIP from that final
+SHA, verify its manifest/hashes and update PR metadata/handoff. Preserve
+`review-1b29be1/`, `uv.lock`, all earlier draft branches and Fable worktree. Do not
+merge/install/authenticate/operate. Independent review, actual frontend and all
+physical/vendor/CT qualification remain outstanding; public distribution deferred.
 
-Read current branch/status before proceeding. Use
-Python `C:/Users/jacob/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`
-with PYTHONPATH absolute `.test-deps`; UTF-8 reads/writes. Never print the embedded
-application key (bridge line25) or historical private keys. The previous phase's
-1371 tests/26 CI jobs are evidence for8d2b1e4, not this new work.
+Python runtime:
+`C:/Users/jacob/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`,
+PYTHONPATH absolute `.test-deps`. UTF-8 for text. Never print the embedded API key
+(bridge line25) or historical keys. No subagents were requested/used.

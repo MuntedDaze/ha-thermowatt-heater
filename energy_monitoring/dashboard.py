@@ -158,7 +158,7 @@ def overview(config):
     else:
         water.append(note("Element power appears here once the hot-water CT is mapped."))
     if hot_water.get("expected_completion"):
-        water.append(tile(hot_water["expected_completion"], "Expected completion"))
+        water.append(tile(hot_water["expected_completion"], "Estimated finish (conditional)"))
     return view(
         "Overview",
         "overview",
@@ -261,8 +261,8 @@ def hot_water_view(config):
             ("latest_start", "Latest continuous start"),
             ("soft_target_time", "Soft target time"),
             ("heating_time_needed", "Heating time needed"),
-            ("expected_completion", "Expected completion"),
-            ("nominal_heating_time", "Nominal minutes if heating stays on"),
+            ("expected_completion", "Estimated finish (conditional)"),
+            ("nominal_heating_time", "Time if heating continuously"),
         ),
     )
     planning = [heading("Plan and decision", "mdi:robot-outline"), rows("Current plan", plan)]
@@ -277,9 +277,9 @@ def hot_water_view(config):
     if not hot_water.get("expected_completion"):
         planning.append(
             note(
-                "**Expected completion** is not exposed by controller 0.9.1. It is requested "
-                "in `ENTITY_CONTRACT.md`; map it under `hot_water.expected_completion` when "
-                "available. Until then use *Next heating stop* and *Heating time needed*."
+                "**Estimated finish** is not mapped. Use `hot_water.expected_completion` "
+                "only when the controller exposes its conditional estimate. Without CT, "
+                "a completion clock is unknown; continuous-heating minutes are assumptions."
             )
         )
     cloud = controller_rows(

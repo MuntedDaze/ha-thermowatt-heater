@@ -46,6 +46,9 @@ def source(tmp_path):
         "thermowatt-heater/config.yaml": "slug: thermowatt_boiler\nversion: '1.3.15'\n",
         "custom_components/thermann_shadow/manifest.json": '{"domain":"thermann_shadow","version":"0.11.0"}',
         "tools/owner_checkout.py": "# synthetic staging source\n",
+        "README.md": "# Synthetic reviewed guide\n",
+        "docs/history/audit/synthetic_config.json": '{"fixture":"DO_NOT_EXPORT"}',
+        "shadow_controller/FORECAST_SETUP.md": "# Synthetic forecast guide\n",
         "energy_monitoring/generated/packages/thermann_energy.yaml": "template: []\n",
         "energy_monitoring/entity_map.yaml": "version: 1\n",
         "docs/pre-review/OWNER_INSTALLATION.md": "# Synthetic owner guide\n",
@@ -83,6 +86,11 @@ def test_staging_preserves_identity_original_branch_and_any_external_private_sta
 
 def test_changed_or_wrong_identity_cache_is_never_overwritten(source, tmp_path):
     repo, root, before, reviewed = source
+    assert checkout.locate("12345678_thermowatt_boiler", (root, root)) == repo.resolve()
+    other = tmp_path / "other-cache"
+    (other / "12345678").mkdir(parents=True)
+    with pytest.raises(checkout.StageError, match="expected_one_existing_repository_cache"):
+        checkout.locate("12345678_thermowatt_boiler", (root, other))
     for slug in ("local_thermowatt_boiler", "87654321_thermowatt_boiler"):
         with pytest.raises(checkout.StageError):
             checkout.inspect(repo, slug, reviewed, (root,))
@@ -104,6 +112,7 @@ def test_bundle_uses_only_committed_source_and_has_verifiable_hashes(source, tmp
         manifest = json.loads(archive.read("REVIEWED_MANIFEST.json"))
         assert manifest["commit"] == reviewed and manifest["bridge_version"] == "1.3.16"
         assert not any("owner-secret" in name or ".git/" in name for name in archive.namelist())
+        assert not any(name.startswith("docs/history/audit/") for name in archive.namelist())
         import hashlib
 
         for path, digest in manifest["sha256"].items():

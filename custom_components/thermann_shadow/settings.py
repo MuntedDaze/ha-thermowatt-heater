@@ -777,8 +777,6 @@ LOCKED_WHILE_ACTIVE = frozenset(
 )
 PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | _DUAL_PROTECTED
 LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | _DUAL_PROTECTED
-RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
-assert not set(RESTORED) & LOCKED_WHILE_ACTIVE  # restore/undo never need control off
 
 
 def _same(a, b) -> bool:
@@ -905,3 +903,8 @@ LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
     "storage_ready_time",
     "baseline_start",
 }
+
+# Finalise only after every extension above: early snapshots silently included
+# newly protected time/learning/poll choices in Restore/Undo's cached tuple.
+RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
+assert not set(RESTORED) & LOCKED_WHILE_ACTIVE

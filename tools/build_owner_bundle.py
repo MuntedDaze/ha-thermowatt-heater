@@ -15,8 +15,10 @@ PATHS = (
     "thermowatt-heater",
     "custom_components/thermann_shadow",
     "energy_monitoring",
+    "README.md",
+    "docs",
+    "shadow_controller/FORECAST_SETUP.md",
     "tools/owner_checkout.py",
-    "docs/pre-review/OWNER_INSTALLATION.md",
 )
 
 
@@ -45,6 +47,8 @@ def build(repo, commit, output):
             if entry.is_dir():
                 continue
             path = PurePosixPath(entry.filename)
+            if path.parts[:3] == ("docs", "history", "audit"):
+                continue  # historical captured runtime payloads are not owner installation files
             if (
                 path.is_absolute()
                 or ".." in path.parts
