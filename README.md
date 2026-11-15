@@ -7,7 +7,7 @@ worthwhile surplus solar for extra storage. Savings depend on your demand,
 electricity contract and heater; they are not guaranteed.
 
 **Development candidate: bridge 1.3.17 / controller 0.13.0,
-audit-remediation draft (see the [review handoff](docs/audit-remediation/HANDOFF.md)).** Unmerged and uninstalled.
+[draft PR #37](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/37).** Unmerged and uninstalled.
 Public distribution is deferred. Automatic heating, adaptive polling and learned
 planning require independent review and separately approved commissioning.
 Nothing in this development has operated the owner’s heater.

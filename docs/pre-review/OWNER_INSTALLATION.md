@@ -45,6 +45,11 @@ backup location. No Proxmox host shell or Supervisor cache commands are needed.
 5. Turn off this bridge’s **Start on boot**, **Watchdog** and **Auto update** and
    stop it. Verify Stopped. Do not uninstall it. Stop any other automation that
    could command this heater. No second bridge may use the account.
+   Record the original cloud/command flags privately, then deliberately save
+   **cloud_enabled: false** and **commands_enabled: false** while stopped. This
+   owner-visible preparation prevents an unexpected post-update start making a
+   live request. Keep credentials, tokens, locks and authentication generation
+   unchanged. Record these disabled values as the expected upgrade configuration.
 6. Settings → System → Backups: make a manual full backup including HA and this
    bridge. Download it to Windows and retain its encryption/recovery key privately.
    Confirm completion, included components, size and successful download. A file
@@ -252,7 +257,8 @@ are not exact utility-bill reconciliation.
 
 ## 9. Seven-day read-only soak, separately approved
 
-Only after live read-only approval, start the **same bridge** with commands off
+Only after live read-only approval, deliberately enable cloud reads and start
+the **same bridge** with commands off
 and the controller off, at fixed 30-minute polling. Keep its normal authentication safeguards.
 First start may refresh existing tokens before the first read; rejection locks
 conservatively. Stop and diagnose rather than changing generation/restarting

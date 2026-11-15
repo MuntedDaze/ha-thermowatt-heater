@@ -1,5 +1,6 @@
 # Independent-audit remediation and normal installation handoff
 
+[Draft PR #37](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/37).
 Candidate **bridge 1.3.17 / controller 0.13.0**, branch
 `codex/audit-remediation-normal-install`, based on preserved PR36 exact
 `649491381cd58cbb8ad65210453f67c551934fab`. A new draft targets **main** so one

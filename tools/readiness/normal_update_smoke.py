@@ -129,7 +129,9 @@ async def main():
         assert await catalog_version() == "99.0.0"
         assert await pull(loader) is False
         assert loader.repo.active_branch.name == "main"
-        assert git(cache, "remote", "get-url", "origin") == ORIGIN
+        # get-url expands the deliberate test-only insteadOf rewrite; inspect
+        # the stored URL to verify Supervisor preserved the registered source.
+        assert git(cache, "config", "--get", "remote.origin.url") == ORIGIN
         assert {
             p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in private.iterdir()
         } == hashes

@@ -37,10 +37,13 @@ Recovery:
    owner-intended supported Manual target for the current operating plan and verify the resulting state. An intentional
    manual action can heat during peak and costs money; the controller does not
    authorise or perform it automatically. Follow native/manufacturer protections.
-4. If internet/vendor control is unavailable, use only manufacturer-supported
-   appliance local controls or qualified service. If no such approved control is
-   available, hot-water restoration cannot be guaranteed; arrange alternatives.
-   Never bypass protection or improvise wiring. HA cannot fix a vendor outage.
+4. If internet/vendor control is unavailable, do not assume there is a local
+   Manual selector: this project has not verified one, and the manufacturer
+   describes changing mode/settings through the app. Use only a separately
+   established manufacturer-supported recovery procedure or qualified service.
+   Without an available approved path, hot-water restoration cannot be
+   guaranteed; arrange alternatives. Never bypass protection, improvise wiring
+   or power-cycle repeatedly to force a mode. HA cannot fix a vendor outage.
 5. Once cloud/MQTT and actual appliance state are known, follow deliberate lock
    recovery; acknowledge controller faults or resume owner override only after
    inspection. Restart requires a new observation. Retain pending/usage history.
@@ -118,9 +121,11 @@ compliance of the chosen variable-temperature strategy.** The plumber discussion
 is owner context, not a compliance assessment performed by the software.
 Manufacturer instructions and applicable plumbing requirements remain relevant.
 
-The appliance retains its own thermostat and native protections. Earlier design
-notes describe native antibacterial operation, including OFF, based on appliance
-documentation. That behaviour, its timing, whole-tank exposure and adequacy for
+The appliance retains its own thermostat and native protections. The
+[manufacturer's guide](https://www.thermann.com.au/thermann-cms/files/Thermann-Smart_Electric-Owners_Guide.pdf)
+(printed p10, PDF page16) describes an antibacterial cycle across modes, including
+app OFF, when its conditions apply; it also notes model algorithms can differ.
+That behaviour, its timing, whole-tank exposure and adequacy for
 this household have not been independently verified on the actual heater. Do not
 claim an assumed native cycle makes45°C compliant. Cloud OFF is a software
 request, not proof protections are disabled or electrical draw is zero.

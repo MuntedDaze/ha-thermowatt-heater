@@ -1,3 +1,10 @@
+> Inactivity gate clarified after independent review: longer adaptive polling
+> remains disabled until at least seven complete days of fixed60 read-only
+> observation pass with zero refresh rejection/lock or hidden keepalive and
+> independent acceptance. Repeat at fixed90 before90. See the
+> [controlled observation plan](../audit-remediation/OPERATIONS.md#read-only-inactivity-qualification).
+> Initial automatic qualification stays fixed30; no vendor lifetime is assumed.
+
 # Focused polling evidence and limits
 
 This phase changes observation scheduling, not command freshness, authentication

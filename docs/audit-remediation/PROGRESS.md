@@ -11,7 +11,10 @@ branch `codex/audit-remediation-normal-install`. Fable remains separately at
 Owner untracked audit and uv.lock are untouched. No live access/merge/install/
 authentication/MQTT/heater operation or enablement is authorised or performed.
 
-Implemented, validation in progress:
+Draft PR #37: https://github.com/MuntedDaze/ha-thermowatt-heater/pull/37
+First pushed remediation commit f6596e89859ee914f376a17bca19c7246c2af9bf.
+
+Implemented, final validation in progress:
 
 - F1: source-cache installer removed; real Supervisor load/pull/catalog smoke
   replaced with normal main update and forward-recovery test, isolated local
@@ -39,10 +42,18 @@ mypy targets, compileall, generated energy files and Bash syntax pass. Full loca
 suite is running after the final corrections. The first run exposed only stale
 version/report expectations; metadata is updated and reports reproduced.
 
-Next: commit/push implementation and documentation increment; new main-targeted
-draft; inspect actual HA/native/Supervisor CI, fix any integration failure, final
-full suite/static checks and final-head CI/reviews. Record exact final SHA and
-workflow evidence in draft PR/completion report rather than a post-CI commit.
+First full corrected local suite passed; the final suite including completed-
+evaluation heartbeat coverage is running. Initial actual HA/combined package,
+optional-watchdog schema and native checks pass. The real Supervisor load/pull/
+forward-recovery body completed, exposing a fixture assertion that used Git's
+rewritten get-url instead of the stored configured URL. It is corrected to read
+remote.origin.url, retaining both canonical URL spellings and all real pull calls.
+
+Next: push the final CI-fixture/doc/checkpoint increment. Inspect all final-head
+CI and reviews, finish exact suite/static/link checks, build optional source
+handoff, and record final SHA/workflows/bundle evidence in PR #37 rather than a
+post-CI commit. Never merge/install/contact vendor or HA; independent safety,
+physical commissioning, inactivity and frontend/backup-restore evidence remain.
 
 Prepared integration strategy: one new draft PR targeting main, containing
 the complete already-reviewed stack and Fable ancestry, with focused audit delta
