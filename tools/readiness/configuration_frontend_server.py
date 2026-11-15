@@ -13,7 +13,7 @@ import shutil
 import socket
 import sys
 
-from homeassistant import bootstrap
+from homeassistant import bootstrap, loader
 from homeassistant.core import HomeAssistant, ServiceRegistry
 
 ROOT = Path("/workspace")
@@ -51,6 +51,7 @@ async def main():
     )
     hass = HomeAssistant(str(CONFIG))
     hass.config.skip_pip = True
+    loader.async_setup(hass)
     assert await bootstrap.async_from_config_dict(
         {
             "homeassistant": {
