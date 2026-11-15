@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.15] - Integrated adaptive candidate (unreleased, uninstalled)
+
+- Adds disabled-by-default bridge-owned adaptive status scheduling. Expiring,
+  status-anchored MQTT plans use monotonic bounded deadlines; missing controller,
+  corrupt scheduling state or lost lease falls back to fixed polling.
+- Actual request categories, poll deadlines and scheduling reasons are published.
+  Confirmation reads replace the anchor; stale hints cannot slide deadlines.
+- Authentication, cloud/command enable flags, quotas, backoff and the closed
+  OFF/45/62/70 exact-prior protocol retain their guards. No POST retry added.
+- Pair with controller 0.11.0 only after review. Both scheduling flags default
+  false; hardware qualification and owner-approved rollout remain outstanding.
+  No release, tag, merge, deployment, live authentication or heater operation.
+
 ## [1.3.14] - Four-state guarded commands (unreleased development candidate)
 
 - Adds only the six missing exact-prior transitions involving Manual 62 to the

@@ -1,5 +1,27 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.11.0 — integrated intelligence (unreleased development candidate)
+
+- Integrates Fable’s seven-view read-only monitoring on a separate draft branch;
+  raw signed CT control stays independent from dashboard and optional circuits.
+- Optional bridge-owned adaptive plans are disabled by default. Actual poll
+  deadlines/reasons and the old shadow comparison are distinct telemetry.
+- Adds target/model/meter-specific clean sessions, robust whole-day held-out
+  tests and a conservative planning gate. Learning enable and independent
+  hardware qualification default false; missing evidence uses nominal planning.
+  Bounded history retains 120 sessions so three 20-session cohorts can coexist.
+- Fresh installations inherit the HA IANA zone, start on an unverified flat
+  placeholder plan, have no household entity IDs, and disable forecasts/boost.
+  Initial baseline and normal targets are 62°C awaiting compliance qualification.
+  Existing owner choices remain unchanged. Entry minor version is now 5.
+- One tariff model supports local/fixed-standard clocks, editable weekday/weekend,
+  shoulder, multi-window, midday and seasonal prices. Basic CT-free/no-solar
+  tariff operation no longer requires EMHASS. All command/commissioning guards remain.
+- Whole-week actual-worker simulations compare fixed30/fixed60/shadow/adaptive;
+  synthetic outcomes disclose missed targets, outage lockout and detection trade-offs.
+- Requires bridge 1.3.15 for adaptive scheduling. Review and separate physical
+  commissioning precede operation; public distribution is deferred.
+
 ## 0.10.0 — economical dual storage (unreleased development candidate)
 
 - Default roles: overnight/weekend Manual 45, required weekday Manual 62,

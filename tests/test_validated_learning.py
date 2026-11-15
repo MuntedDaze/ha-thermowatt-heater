@@ -64,6 +64,19 @@ def test_complete_session_details_and_heldout_fit_survive_restart():
     assert restored.last is None and restored.cycle is None
 
 
+def test_bounded_history_can_retain_all_three_qualified_target_cohorts():
+    history = perf.MeasuredHistory()
+    history.configure(315, 3, "sensor.synthetic_ct|W")
+    for day in range(10):
+        for hour, target in enumerate((45, 62, 70, 45, 62, 70)):
+            captured(history, START + timedelta(days=day, hours=hour * 2), target)
+    assert len(history.sessions) == 60 <= perf.MAX_SESSIONS
+    restored = perf.MeasuredHistory.from_dict(copy.deepcopy(history.to_dict()))
+    for target in (45, 62, 70):
+        result = metrics(restored, START + timedelta(days=11), target)
+        assert result["sessions"] == 20 and result["eligible"]
+
+
 def test_changed_heldout_data_cannot_leak_into_fit_or_pass_optimistic_coverage():
     good, now = dataset()
     bad, _ = dataset(hold_fraction=0.8)

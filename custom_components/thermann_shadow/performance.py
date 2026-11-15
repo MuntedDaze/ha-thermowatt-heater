@@ -12,7 +12,9 @@ from statistics import median
 
 from .model import UTC
 
-MAX_SESSIONS = 40
+# Three target cohorts each need >=20 sessions plus held-out coverage. The old
+# 40-row total could never retain enough evidence for all three at once.
+MAX_SESSIONS = 120
 SAVE_INTERVAL = timedelta(minutes=15)
 
 

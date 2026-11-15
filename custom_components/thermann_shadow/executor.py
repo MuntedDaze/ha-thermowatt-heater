@@ -455,7 +455,27 @@ class Executor:
                     reported_target_c=obs.target_c if obs.mode == "Manual" else None,
                 )
             )
-            await self._publish_poll_plan(now, obs, decision, min(actions) if actions else None)
+            # An already-selected storage target needs no new start decision.
+            # Keep the old shadow comparison intact, but do not spend real GETs
+            # on its hypothetical latest-start or zero-benefit pause window.
+            storing = (self.policy.setpoint(state) or 0) >= int(
+                self.runtime.native_options["normal_storage_c"]
+            )
+            actual_actions = [
+                self.runtime.values.get("next_tariff_change"),
+                decision.plan.get("next_baseline"),
+            ]
+            if self.controller.enabled:
+                actual_actions += [now] if decision.command else []
+                if not storing:
+                    actual_actions += [
+                        decision.plan.get("best_start"),
+                        decision.plan.get("latest_start"),
+                    ]
+            actual_actions = [when for when in actual_actions if when is not None and when >= now]
+            await self._publish_poll_plan(
+                now, obs, decision, min(actual_actions) if actual_actions else None
+            )
             self.runtime.record_event(now, obs, decision)
         self._notify_listeners()
 
