@@ -137,3 +137,19 @@ supported setpoint protocol and the owner's strategy; review actual native
 behaviour and appliance/plumbing requirements during separately approved physical
 commissioning. No new hygiene sensor, reminder-based heating rule, restrictive
 gate or automatic post-holiday command has been added for F8.
+
+### Owner decision and reporting convention (16 November 2026)
+
+See [the standing owner decision](../decisions/HOT_WATER_TEMPERATURE.md).
+The owner reiterates that the 45°C target is intended only for shorter periods,
+followed by planned heating above 60°C, and reports plumber advice about this
+specific operation. The strategy is an agreed design requirement rather than
+an open invitation to change setpoints in routine development.
+
+Retain the factual technical limitations above for a deliberate safety audit,
+but **do not repeat a generic 45°C compliance warning as boilerplate** in each
+PR, troubleshooting exchange, update or owner-facing handoff. Re-open the
+question only for a specific new risk, observed failure to reheat, material
+change of operating conditions, or an explicit owner request. Document the
+concrete evidence if that happens. This reporting decision changes no control
+logic, appliance protections, regulatory obligations or approval gates.
