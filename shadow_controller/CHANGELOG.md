@@ -2,6 +2,10 @@
 
 ## 0.13.0 — independent-audit remediation (unreleased)
 
+- Follow-up: retain the parked-OFF warning through fault-locked/unknown-current
+  HOLD using a diagnostic-only requirement from the same policy. Genuine newer
+  uncontrolled reports invalidate old OFF evidence. The actual desired state,
+  commands, threshold/deduplication, guards and temperature strategy are unchanged.
 - Adds a persisted warning when the last observed heater state is software OFF
   and permitted heating has been wanted for 30 minutes without restoration.
   No peak, owner, authentication, command-budget or confirmation bypass is added.

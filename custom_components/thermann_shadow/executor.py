@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from dataclasses import replace
 from datetime import datetime, timedelta, time
 
 from homeassistant.helpers.storage import Store
@@ -461,6 +462,23 @@ class Executor:
             override_12h=controller.guest_active(now),
         )
         decision = self.policy.decide(snapshot)
+        if (
+            decision.reason == "heater_state_not_controlled"
+            and controller.last_observed_heater == "off"
+        ):
+            # Diagnostic only: unknown state must still HOLD. Ask the same
+            # policy whether restoring the last observed OFF would be wanted
+            # now, preserving peak/holiday/owner and economic OFF decisions.
+            restore = self.policy.decide(replace(snapshot, heater_state="off"))
+            # _send records the thermostat requirement before command gates.
+            # Keep it through spacing/freshness holds, but not deliberate OFF
+            # or the pre-peak command-slot reservation (which never calls _send).
+            target = restore.plan.get("desired_target_c")
+            if target is not None:
+                decision = replace(
+                    decision,
+                    plan={**decision.plan, "unconfirmed_restore_target_c": target},
+                )
         self.last_decision = decision
         return decision, state
 

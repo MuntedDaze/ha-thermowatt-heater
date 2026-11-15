@@ -1,5 +1,9 @@
 # Independent-audit remediation and normal installation handoff
 
+The focused follow-up from reviewed94a7dd4 closes the unknown-current-state
+parked-OFF warning gap. See [the short review handoff](PARKED_OFF_REVIEW.md) and
+PR37 for its final-head test/CI evidence. All other findings remain as reviewed.
+
 [Draft PR #37](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/37).
 Candidate **bridge 1.3.17 / controller 0.13.0**, branch
 `codex/audit-remediation-normal-install`, based on preserved PR36 exact

@@ -545,7 +545,9 @@ class Controller:
         now = obs.now
         effects: list[Effect] = []
         new_poll = self._ingest_poll(obs)
-        if new_poll and obs.heater_state is not None:
+        # A genuine uncontrolled mode/target invalidates older OFF evidence.
+        # Unavailable entities have no mode and retain the last observation.
+        if new_poll and obs.mode is not None:
             self.last_observed_heater = obs.heater_state
         self.last_want = {
             "state": want.state,
@@ -892,7 +894,15 @@ class Controller:
         # assertion or permission to bypass peak/owner/confirmation guards.
         needs_restore = (
             self.last_observed_heater == OFF
-            and want.state in TARGET_C
+            and (
+                want.state in TARGET_C
+                or (
+                    self.heater is None
+                    and want.state == "hold"
+                    and want.reason == "heater_state_not_controlled"
+                    and want.plan.get("unconfirmed_restore_target_c") in TARGET_C.values()
+                )
+            )
             and not self.hold
             and self.state != OWNER_OVERRIDE
         )

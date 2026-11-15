@@ -1,5 +1,36 @@
 # PR36 audit remediation checkpoint
 
+## Current PR37 parked-OFF follow-up
+
+Owner requests one notification correction from independently re-reviewed
+`94a7dd4cee49901d972ece2606315ac97ca3e314`. Keep the same isolated branch/PR37 and
+all prior recovery heads; no merge/install/live operation. Preserve45/62/70 and
+all command/auth/polling behaviour; F8 is closed and not reopened.
+
+The gap is real: fault lock clears controller.heater; the actual executor then
+returns HOLD before peak/holiday checks. A blanket unknown-state warning would
+be false during legitimate OFF. Implemented a diagnostic-only current-policy
+restoration target from the last genuine OFF, consumed only by alert supervision.
+The actual HOLD/command remain unchanged. Fresh uncontrolled reports invalidate
+older OFF evidence; unavailable entities preserve it. No schema/authority change.
+
+19 new actual-executor/bridge regressions pass. The earlier 94-case focused run
+passed before the last pending-POST restart test was added. Lint/format, both strict mypy targets, compileall,
+generated energy checks and Bash syntax pass. Full suite 1440 passed before the
+last added test; all three week-report regressions remain unchanged. A final
+full-suite rerun with all 1441 tests will run on the committed fix;
+Final local rerun including the added pending-POST restart case, plus final-head
+actual HA/native/Supervisor CI and reviews, are required after push.
+If replay reports change, verify only corrected diagnostic notifications differ;
+never conceal command/HTTP/energy/cost changes. Keep candidate versions unchanged.
+
+Next: finish full suite, commit/push the narrow fix and this handoff, inspect all
+final-head CI, then update PR37 with exact final SHA/results and the short review
+link. Do not make a post-CI source commit just to attest to its own SHA.
+[Focused review handoff](PARKED_OFF_REVIEW.md). Historical checkpoints follow.
+
+## Earlier remediation checkpoint
+
 Owner request read in full from the 15 November attachment. Source findings and
 all accompanying evidence read from `.audit-2026-11-15/REVIEW_REPORT.md`,
 `test_adv_review.py`, `adv_output.txt` and `week_replay_summary.txt`. Preserve
