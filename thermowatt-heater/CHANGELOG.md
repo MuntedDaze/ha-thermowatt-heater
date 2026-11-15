@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.17] - Independent-audit remediation candidate (unreleased, uninstalled)
+
+- Refuses a command whose due token refresh fails before the heater POST, without
+  creating false pending/sent state. Refresh finishes before pending persistence;
+  exact-prior freshness and queue age are rechecked. Genuine uncertain POSTs
+  remain persisted, confirmed by bounded reads and never blindly repeated.
+- Empty device lists use fixed rediscovery with an explicit no_devices diagnostic;
+  adaptive synchronisation errors are contained within the normal tick boundary.
+- Pair with controller 0.13.0: persisted parked-OFF restore warning and last-observed
+  state, independent controller evaluation timestamp and no CT-free pause based on the element's own grid draw.
+- Replaces unsupported Supervisor cache staging with merge-then-normal-update
+  preparation. Existing identity, options, private state and all default-off
+  adaptive/learning gates remain. Owner45/62/70 strategy is unchanged; start fixed30.
+- Authentication lifetimes, locks, retry/backoff and command budgets are unchanged.
+  No release, merge, installation, authentication or physical operation performed.
+
 ## [1.3.16] - Event-aware polling candidate (unreleased, uninstalled)
 
 - Adds purpose-bounded v2 scheduling plans: explicit quiet baseline/OFF owner

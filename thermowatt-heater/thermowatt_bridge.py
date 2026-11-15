@@ -620,7 +620,7 @@ class MyThermowattBridge:
         age = self._token_age()
         return age is None or age >= PROACTIVE_REFRESH_AGE
 
-    def request(self, method, endpoint, serial=None, **kwargs):
+    def request(self, method, endpoint, serial=None, _refresh_prepared=False, **kwargs):
         self.guard.check()
         if not self.options.get("cloud_enabled", False):
             raise AuthBlocked("cloud_disabled")
@@ -628,7 +628,7 @@ class MyThermowattBridge:
             raise CloudError("authentication_not_ready")
         if self.clock() < self.next_cloud:
             raise CloudError("cloud_backoff")
-        if self._token_due_for_refresh():
+        if not _refresh_prepared and self._token_due_for_refresh():
             operation = self.operation
             self.refresh_session()
             self.operation = operation
@@ -977,7 +977,8 @@ class MyThermowattBridge:
                 due_now |= remaining == 0
         if self.next_background:
             self.next_poll = min(
-                self.next_background.get(serial, 0) for serial in self.active_devices
+                (self.next_background.get(serial, 0) for serial in self.active_devices),
+                default=self.clock() + self.poll_interval,
             )
         # UTC clock changes cannot stall an otherwise healthy monotonic poll.
         # Backoff/lockout paths above are never shortened.
@@ -1017,7 +1018,10 @@ class MyThermowattBridge:
         self.active_devices = active
         self.operation = "device_cache_storage"
         atomic_json(self.config_path, self.config)
-        self.discovered = True
+        # An empty, valid response is not a usable device discovery. Retry only
+        # at the ordinary fixed deadline, rather than spinning or forgetting to
+        # rediscover after a device returns.
+        self.discovered = bool(active)
 
     def poll_status(self, serial, category=None, operation=None):
         self.last_status_attempt[serial] = self.monotonic()
@@ -1475,6 +1479,31 @@ class MyThermowattBridge:
                 expected = ({9}, observed)
             else:
                 arguments = {"data": ""}
+        # A due refresh is known NOT to be a heater POST. Finish it before
+        # recording an uncertain command. A refresh failure refuses this intent;
+        # it must not be described as a command that was sent once.
+        if self._token_due_for_refresh():
+            try:
+                self.refresh_session()
+            except CloudError as error:
+                self._command_result(
+                    kind,
+                    payload,
+                    "refused_authentication_before_command",
+                    refresh=refresh,
+                    error=self.quota_signal or (error.args[0] if error.args else None),
+                )
+                raise
+            if not self._status_is_fresh(serial):
+                self._command_result(
+                    kind, payload, "refused_status_expired_during_authentication", refresh=refresh
+                )
+                return
+            if self.monotonic() - issued > COMMAND_MAX_AGE_AFTER_REFRESH:
+                self._command_result(
+                    kind, payload, "dropped_command_expired_during_refresh", refresh=refresh
+                )
+                return
         # Persist the uncertain command BEFORE the POST: a crash or restart from
         # here on never re-sends it, and the next reads decide its outcome.
         self.pending = {
@@ -1503,7 +1532,9 @@ class MyThermowattBridge:
         self.operation = "heater_command"
         self._availability(serial, False)
         try:
-            response = self.request("POST", endpoint, serial, **arguments)
+            # No authentication operation may start inside the uncertain-POST
+            # window. request still checks the guard, cloud flag and backoff.
+            response = self.request("POST", endpoint, serial, _refresh_prepared=True, **arguments)
         except CloudError as error:
             # Unknown whether the cloud acted (e.g. a timeout after delivery):
             # never re-sent; the bounded reads decide, or the deadline does.
@@ -1546,8 +1577,8 @@ class MyThermowattBridge:
             return
         polling = False
         self.read_this_tick = set()
-        self._adaptive_sync()
         try:
+            self._adaptive_sync()
             self.operation = "authentication_guard"
             self.guard.check()
             if self.clock() < self.next_cloud:
@@ -1605,7 +1636,9 @@ class MyThermowattBridge:
                 if self.last_diagnostic is not None:
                     LOG.info("Bridge resumed: code=cloud_cycle_recovered.")
                 self.last_diagnostic = None
-                self.cloud_health = "ok"
+                self.cloud_health = "ok" if self.active_devices else "no_devices"
+                if not self.active_devices:
+                    self.last_error = "device_list_empty"
                 self.publish_diagnostics(force=True)
             self.next_cloud = min(self.clock() + self.COMMAND_INTERVAL, self.next_poll)
             self._adaptive_sync()

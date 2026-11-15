@@ -1,4 +1,4 @@
-"""Source-only staging against disposable local Git fixtures; no HA connection."""
+"""Exact source bundles for controller/dashboard files; never bridge cache staging."""
 
 import importlib
 import json
@@ -10,7 +10,6 @@ import zipfile
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
-checkout = importlib.import_module("owner_checkout")
 bundle = importlib.import_module("build_owner_bundle")
 
 
@@ -41,11 +40,10 @@ def source(tmp_path):
     repo = root / "12345678"
     repo.mkdir(parents=True)
     git(repo, "init", "-b", "main")
-    git(repo, "remote", "add", "origin", checkout.ORIGIN)
+    git(repo, "remote", "add", "origin", "https://github.com/MuntedDaze/ha-thermowatt-heater")
     for path, content in {
         "thermowatt-heater/config.yaml": "slug: thermowatt_boiler\nversion: '1.3.15'\n",
         "custom_components/thermann_shadow/manifest.json": '{"domain":"thermann_shadow","version":"0.11.0"}',
-        "tools/owner_checkout.py": "# synthetic staging source\n",
         "README.md": "# Synthetic reviewed guide\n",
         "docs/history/audit/synthetic_config.json": '{"fixture":"DO_NOT_EXPORT"}',
         "shadow_controller/FORECAST_SETUP.md": "# Synthetic forecast guide\n",
@@ -68,41 +66,6 @@ def source(tmp_path):
     return repo, root, before, reviewed
 
 
-def test_staging_preserves_identity_original_branch_and_any_external_private_state(
-    source, tmp_path
-):
-    repo, root, before, reviewed = source
-    private = tmp_path / "data.json"
-    private.write_text('{"synthetic_guard":"locked","generation":7}', encoding="utf-8")
-    record = tmp_path / "share" / "record.json"
-    plan = checkout.inspect(repo, "12345678_thermowatt_boiler", reviewed, (root,))
-    assert plan["reviewed_version"] == "1.3.16" and not record.exists()
-    result = checkout.stage(repo, "12345678_thermowatt_boiler", reviewed, record, (root,))
-    assert result["original_commit"] == before and result["original_branch"] == "installed-fixture"
-    assert git(repo, "rev-parse", "HEAD") == reviewed
-    assert checkout.stage(repo, "12345678_thermowatt_boiler", reviewed, record, (root,)) == result
-    assert json.loads(private.read_text(encoding="utf-8"))["generation"] == 7
-
-
-def test_changed_or_wrong_identity_cache_is_never_overwritten(source, tmp_path):
-    repo, root, before, reviewed = source
-    assert checkout.locate("12345678_thermowatt_boiler", (root, root)) == repo.resolve()
-    other = tmp_path / "other-cache"
-    (other / "12345678").mkdir(parents=True)
-    with pytest.raises(checkout.StageError, match="expected_one_existing_repository_cache"):
-        checkout.locate("12345678_thermowatt_boiler", (root, other))
-    for slug in ("local_thermowatt_boiler", "87654321_thermowatt_boiler"):
-        with pytest.raises(checkout.StageError):
-            checkout.inspect(repo, slug, reviewed, (root,))
-    (repo / "owner.txt").write_text("preserve", encoding="utf-8")
-    with pytest.raises(checkout.StageError, match="source_cache_has_changes"):
-        checkout.stage(
-            repo, "12345678_thermowatt_boiler", reviewed, tmp_path / "record.json", (root,)
-        )
-    assert git(repo, "rev-parse", "HEAD") == before
-    assert (repo / "owner.txt").read_text(encoding="utf-8") == "preserve"
-
-
 def test_bundle_uses_only_committed_source_and_has_verifiable_hashes(source, tmp_path):
     repo, _, _, reviewed = source
     (repo / "owner-secret.txt").write_text("SYNTHETIC_PRIVATE", encoding="utf-8")
@@ -111,6 +74,8 @@ def test_bundle_uses_only_committed_source_and_has_verifiable_hashes(source, tmp
     with zipfile.ZipFile(first) as archive:
         manifest = json.loads(archive.read("REVIEWED_MANIFEST.json"))
         assert manifest["commit"] == reviewed and manifest["bridge_version"] == "1.3.16"
+        assert manifest["bridge_installation"] == "normal_update_after_approved_main_merge"
+        assert "tools/owner_checkout.py" not in archive.namelist()
         assert not any("owner-secret" in name or ".git/" in name for name in archive.namelist())
         assert not any(name.startswith("docs/history/audit/") for name in archive.namelist())
         import hashlib

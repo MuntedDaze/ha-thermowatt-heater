@@ -497,7 +497,7 @@ CATALOG.update(
         "baseline_c": Setting(
             "Overnight baseline temperature",
             "Everyday",
-            "Supported native thermostat target during permitted nights/weekends; does not prove achieved tank temperature.",
+            "Supported native thermostat target during permitted nights/weekends; does not prove achieved whole-tank temperature or independently establish compliance. Follow appliance/plumbing requirements; native protective behaviour is not verified by this software.",
             unit="°C",
             kind="select",
             choices=("45", "62"),
@@ -903,6 +903,7 @@ LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
     "storage_ready_time",
     "baseline_start",
 }
+
 
 # Finalise only after every extension above: early snapshots silently included
 # newly protected time/learning/poll choices in Restore/Undo's cached tuple.

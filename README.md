@@ -6,8 +6,8 @@ unnecessary extra heating. With a commissioned hot-water meter, it can also use
 worthwhile surplus solar for extra storage. Savings depend on your demand,
 electricity contract and heater; they are not guaranteed.
 
-**Development candidate: bridge 1.3.16 / controller 0.12.0,
-[draft PR #36](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/36).** Unmerged and uninstalled.
+**Development candidate: bridge 1.3.17 / controller 0.13.0,
+audit-remediation draft (see the [review handoff](docs/audit-remediation/HANDOFF.md)).** Unmerged and uninstalled.
 Public distribution is deferred. Automatic heating, adaptive polling and learned
 planning require independent review and separately approved commissioning.
 Nothing in this development has operated the owner’s heater.
@@ -67,7 +67,9 @@ commissioned meter raises a fault; missing readings never become measured zero.
 | Electricity plan and clock | Your verified retail rates/windows, household time zone and whether the contract follows daylight saving |
 | Storage ready time | A weekday deadline when there is no afternoon tariff peak |
 
-The owner’s proposed example is 45°C baseline / 62°C normal / 70°C optional boost.
+The owner’s agreed strategy is 45°C baseline / 62°C normal / 70°C optional boost,
+with OFF during configured peak periods. The owner chose this after plumber
+discussion; independent compliance has not been established by this project.
 Fresh setup initially selects 62°C baseline/normal pending compliance checks.
 **45°C is not a universal storage-temperature recommendation.** Follow the
 manufacturer’s instructions and applicable storage hygiene/plumbing requirements.
@@ -124,17 +126,26 @@ templates; desktop/mobile appearance still needs visual review.
 Start with [Jacob’s complete CT-free installation guide](docs/pre-review/OWNER_INSTALLATION.md)
 for the existing Proxmox/HAOS, Thermann 315 L, GoodWe/HK1000, EMHASS and fixed-AEST
 Aurora 93 system. It covers verified backups, exact reviewed files, guarded
-**in-place** staging of the same stopped bridge, controller/dashboard installation,
+normal **Update of the same stopped bridge after an approved integrated merge**, controller/dashboard installation,
 entity mapping, supervised commissioning, request measurements, later Shelly and
-recovery. Adding the unmerged branch URL is not an in-place upgrade.
+recovery. The old Supervisor cache-pin method is unsupported and removed.
+Adding an unmerged branch URL is not an in-place upgrade.
+
+Strict peak OFF can leave the heater OFF if cloud/authentication/controller access
+fails. A distinct warning appears after permitted heat has been wanted for30
+minutes without restoration. It cannot restore heat without a working path.
+A tested phone notification and manual recovery plan are commissioning items.
+[Fault recovery and inactivity qualification](docs/audit-remediation/OPERATIONS.md).
+Longer adaptive polling requires seven-day read-only inactivity evidence at each
+chosen60/90-minute interval; simulations do not qualify vendor sessions.
 
 Turning **Automatic heater control** off sends no OFF command: the appliance’s
 current setting can remain active. Use approved manual operation during recovery.
 Unconfirmed OFF is an unverified lockout, not a claim of zero consumption. Preserve
 authentication locks and private backups; do not retry by restarting repeatedly.
 
-- [Focused completion/review handoff](docs/pre-review/HANDOFF.md)
-- [Development checkpoint](docs/pre-review/PROGRESS.md)
+- [Audit remediation/review handoff](docs/audit-remediation/HANDOFF.md)
+- [Development checkpoint](docs/audit-remediation/PROGRESS.md)
 - [Dashboard mapping and saved-statistics reports](energy_monitoring/README.md)
 - [Learning gates and limitations](docs/final-integration/LEARNING.md)
 - [Bridge options and authentication guards](thermowatt-heater/DOCS.md)

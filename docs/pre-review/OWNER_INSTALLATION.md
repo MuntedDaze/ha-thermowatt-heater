@@ -1,32 +1,28 @@
-# Jacob’s CT-free installation, then Shelly later
+# Jacob’s normal CT-free installation, then Shelly later
 
-This is a **future owner procedure**, not permission to run it now. The candidate
-is unmerged and has not been installed on your system. Complete independent
-review first. Approve staging/install, live read-only access, supervised commands
-and automatic control separately. This work performed none of those operations.
+**Future instructions only. Nothing is merged or installed.** First obtain
+independent review and explicit approval for the integrated merge, installation,
+live read-only observation, supervised commands and automatic operation separately.
+A green test run is not any of those approvals.
 
-Your system: Home Assistant OS in a Proxmox VM; existing Thermann Hot Water bridge
-and its private persistent authentication state; Mosquitto/MQTT; Thermann Smart
-Electric 315 L/3 kW; GoodWe GW5000-DNS-30/HK1000; 6.6 kW solar and EMHASS. Initially
-there is **no dedicated hot-water CT**. Proposed roles are 45/62/70°C, with Never
-peak policy and optional boost disabled until the future Shelly is commissioned.
-These are proposed household settings, not temperature/hygiene certification.
+Your existing system: Home Assistant OS in one Proxmox VM, Thermann bridge with
+persistent authentication, MQTT/Mosquitto, Thermann Smart Electric 315 L / 3 kW,
+GoodWe GW5000-DNS-30 / HK1000, 6.6 kW solar and EMHASS forecasts. No hot-water CT yet.
+Preserve **45°C overnight/weekend baseline, 62°C normal weekday storage,
+70°C optional economical solar boost, and the existing configured peak-OFF policy**.
+Initially no CT means optional boost unavailable. Start with
+**fixed 30-minute polling, adaptive off and learning off**.
 
-## What you will need
+The normal route is **review → approved integrated merge to main → Update the
+existing add-on**. The PR36 Supervisor cache-pin procedure is unsupported and has
+been removed. Do not run old `owner_checkout.py` files, edit Supervisor caches,
+add a branch repository, install another bridge, uninstall or press Rebuild.
+Old PR36 owner ZIPs are superseded for installation.
 
-- A second device/browser to read this guide while HA restarts.
-- Your exact reviewed commit and the local owner ZIP supplied with the final
-  handoff. Keep its SHA256 and `REVIEWED_MANIFEST.json` together. A green CI result
-  is not independent safety approval.
-- Access to HA’s file shares/editor and the Proxmox VM Console. The source-cache
-  staging section is an advanced developer procedure. Ask for help if unfamiliar;
-  do not substitute uninstall/reinstall or a second bridge.
-- A safe approved way to operate the heater manually during downtime, following
-  the appliance instructions. Stopping the bridge/controller does not send OFF.
-
-HA versions may call the menu **Apps** or **Add-ons**. In either case open the
-existing **Thermann Hot Water** entry. Menu labels and the dashboard still need
-visual verification on your actual frontend; automated YAML tests cannot do that.
+Home Assistant may label the menu Apps or Add-ons. Keep a second device open to
+this guide. You need HA administration, file-share/editor access and a private
+backup location. No Proxmox host shell or Supervisor cache commands are needed.
+[Detailed merge/recovery evidence](../audit-remediation/NORMAL_UPDATE.md).
 
 ## 1. Record, disable and back up
 
@@ -39,8 +35,10 @@ visual verification on your actual frontend; automated YAML tests cannot do that
    the **full installed ID** from the page URL (for example
    `12345678_thermowatt_boiler`), its source repository and configured polling.
    Your ID may have a different eight-character prefix. Do not use the example ID.
-   If it starts `local_` or comes from another repository, this helper refuses;
-   preserve that installation and obtain a reviewed source-path plan instead.
+   Keep the exact registered repository URL, including any `.git` suffix.
+   If it starts `local_`, uses a branch suffix or comes from another repository,
+   stop: the normal same-identity route has not been established for it. Do not
+   add a replacement repository or uninstall anything.
 4. Record controller version, source mappings, entity names, tariff/rates/clock,
    command topic and qualification choices privately. Do not post screenshots
    containing account addresses, MQTT passwords, device serials or tokens.
@@ -64,120 +62,68 @@ whole installed add-on, not just its visible YAML. Keep HA’s config entries,
 entity registry and controller storage too. Never delete guard/token files,
 reset request counts or increment authentication generation as an upgrade step.
 
-## 2. Obtain and check the reviewed files
+## 2. Wait for the exact approved integration
 
-The normal repository URL still follows its normal branch. It **cannot install
-this unmerged candidate**. Adding `#codex/polling-owner-readiness` also changes
-HA’s repository ID and would create a different full add-on identity.
-[HA’s repository identity rules](https://contributors.home-assistant.io/apps/guides/repository/).
+The developer handoff must record the reviewed final source SHA, the authorised
+main merge SHA/tree, bridge **1.3.17** and controller **0.13.0**, and final-head CI.
+At present the code is only a draft. The normal store cannot install this
+unmerged candidate. Do not try to make it appear by adding a `#branch` URL.
 
-Use the exact-commit owner ZIP from the handoff. On Windows, open PowerShell:
+After merge approval and a verified merge, obtain the exact controller/dashboard
+files from that main commit, using its GitHub commit page → Browse files → Code
+→ Download ZIP (or the exact-commit source bundle supplied with the handoff).
+Check the supplied SHA256 and manifest. Keep the original ZIP unchanged; edit
+only a working copy for your own entity mappings. The bridge source inside it is
+for review, **not** for copying into Supervisor.
 
-```powershell
-Get-FileHash -Algorithm SHA256 'C:\path\to\thermann-owner-reviewed.zip'
-```
+A helper can reproduce a local source bundle with
+`python tools/build_owner_bundle.py --commit FULL_MAIN_SHA --out owner-staging/thermann-owner-reviewed.zip`.
+This creates files on that computer only; it neither merges nor installs.
 
-Replace that path with the downloaded file. Compare the hash with the handoff,
-then extract it. The manifest records the full 40-character commit, bridge and
-controller versions and every included file’s hash. Keep this original ZIP
-unchanged. It contains committed source only, no HA backups or private runtime
-state. A hash detects changes; the trusted review/handoff establishes provenance.
+## 3. Find the normal update for the same bridge
 
-An experienced helper can reproduce it from this repository using:
+After approved merge and installation approval:
 
-```text
-python tools/build_owner_bundle.py --commit FULL_REVIEWED_SHA --out owner-staging/thermann-owner-reviewed.zip
-```
+1. Check the existing registered repository is the same MuntedDaze repository
+   recorded in step 1, following its default **main** branch. Preserve the exact
+   URL string and installed full ID. The public GitHub default is main; another
+   repository/branch or `local_` installation needs its own reviewed plan.
+2. Settings → Apps/Add-ons → App store → three-dot menu → **Check for updates**.
+   Some versions also show Settings → System → Updates → Check for updates.
+3. Open the **existing Thermann Hot Water** entry or its update card. Check the
+   installed version, offered 1.3.17, release notes and unchanged full ID.
+4. If it offers Install instead of Update, offers another version, or the ID
+   differs, stop. Do not install a second copy or change the repository URL.
+5. Confirm the bridge is still stopped, watchdog/start-on-boot/auto-update off,
+   controller disabled, and the sealed backup is available.
 
-It does not install anything. Do not replace the full reviewed SHA with a moving
-branch name. Copy the extracted folder to HA’s share as `thermann-reviewed`, so
-`/share/thermann-reviewed/tools/owner_checkout.py` exists. With the standard Samba
-share this is usually `\\homeassistant\share\thermann-reviewed` on Windows;
-use your actual Samba share/hostname. Do not upload a private backup to GitHub.
+No GitHub release, second repository or source-cache pin is required. The final
+approved files must actually be on main before the store can offer them. If main
+has changed after review, obtain review of that exact offered version first.
 
-## 3. Stage the existing bridge in place
+## 4. Update in place and preserve private state
 
-**This is advanced, version-dependent developer staging, not the normal store
-installer.** It preserves the existing repository ID and add-on instance. CI exercises real Supervisor 2026.10.5/2026.11.0 source-loading/schema code.
-Confirm final-head success before using it; it has not run on your live VM. Check Settings → System → Repairs → System information for
-your Supervisor version. For another version, obtain a reviewed compatibility
-check before proceeding. Do not edit Supervisor’s installed-app JSON or `/data`.
+Choose **Update** on the same stopped entry. Enable the offered backup of the
+current version as an additional precaution. Do not choose Install, uninstall,
+Rebuild or Reset. Keep the bridge stopped after the update; verify its state.
 
-From Proxmox, select the **existing HAOS VM → Console**. At the HA prompt enter
-`login` to reach the HAOS host shell, as described in the
-[official host-console guide](https://contributors.home-assistant.io/os/operating-system/debugging/). This is not a Home Assistant service call.
-Before executing the helper, verify its transferred hash against the trusted
-ZIP manifest entry `tools/owner_checkout.py`:
+Check version 1.3.17 and the unchanged full ID. Compare the saved Configuration
+privately: credentials, MQTT settings, topic, poll/retry settings, cloud/command
+flags and authentication generation must retain their recorded values. The
+existing instance's private data is retained, including tokens, authentication
+locks, request accounting and pending-command records. New options default off;
+upgrade never authorises a login, retry-generation bump or heater operation.
 
-```sh
-docker exec hassio_supervisor sha256sum /data/share/thermann-reviewed/tools/owner_checkout.py
-```
+For the later approved read-only phase, deliberately select
+**commands_enabled: false**, fixed **poll_interval_minutes: 30** with minutes as
+the unit, and all bridge adaptive/qualification flags false. The controller stays
+off. Do not lower retry limits or alter generation to force recovery. The
+60-minute minimum cloud retry and exponential backoff remain unchanged. Review
+any existing different retry choice explicitly rather than overwriting it.
 
-Compare the hash before running the Python inspection command below. If the file
-is missing, hash differs, or you are unsure, stop.
-
-Set two shell variables, copying your actual installed ID and the manifest SHA:
-
-```sh
-thermann_addon='YOUR_EXISTING_FULL_ID'
-thermann_review='FULL_40_CHARACTER_REVIEWED_SHA'
-docker exec hassio_supervisor python3 /data/share/thermann-reviewed/tools/owner_checkout.py --slug "$thermann_addon" --commit "$thermann_review"
-```
-
-The default Python command only inspects the existing source cache: expected public
-origin, matching ID/path, clean working files, original branch/commit and whether
-the reviewed object is already cached. It prints no private options/auth state.
-If it refuses, stop and ask for help. It will not discard local changes.
-
-Only after approving the displayed plan, with the bridge still Stopped:
-
-```sh
-docker exec hassio_supervisor python3 /data/share/thermann-reviewed/tools/owner_checkout.py --slug "$thermann_addon" --commit "$thermann_review" --stage
-```
-
-This fetches only the requested public GitHub commit if needed and creates a
-local named `owner-reviewed-<commit>` branch in the **existing** repository cache.
-It saves `owner-checkout-record.json` beside the extracted bundle before switching.
-It does not install/start a container, change private options/data or contact
-Thermann. Keep that recovery record. Repeating the same completed stage is safe;
-a different stage or dirty cache is refused for review.
-
-Now restart Supervisor so its catalog reads the pinned source:
-
-```sh
-ha supervisor restart
-```
-
-Wait for Supervisor to return. Re-run the inspection command and confirm the exact
-reviewed commit and pinned branch. Open the **same existing** Thermann Hot Water
-entry: its full ID must be unchanged and the offered version must match the
-manifest. If either differs, do not press Install/Update/Rebuild.
-
-The local pin intentionally has no matching remote branch. Later store refreshes
-can report that specific Git branch reference is absent. Do not press a store
-Reset, change repository URL, or rebuild from another checkout to hide it. That
-would remove the reviewed pin. Future source changes need another reviewed plan.
-The method follows Supervisor’s [cache load](https://github.com/home-assistant/supervisor/blob/2026.11.0/supervisor/store/git.py)
-and [catalog reader](https://github.com/home-assistant/supervisor/blob/2026.11.0/supervisor/store/data.py);
-it does not change the repository’s GitHub branches or publish a release.
-
-## 4. Upgrade without resetting private state
-
-On that **same** stopped bridge entry, choose **Update**, not Install or uninstall.
-If no correct update is offered, stop; do not guess with Rebuild. Supervisor builds
-from the pinned reviewed source. Since the bridge was stopped, keep it stopped
-afterwards. Confirm installed version and unchanged full ID.
-
-Compare the private Configuration with your record: account/MQTT settings,
-cloud/command flags, auth generation, retry/poll settings and topic must retain
-the intended values. Do not paste tokens/guards into the UI or restore a template
-options file. The complete existing private data remains with the same instance.
-New adaptive options start false. An upgrade is not permission to authenticate.
-
-For later read-only testing, deliberately make **commands_enabled false** while
-the controller is also disabled. This is an explicit owner safety choice, not a
-silent migration. Preserve credentials, tokens, locks and auth generation. Do not
-start yet unless live read-only access is separately approved.
+Normal updates and real Supervisor source/catalog refresh are tested in isolated
+CI. They do not prove your VM backup can restore the previous image; step 13
+separates source recovery from private-state/VM restore.
 
 ## 5. Install/update the controller without deleting its entry
 
@@ -221,28 +167,49 @@ for genuine calculation timestamps; a heartbeat is not a new forecast. CT-free
 required heating can use verified raw grid export plus forecasts. It never
 subtracts inferred element watts to create optional-solar authority.
 
-## 7. Check household settings
+## 7. Verify your household settings and hygiene
 
-Configure → Preferences and System show plain setting names. Critical settings
-are locked while automatic control is active; disable first.
+Configure → Preferences/System. Disable automatic control before changing
+critical settings.
 
-- Household time zone: **Australia/Hobart**.
-- Tariff clock: **standard**, fixed AEST; tariff profile Aurora 93 or equivalent
-  custom full-week rows. Verify the actual **retail contract** and current rates,
-  not a network schedule or prices copied from this repository.
-- Weekday peaks 07:00–10:00 and 16:00–21:00 AEST; weekends off-peak for this example.
-  During daylight saving these display 08:00–11:00 and 17:00–22:00 Hobart time.
-- Nominal tank 315 L, element 3 kW. Baseline 45 / normal 62 / future boost 70 are the
-  proposed household roles. Verify manufacturer/storage hygiene and local plumbing
-  requirements before selecting 45; it is not universally appropriate.
-- Completion margin 30 min: normal storage aims before 15:30 AEST, with software
-  OFF requested before 16:00. A late draw or outage can still defeat readiness.
+- Household zone: **Australia/Hobart**. Tariff clock: **standard**, fixed AEST.
+  Verify Aurora 93 retail contract, rates and feed-in price against your bill.
+  Example weekday peaks are 07:00–10:00 and 16:00–21:00 AEST, weekends off-peak.
+  During daylight saving they display 08:00–11:00 and 17:00–22:00 in Hobart.
+- Nominal tank **315 L**, element **3 kW**. These are planning estimates only.
+- **Overnight/weekend baseline: Manual 45°C. Normal weekday storage: Manual 62°C.
+  Optional economical solar target: Manual 70°C.** This is the owner's agreed
+  variable-temperature strategy following plumber discussion. Preserve these
+  saved roles and the existing peak policy. No new restrictive software gate is
+  introduced, and no upgrade changes the actual heater target silently.
+- Tasmania's [official heated-water guidance](https://buildingstandards.tas.gov.au/topics/technical-regulation/plumbing-standards/heated-water)
+  specifies at least 60°C stored-water settings and separate delivery/scald
+  protection. The owner has deliberately chosen variable-temperature operation,
+  including periodic62/70°C heating. **Independent compliance has not been
+  established by this project.** Manufacturer instructions, plumbing requirements,
+  whole-tank temperature and actual native protections must be understood. A
+  bottom-probe reading or selected target does not prove disinfection. The
+  software neither replaces the appliance protections nor certifies an exception
+  to the published requirements. See [appliance/strategy limitations](../audit-remediation/OPERATIONS.md#storage-temperature-requirements-and-the-owners-strategy).
+- Completion margin **30 minutes**; required storage aims before the relevant
+  peak with OFF requested two minutes ahead. Late draws/outages can defeat it.
 - Heating during peak periods: **Never schedule heating during peak**.
-- Enable optional solar boost: **off** initially. No CT means unavailable even
-  if enabled. The separate 12-hour Override is a real 70°C request and may heat at peak.
-- Use published forecasts: enable only after checking actual generation/units.
-  Missing EMHASS does not prevent basic required tariff control.
-- All adaptive and learned-planning/qualification flags: **off initially**.
+  This policy can leave the heater OFF if control fails. Software cannot promise
+  to restore heat with no working cloud path. Decide whether this reliability
+  trade-off is acceptable before enabling it; do not defeat the peak policy.
+- Published forecasts: enable only after genuine EMHASS timestamp/units checks.
+  Required tariff heating also works without forecasts/solar.
+- Adaptive/longer-check/learning flags: **off**. Fixed **30 minutes** initially.
+- **Owner notification service:** enter your actual mobile service name without
+  `notify.` (for example `mobile_app_jacobs_phone`). In Developer tools → Actions,
+  select that actual `notify` service, send a test, and confirm receipt on the
+  phone while HA is not open. Record the date/service. A configured name alone
+  is not a successful test. This is a mandatory Never-policy commissioning item.
+
+Set up and test the independent read-only watchdog described in
+[monitoring/recovery](../audit-remediation/OPERATIONS.md). It can notify when the
+controller stops evaluating while HA is alive. Total HA/internet/power failure
+needs an external availability check or owner checks; HA cannot notify if down.
 
 ## 8. Install the seven-view read-only dashboard
 
@@ -283,74 +250,80 @@ no measured heater energy/cycle total to add. Set the supply-charge helper from
 your bill if using cost totals. Estimates spanning meter gaps/rate boundaries
 are not exact utility-bill reconciliation.
 
-## 9. Inspect read-only operation, after separate approval
+## 9. Seven-day read-only soak, separately approved
 
-Only now, with live read-only access approved, start the **same bridge** with
-commands disabled and controller disabled. No authentication generation bump is
-part of installation. If already locked, stop and diagnose through the existing
-deliberate recovery procedure; do not restart or change generation repeatedly.
+Only after live read-only approval, start the **same bridge** with commands off
+and the controller off, at fixed 30-minute polling. Keep its normal authentication safeguards.
+First start may refresh existing tokens before the first read; rejection locks
+conservatively. Stop and diagnose rather than changing generation/restarting
+repeatedly. No setup step erases tokens or clears a lock.
 
-Compare mode/target/probe to the vendor app; inspect successful-poll timestamps,
-health and request categories. Confirm the planned62°C weekday storage and peak
-OFF are only wishes while disabled. CT-free physical element state and completion
-clock must show unknown. The continuous-heating estimate means **if the element runs at nominal
-power**, not a measured ON state, deadline promise or shower-volume guarantee.
-Verify the seven views and all actual setting labels on your display.
+For **at least seven days**, record request counter differences/categories,
+authentication health, mode, target and probe agreement with the vendor app.
+Verify tariff boundaries, baseline/normal wishes, all seven dashboard views and
+actual setting labels on desktop/mobile. CT-free element ON/OFF and absolute
+completion remain unknown. Continuous-heating time is conditional nominal physics.
 
-## 10. Supervised four-state qualification, separate command approval
+Inspect **Controller last evaluated**, active alerts and phone notifications.
+Temperature history can help assess actual native behaviour, but no target,
+point reading or absence of faults proves whole-tank hygiene. Automated dashboard
+checks are not an independent dashboard audit or a visual usability check.
 
-With explicit owner approval and supervision, qualify OFF/45/62/70 transitions,
-exact-prior refusal after an app change, delayed confirmation, native hysteresis
-and protection, peak OFF, return to baseline, restart and fault recovery. Follow
-the independent reviewer’s acceptance plan. Observe cloud readback; without a CT
-this cannot prove electrical consumption. Stop on a refusal or unknown outcome.
-Never repeat a POST blindly or use the legacy command policy to bypass guards.
+## 10. Supervised qualification, separate command approval
 
-Only record **Four-state commands qualified (1.3.14)** after that evidence; its
-historical label identifies the protocol, not the installed bridge version. The
-topic and advertised transitions must match the same heater. Leave new polling
-and learning gates off. A qualified flag does not enable automatic control.
+Use the independent reviewer’s accepted plan. Verify OFF/45/62/70 exact-prior
+protocol behaviour, one POST per intent, confirmation, app-change refusal,
+pending-command restart/no repeat, faults, native protections and reported
+`WaterHeaterSts`. Record each result. Preserve the agreed45/62/70 roles; these supervised tests do not independently
+establish storage-temperature compliance. Finish in the owner-approved state
+for that time and tariff period. Do not assume any raw status flag proves physical ON/OFF.
 
-## 11. CT-free automatic trial and real request measurements
+Stop on refusal/unknown outcome. Acknowledge only after understanding the actual
+state; never use legacy command policy, repeated POST or authentication reset to
+bypass a failure. Without CT, cloud confirmation cannot prove zero consumption.
+Only record Four-state commands qualified after evidence. Its historical 1.3.14
+label identifies the protocol, not the installed version. Keep polling and
+learning gates off. Qualification does not enable automatic control.
 
-After separate approval, enable automatic control under supervision with fixed
-30-minute polling first. Observe overnight baseline, normal weekday storage,
-cloudy/sunny forecasts, both peak transitions, weekend, owner hold and a safe
-restart. Actual hot-water comfort matters more than an estimated probe target.
-If control is disabled again, it sends no OFF; inspect the vendor-app setting.
+## 11. CT-free automatic trial, fixed 30-minute polling, separate approval
 
-Record request counter **differences** and categories over equal 24-hour/week
-periods; do not reset them. Include refresh, status, pre-command GET, POST,
-confirmation and failures. Compare weather, demand, targets, temperature deficits,
-cost, maximum age and app-change detection, not just raw HTTP totals.
+Before enablement: agreed45/62/70 roles retained, verified tariff/GoodWe/forecast mapping,
+read-only soak accepted, supervised commands accepted, tested phone service,
+parked-OFF warning and independent watchdog accepted, manual recovery understood,
+and strict-peak versus availability trade-off accepted. There is no added baseline restriction. The owner's plumber discussion is
+recorded context, not an independent compliance certificate from this software.
 
-Only after reviewing that baseline and separately approving dynamic polling:
+Under the separately approved supervised trial, observe overnight, weekday
+storage, sunny/cloudy days, both peaks, weekend, app changes, restart and return
+to the baseline. Record at least two weeks of actual comfort, request categories,
+temperatures, faults and boundaries before unattended acceptance. No CT means
+no optional solar-only authority and no learned control.
 
-1. Disable automatic control to edit critical settings.
-2. Qualify/enable the bridge’s two adaptive options and **Longer quiet checks
-   independently qualified** deliberately. Confirm the health diagnostic advertises
-   plan versions 1 and 2; without that separate new gate, requested event-aware
-   operation sends no plans and uses fixed fallback.
-3. Enable **Send adaptive cloud scheduling plans** and **Allow longer checks
-   during quiet periods**, initially choosing **60 minutes** for app-change checks
-   only if that detection delay is acceptable. 30 is the tighter choice; 90 is a
-   comparative option, not the initial recommendation.
-4. Re-enable control only under the approved trial. Watch actual next poll/reason,
-   lease fallback and temperature age. A quiet temperature can expire after 45 min;
-   this is intentionally unknown passive data, not permission for a stale command.
-5. Compare actual outcomes. Disable the event-aware/adaptive flags to return to
-   the original fixed30 policy if savings or reliability do not justify it.
+Separately approve a controlled outage exercise while parked OFF. Cloud/control
+recovery cannot be promised: after permitted heat has been wanted for 30 minutes,
+the distinct **parked OFF, cannot restore heat** warning should reach your phone.
+Backoff may last hours; locks need deliberate recovery, controller faults may
+need Acknowledge. The warning does not bypass peak lockout or issue a fallback
+command. Follow the [manual recovery runbook](../audit-remediation/OPERATIONS.md).
 
-For a separately approved **read-only inactivity check**, keep commands and
-automatic control off, temporarily use fixed 60-minute bridge polling, and observe
-refresh/health over equal periods. Restore 30 before an automatic-control trial.
-This tests session inactivity without enabling heater commands. Do not change
-authentication generations or retry locks for this experiment.
+Measure request **differences** over equal days/weeks, including login/refresh,
+status, pre-command GET, POST, confirmation and failures. Do not reset counters.
+Include weather/demand, costs, target misses, status age and owner-change delays.
 
-Synthetic savings are not a guarantee of your vendor session behaviour. The
-20-minute refresh heuristic remains request-driven and unchanged. Authentication
-failure after inactivity locks conservatively rather than extending a session
-or retrying indefinitely. Brief app changes between observations can be missed.
+**Adaptive polling stays off** until the hard independent inactivity gate in
+[the observation plan](../audit-remediation/OPERATIONS.md#read-only-inactivity-qualification)
+passes: at least seven complete days fixed 60-minute polling read-only, zero refresh rejections,
+no hidden keepalive/extra requests, accepted delay and reviewed evidence. Repeat
+at fixed 90-minute polling before 90 is allowed. Read-only means commands and automatic control
+off. Restore fixed 30-minute polling before returning to an automatic trial. Any failure blocks
+qualification; do not alter auth generations or retry safeguards to pass.
+
+Only then, with separate approval, enable both bridge adaptive flags, its
+separate longer-quiet qualification, and controller plan/quiet permissions.
+Start with an accepted 60-minute bound, observe actual plans/lease fallback and
+compare equal-service outcomes. Disable adaptive flags to return to fixed 30-minute polling if
+reliability or savings are not demonstrated. Brief app changes can be missed;
+command-specific fresh prior and confirmation remain mandatory.
 
 ## 12. Add Shelly later, without rebuilding
 
@@ -368,35 +341,43 @@ not delete the integration or old history. Optional solar and learned planning
 remain separate approval/validation decisions. Learning needs real clean sessions
 and whole-day held-out error checks; a few successful nights are not qualification.
 
-## 13. Stop, back out and verify success
+## 13. Stop, recover and verify success
 
 | Check | Success / stop condition |
 |---|---|
-| Identity | Same full bridge ID and controller entry/entity IDs; stop if duplicated |
-| Private state | Intended credentials/options/generation/locks retained; no manual guard edits |
-| Files | Reviewed SHA, versions and pinned source match manifest immediately before update |
-| Disabled inspection | No controller POSTs, correct cloud status, read-only dashboard |
-| Tariff | Verified contract, fixed AEST, correct local DST display and boundary wishes |
-| CT-free | Normal heat supported; optional boost unavailable; physical element unknown |
-| Commands | Every approved command gets actual cloud confirmation or a clear fault |
-| Polling | Actual categories/age/detection recorded; lease loss selects fixed fallback |
-| Usability | Seven views render clearly on desktop/mobile; no broken IDs or misleading controls |
+| Identity | Same repository URL, full bridge ID, controller entry/entity IDs; no second bridge |
+| Versions | Exact approved main tree, offered/installed 1.3.17 and controller 0.13.0 |
+| Private state | Recorded options, tokens/locks/generation, pending and usage preserved |
+| Read-only | Seven-day accepted record; no controller/heater POST; correct status |
+| Strategy/requirements | Agreed45/62/70 retained; appliance/plumbing limitations understood; no claimed independent compliance |
+| Tariff | Verified retail rates/fixed AEST and correct DST display |
+| CT-free | Normal required heat works; optional boost/learning unavailable; element unknown |
+| Faults | Tested phone/watchdog; parked-OFF warning and manual recovery understood |
+| Commands | Every approved intent confirmed or clearly faulted, never blindly repeated |
+| Usability | Seven readable views on desktop/mobile, actual IDs and conditional labels |
 
-If something fails, disable control, stop bridge commands and inspect the actual
-appliance state. Keep the same add-on installed. Preserve logs/records privately;
-never publish tokens, raw sensitive errors or backup files. Use approved manual
-operation for hot water while recovering.
+If anything fails, disable control, stop bridge commands and inspect the actual
+heater. Disabling control does not send OFF. Use the approved manufacturer/manual
+operation plan while software recovers. If the cloud/app is down, use only the
+manufacturer-supported local controls or qualified service; do not improvise
+wiring, bypass protection or assume the bridge can restore heat.
 
-If the new bridge was **never started** and no live command/authentication occurred
-since the sealed backup, a reviewed restore of that backup/VM can return to the
-old installation. If live operation occurred, do not blindly restore older token,
-guard or request-accounting state. Obtain review, retain newer safety state and
-reconcile pending commands. Bridge 1.3.13 cannot safely manage an unreviewed
-Manual 62 prior state: return to an understood old supported state only under
-separate approval before rollback. The source-only staging record records the
-old Git branch/commit; it is not a private-data backup or automatic rollback tool.
-See [upgrade/recovery](../final-integration/UPGRADE.md).
+Preferred recovery after live activity is a **reviewed forward recovery build**
+on the same main repository, offered by normal Update, preserving newer private
+state. It needs its own review/approval and a higher offered version. Do not use
+an old cache checkout. Disable affected controller/adaptive features while waiting.
 
-Do not uninstall/re-add, delete `.storage`, run a second active bridge, reset
-repository/source pins blindly, or clear authentication locks to get past a
-problem. Independent review and supervised physical evidence are still required.
+A sealed HA/Proxmox backup taken before any later authentication/command can be
+restored only through an approved recovery plan. Verify the backup/image restore
+in a disconnected isolated VM first; this development has not proven a real
+Supervisor backup restores your old built image. Never boot both VMs online.
+After live activity, old tokens/locks/accounting and pending-command data must
+not be blindly rolled back. Preserve newer safety state and obtain review.
+Record your **actual** old version, rather than assuming 1.3.11 or1.3.13. Older
+bridges may not support Manual 62; reconcile to an independently approved older
+supported state before any downgrade. Restoring files does not cancel sent commands.
+
+For controller/dashboard-only rollback, stop control, restore compatible code
+and configuration from the matching private backup, retain the same entry and
+registry, and verify read-only again. Do not delete `.storage`, reset guards,
+uninstall/re-add or run another bridge. [Detailed recovery limits](../audit-remediation/NORMAL_UPDATE.md).

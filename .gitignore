@@ -34,3 +34,4 @@ request_usage.json
 
 # Local exact-commit owner handoffs (not public releases).
 /owner-staging/
+/.audit-remediation-*.txt

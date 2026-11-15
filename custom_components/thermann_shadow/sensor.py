@@ -82,6 +82,7 @@ TIMESTAMPS = {
 CONTROLLER_SENSORS = {
     "controller_state": ("Automatic control state", None),
     "controller_reason": ("Automatic control reason", None),
+    "controller_evaluated_at": ("Controller last evaluated", None),
     "thermann_mode": ("Thermann mode", None),
     "thermann_target": ("Thermann target", "°C"),
     "next_action": ("Next intended action", None),
@@ -103,13 +104,16 @@ CONTROLLER_SENSORS = {
     "boost_eligibility": ("Solar boost eligibility", None),
     "boost_reason": ("Solar boost reason", None),
     "planned_heat_kwh": ("Planned heating energy estimate", "kWh"),
+    "parked_off_restore_since": ("Waiting to restore heat since", None),
 }
 CONTROLLER_TIMESTAMPS = {
+    "controller_evaluated_at",
     "next_heating_start",
     "next_heating_stop",
     "last_command_time",
     "guest_mode_ends",
     "next_adaptive_poll",
+    "parked_off_restore_since",
 }
 
 

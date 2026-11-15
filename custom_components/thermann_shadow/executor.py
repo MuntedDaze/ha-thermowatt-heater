@@ -80,6 +80,7 @@ class Executor:
         self.hass, self.entry, self.runtime = hass, entry, runtime
         self.store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.controller")
         self.controller = Controller()
+        self.last_evaluated_at = None  # not restored; only a completed evaluation updates it
         self.lock = asyncio.Lock()
         self.listeners: set = set()
         self.last_observation: Observation | None = None
@@ -578,6 +579,7 @@ class Executor:
                 now, obs, decision, min(actual_actions) if actual_actions else None
             )
             self.runtime.record_event(now, obs, decision)
+            self.last_evaluated_at = now
         self._notify_listeners()
 
     async def _publish_poll_plan(self, now, obs, decision, decision_at):
@@ -755,6 +757,7 @@ class Executor:
         return {
             "controller_state": summary["state"],
             "controller_reason": summary["reason"],
+            "controller_evaluated_at": self.last_evaluated_at,
             "thermann_mode": obs.mode if obs else None,
             "thermann_target": obs.target_c if obs else None,
             "next_action": want.get("state") or (decision.state if decision else None),
@@ -766,6 +769,7 @@ class Executor:
             "commands_last_24h": summary["commands_last_24h"],
             "requests_last_24h": summary["requests_last_24h"],
             "fault": summary["fault"] or "none",
+            "parked_off_restore_since": _parse(summary["parked_off_restore_since"]),
             "operating_mode": summary["operating_mode"],
             "guest_mode_ends": _parse(summary["guest_until"]),
             "desired_temperature": decision.plan.get("desired_target_c") if decision else None,

@@ -2,7 +2,7 @@
 
 *Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
-Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Bridge 1.3.16 is an unmerged, uninstalled development candidate; four-state hardware behaviour still requires supervised qualification. See the [focused handoff](../docs/pre-review/HANDOFF.md) and [owner installation guide](../docs/pre-review/OWNER_INSTALLATION.md). Public distribution is deferred.
+Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Bridge 1.3.17 is an unmerged, uninstalled development candidate; four-state hardware behaviour still requires supervised qualification. See the [focused handoff](../docs/audit-remediation/HANDOFF.md) and [owner installation guide](../docs/pre-review/OWNER_INSTALLATION.md). Public distribution is deferred.
 
 **Defaults are safe:** cloud access off, commands off, polling every 30 minutes.
 

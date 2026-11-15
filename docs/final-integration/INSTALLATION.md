@@ -1,3 +1,8 @@
+> Historical checkpoint: superseded for installation and current audit status.
+> Use the [audit remediation handoff](../audit-remediation/HANDOFF.md) and
+> [normal owner guide](../pre-review/OWNER_INSTALLATION.md). Supervisor cache
+> staging is unsupported; preserve the owner’s agreed45/62/70 strategy.
+
 # Owner installation and commissioning plan
 
 Bridge 1.3.15 / controller 0.11.0, draft PR #35; uninstalled and unmerged.

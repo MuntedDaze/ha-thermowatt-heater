@@ -10,7 +10,7 @@ ADDON = ROOT / "thermowatt-heater"
 
 def test_supervisor_options_and_release_metadata(module):
     config = yaml.safe_load((ADDON / "config.yaml").read_text())
-    assert config["version"] == "1.3.16"
+    assert config["version"] == "1.3.17"
     assert config["slug"] == "thermowatt_boiler"  # installation identity never changes
     assert config["name"] == "Thermann Hot Water"
     assert "Unofficial" in config["description"]
@@ -29,6 +29,7 @@ def test_supervisor_options_and_release_metadata(module):
         "1.3.14",
         "1.3.15",
         "1.3.16",
+        "1.3.17",
     ]
     assert config["options"]["on_demand_refresh_enabled"] is False
     assert set(config["arch"]) == {"amd64", "aarch64"}

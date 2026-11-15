@@ -26,6 +26,7 @@ CONFIGURATION = (
     "  name: Energy monitoring check\n"
     "  packages:\n"
     "    thermann_energy: !include packages/thermann_energy.yaml\n"
+    "    thermann_owner_watchdog: !include packages/thermann_owner_watchdog.yaml\n"
 )
 
 
@@ -47,6 +48,16 @@ def write(out: Path, meters: int, minimal: bool = False) -> None:
     (out / "configuration.yaml").write_text(CONFIGURATION, encoding="utf-8", newline="\n")
     (out / "packages/thermann_energy.yaml").write_text(
         dump(build_package(validate(raw))), encoding="utf-8", newline="\n"
+    )
+    # Validate the optional NOTIFICATION-only owner example in real HA too.
+    # This throwaway config is checked, never run against a live installation.
+    example = (
+        Path(__file__).resolve().parents[1] / "docs/audit-remediation/OWNER_WATCHDOG.yaml.example"
+    )
+    (out / "packages/thermann_owner_watchdog.yaml").write_text(
+        dump({"automation": yaml.safe_load(example.read_text(encoding="utf-8"))}),
+        encoding="utf-8",
+        newline="\n",
     )
 
 

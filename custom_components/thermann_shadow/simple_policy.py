@@ -608,6 +608,11 @@ class SimplePolicy:
             profile = self.surplus_profile(now, soft, snap.forecast, required_measured)
             costs = self._windows(profile, self._prices(now, len(profile)), need)
             if state == normal:
+                # Raw grid export includes an unknown element draw without a
+                # commissioned circuit meter. It can choose a required start,
+                # but cannot justify pausing an already selected normal target.
+                if not snap.heater_meter_valid:
+                    return normal, "storage_until_peak", 5, plan
                 best = self._cheapest(costs, math.ceil(s.command_spacing / SLOT))
                 if best is not None:
                     saving = (costs[0] - costs[best]) * hours * s.element_kw

@@ -139,7 +139,7 @@ RECOVERY = {
     "intent_unresolved_after_restart": "Home Assistant restarted while a command was unconfirmed and no later status resolved it. Check the Thermann app, then Acknowledge fault.",
     "unexpected_mode_during_confirmation": "The heater reported a mode that was neither the previous nor the requested one. Check the Thermann app. Resume automatic control when you are satisfied.",
     "mode_or_target_changed_outside_controller": "The Thermann mode or target changed without a controller command (for example in the app). Automatic control stays paused until you press Resume automatic control.",
-    "unexpected_mode_or_target": "The heater is not OFF, Manual 45 °C or Manual 70 °C (for example it is in Schedule, Eco or another Manual target). Automatic control will not touch it. In the Thermann app choose OFF, Manual 45 °C or Manual 70 °C, then press Resume automatic control.",
+    "unexpected_mode_or_target": "The heater is not OFF or a supported Manual 45/62/70 °C target (for example it is in Schedule, Eco or another Manual target). Automatic control will not touch it. In the Thermann app choose an independently qualified supported state, then press Resume automatic control.",
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
     "guest_mode_not_applied": "The 12hr Override wants Manual at 70 °C but the controller could not apply it (see the reason and gate failures). Check the Thermann Hot Water app and the Thermann app; you can select Manual at 70 °C in the app yourself.",
 }
@@ -335,6 +335,8 @@ class Controller:
     refusal: str | None = None
     forecast_missing_since: str | None = None
     heater_meter_missing_since: str | None = None
+    last_observed_heater: str | None = None
+    parked_off_restore_since: str | None = None
 
     # ------------------------------------------------------------------ persistence
     def to_dict(self) -> dict:
@@ -543,6 +545,8 @@ class Controller:
         now = obs.now
         effects: list[Effect] = []
         new_poll = self._ingest_poll(obs)
+        if new_poll and obs.heater_state is not None:
+            self.last_observed_heater = obs.heater_state
         self.last_want = {
             "state": want.state,
             "reason": want.reason,
@@ -876,12 +880,42 @@ class Controller:
     ) -> None:
         now = obs.now
         if not self.enabled:
+            self.parked_off_restore_since = None
             for key in list(self.alerts):
                 del self.alerts[key]
                 effects.append(Effect("resolve", key=key))
             effects[:] = [e for e in effects if e.kind != "notify"]
             return
         alerts: list[tuple[str, str, str]] = []
+        # Last OBSERVED software state is retained through unavailable entities
+        # and restart. This is a reliability warning, never an element-state
+        # assertion or permission to bypass peak/owner/confirmation guards.
+        needs_restore = (
+            self.last_observed_heater == OFF
+            and want.state in TARGET_C
+            and not self.hold
+            and self.state != OWNER_OVERRIDE
+        )
+        if needs_restore:
+            since = _dt(self.parked_off_restore_since)
+            if since is None or since > now:
+                self.parked_off_restore_since = _iso(now)
+                since = now
+            if now - since >= timedelta(minutes=30):
+                alerts.append(
+                    (
+                        "parked_off_cannot_restore",
+                        "Hot water: parked OFF, cannot restore heat",
+                        "The last observed heater state was software OFF and a permitted heating target "
+                        "has been wanted for 30 minutes without confirmed restoration. Hot water may run out. "
+                        "Check cloud/authentication/controller faults and the Thermann app. No command or lock "
+                        "is automatically retried or reset. If the app is unavailable, follow the manufacturer's "
+                        "local-control instructions or contact qualified support; never bypass electrical protection. "
+                        "Strict peak lockout needs working control to restore heat. This warning does not authorise peak heating.",
+                    )
+                )
+        else:
+            self.parked_off_restore_since = None
         if want.reason == "peak_lockout" and (self.heater != OFF or self.state == CONFIRMING):
             alerts.append(
                 (
@@ -1061,4 +1095,6 @@ class Controller:
             "holiday_start": self.holiday_start,
             "holiday_return": self.holiday_return,
             "last_mode_refusal": self.refusal,
+            "last_observed_heater": self.last_observed_heater,
+            "parked_off_restore_since": self.parked_off_restore_since,
         }

@@ -18,7 +18,6 @@ PATHS = (
     "README.md",
     "docs",
     "shadow_controller/FORECAST_SETUP.md",
-    "tools/owner_checkout.py",
 )
 
 
@@ -68,7 +67,6 @@ def build(repo, commit, output):
     required = (
         "thermowatt-heater/config.yaml",
         "custom_components/thermann_shadow/manifest.json",
-        "tools/owner_checkout.py",
         "docs/pre-review/OWNER_INSTALLATION.md",
     )
     if not all(path in contents for path in required):
@@ -85,6 +83,7 @@ def build(repo, commit, output):
             path: hashlib.sha256(data).hexdigest() for path, data in sorted(contents.items())
         },
         "installs_or_starts_anything": False,
+        "bridge_installation": "normal_update_after_approved_main_merge",
     }
     contents["REVIEWED_MANIFEST.json"] = (json.dumps(manifest, indent=2) + "\n").encode()
     output.parent.mkdir(parents=True, exist_ok=True)

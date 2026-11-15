@@ -106,6 +106,8 @@ hot_water:
   heating_time_needed: sensor.thermann_shadow_heating_time_needed
   element_state: sensor.thermann_shadow_heater_element_state
   controller_fault: sensor.thermann_shadow_controller_fault
+  controller_evaluated_at: sensor.thermann_shadow_controller_last_evaluated
+  restore_wait_since: sensor.thermann_shadow_waiting_to_restore_heat_since
   current_tariff: sensor.thermann_shadow_current_tariff
   last_command: sensor.thermann_shadow_last_command
   last_command_result: sensor.thermann_shadow_last_command_result

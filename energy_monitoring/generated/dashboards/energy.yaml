@@ -193,6 +193,12 @@ views:
     - type: tile
       entity: sensor.thermann_shadow_controller_fault
       name: Controller fault
+    - type: tile
+      entity: sensor.thermann_shadow_controller_last_evaluated
+      name: Controller last evaluated
+    - type: tile
+      entity: sensor.thermann_shadow_waiting_to_restore_heat_since
+      name: Waiting to restore heat since
   - type: grid
     cards:
     - type: heading

@@ -34,4 +34,4 @@ configuration:
     description: Leave false until the owner has separately reviewed and supervised polling, freshness, restart and guard behaviour. Does not change authentication or heater-command permission.
   event_aware_polling_qualified:
     name: Longer quiet checks independently qualified
-    description: Default false, including upgrades. Separately approve v2 purpose-bound owner checks up to 90 minutes; controller quiet permission and chosen bound are also required. Command freshness, confirmations and auth safeguards stay unchanged.
+    description: Default false, including upgrades. Requires independent acceptance of at least 7 days fixed-60 read-only polling with zero refresh rejection or hidden keepalive; repeat at fixed-90 before choosing 90. Controller quiet permission and accepted owner-change delay are also required. No auth safeguard changes.

@@ -1,3 +1,8 @@
+> Historical checkpoint: superseded for installation and current audit status.
+> Use the [audit remediation handoff](../audit-remediation/HANDOFF.md) and
+> [normal owner guide](../pre-review/OWNER_INSTALLATION.md). Supervisor cache
+> staging is unsupported; preserve the owner’s agreed45/62/70 strategy.
+
 # Focused pre-review checkpoint
 
 Owner request: improve event-aware Thermann polling, excellent CT-free required

@@ -238,6 +238,8 @@ def hot_water_view(config):
                 ("operating_mode", "Operating mode"),
                 ("element_state", "Element (meter-inferred)"),
                 ("controller_fault", "Controller fault"),
+                ("controller_evaluated_at", "Controller last evaluated"),
+                ("restore_wait_since", "Waiting to restore heat since"),
             ),
         )
     ]
