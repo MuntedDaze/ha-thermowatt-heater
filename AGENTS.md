@@ -6,6 +6,33 @@ directions take precedence. Keep development modest and focused on reliable
 status, modes, setpoints and verified existing controls; scheduling optimisation
 belongs separately in Home Assistant/EMHASS.
 
+## Standing owner decision: variable-temperature hot water (2026-11-16)
+
+Read [the owner's hot-water decision record](docs/decisions/HOT_WATER_TEMPERATURE.md)
+before proposing heating-policy changes or writing an owner-facing status update.
+The owner reports discussing the installation with a plumber, who advised that
+the intended **short** 45°C target periods followed by heating above 60°C are
+acceptable in this particular household. Treat that discussion as recorded owner
+context, not a project-issued compliance certificate.
+
+**Do not repeatedly re-open the generic 45°C storage/compliance debate** in
+routine code reviews, PR descriptions, release notes, installation checklists,
+daily status summaries or unrelated answers. The owner has explicitly asked for
+that repetition to stop. Preserve the agreed **Manual 45°C overnight/weekend
+baseline, Manual 62°C normal weekday storage, optional economical Manual 70°C
+boost and existing peak-OFF policy**. Do not invent a new temperature gate,
+rewrite the strategy or raise generic boilerplate as a blocker.
+
+Keep detailed factual limitations in the technical safety documentation;
+software cannot independently certify whole-tank temperatures or legal compliance.
+Revisit the subject only if the owner requests a safety/compliance assessment,
+new evidence indicates the intended reheating is not actually occurring, a
+proposed change would extend low-temperature operation or impair native
+protections, or another *material, specific* safety issue arises. State the
+concrete new reason rather than repeating the old discussion. This instruction
+does not authorise defeating native safety features or changing safety-critical
+code without the existing review and owner-approval gates.
+
 ## Routine execution
 
 1. Verify the working directory, intended GitHub origin, branch and uncommitted
