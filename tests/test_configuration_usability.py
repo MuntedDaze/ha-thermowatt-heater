@@ -58,6 +58,17 @@ def test_units_convert_only_deliberate_edits():
     assert ui.unit("forecast_uncertainty") == "%"
 
 
+def test_native_time_selector_added_seconds_do_not_change_saved_times():
+    values = {**c.DEFAULT_OPTIONS, "daytime_start": "09:00", "baseline_start": "21:00:00"}
+    assert ui.stored_changes(values, {"daytime_start": "09:00:00", "baseline_start": "21:00"}) == {
+        "daytime_start": "09:00",
+        "baseline_start": "21:00:00",
+    }
+    changed = ui.stored_changes(values, {"daytime_start": "09:00:30"})
+    with pytest.raises(ValueError):
+        c.parse_options({**values, **changed})
+
+
 def form_for(row):
     return {
         "days": [str(v) for v in row["days"]],

@@ -54,7 +54,8 @@ async function main() {
           await page.getByText(steps[target].title, { exact: true }).last().click();
         }
         for (const label of Object.values(steps[id].data || {})) {
-          await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+          const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          await expect(page.getByText(new RegExp(`^${escaped}\\s*\\*?$`)).first()).toBeVisible();
         }
         // Check actual rendered inline help, not just downloaded translations.
         for (const help of Object.values(steps[id].data_description || {})) {

@@ -389,11 +389,20 @@ def display_value(key, value):
     return float(Decimal(str(value)) * SCALES[key])
 
 
+def _same_time(before, after):
+    try:
+        return _minute(before) == _minute(after)
+    except (ValueError, TypeError):
+        return False  # Let the existing complete parser report invalid times.
+
+
 def stored_changes(values, submitted):
     """Keep original values exactly on a no-op save, including precise prices."""
     result = {}
     for key, value in submitted.items():
         if value == display_value(key, values[key]):
+            result[key] = values[key]
+        elif CATALOG[key].kind == "time" and _same_time(value, values[key]):
             result[key] = values[key]
         elif key in SCALES:
             result[key] = float(Decimal(str(value)) / SCALES[key])
