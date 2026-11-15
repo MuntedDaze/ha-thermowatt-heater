@@ -10,7 +10,7 @@ configuration:
     description: Leave disabled for read-only use. Separate owner approval is required for control.
   command_policy:
     name: Command policy
-    description: automation (default) accepts only Manual:70 (heating permitted) and off (parked) from the hot-water controller and refuses every other command, including temperature changes. legacy restores the full 1.3.8 command set. Monitoring is the same either way.
+    description: automation accepts only the closed exact-prior OFF/45/62/70 transition protocol and retained narrow legacy forms. Other setpoints and malformed commands are refused. legacy is the older broader protocol and must not be used to bypass qualification.
   poll_interval_minutes:
     name: Polling interval
     description: Value in the selected unit. Seconds 60–7200; Minutes 1–120. This historic YAML key is retained for upgrades; missing units mean Minutes.
@@ -26,3 +26,12 @@ configuration:
   on_demand_refresh_enabled:
     name: Allow read-only on-demand refresh
     description: Disabled by default. Accepts non-retained refresh requests for known devices, coalesced in the existing worker. Waits at least 5 minutes after any status attempt and never bypasses guards or cloud-error cooldowns. Do not trigger from rapidly changing solar values.
+  adaptive_polling_enabled:
+    name: Enable actual adaptive polling
+    description: Disabled by default pending review and supervised validation. The bridge remains the only HTTP authority, using bounded expiring controller plans with fixed fallback. Requires separate qualification below.
+  adaptive_polling_qualified:
+    name: Adaptive polling independently qualified
+    description: Leave false until the owner has separately reviewed and supervised polling, freshness, restart and guard behaviour. Does not change authentication or heater-command permission.
+  event_aware_polling_qualified:
+    name: Longer quiet checks independently qualified
+    description: Default false, including upgrades. Requires independent acceptance of at least 7 days fixed-60 read-only polling with zero refresh rejection or hidden keepalive; repeat at fixed-90 before choosing 90. Controller quiet permission and accepted owner-change delay are also required. No auth safeguard changes.

@@ -17,8 +17,14 @@ import pytest
 from test_shadow_model import c, m
 
 sp = importlib.import_module(f"{m.__package__}.simple_policy")
-SETTINGS, TARIFFS = c.parse_options({})
-S = sp.PolicySettings(feed_in_rate=SETTINGS.feed_in_rate, tariff_clock=SETTINGS.tariff_clock)
+SETTINGS, TARIFFS = c.parse_options({"tariff_clock": "standard"})
+# Preserve the previous mandatory-70 scenarios as explicit compatibility tests.
+S = sp.PolicySettings(
+    normal_c=70,
+    peak_policy=sp.PEAK_SOLAR,
+    feed_in_rate=SETTINGS.feed_in_rate,
+    tariff_clock=SETTINGS.tariff_clock,
+)
 OFF, BASE, STORE, HOLD = sp.OFF, sp.BASELINE, sp.STORAGE, sp.HOLD
 MIN = timedelta(minutes=1)
 RATE = S.element_kw / S.kwh_per_c  # about 8.2 °C/h
@@ -39,6 +45,7 @@ def feed(policy, start, minutes, grid_kw, element=False):
 
 
 def snap(now, state, reading=60.0, **kw):
+    kw.setdefault("heater_meter_valid", True)  # synthetic direct-meter tank fixture
     return sp.Snapshot(now, state, reading, kw.pop("reading_at", now - 5 * MIN), **kw)
 
 
@@ -93,8 +100,10 @@ def test_commands_are_the_three_states_only():
     p = sp.SimplePolicy(S, TARIFFS)
     now = at(SAT, 23)
     assert p.decide(snap(now, OFF)).command == "Manual:45"
-    p60 = sp.SimplePolicy(replace(S, baseline_c=60), TARIFFS)
-    assert p60.decide(snap(now, OFF)).command == "Manual:60"
+    with pytest.raises(ValueError, match="unsupported_target_roles"):
+        sp.SimplePolicy(replace(S, baseline_c=60), TARIFFS)
+    p62 = sp.SimplePolicy(replace(S, baseline_c=62), TARIFFS)
+    assert p62.decide(snap(now, OFF)).command == "Manual:62"
 
 
 def test_no_antibacterial_or_exposure_subsystem():
@@ -116,7 +125,7 @@ def test_owner_layer_then_cloud_gate_then_spacing():
     assert p.decide(snap(now, OFF, override_12h=True)).command == "Manual:70"
     blocked = p.decide(snap(now, STORE, cloud_ready=False))
     assert (blocked.state, blocked.layer, blocked.plan["wanted"]) == (HOLD, 3, OFF)
-    spaced = p.decide(snap(now, STORE, last_command_at=now - 14 * MIN))
+    spaced = p.decide(snap(now, BASE, holiday=True, last_command_at=now - 14 * MIN))
     assert (spaced.reason, spaced.command) == ("command_spacing", None)
     assert p.decide(snap(now, STORE, last_command_at=now - 15 * MIN)).command == "off"
 
@@ -293,12 +302,15 @@ def test_starts_on_off_peak_when_waiting_would_miss_the_soft_target():
     assert (late.state, late.reason, late.command) == (STORE, "storage_latest_start", "Manual:70")
 
 
-def test_overcast_or_missing_forecast_starts_storage_at_once():
+def test_overcast_forecast_starts_storage_at_once_and_a_missing_one_waits():
     p = sp.SimplePolicy(S, TARIFFS)
     now = at(MON, 11, 5)
-    for forecast in (fc(now, 8, 0.3), ()):
-        d = p.decide(snap(now, OFF, reading=55, forecast=forecast))
-        assert (d.state, d.reason, d.layer) == (STORE, "storage_cheapest_now", 6)
+    d = p.decide(snap(now, OFF, reading=55, forecast=fc(now, 8, 0.3)))
+    assert (d.state, d.reason, d.layer) == (STORE, "storage_cheapest_now", 6)
+    # 0.9.1 (audit M4): with no published forecast at all, grid-only heating
+    # waits for the latest start; it is no longer started at once.
+    d = p.decide(snap(now, OFF, reading=55))
+    assert (d.state, d.reason, d.command) == (OFF, "storage_waiting_no_forecast", None)
 
 
 def test_measured_solar_now_as_good_as_the_forecast_later_starts_now():
@@ -376,18 +388,19 @@ def test_weekend_baseline_without_solar_and_no_forced_storage():
     assert p.decide(snap(at(SUN, 15, 30), BASE, reading=40)).state == BASE  # no deadline
 
 
-def test_weekend_one_kilowatt_qualifies_only_without_a_better_forecast():
+def test_weekend_requires_full_cover_and_waits_for_a_better_forecast():
     now = at(SAT, 11)
     p = sp.SimplePolicy(S, TARIFFS)
     feed(p, now - 11 * MIN, 12, -1.1)
     flat = fc(now, 14, 1.0)
     d = p.decide(snap(now, BASE, reading=44, forecast=flat))
-    assert (d.state, d.reason, d.command) == (STORE, "solar_opportunity", "Manual:70")
+    assert (d.state, d.reason, d.command) == (BASE, "baseline", None)
     q = sp.SimplePolicy(S, TARIFFS)
-    feed(q, now - 11 * MIN, 12, -1.1)
-    brighter = fc(now, 14, lambda i: 3.5 if 3 <= i <= 10 else 1.0)
+    feed(q, now - 11 * MIN, 12, -3.4)
+    # A high FIT can still make an otherwise fully covered boost uneconomic.
+    brighter = fc(now, 14, 3.4)
     d = q.decide(snap(now, BASE, reading=44, forecast=brighter))
-    assert (d.state, d.plan["waiting_for"]) == (BASE, "cheaper_window_later")
+    assert (d.state, d.reason) == (STORE, "solar_opportunity")
 
 
 def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
@@ -400,9 +413,9 @@ def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
     assert 0.1702 - cost == pytest.approx(0.0258, abs=0.0005)
     # A dearer margin would make 1 kW not worth it.
     strict = sp.SimplePolicy(replace(S, optional_heat_margin=0.03), TARIFFS)
-    feed(strict, now - 11 * MIN, 12, -1.1)
+    feed(strict, now - 11 * MIN, 12, -3.4)
     d = strict.decide(snap(now, BASE, reading=44, forecast=fc(now, 14, 1.1)))
-    assert (d.state, d.plan["waiting_for"]) == (BASE, "more_solar")
+    assert d.state == BASE  # projected partial-grid heat does not meet the new useful-heat margin
 
 
 def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():
@@ -411,9 +424,9 @@ def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():
     now = feed(p, t0 + MIN, 8, 2.7, element=True)  # cloud: available 0.3 kW for 8 min
     sun_returns = fc(now, 4, 2.5)
     d = p.decide(snap(now, STORE, reading=55, forecast=sun_returns))
-    assert (d.state, d.reason) == (STORE, "solar_opportunity_continues")
+    assert (d.state, d.reason) == (BASE, "solar_opportunity_import")
     d = p.decide(snap(now, STORE, reading=55, forecast=fc(now, 4, 0.3)))
-    assert (d.state, d.reason, d.command) == (BASE, "solar_opportunity_ended", "Manual:45")
+    assert (d.state, d.reason, d.command) == (BASE, "solar_opportunity_import", "Manual:45")
 
 
 def test_opportunity_never_starts_what_cannot_finish_before_monday_peak():
@@ -481,7 +494,7 @@ def simulate(
     policy, tank = sp.SimplePolicy(settings, TARIFFS), Tank(reading, state, settings)
     forecast_pv = forecast_pv or pv
     draws, loads = draws or {}, loads or {}
-    seen, last_cmd, forecast, times = (reading, start), None, (), []
+    seen, last_cmd, forecast, times, reasons = (reading, start), None, (), [], []
     log = {"commands": [], "peak_grid_kwh": 0.0, "grid_heat_kwh": 0.0, "at": {}, "reasons": set()}
     log["baseline_peak_minutes"] = 0
     for i in range(hours * 60):
@@ -503,12 +516,17 @@ def simulate(
                 )
                 for k in range(36)
             )
-        d = policy.decide(sp.Snapshot(now, tank.state, seen[0], seen[1], forecast, last_cmd))
+        d = policy.decide(
+            sp.Snapshot(
+                now, tank.state, seen[0], seen[1], forecast, last_cmd, heater_meter_valid=True
+            )
+        )
         log["reasons"].add(d.reason)
         if d.command:
             log["commands"].append((loc.strftime("%a %H:%M"), d.state, d.reason))
             tank.state, last_cmd = d.state, now
             times.append(now)
+            reasons.append(d.reason)
         heat_grid = min(settings.element_kw, max(0.0, grid)) if tank.element else 0.0
         log["grid_heat_kwh"] += heat_grid / 60
         if m.tariff_at(now, TARIFFS, settings.tariff_clock).kind == "peak":
@@ -518,8 +536,10 @@ def simulate(
         log["at"][key] = tank.t
     # Agreed design: Manual 45 only in off-peak baseline periods, never in a peak.
     assert log["baseline_peak_minutes"] == 0, log["commands"]
-    gaps = [b - a for a, b in zip(times, times[1:], strict=False)]
-    assert all(gap >= settings.command_spacing for gap in gaps), log["commands"]
+    # Every command respects the spacing, except a peak withdrawal (0.9.1, H1).
+    for earlier, later, reason in zip(times, times[1:], reasons[1:], strict=False):
+        if reason not in sp.SPACING_EXEMPT_REASONS:
+            assert later - earlier >= settings.command_spacing, log["commands"]
     return log, tank
 
 
@@ -631,13 +651,19 @@ def test_sim_weekend_solar_session_is_not_interrupted_by_a_passing_cloud():
     assert log["at"][(SAT, "16:00")] >= 62  # in the Manual 70 band
 
 
-def test_sim_no_command_pairs_closer_than_the_spacing_and_no_flapping():
+def test_sim_patchy_weekend_withdraws_import_and_spaces_restarts():
     def patchy(loc):
         base = sunny_summer(loc)
         return base * (0.3 if (loc.minute // 7) % 2 else 1.0)  # clouds every 7 minutes
 
     log, _ = simulate(at(SAT, 6), 14, 44, BASE, patchy)
-    assert len(log["commands"]) <= 4, log["commands"]
+    # Sustained import now ends optional heat even with returning sun. This
+    # pure policy has no daily budget (the controller separately caps starts).
+    assert len(log["commands"]) <= 14, log["commands"]
+    stops = [c for c in log["commands"] if c[1] == BASE]
+    assert stops and all(
+        c[2] in {"solar_opportunity_import", "solar_opportunity_ended"} for c in stops
+    )
     log, _ = simulate(at(MON, 6), 14, 44, BASE, patchy)
     assert len(log["commands"]) <= 5, log["commands"]
 
@@ -702,7 +728,8 @@ def test_setpoint_is_what_was_requested_and_reached_needs_a_fresh_reading():
 def test_band_reading_keeps_the_deadline_and_economics_unchanged():
     # At 62 the thermostat would heat in Manual 70, so the plan still runs.
     p = sp.SimplePolicy(S, TARIFFS)
-    d = p.decide(snap(at(MON, 11, 5), OFF, reading=62))
+    now = at(MON, 11, 5)
+    d = p.decide(snap(now, OFF, reading=62, forecast=fc(now, 8, 0.3)))
     assert d.plan["target_reached"] is False and d.plan["thermostat_would_heat_at_storage"]
     assert (d.state, d.reason) == (STORE, "storage_cheapest_now")
     assert d.plan["heating_hours"] == pytest.approx(8 / RATE, abs=0.01)

@@ -15,6 +15,8 @@ class ShadowText(SettingEntity, TextEntity):
         super().__init__(entry, runtime, key)
         if key.startswith("controller_"):
             self._attr_native_max = 64
+        elif key == "heater_meter_verification":
+            self._attr_native_max = 258  # full raw entity ID plus |W or |kW
 
     @property
     def native_value(self):

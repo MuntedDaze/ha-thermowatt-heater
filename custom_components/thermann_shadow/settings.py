@@ -1,6 +1,7 @@
 """One metadata catalogue for native controls, forms, defaults and validation."""
 
 from dataclasses import dataclass
+from zoneinfo import available_timezones
 from types import MappingProxyType
 
 from .config import DEFAULT_OPTIONS
@@ -122,7 +123,7 @@ CATALOG = {
     "forecast_enabled": Setting(
         "Use published forecasts",
         "Advanced",
-        "Optional local PV AND household-load forecasts with generation timestamps; missing forecasts never delay fallback.",
+        "The EMHASS PV AND household-load forecasts with generation timestamps. Optional for basic no-solar tariff control. Settings cannot change while automatic control is on. If the forecast is missing, weekday grid heating waits for the latest start instead of starting at once, and an alert is raised after an hour.",
         kind="switch",
     ),
     "forecast_uncertainty": Setting(
@@ -209,13 +210,13 @@ CATALOG = {
     "import_positive": Setting(
         "Positive grid means import",
         "System",
-        "OFF means export-positive HK1000. Never change without a load test; restore preserves direction.",
+        "OFF means export-positive. Verify the actual meter with a known load; restore preserves direction.",
         kind="switch",
     ),
     "tariff_clock": Setting(
         "Tariff clock",
         "Advanced",
-        "Confirmed Aurora 93 uses standard (fixed AEST UTC+10), automatically one hour later in Hobart summer.",
+        "Use your verified contract: standard is fixed AEST UTC+10; local is Australia/Hobart with DST. Other time zones are not qualified.",
         choices=("standard", "local"),
         kind="select",
     ),
@@ -223,7 +224,7 @@ CATALOG = {
         "Tariff periods mode",
         "Advanced",
         "aurora_93 uses editable weekday peak times below; custom retains advanced weekly JSON periods in Configure.",
-        choices=("aurora_93", "custom"),
+        choices=("flat", "aurora_93", "custom"),
         kind="select",
     ),
     "weekend_peak": Setting(
@@ -395,7 +396,7 @@ CATALOG = {
     "controller_max_commands_per_day": Setting(
         "Maximum commands per day",
         "System",
-        "Backstop: rolling 24 h limit on commands that start or change heating. A typical weekday needs 4 commands in all; a switch to OFF (the park) is never held back by this limit.",
+        "Rolling 24 h limit for OPTIONAL solar starts (a peak-solar start, a weekend solar start): none is sent once this many commands have gone out. Essential commands (the weekday 70 °C heat, Manual 45 °C, the 12hr Override) may go 6 beyond it, so optional solar activity can never block them; that higher cap still stops a fault that loops. A switch to OFF is never held back. A typical weekday needs 4 commands in all.",
         4,
         10,
     ),
@@ -436,6 +437,220 @@ for key in ("peak_morning_start", "peak_morning_end", "peak_evening_start", "pea
         "Tariff-clock HH:MM, not Hobart comfort time. Must be increasing: morning start/end, evening start/end.",
         kind="time",
     )
+CATALOG["heater_meter_verification"] = Setting(
+    "Commissioned hot-water power entity and unit",
+    "System",
+    "After an electrician verifies the exclusive hot-water circuit, sign, units, reporting cadence, "
+    "OFF/ON and outage tests, enter entity_id|W or entity_id|kW. Empty disables optional heating. "
+    "Remapping the power sensor clears this record; no relay control is used.",
+    kind="text",
+)
+CATALOG.update(
+    {
+        "adaptive_polling_shadow": Setting(
+            "Compare adaptive polling (shadow only)",
+            "System",
+            "Record bounded would-be reads only. Actual bridge polling, authentication, budgets and confirmations are unchanged.",
+            kind="switch",
+        ),
+        "adaptive_poll_heating_minutes": Setting(
+            "Shadow heating poll maximum",
+            "System",
+            "Advisory heating cap, at most 60 minutes. Does not change actual reads.",
+            15,
+            60,
+            "min",
+        ),
+        "adaptive_poll_stable_minutes": Setting(
+            "Shadow stable poll maximum",
+            "System",
+            "Advisory stable cap, at most 90 minutes. Vendor inactivity expiry remains unverified.",
+            30,
+            90,
+            "min",
+        ),
+    }
+)
+CATALOG.update(
+    {
+        "optional_heat_margin_aud_per_kwh": Setting(
+            "Optional heat minimum saving",
+            "Advanced",
+            "Minimum prospective saving against off-peak grid, including lost feed-in value. "
+            "Does not relax measured-power or import guards.",
+            0,
+            0.20,
+            "AUD/kWh",
+        ),
+        "pause_min_saving_aud": Setting(
+            "Minimum saving to pause weekday heat",
+            "Advanced",
+            "A later window must save this much and still fit before the soft target.",
+            0.10,
+            2,
+            "AUD",
+        ),
+    }
+)
+CATALOG.update(
+    {
+        "baseline_c": Setting(
+            "Overnight baseline temperature",
+            "Everyday",
+            "Supported native thermostat target during permitted nights/weekends; does not prove achieved whole-tank temperature or independently establish compliance. Follow appliance/plumbing requirements; native protective behaviour is not verified by this software.",
+            unit="°C",
+            kind="select",
+            choices=("45", "62"),
+        ),
+        "normal_storage_c": Setting(
+            "Normal weekday storage temperature",
+            "Everyday",
+            "Required weekday thermostat target. Only bridge-supported values; 62 is the economical default.",
+            unit="°C",
+            kind="select",
+            choices=("62", "70"),
+        ),
+        "solar_boost_c": Setting(
+            "Optional solar storage temperature",
+            "Everyday",
+            "Upper optional target, at least the normal target. Equal targets avoid a separate top-up.",
+            unit="°C",
+            kind="select",
+            choices=("62", "70"),
+        ),
+        "optional_solar_boost": Setting(
+            "Enable optional solar boost",
+            "Everyday",
+            "Optional heat requires verified raw circuit measurement and useful monetary benefit. Independent of the peak policy. 12-hour Override stays 70.",
+            kind="switch",
+        ),
+        "peak_heating_policy": Setting(
+            "Heating during peak periods",
+            "Everyday",
+            "The Never option takes priority over routine solar opportunities. Solar-only requires verified raw circuit power, fresh grid and all qualifications. Explicit owner override/native protections remain independent.",
+            kind="select",
+            choices=("Never schedule heating during peak", "Verified solar-only heating"),
+        ),
+        "tank_litres": Setting(
+            "Tank capacity",
+            "Advanced",
+            "Nominal tank volume for conservative energy/time estimates, not measured hot-water availability.",
+            50,
+            500,
+            "L",
+        ),
+        "element_kw": Setting(
+            "Nominal element power",
+            "Advanced",
+            "Supported resistive-element planning reference. CT-free operation never treats this as verified draw.",
+            2,
+            3.6,
+            "kW",
+        ),
+        "completion_margin_minutes": Setting(
+            "Preferred completion before peak",
+            "Everyday",
+            "Soft planning margin; required heating may continue until the hard peak boundary.",
+            5,
+            120,
+            "min",
+        ),
+        "boost_useful_fraction": Setting(
+            "Expected useful fraction of extra solar heat",
+            "Advanced",
+            "Planning assumption 0–1 for extra heat used before the next cheap opportunity. Includes a bounded standby-loss allowance. Zero prevents optional boosts; not learned evidence.",
+            0,
+            1,
+        ),
+        "controller_four_state_qualified": Setting(
+            "Four-state commands qualified (1.3.14)",
+            "System",
+            "Only after separately authorised supervised qualification of OFF/45/62/70 transitions. Does not authorise live operation by itself.",
+            kind="switch",
+        ),
+    }
+)
+CATALOG["adaptive_polling_enabled"] = Setting(
+    "Send adaptive cloud scheduling plans",
+    "System",
+    "Disabled until independent review and supervised validation. Sends bounded expiring hints only; the bridge needs its separate enabled and qualified options. Fixed fallback and every cloud/command guard remain.",
+    kind="switch",
+)
+CATALOG["event_aware_polling_enabled"] = Setting(
+    "Allow longer checks during quiet periods",
+    "System",
+    "Default off. Requires adaptive polling and the reviewed event-aware bridge. "
+    "May hold a confirmed baseline/OFF setting longer, without trusting an old temperature. "
+    "App changes can remain unseen until the selected check limit; brief changes can be missed. "
+    "Command prior checks and confirmation are unchanged.",
+    kind="switch",
+)
+CATALOG["owner_change_check_minutes"] = Setting(
+    "Maximum time between app-change checks",
+    "System",
+    "Healthy-cloud maximum between ordinary observations in quiet periods, 30–90 minutes. "
+    "Longer saves requests but delays detecting external changes. Outages can delay detection "
+    "further. Applies only with longer quiet checks enabled; temperatures still expire normally.",
+    30,
+    90,
+    "min",
+)
+CATALOG["learned_planning_enabled"] = Setting(
+    "Use validated conservative learned heating rate",
+    "System",
+    "Disabled until real independent samples, held-out accuracy and hardware qualification pass. A learned lower bound may advance required heating, never delay it beyond nominal/live-watt planning.",
+    kind="switch",
+)
+CATALOG["learning_hardware_qualified"] = Setting(
+    "Heating learning independently qualified",
+    "System",
+    "Owner commissioning gate, never set from synthetic tests. Remapping the meter, changing its unit or nominal tank/power clears this flag.",
+    kind="switch",
+)
+
+
+CATALOG["time_zone"] = Setting(
+    "Household time zone",
+    "Advanced",
+    "IANA zone; a new installation starts from Home Assistant's configured zone. Tariff local/fixed standard basis is separate. Changing this requires control disabled.",
+    choices=tuple(sorted(available_timezones())),
+    kind="select",
+)
+for key, name in (
+    ("daytime_start", "Weekday storage window starts"),
+    ("storage_ready_time", "Weekday storage ready time without peak"),
+    ("baseline_start", "Return to overnight baseline without peak"),
+):
+    CATALOG[key] = Setting(
+        name,
+        "Everyday",
+        "Household local clock. Used for required weekday storage when the electricity plan has no peak deadline. Start < ready < baseline return. Not an electrical peak or a hygiene guarantee.",
+        kind="time",
+    )
+
+_DUAL_PROTECTED = frozenset(
+    {
+        "baseline_c",
+        "normal_storage_c",
+        "solar_boost_c",
+        "tank_litres",
+        "element_kw",
+        "completion_margin_minutes",
+        "optional_solar_boost",
+        "peak_heating_policy",
+        "boost_useful_fraction",
+        "controller_four_state_qualified",
+    }
+)
+CATALOG["boost_min_saving_aud"] = Setting(
+    "Minimum benefit of optional solar boost",
+    "Advanced",
+    "Expected net dollars saved must exceed this per boost as well as the existing per-kWh margin; avoids extra commands for trivial benefit.",
+    0,
+    2,
+    "AUD",
+)
+_DUAL_PROTECTED = _DUAL_PROTECTED | {"boost_min_saving_aud"}
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety
@@ -458,6 +673,10 @@ ORIGINAL_DEFAULTS = MappingProxyType(
         # Recommendations changed in 0.4.0 by owner requirement; what shipped first:
         "morning_threshold_c": 40.0,
         "morning_time": "07:00",
+        "meter_verified": True,
+        "tariff_verified": True,
+        "import_positive": False,
+        "tariff_clock": "standard",
     }
 )
 
@@ -504,6 +723,16 @@ PRESERVE_ON_RESTORE = frozenset(
         "controller_execution_latency_minutes",
         "status_max_age_minutes",
         "grid_max_age_seconds",
+        # 0.9.1 (audit M4): the forecast switch decides whether EMHASS is used
+        # at all and is a commissioning requirement, not a preference.
+        "forecast_enabled",
+        "heater_meter_verification",
+        "adaptive_polling_shadow",
+        "adaptive_polling_enabled",
+        "adaptive_poll_heating_minutes",
+        "adaptive_poll_stable_minutes",
+        "optional_heat_margin_aud_per_kwh",
+        "pause_min_saving_aud",
     }
 )
 # 0.7.1: settings that change WHERE commands go, WHETHER they may be sent, HOW
@@ -539,11 +768,15 @@ LOCKED_WHILE_ACTIVE = frozenset(
         "peak_evening_end",
         "status_max_age_minutes",
         "grid_max_age_seconds",
+        "forecast_enabled",
         "sources",
+        "optional_heat_margin_aud_per_kwh",
+        "pause_min_saving_aud",
+        "heater_meter_verification",
     }
 )
-RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
-assert not set(RESTORED) & LOCKED_WHILE_ACTIVE  # restore/undo never need control off
+PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | _DUAL_PROTECTED
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | _DUAL_PROTECTED
 
 
 def _same(a, b) -> bool:
@@ -609,6 +842,11 @@ def apply_changes(values, changes):
     """Ordinary edits. After a restore, an edited key leaves the undo snapshot:
     it is the owner's newest decision and must not be reverted by Undo."""
     result = {**values, **changes}
+    if any(
+        key in changes and changes[key] != values.get(key)
+        for key in ("tank_litres", "element_kw", "heater_meter_verification")
+    ):
+        result["learning_hardware_qualified"] = False
     backup = result.get(BACKUP_KEY)
     if isinstance(backup, dict):
         backup = {
@@ -634,3 +872,40 @@ def describe(key, current):
         "changed_from_recommended": current != recommended,
         "restore_recommended": "restores" if key in RESTORED else "preserves",
     }
+
+
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {"adaptive_polling_enabled"}
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
+    "event_aware_polling_enabled",
+    "owner_change_check_minutes",
+}
+PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
+    "event_aware_polling_enabled",
+    "owner_change_check_minutes",
+}
+PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
+    "learned_planning_enabled",
+    "learning_hardware_qualified",
+}
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
+    "learned_planning_enabled",
+    "learning_hardware_qualified",
+}
+PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
+    "time_zone",
+    "daytime_start",
+    "storage_ready_time",
+    "baseline_start",
+}
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
+    "time_zone",
+    "daytime_start",
+    "storage_ready_time",
+    "baseline_start",
+}
+
+
+# Finalise only after every extension above: early snapshots silently included
+# newly protected time/learning/poll choices in Restore/Undo's cached tuple.
+RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
+assert not set(RESTORED) & LOCKED_WHILE_ACTIVE

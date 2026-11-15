@@ -1,0 +1,1877 @@
+{
+  "schema_version": 1,
+  "cases": 11,
+  "strategies": [
+    "previous_required_70",
+    "required_62",
+    "dual_62_optional_70"
+  ],
+  "assumptions": {
+    "tank": "315 L perfectly mixed; 3 kW; 8 C thermostat hysteresis; initial state Manual45",
+    "loss": "0.3 percent of temperature difference above 20 C per hour",
+    "tariff": "synthetic configured Aurora-like fixed AEST; not current price advice",
+    "peak_policy": "Never schedule heating during peak, for every strategy",
+    "cloud": "fixed 30-minute successful reads; 20-minute refresh heuristic; successful POST + 1-minute readback; counts are modelled, not measured",
+    "service": "same 2.5 kWh useful evening draw; daytime-draw case adds 4 kWh; identical initial conditions per case",
+    "equal_terminal": "hypothetical later off-peak grid replenishment to greatest terminal stored energy in each case; no extra loss/latency; not an executed plan",
+    "replacement_aud_per_kwh": 0.1702,
+    "limits": "no stratification, native protective cycles, owner intervention, failed commands or outages; physical ON/OFF not verified by this model; target misses are explicit, not compensated by terminal value; no annual savings inference"
+  },
+  "rows": [
+    {
+      "scenario": "strong_sun_direct_70",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 9.6,
+      "lost_feed_in_aud": 0.890496,
+      "net_energy_cost_aud": 0.890496,
+      "standing_loss_kwh": 0.949801,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.791207,
+      "end_stored_above_15_kwh": 17.138449,
+      "maximum_temperature_c": 70.113076,
+      "temperature_at_evening_peak_c": 69.691394,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.113035,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 0.890496
+    },
+    {
+      "scenario": "strong_sun_direct_70",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 6.6,
+      "lost_feed_in_aud": 0.612216,
+      "net_energy_cost_aud": 0.612216,
+      "standing_loss_kwh": 0.849731,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.873848,
+      "end_stored_above_15_kwh": 14.238519,
+      "maximum_temperature_c": 62.060984,
+      "temperature_at_evening_peak_c": 61.582121,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.153059,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 2.899931,
+      "terminal_replenishment_aud": 0.493568,
+      "equal_service_terminal_cost_aud": 1.105784
+    },
+    {
+      "scenario": "strong_sun_direct_70",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 9.6,
+      "lost_feed_in_aud": 0.890496,
+      "net_energy_cost_aud": 0.890496,
+      "standing_loss_kwh": 0.949801,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.791207,
+      "end_stored_above_15_kwh": 17.138449,
+      "maximum_temperature_c": 70.113076,
+      "temperature_at_evening_peak_c": 69.691394,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.0,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "weekday_direct_solar_boost"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 0.890496
+    },
+    {
+      "scenario": "cloudy_off_peak",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 9.6,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 1.63392,
+      "standing_loss_kwh": 0.949801,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.791207,
+      "end_stored_above_15_kwh": 17.138449,
+      "maximum_temperature_c": 70.113076,
+      "temperature_at_evening_peak_c": 69.691394,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.113035,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.63392
+    },
+    {
+      "scenario": "cloudy_off_peak",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 6.6,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 1.12332,
+      "standing_loss_kwh": 0.849731,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.873848,
+      "end_stored_above_15_kwh": 14.238519,
+      "maximum_temperature_c": 62.060984,
+      "temperature_at_evening_peak_c": 61.582121,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.153059,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 2.899931,
+      "terminal_replenishment_aud": 0.493568,
+      "equal_service_terminal_cost_aud": 1.616888
+    },
+    {
+      "scenario": "cloudy_off_peak",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 6.6,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 1.12332,
+      "standing_loss_kwh": 0.849731,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.873848,
+      "end_stored_above_15_kwh": 14.238519,
+      "maximum_temperature_c": 62.060984,
+      "temperature_at_evening_peak_c": 61.582121,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.153059,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 2.899931,
+      "terminal_replenishment_aud": 0.493568,
+      "equal_service_terminal_cost_aud": 1.616888
+    },
+    {
+      "scenario": "patchy_optimistic_forecast",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 3.75,
+      "heater_solar_kwh": 5.85,
+      "lost_feed_in_aud": 0.542646,
+      "net_energy_cost_aud": 1.180896,
+      "standing_loss_kwh": 0.947488,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.797521,
+      "end_stored_above_15_kwh": 17.140762,
+      "maximum_temperature_c": 70.10707,
+      "temperature_at_evening_peak_c": 69.697861,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.110666,
+      "forecast_mae_kw": 0.5,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:05:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.140762,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.180896
+    },
+    {
+      "scenario": "patchy_optimistic_forecast",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 2.5,
+      "heater_solar_kwh": 4.1,
+      "lost_feed_in_aud": 0.380316,
+      "net_energy_cost_aud": 0.805816,
+      "standing_loss_kwh": 0.848144,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.878182,
+      "end_stored_above_15_kwh": 14.240106,
+      "maximum_temperature_c": 62.05496,
+      "temperature_at_evening_peak_c": 61.58656,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.151433,
+      "forecast_mae_kw": 0.5,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:05:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.140762,
+      "terminal_replenishment_kwh": 2.900656,
+      "terminal_replenishment_aud": 0.493692,
+      "equal_service_terminal_cost_aud": 1.299508
+    },
+    {
+      "scenario": "patchy_optimistic_forecast",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 2.5,
+      "heater_solar_kwh": 4.1,
+      "lost_feed_in_aud": 0.380316,
+      "net_energy_cost_aud": 0.805816,
+      "standing_loss_kwh": 0.848144,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.878182,
+      "end_stored_above_15_kwh": 14.240106,
+      "maximum_temperature_c": 62.05496,
+      "temperature_at_evening_peak_c": 61.58656,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.151433,
+      "forecast_mae_kw": 0.5,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:05:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T10:20:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "weekday_solar_boost"
+        },
+        {
+          "at_aest": "2026-11-16T10:40:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "weekday_solar_boost_withdrawn"
+        },
+        {
+          "at_aest": "2026-11-16T11:10:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "weekday_solar_boost"
+        },
+        {
+          "at_aest": "2026-11-16T11:40:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "weekday_solar_boost_withdrawn"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 8,
+      "modelled_cloud_requests": {
+        "status": 62,
+        "command_post": 8,
+        "auth_refresh": 49
+      },
+      "modelled_cloud_request_count": 119,
+      "common_terminal_stored_kwh": 17.140762,
+      "terminal_replenishment_kwh": 2.900656,
+      "terminal_replenishment_aud": 0.493692,
+      "equal_service_terminal_cost_aud": 1.299508
+    },
+    {
+      "scenario": "patchy_pessimistic_forecast",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 3.75,
+      "heater_solar_kwh": 5.85,
+      "lost_feed_in_aud": 0.542646,
+      "net_energy_cost_aud": 1.180896,
+      "standing_loss_kwh": 0.949801,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.791207,
+      "end_stored_above_15_kwh": 17.138449,
+      "maximum_temperature_c": 70.113076,
+      "temperature_at_evening_peak_c": 69.691394,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.113035,
+      "forecast_mae_kw": 0.583333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.180896
+    },
+    {
+      "scenario": "patchy_pessimistic_forecast",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 2.5,
+      "heater_solar_kwh": 4.1,
+      "lost_feed_in_aud": 0.380316,
+      "net_energy_cost_aud": 0.805816,
+      "standing_loss_kwh": 0.849731,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.873848,
+      "end_stored_above_15_kwh": 14.238519,
+      "maximum_temperature_c": 62.060984,
+      "temperature_at_evening_peak_c": 61.582121,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.153059,
+      "forecast_mae_kw": 0.583333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 2.899931,
+      "terminal_replenishment_aud": 0.493568,
+      "equal_service_terminal_cost_aud": 1.299384
+    },
+    {
+      "scenario": "patchy_pessimistic_forecast",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 2.5,
+      "heater_solar_kwh": 4.1,
+      "lost_feed_in_aud": 0.380316,
+      "net_energy_cost_aud": 0.805816,
+      "standing_loss_kwh": 0.849731,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.873848,
+      "end_stored_above_15_kwh": 14.238519,
+      "maximum_temperature_c": 62.060984,
+      "temperature_at_evening_peak_c": 61.582121,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.153059,
+      "forecast_mae_kw": 0.583333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 2.899931,
+      "terminal_replenishment_aud": 0.493568,
+      "equal_service_terminal_cost_aud": 1.299384
+    },
+    {
+      "scenario": "unexpected_solar_after_normal",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 2.0,
+      "heater_solar_kwh": 7.6,
+      "lost_feed_in_aud": 0.704976,
+      "net_energy_cost_aud": 1.045376,
+      "standing_loss_kwh": 0.949801,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.791207,
+      "end_stored_above_15_kwh": 17.138449,
+      "maximum_temperature_c": 70.113076,
+      "temperature_at_evening_peak_c": 69.691394,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.113035,
+      "forecast_mae_kw": 0.083333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.199964,
+      "terminal_replenishment_kwh": 0.061515,
+      "terminal_replenishment_aud": 0.01047,
+      "equal_service_terminal_cost_aud": 1.055846
+    },
+    {
+      "scenario": "unexpected_solar_after_normal",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.44,
+      "heater_solar_kwh": 6.16,
+      "lost_feed_in_aud": 0.571402,
+      "net_energy_cost_aud": 0.64629,
+      "standing_loss_kwh": 0.848144,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.878182,
+      "end_stored_above_15_kwh": 14.240106,
+      "maximum_temperature_c": 62.05496,
+      "temperature_at_evening_peak_c": 61.58656,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.151433,
+      "forecast_mae_kw": 0.083333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:05:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.199964,
+      "terminal_replenishment_kwh": 2.959858,
+      "terminal_replenishment_aud": 0.503768,
+      "equal_service_terminal_cost_aud": 1.150057
+    },
+    {
+      "scenario": "unexpected_solar_after_normal",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.44,
+      "heater_solar_kwh": 9.21,
+      "lost_feed_in_aud": 0.85432,
+      "net_energy_cost_aud": 0.929208,
+      "standing_loss_kwh": 0.938286,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.959153,
+      "end_stored_above_15_kwh": 17.199964,
+      "maximum_temperature_c": 70.088309,
+      "temperature_at_evening_peak_c": 69.863412,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.0,
+      "forecast_mae_kw": 0.083333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:05:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T13:30:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "weekday_solar_boost"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 5,
+      "modelled_cloud_requests": {
+        "status": 56,
+        "command_post": 5,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 109,
+      "common_terminal_stored_kwh": 17.199964,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 0.929208
+    },
+    {
+      "scenario": "unexpected_daytime_draw",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 13.7,
+      "lost_feed_in_aud": 1.270812,
+      "net_energy_cost_aud": 1.270812,
+      "standing_loss_kwh": 0.944683,
+      "useful_draw_kwh": 6.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 62.078199,
+      "end_stored_above_15_kwh": 17.243567,
+      "maximum_temperature_c": 70.113076,
+      "temperature_at_evening_peak_c": 69.985343,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.005368,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.243567,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.270812
+    },
+    {
+      "scenario": "unexpected_daytime_draw",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 10.75,
+      "lost_feed_in_aud": 0.99717,
+      "net_energy_cost_aud": 0.99717,
+      "standing_loss_kwh": 0.845889,
+      "useful_draw_kwh": 6.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 54.293866,
+      "end_stored_above_15_kwh": 14.392361,
+      "maximum_temperature_c": 62.090117,
+      "temperature_at_evening_peak_c": 62.01232,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.0,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.243567,
+      "terminal_replenishment_kwh": 2.851207,
+      "terminal_replenishment_aud": 0.485275,
+      "equal_service_terminal_cost_aud": 1.482445
+    },
+    {
+      "scenario": "unexpected_daytime_draw",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 13.7,
+      "lost_feed_in_aud": 1.270812,
+      "net_energy_cost_aud": 1.270812,
+      "standing_loss_kwh": 0.944683,
+      "useful_draw_kwh": 6.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 62.078199,
+      "end_stored_above_15_kwh": 17.243567,
+      "maximum_temperature_c": 70.113076,
+      "temperature_at_evening_peak_c": 69.985343,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.0,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "weekday_direct_solar_boost"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.243567,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.270812
+    },
+    {
+      "scenario": "late_cold_start_before_peak",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 30,
+      "simulated_hours": 9.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 5.25,
+      "heater_solar_kwh": 2.9,
+      "lost_feed_in_aud": 0.269004,
+      "net_energy_cost_aud": 1.162554,
+      "standing_loss_kwh": 0.167191,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 44.969105,
+      "end_stored_above_15_kwh": 10.976934,
+      "maximum_temperature_c": 45.062917,
+      "temperature_at_evening_peak_c": 37.874241,
+      "required_probe_target_reached_by_peak": false,
+      "storage_shortfall_at_peak_kwh": 11.766862,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T15:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_target_may_be_missed"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 3,
+      "modelled_cloud_requests": {
+        "status": 23,
+        "command_post": 3,
+        "auth_refresh": 18
+      },
+      "modelled_cloud_request_count": 44,
+      "common_terminal_stored_kwh": 10.976934,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.162554
+    },
+    {
+      "scenario": "late_cold_start_before_peak",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 30,
+      "simulated_hours": 9.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 5.25,
+      "heater_solar_kwh": 2.9,
+      "lost_feed_in_aud": 0.269004,
+      "net_energy_cost_aud": 1.162554,
+      "standing_loss_kwh": 0.167191,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 44.969105,
+      "end_stored_above_15_kwh": 10.976934,
+      "maximum_temperature_c": 45.062917,
+      "temperature_at_evening_peak_c": 37.874241,
+      "required_probe_target_reached_by_peak": false,
+      "storage_shortfall_at_peak_kwh": 8.836662,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T15:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_target_may_be_missed"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 3,
+      "modelled_cloud_requests": {
+        "status": 23,
+        "command_post": 3,
+        "auth_refresh": 18
+      },
+      "modelled_cloud_request_count": 44,
+      "common_terminal_stored_kwh": 10.976934,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.162554
+    },
+    {
+      "scenario": "late_cold_start_before_peak",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 30,
+      "simulated_hours": 9.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 5.25,
+      "heater_solar_kwh": 2.9,
+      "lost_feed_in_aud": 0.269004,
+      "net_energy_cost_aud": 1.162554,
+      "standing_loss_kwh": 0.167191,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 44.969105,
+      "end_stored_above_15_kwh": 10.976934,
+      "maximum_temperature_c": 45.062917,
+      "temperature_at_evening_peak_c": 37.874241,
+      "required_probe_target_reached_by_peak": false,
+      "storage_shortfall_at_peak_kwh": 8.836662,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T15:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_target_may_be_missed"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 3,
+      "modelled_cloud_requests": {
+        "status": 23,
+        "command_post": 3,
+        "auth_refresh": 18
+      },
+      "modelled_cloud_request_count": 44,
+      "common_terminal_stored_kwh": 10.976934,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.162554
+    },
+    {
+      "scenario": "weekend_surplus",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 45,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 3.05,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 0.51911,
+      "standing_loss_kwh": 0.639785,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 44.75487,
+      "end_stored_above_15_kwh": 10.898465,
+      "maximum_temperature_c": 45.05122,
+      "temperature_at_evening_peak_c": null,
+      "required_probe_target_reached_by_peak": null,
+      "storage_shortfall_at_peak_kwh": null,
+      "forecast_mae_kw": 0.0,
+      "commands": [],
+      "command_count": 0,
+      "modelled_cloud_requests": {
+        "status": 48,
+        "command_post": 0,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 96,
+      "common_terminal_stored_kwh": 17.080849,
+      "terminal_replenishment_kwh": 6.182384,
+      "terminal_replenishment_aud": 1.052242,
+      "equal_service_terminal_cost_aud": 1.571352
+    },
+    {
+      "scenario": "weekend_surplus",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 45,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 3.05,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 0.51911,
+      "standing_loss_kwh": 0.639785,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 44.75487,
+      "end_stored_above_15_kwh": 10.898465,
+      "maximum_temperature_c": 45.05122,
+      "temperature_at_evening_peak_c": null,
+      "required_probe_target_reached_by_peak": null,
+      "storage_shortfall_at_peak_kwh": null,
+      "forecast_mae_kw": 0.0,
+      "commands": [],
+      "command_count": 0,
+      "modelled_cloud_requests": {
+        "status": 48,
+        "command_post": 0,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 96,
+      "common_terminal_stored_kwh": 17.080849,
+      "terminal_replenishment_kwh": 6.182384,
+      "terminal_replenishment_aud": 1.052242,
+      "equal_service_terminal_cost_aud": 1.571352
+    },
+    {
+      "scenario": "weekend_surplus",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 45,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 9.55,
+      "lost_feed_in_aud": 0.885858,
+      "net_energy_cost_aud": 0.885858,
+      "standing_loss_kwh": 0.957401,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.633948,
+      "end_stored_above_15_kwh": 17.080849,
+      "maximum_temperature_c": 70.003116,
+      "temperature_at_evening_peak_c": null,
+      "required_probe_target_reached_by_peak": null,
+      "storage_shortfall_at_peak_kwh": null,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-21T09:40:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "solar_opportunity"
+        },
+        {
+          "at_aest": "2026-11-21T16:05:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "solar_opportunity_ended"
+        }
+      ],
+      "command_count": 2,
+      "modelled_cloud_requests": {
+        "status": 52,
+        "command_post": 2,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 102,
+      "common_terminal_stored_kwh": 17.080849,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 0.885858
+    },
+    {
+      "scenario": "weekend_cloud",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 45,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 3.05,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 0.51911,
+      "standing_loss_kwh": 0.639785,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 44.75487,
+      "end_stored_above_15_kwh": 10.898465,
+      "maximum_temperature_c": 45.05122,
+      "temperature_at_evening_peak_c": null,
+      "required_probe_target_reached_by_peak": null,
+      "storage_shortfall_at_peak_kwh": null,
+      "forecast_mae_kw": 0.0,
+      "commands": [],
+      "command_count": 0,
+      "modelled_cloud_requests": {
+        "status": 48,
+        "command_post": 0,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 96,
+      "common_terminal_stored_kwh": 10.898465,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 0.51911
+    },
+    {
+      "scenario": "weekend_cloud",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 45,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 3.05,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 0.51911,
+      "standing_loss_kwh": 0.639785,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 44.75487,
+      "end_stored_above_15_kwh": 10.898465,
+      "maximum_temperature_c": 45.05122,
+      "temperature_at_evening_peak_c": null,
+      "required_probe_target_reached_by_peak": null,
+      "storage_shortfall_at_peak_kwh": null,
+      "forecast_mae_kw": 0.0,
+      "commands": [],
+      "command_count": 0,
+      "modelled_cloud_requests": {
+        "status": 48,
+        "command_post": 0,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 96,
+      "common_terminal_stored_kwh": 10.898465,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 0.51911
+    },
+    {
+      "scenario": "weekend_cloud",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 45,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 3.05,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 0.51911,
+      "standing_loss_kwh": 0.639785,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 44.75487,
+      "end_stored_above_15_kwh": 10.898465,
+      "maximum_temperature_c": 45.05122,
+      "temperature_at_evening_peak_c": null,
+      "required_probe_target_reached_by_peak": null,
+      "storage_shortfall_at_peak_kwh": null,
+      "forecast_mae_kw": 0.0,
+      "commands": [],
+      "command_count": 0,
+      "modelled_cloud_requests": {
+        "status": 48,
+        "command_post": 0,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 96,
+      "common_terminal_stored_kwh": 10.898465,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 0.51911
+    },
+    {
+      "scenario": "ct_free_required_storage",
+      "strategy": "previous_required_70",
+      "ct_available": false,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 9.6,
+      "lost_feed_in_aud": 0.890496,
+      "net_energy_cost_aud": 0.890496,
+      "standing_loss_kwh": 0.949801,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 61.791207,
+      "end_stored_above_15_kwh": 17.138449,
+      "maximum_temperature_c": 70.113076,
+      "temperature_at_evening_peak_c": 69.691394,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.113035,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 0.890496
+    },
+    {
+      "scenario": "ct_free_required_storage",
+      "strategy": "required_62",
+      "ct_available": false,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 6.6,
+      "lost_feed_in_aud": 0.612216,
+      "net_energy_cost_aud": 0.612216,
+      "standing_loss_kwh": 0.849731,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.873848,
+      "end_stored_above_15_kwh": 14.238519,
+      "maximum_temperature_c": 62.060984,
+      "temperature_at_evening_peak_c": 61.582121,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.153059,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 2.899931,
+      "terminal_replenishment_aud": 0.493568,
+      "equal_service_terminal_cost_aud": 1.105784
+    },
+    {
+      "scenario": "ct_free_required_storage",
+      "strategy": "dual_62_optional_70",
+      "ct_available": false,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.0,
+      "heater_solar_kwh": 6.6,
+      "lost_feed_in_aud": 0.612216,
+      "net_energy_cost_aud": 0.612216,
+      "standing_loss_kwh": 0.849731,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 53.873848,
+      "end_stored_above_15_kwh": 14.238519,
+      "maximum_temperature_c": 62.060984,
+      "temperature_at_evening_peak_c": 61.582121,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.153059,
+      "forecast_mae_kw": 0.0,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T10:00:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.138449,
+      "terminal_replenishment_kwh": 2.899931,
+      "terminal_replenishment_aud": 0.493568,
+      "equal_service_terminal_cost_aud": 1.105784
+    },
+    {
+      "scenario": "forecast_sun_never_arrives",
+      "strategy": "previous_required_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 70,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 9.65,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 1.64243,
+      "standing_loss_kwh": 0.890762,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 62.088904,
+      "end_stored_above_15_kwh": 17.247488,
+      "maximum_temperature_c": 70.091393,
+      "temperature_at_evening_peak_c": 69.996307,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.001352,
+      "forecast_mae_kw": 1.083333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T12:10:00+10:00",
+          "state": "storage",
+          "target_c": 70,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.247488,
+      "terminal_replenishment_kwh": 0.0,
+      "terminal_replenishment_aud": 0.0,
+      "equal_service_terminal_cost_aud": 1.64243
+    },
+    {
+      "scenario": "forecast_sun_never_arrives",
+      "strategy": "required_62",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 6.7,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 1.14034,
+      "standing_loss_kwh": 0.791678,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 54.305362,
+      "end_stored_above_15_kwh": 14.396572,
+      "maximum_temperature_c": 62.101914,
+      "temperature_at_evening_peak_c": 62.024095,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.0,
+      "forecast_mae_kw": 1.083333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T13:10:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.247488,
+      "terminal_replenishment_kwh": 2.850917,
+      "terminal_replenishment_aud": 0.485226,
+      "equal_service_terminal_cost_aud": 1.625566
+    },
+    {
+      "scenario": "forecast_sun_never_arrives",
+      "strategy": "dual_62_optional_70",
+      "ct_available": true,
+      "initial_c": 45,
+      "simulated_hours": 24.0,
+      "required_target_c": 62,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 6.7,
+      "heater_solar_kwh": 0.0,
+      "lost_feed_in_aud": 0.0,
+      "net_energy_cost_aud": 1.14034,
+      "standing_loss_kwh": 0.791678,
+      "useful_draw_kwh": 2.5,
+      "unserved_draw_kwh": 0.0,
+      "end_temperature_c": 54.305362,
+      "end_stored_above_15_kwh": 14.396572,
+      "maximum_temperature_c": 62.101914,
+      "temperature_at_evening_peak_c": 62.024095,
+      "required_probe_target_reached_by_peak": true,
+      "storage_shortfall_at_peak_kwh": 0.0,
+      "forecast_mae_kw": 1.083333,
+      "commands": [
+        {
+          "at_aest": "2026-11-16T06:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T13:10:00+10:00",
+          "state": "normal_storage",
+          "target_c": 62,
+          "reason": "storage_cheapest_now"
+        },
+        {
+          "at_aest": "2026-11-16T15:58:00+10:00",
+          "state": "off",
+          "target_c": null,
+          "reason": "peak_lockout"
+        },
+        {
+          "at_aest": "2026-11-16T21:00:00+10:00",
+          "state": "baseline",
+          "target_c": 45,
+          "reason": "baseline"
+        }
+      ],
+      "command_count": 4,
+      "modelled_cloud_requests": {
+        "status": 54,
+        "command_post": 4,
+        "auth_refresh": 48
+      },
+      "modelled_cloud_request_count": 106,
+      "common_terminal_stored_kwh": 17.247488,
+      "terminal_replenishment_kwh": 2.850917,
+      "terminal_replenishment_aud": 0.485226,
+      "equal_service_terminal_cost_aud": 1.625566
+    }
+  ]
+}

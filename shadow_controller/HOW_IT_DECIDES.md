@@ -1,5 +1,8 @@
 # How the controller decides (0.9.0)
 
+> Versioned 0.9.x / bridge 1.3.13 recovery reference. For the unmerged four-state
+> 0.10.0 / 1.3.14 candidate, see [the current guide](../docs/dual-storage/README.md). The old PR #33 commit remains unchanged.
+
 Technical reference for the current behaviour. The design and its reasoning
 are in [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md); the user guide is
 [README.md](README.md). Earlier references are under `docs/history/controller/`.

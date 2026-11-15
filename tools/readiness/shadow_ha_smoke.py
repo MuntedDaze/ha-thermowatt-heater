@@ -1,7 +1,6 @@
 """Run inside the official HA Core image with --network none, never on owner HA."""
 
 import asyncio
-from dataclasses import replace
 from datetime import timedelta
 import json
 import logging
@@ -59,8 +58,8 @@ def assert_entity_serialization(hass, sources):
     settings = sum(meta.kind != "form" and meta.group != "Retired" for meta in CATALOG.values())
     # + restore/undo buttons; 0.5.0: controller sensors, master switch, 3 owner buttons;
     # 0.7.0: 3 guest/holiday buttons, the holiday departure and return (dates
-    # since 0.9.0), the thermal-state sensor.
-    expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3 + 3 + 2 + 1
+    # since 0.9.0), the thermal-state sensor and backend event telemetry sensor.
+    expected = len(SENSORS) + settings + 2 + len(CONTROLLER_SENSORS) + 1 + 3 + 3 + 2 + 2
     assert len(states) == expected, (len(states), expected)
     frames = []
     connection = SimpleNamespace(
@@ -72,6 +71,14 @@ def assert_entity_serialization(hass, sources):
     response = json.loads(frames[0])
     assert response["success"] is True
     returned = {state["entity_id"]: state for state in response["result"]}
+    for key in ("cloud_poll_interval", "shadow_adaptive_poll_interval"):
+        attrs = returned[f"sensor.thermann_shadow_{key}"]["attributes"]
+        assert attrs["device_class"] == "duration" and attrs["state_class"] == "measurement", attrs
+        assert attrs["unit_of_measurement"] == "s", attrs
+    for key in ("expected_heating_completion", "next_cloud_poll", "shadow_next_adaptive_poll"):
+        assert (
+            returned[f"sensor.thermann_shadow_{key}"]["attributes"]["device_class"] == "timestamp"
+        )
     assert all(state.entity_id in returned for state in states)  # no silent omission
     assert returned["sensor.thermann_shadow_controller"]["attributes"]["sources"] == dict(sources)
     engine = create_engine("sqlite:///:memory:")
@@ -205,14 +212,25 @@ async def main():
         runtime.update(now)
         assert runtime.values["temperature"] == 63
         assert runtime.values["target"] == 70
-        assert runtime.values["measured_net_export_kw"] == 1.501
+        assert runtime.values["measured_net_export_kw"] == -1.501
+        assert runtime.grid_import_kw is None and not runtime.settings.meter_verified
+        assert not runtime.settings.tariff_verified
         assert runtime.values["pv"] == 2.322
         assert runtime.values["requests_since_start"] == 0
-        assert runtime.values["current_price_aud"] in {0.170200, 0.361878}
+        assert runtime.values["current_price_aud"] == 0
+        assert (
+            entry.options["tariff_profile"] == "flat"
+            and entry.options["time_zone"] == hass.config.time_zone
+        )
+        assert entry.options["baseline_c"] == "62" and not entry.options["optional_solar_boost"]
         assert runtime.details["additional_cloud_requests"] == 0
         assert runtime.details["controller_active"] is False
         assert runtime.values["controller"] == "shadow_observation"
         assert_entity_serialization(hass, runtime.sources)
+        # The following legacy form regressions use the historic empty options
+        # fixture after explicitly checking the new fresh-install defaults.
+        hass.config_entries.async_update_entry(entry, options={})
+        await hass.async_block_till_done()
         # Real config/options flows reject bad tariffs; owner can edit mappings.
         flow = await hass.config_entries.options.async_init(entry.entry_id)
         assert flow["type"] == "menu", flow  # 0.8.0: preferences / system / sources
@@ -232,7 +250,17 @@ async def main():
             assert flow["errors"] == {"base": "invalid_settings"}, flow
             assert entry.options == {}, entry.options
         # Explicit synthetic-only qualified settings exercise planning on real HA states.
-        runtime.settings = replace(runtime.settings, meter_verified=True, tariff_verified=True)
+        hass.config_entries.async_update_entry(
+            entry,
+            options={
+                **entry.options,
+                "meter_verified": True,
+                "tariff_verified": True,
+                "import_positive": False,
+                "tariff_clock": "standard",
+            },
+        )
+        await hass.async_block_till_done()
         runtime.update(now)
         assert runtime.grid_import_kw is not None  # verified meter: signed import used
         hass.states.async_set(
@@ -267,8 +295,9 @@ async def main():
         from custom_components.thermann_shadow.sensor import CONTROLLER_SENSORS, SENSORS
 
         # + the 0.7.0 read-only thermal-state sensor.
-        assert len(sensor_ids) == len(SENSORS) + len(CONTROLLER_SENSORS) + 1, sensor_ids
+        assert len(sensor_ids) == len(SENSORS) + len(CONTROLLER_SENSORS) + 2, sensor_ids
         assert "sensor.thermann_shadow_tank_thermal_state_estimate" in sensor_ids
+        assert "sensor.thermann_shadow_controller_telemetry" in sensor_ids
         # Save through the real options flow. Reload retains entity identities,
         # releases listeners, keeps validation false and waits for a normal poll.
         old_runtime = runtime
@@ -279,6 +308,7 @@ async def main():
             for key, value in DEFAULT_OPTIONS.items()
             if SETTINGS_CATALOG[key].group in ("Everyday", "Advanced")
         }
+        preferences["tariff_clock"] = "standard"
         saved = await hass.config_entries.options.async_configure(flow["flow_id"], preferences)
         assert saved["type"] == "create_entry"
         await hass.async_block_till_done()

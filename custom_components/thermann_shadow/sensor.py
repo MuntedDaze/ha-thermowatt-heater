@@ -1,6 +1,6 @@
 """Only sensors: estimates deliberately have no energy-measurement state class."""
 
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .naming import RETIRED_SENSORS as RETIRED  # noqa: F401 (re-exported)
@@ -45,11 +45,44 @@ SENSORS = {
     "heating_hours_needed": ("Heating time needed", "h"),
     "measured_surplus_kw": ("Measured surplus excluding element", "kW"),
     "shadow_command": ("Shadow command", None),
+    "heater_measured_w": ("Hot water measured power", "W"),
+    "heater_meter_state": ("Hot water measured element state", None),
+    "heater_meter_quality": ("Hot water meter quality", None),
+    "heater_energy_kwh": ("Hot water circuit energy", "kWh"),
+    "heater_raw_w": ("Hot water signed raw power", "W"),
+    "expected_completion": ("Expected heating completion", None),
+    "nominal_heating_minutes": ("Continuous heating time estimate", "min"),
+    "next_cloud_poll": ("Next cloud poll", None),
+    "cloud_poll_interval": ("Cloud poll interval", "s"),
+    "learned_heating_rate": ("Learned heating rate", "°C/h"),
+    "prediction_confidence": ("Heating prediction confidence", None),
+    "normal_storage_target_c": ("Normal storage target", "°C"),
+    "adaptive_polling_status": ("Actual adaptive polling status", None),
+    "learning_status": ("Heating learning status", None),
+    "tariff_verification": ("Tariff verification", None),
+    "feed_in_rate_aud": ("Configured feed in rate", "AUD/kWh"),
+    "learning_sessions": ("Clean heating learning sessions", None),
+    "prediction_error": ("Held out heating prediction error", "min"),
+    "planning_heating_rate": ("Planning heating rate", "°C/h"),
+    "baseline_target_c": ("Overnight baseline target", "°C"),
+    "solar_boost_target_c": ("Solar boost target", "°C"),
+    "peak_heating_policy": ("Peak heating policy", None),
+    "optional_boost_enabled": ("Optional solar boost enabled", None),
+    "circuit_measurement_mode": ("Circuit measurement mode", None),
 }
-TIMESTAMPS = {"peak_start", "planned_start", "latest_start", "next_tariff_change", "soft_target"}
+TIMESTAMPS = {
+    "peak_start",
+    "planned_start",
+    "latest_start",
+    "next_tariff_change",
+    "soft_target",
+    "expected_completion",
+    "next_cloud_poll",
+}
 CONTROLLER_SENSORS = {
     "controller_state": ("Automatic control state", None),
     "controller_reason": ("Automatic control reason", None),
+    "controller_evaluated_at": ("Controller last evaluated", None),
     "thermann_mode": ("Thermann mode", None),
     "thermann_target": ("Thermann target", "°C"),
     "next_action": ("Next intended action", None),
@@ -63,12 +96,24 @@ CONTROLLER_SENSORS = {
     "fault": ("Controller fault", None),
     "operating_mode": ("Hot water operating mode", None),
     "guest_mode_ends": ("12hr Override ends", None),
+    "request_budget_remaining": ("Cloud request budget remaining", "requests"),
+    "next_adaptive_poll": ("Shadow next adaptive poll", None),
+    "adaptive_poll_interval": ("Shadow adaptive poll interval", "s"),
+    "desired_temperature": ("Desired thermostat temperature", "°C"),
+    "heating_requirement": ("Heating requirement", None),
+    "boost_eligibility": ("Solar boost eligibility", None),
+    "boost_reason": ("Solar boost reason", None),
+    "planned_heat_kwh": ("Planned heating energy estimate", "kWh"),
+    "parked_off_restore_since": ("Waiting to restore heat since", None),
 }
 CONTROLLER_TIMESTAMPS = {
+    "controller_evaluated_at",
     "next_heating_start",
     "next_heating_stop",
     "last_command_time",
     "guest_mode_ends",
+    "next_adaptive_poll",
+    "parked_off_restore_since",
 }
 
 
@@ -82,6 +127,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         for key, (name, unit) in CONTROLLER_SENSORS.items()
     ]
     entities.append(ThermalStateSensor(runtime, entry))
+    entities.append(ControllerTelemetrySensor(runtime, entry))
     async_add_entities(entities)
 
 
@@ -100,6 +146,9 @@ class ShadowSensor(SensorEntity):
         self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
         if key in TIMESTAMPS:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        if key in {"cloud_poll_interval", "adaptive_poll_interval"}:
+            self._attr_device_class = SensorDeviceClass.DURATION
+            self._attr_state_class = SensorStateClass.MEASUREMENT
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.runtime.subscribe(self.async_write_ha_state))
@@ -120,9 +169,8 @@ class ControllerSensor(ShadowSensor):
 
     def __init__(self, runtime, entry, key, name, unit):
         super().__init__(runtime, entry, key, name, unit)
-        self._attr_device_class = (
-            SensorDeviceClass.TIMESTAMP if key in CONTROLLER_TIMESTAMPS else None
-        )
+        if key in CONTROLLER_TIMESTAMPS:
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     async def async_added_to_hass(self):
         await super().async_added_to_hass()
@@ -162,3 +210,23 @@ class ThermalStateSensor(ShadowSensor):
         from homeassistant.util import dt as dt_util
 
         return self.runtime.thermal.summary(dt_util.utcnow())
+
+
+class ControllerTelemetrySensor(ShadowSensor):
+    """Stable backend event contract for Recorder and independently built views."""
+
+    def __init__(self, runtime, entry):
+        super().__init__(runtime, entry, "controller_telemetry", "Controller telemetry", None)
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        self.async_on_remove(self.runtime.executor.subscribe(self.async_write_ha_state))
+
+    @property
+    def native_value(self):
+        event = self.runtime.telemetry
+        return event["controller"]["reason"] if event else "awaiting_observations"
+
+    @property
+    def extra_state_attributes(self):
+        return self.runtime.telemetry

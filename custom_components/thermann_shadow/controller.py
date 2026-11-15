@@ -1,6 +1,6 @@
-"""Production executor state machine (0.9.0). The ONLY code that may request a
-Thermann mode change, and only through the bridge's guarded three-state MQTT
-payloads (Thermann Hot Water app >= 1.3.13).
+"""Guarded four-state executor. The ONLY code that may request a
+Thermann mode change, and only through the bridge's guarded four-state MQTT
+payloads (Thermann Hot Water app >= 1.3.14).
 
 Pure logic: no Home Assistant imports, no I/O. ``executor.py`` builds the
 observations, persists the returned state BEFORE publishing, and performs the
@@ -24,11 +24,12 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 OFF, BASELINE, STORAGE = "off", "baseline", "storage"  # simple_policy states
-TARGET_C = {BASELINE: 45.0, STORAGE: 70.0}
+NORMAL = "normal_storage"
+TARGET_C = {BASELINE: 45.0, NORMAL: 62.0, STORAGE: 70.0}
 # Bridge 1.3.13 payload: "<target>@<prior>"; the bridge re-checks <prior> on a
 # fresh status and refuses anything else (owner changes are never overwritten).
-PAYLOAD_TARGET = {OFF: "off", BASELINE: "Manual:45", STORAGE: "Manual:70"}
-PAYLOAD_PRIOR = {OFF: "off", BASELINE: "45", STORAGE: "70"}
+PAYLOAD_TARGET = {OFF: "off", BASELINE: "Manual:45", NORMAL: "Manual:62", STORAGE: "Manual:70"}
+PAYLOAD_PRIOR = {OFF: "off", BASELINE: "45", NORMAL: "62", STORAGE: "70"}
 PARK_MODE = "Off"
 TOPIC_PREFIX, TOPIC_SUFFIX = "P/", "/CMD/MODE"
 REFRESH_SUFFIX = "/refresh"
@@ -41,6 +42,7 @@ OBSERVING = "observing"
 PARKED = "parked"  # confirmed OFF
 BASELINE_ACTIVE = "baseline_45"  # confirmed Manual 45
 STORAGE_ACTIVE = "storage_70"  # confirmed Manual 70
+NORMAL_ACTIVE = "normal_storage_62"
 CHANGE_REQUESTED = "change_requested"  # policy wants another state; a gate blocks it
 CONFIRMING = "confirming"  # one command published; waiting for observed status
 OWNER_OVERRIDE = "owner_override"
@@ -51,13 +53,14 @@ STATES = (
     PARKED,
     BASELINE_ACTIVE,
     STORAGE_ACTIVE,
+    NORMAL_ACTIVE,
     CHANGE_REQUESTED,
     CONFIRMING,
     OWNER_OVERRIDE,
     FAULT_LOCKED,
 )
-STEADY = {PARKED, BASELINE_ACTIVE, STORAGE_ACTIVE, CHANGE_REQUESTED}
-STATE_OF = {PARKED: OFF, BASELINE_ACTIVE: BASELINE, STORAGE_ACTIVE: STORAGE}
+STEADY = {PARKED, BASELINE_ACTIVE, NORMAL_ACTIVE, STORAGE_ACTIVE, CHANGE_REQUESTED}
+STATE_OF = {PARKED: OFF, BASELINE_ACTIVE: BASELINE, NORMAL_ACTIVE: NORMAL, STORAGE_ACTIVE: STORAGE}
 ACTIVE_OF = {value: key for key, value in STATE_OF.items()}
 EVENT_PREFIXES = ("fault_", "override_")
 
@@ -75,6 +78,34 @@ BRIDGE_IN_PROGRESS_RESULTS = {
     "submitted_awaiting_status",
     "awaiting_confirmation",
 }
+# 0.9.1 (audit C1). OPTIONAL commands start heating that is not needed for hot
+# water: a peak-solar start and a weekend/night solar start. They stop at the
+# configured daily limit. Every other non-OFF command is ESSENTIAL (the weekday
+# 70 °C heat, the Manual 45 °C baseline, the 12hr Override): optional activity
+# can never use up its budget. Essential commands have their own higher cap, so
+# a fault that loops is still stopped. OFF is never held back.
+OPTIONAL_REASONS = frozenset(
+    {
+        "peak_solar_qualified",
+        "solar_opportunity",
+        "weekday_solar_boost",
+        "weekday_direct_solar_boost",
+    }
+)
+ESSENTIAL_EXTRA_COMMANDS = 6
+# Reserve pre-read/POST/two confirmations/possible refresh for two essential
+# transitions. This local estimate never grants additional vendor quota.
+OPTIONAL_EXIT_REQUEST_RESERVE = 10
+# Must match the policy: only justified protective peak OFF bypasses spacing.
+SPACING_EXEMPT_REASONS = frozenset(
+    {
+        "peak_solar_withdrawn",
+        "peak_meter_unavailable",
+        "peak_heater_meter_unavailable",
+        "peak_lockout",
+    }
+)
+FORECAST_ALERT_AFTER = timedelta(minutes=60)
 BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
 BRIDGE_UNEXPECTED_STATE = "unexpected_state_after_command"
 
@@ -94,7 +125,7 @@ def heater_state(mode: str | None, target_c: float | None) -> str | None:
         return OFF
     if mode == "Manual" and target_c is not None:
         for state, value in TARGET_C.items():
-            if abs(target_c - value) < 0.01:
+            if target_c == value:
                 return state
     return None
 
@@ -108,7 +139,7 @@ RECOVERY = {
     "intent_unresolved_after_restart": "Home Assistant restarted while a command was unconfirmed and no later status resolved it. Check the Thermann app, then Acknowledge fault.",
     "unexpected_mode_during_confirmation": "The heater reported a mode that was neither the previous nor the requested one. Check the Thermann app. Resume automatic control when you are satisfied.",
     "mode_or_target_changed_outside_controller": "The Thermann mode or target changed without a controller command (for example in the app). Automatic control stays paused until you press Resume automatic control.",
-    "unexpected_mode_or_target": "The heater is not OFF, Manual 45 °C or Manual 70 °C (for example it is in Schedule, Eco or another Manual target). Automatic control will not touch it. In the Thermann app choose OFF, Manual 45 °C or Manual 70 °C, then press Resume automatic control.",
+    "unexpected_mode_or_target": "The heater is not OFF or a supported Manual 45/62/70 °C target (for example it is in Schedule, Eco or another Manual target). Automatic control will not touch it. In the Thermann app choose an independently qualified supported state, then press Resume automatic control.",
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
     "guest_mode_not_applied": "The 12hr Override wants Manual at 70 °C but the controller could not apply it (see the reason and gate failures). Check the Thermann Hot Water app and the Thermann app; you can select Manual at 70 °C in the app yourself.",
 }
@@ -123,7 +154,14 @@ class ControllerConfig:
     command_topic: str = ""
     bridge_commands_qualified: bool = False  # 1.3.11 T3 (kept for the record)
     three_state_qualified: bool = False  # 0.9.0: supervised 1.3.13 qualification
-    max_commands_per_day: int = 8  # backstop; a park (OFF) is never held back by it
+    # Daily limit for OPTIONAL solar starts; essential commands may go
+    # ESSENTIAL_EXTRA_COMMANDS beyond it; a park (OFF) is never held back.
+    max_commands_per_day: int = 8
+    # 0.9.1: automatic control needs the published (EMHASS) forecasts enabled.
+    published_forecasts_enabled: bool = True
+    tariff_verified: bool = True
+    requires_four_states: bool = False
+    four_state_qualified: bool = False
     command_spacing_minutes: float = 15.0  # the shared spacing rule, enforced here too
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
@@ -137,8 +175,14 @@ class ControllerConfig:
             missing.append("command_topic_not_configured")
         elif self.expected_command_topic and self.command_topic != self.expected_command_topic:
             missing.append("command_topic_does_not_match_heater")
-        if not self.three_state_qualified:
+        if not self.three_state_qualified and not self.requires_four_states:
             missing.append("three_state_commands_not_qualified")
+        if self.requires_four_states and not self.four_state_qualified:
+            missing.append("four_state_commands_not_qualified")
+        if not self.published_forecasts_enabled and not self.requires_four_states:
+            missing.append("published_forecasts_not_enabled")
+        if not self.tariff_verified:
+            missing.append("tariff_contract_not_verified")
         return missing
 
 
@@ -176,6 +220,8 @@ class Observation:
 
     now: datetime
     poll_at: datetime | None = None  # bridge last_successful_poll
+    heater_meter_mapped: bool = False
+    heater_meter_quality: str | None = None
     mode: str | None = None  # vendor mode: Manual/Schedule/Eco/Off/Holiday/Unknown
     target_c: float | None = None
     temperature_c: float | None = None
@@ -195,6 +241,10 @@ class Observation:
     bridge_transitions: list | None = None  # 1.3.13 diagnostics
     requests_total: int | None = None
     mqtt_ready: bool = False
+    forecast_available: bool | None = None  # published forecast usable now (None: unknown)
+    passive_status_deadline: datetime | None = (
+        None  # validated quiet lease; never command authority
+    )
 
     @property
     def heater_state(self) -> str | None:
@@ -247,18 +297,19 @@ def _dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
 
-def hobart_midnight(day: date | datetime) -> datetime:
+def hobart_midnight(day: date | datetime, zone: str = "Australia/Hobart") -> datetime:
     """Holiday dates take effect at 00:00 Hobart local: a departure of 10
     November starts Holiday mode at 00:00 on 10 November (so today's date
     starts it at once), and a return of 14 November ends it at 00:00 on 14
     November. A datetime is reduced to its Hobart date."""
     if isinstance(day, datetime):
-        day = day.astimezone(HOBART).date()
-    return datetime.combine(day, time(0), HOBART)
+        day = day.astimezone(ZoneInfo(zone)).date()
+    return datetime.combine(day, time(0), ZoneInfo(zone))
 
 
 @dataclass
 class Controller:
+    time_zone: str = "Australia/Hobart"
     enabled: bool = False
     hold: bool = False
     state: str = DISABLED
@@ -282,6 +333,10 @@ class Controller:
     holiday_start: str | None = None
     holiday_return: str | None = None
     refusal: str | None = None
+    forecast_missing_since: str | None = None
+    heater_meter_missing_since: str | None = None
+    last_observed_heater: str | None = None
+    parked_off_restore_since: str | None = None
 
     # ------------------------------------------------------------------ persistence
     def to_dict(self) -> dict:
@@ -300,8 +355,12 @@ class Controller:
         # 0.7-0.8 stored dates AND times; 0.9.0 keeps each Hobart date (00:00).
         for key in ("holiday_start", "holiday_return"):
             value = getattr(controller, key)
-            if value:
-                setattr(controller, key, _iso(hobart_midnight(datetime.fromisoformat(value))))
+            if value and "time_zone" not in data:
+                setattr(
+                    controller,
+                    key,
+                    _iso(hobart_midnight(datetime.fromisoformat(value), controller.time_zone)),
+                )
         intent = controller.intent
         if intent is not None and (not isinstance(intent, dict) or "target" not in intent):
             # A 0.8.x permit/park intent: its outcome is decided by the next
@@ -316,6 +375,8 @@ class Controller:
         """After an HA restart: never assume the heater is in the last REQUESTED
         state. Re-inspect from a NEW status; an unresolved intent is reconciled
         from observed status only and is never re-sent."""
+        if (seen := _dt(self.last_poll_seen)) is not None and seen > now:
+            self.last_poll_seen = None
         self.inspect_after = _iso(now)
         if self.state == CONFIRMING and self.intent:
             self.reason = "reconciling_command_after_restart"
@@ -417,17 +478,20 @@ class Controller:
             return False
         self.guest_started = self.guest_until = None
         self.refusal = None
-        if self.enabled and self.state not in {FAULT_LOCKED, OWNER_OVERRIDE}:
+        # 0.9.1 (audit M1): a steady controller knows the heater state (every
+        # status is checked against it), so the policy resumes at once. Waiting
+        # for a new poll left Manual 70 °C on peak grid for up to 30 minutes.
+        if self.enabled and self.state not in {FAULT_LOCKED, OWNER_OVERRIDE, *STEADY}:
             self._reinspect(now, reason)
         return True
 
     def holiday_start_date(self) -> date | None:
         start = _dt(self.holiday_start)
-        return start.astimezone(HOBART).date() if start else None
+        return start.astimezone(ZoneInfo(self.time_zone)).date() if start else None
 
     def holiday_return_date(self) -> date | None:
         back = _dt(self.holiday_return)
-        return back.astimezone(HOBART).date() if back else None
+        return back.astimezone(ZoneInfo(self.time_zone)).date() if back else None
 
     def set_holiday(
         self, now: datetime, start: date | datetime | None, back: date | datetime | None
@@ -437,9 +501,9 @@ class Controller:
         today starts Holiday mode at once. Validated, never silently
         adjusted; a refusal leaves the previous dates unchanged."""
         if start is not None:
-            start = hobart_midnight(start)
+            start = hobart_midnight(start, self.time_zone)
         if back is not None:
-            back = hobart_midnight(back)
+            back = hobart_midnight(back, self.time_zone)
         if back is not None and back <= now:
             self.refusal = "return_must_be_in_the_future"
             return False
@@ -481,6 +545,10 @@ class Controller:
         now = obs.now
         effects: list[Effect] = []
         new_poll = self._ingest_poll(obs)
+        # A genuine uncontrolled mode/target invalidates older OFF evidence.
+        # Unavailable entities have no mode and retain the last observation.
+        if new_poll and obs.mode is not None:
+            self.last_observed_heater = obs.heater_state
         self.last_want = {
             "state": want.state,
             "reason": want.reason,
@@ -530,7 +598,7 @@ class Controller:
 
     # ------------------------------------------------------------------ helpers
     def _ingest_poll(self, obs: Observation) -> bool:
-        if obs.poll_at is None:
+        if obs.poll_at is None or obs.poll_at > obs.now:
             return False
         seen = _dt(self.last_poll_seen)
         if seen is not None and obs.poll_at <= seen:
@@ -554,7 +622,7 @@ class Controller:
 
     def _fresh_after_inspection(self, obs: Observation) -> bool:
         after = _dt(self.inspect_after)
-        if obs.poll_at is None:
+        if obs.poll_at is None or obs.poll_at > obs.now:
             return False
         return after is None or obs.poll_at > after
 
@@ -608,6 +676,7 @@ class Controller:
             result_at is not None
             and published is not None
             and result_at >= published - timedelta(seconds=5)
+            and result_at <= obs.now
             and last.get("payload") == intent.get("payload")
         )
         if bridge_fresh:
@@ -644,6 +713,7 @@ class Controller:
             and obs.poll_at is not None
             and published is not None
             and obs.poll_at > published
+            and obs.poll_at <= obs.now
         )
         in_progress = bridge_fresh and result in BRIDGE_IN_PROGRESS_RESULTS
         conclusive = after_publish and not in_progress
@@ -687,10 +757,17 @@ class Controller:
         self.intent = None
 
     def gates(
-        self, obs: Observation, target: str, cfg: ControllerConfig, payload: str = ""
+        self,
+        obs: Observation,
+        target: str,
+        cfg: ControllerConfig,
+        payload: str = "",
+        reason: str = "",
     ) -> list[str]:
         """Every reason the controller may NOT publish now (empty = eligible)."""
         failures = list(cfg.missing_commissioning())
+        if "62" in payload and not cfg.four_state_qualified and not cfg.requires_four_states:
+            failures.append("four_state_commands_not_qualified")
         now = obs.now
         if not obs.mqtt_ready:
             failures.append("mqtt_not_ready")
@@ -714,7 +791,9 @@ class Controller:
             failures.append("no_heater_status")
         else:
             age = (now - obs.poll_at).total_seconds()
-            if age > (cfg.poll_interval_minutes + 5) * 60:
+            if age < 0:
+                failures.append("heater_status_in_future")
+            elif age > (cfg.poll_interval_minutes + 5) * 60:
                 failures.append("heater_status_too_old")
             elif (
                 age > BRIDGE_FRESH_SECONDS
@@ -725,17 +804,34 @@ class Controller:
         if obs.heater_state != self.heater:
             failures.append("heater_not_in_confirmed_state")
         last = self.last_command_at()
-        if last is not None and now - last < timedelta(minutes=cfg.command_spacing_minutes):
+        spacing_exempt = target == OFF and reason in SPACING_EXEMPT_REASONS
+        if (
+            not spacing_exempt
+            and last is not None
+            and now - last < timedelta(minutes=cfg.command_spacing_minutes)
+        ):
             # The policy applies the same rule; this is the backstop.
             failures.append("command_spacing")
-        if target != OFF and len(self.commands) >= cfg.max_commands_per_day:
-            # A backstop against a fault; a park (OFF) is never held back by it.
-            failures.append("daily_command_limit_reached")
+        if target != OFF:
+            # A park (OFF) is never held back by either limit.
+            sent = len(self.commands)
+            if reason in OPTIONAL_REASONS:
+                if sent >= cfg.max_commands_per_day:
+                    failures.append("daily_command_limit_reached")
+            elif sent >= cfg.max_commands_per_day + ESSENTIAL_EXTRA_COMMANDS:
+                failures.append("daily_essential_command_limit_reached")
         used = self.requests_last_24h(now)
         if used is None:
             failures.append("request_accounting_unavailable")
         elif used >= cfg.max_requests_per_day and target != OFF:
             failures.append("daily_cloud_request_budget_reached")
+        elif (
+            used is not None
+            and reason in OPTIONAL_REASONS
+            and target != OFF
+            and used + OPTIONAL_EXIT_REQUEST_RESERVE > cfg.max_requests_per_day
+        ):
+            failures.append("optional_exit_request_reserve")
         return failures
 
     def _decide(
@@ -748,7 +844,7 @@ class Controller:
             self.gate_failures = []
             return
         payload = payload_for(want.state, current)
-        failures = self.gates(obs, want.state, cfg, payload)
+        failures = self.gates(obs, want.state, cfg, payload, want.reason)
         self.gate_failures = failures
         if failures:
             self.state, self.reason = CHANGE_REQUESTED, failures[0]
@@ -786,14 +882,82 @@ class Controller:
     ) -> None:
         now = obs.now
         if not self.enabled:
+            self.parked_off_restore_since = None
             for key in list(self.alerts):
                 del self.alerts[key]
                 effects.append(Effect("resolve", key=key))
             effects[:] = [e for e in effects if e.kind != "notify"]
             return
         alerts: list[tuple[str, str, str]] = []
+        # Last OBSERVED software state is retained through unavailable entities
+        # and restart. This is a reliability warning, never an element-state
+        # assertion or permission to bypass peak/owner/confirmation guards.
+        needs_restore = (
+            self.last_observed_heater == OFF
+            and (
+                want.state in TARGET_C
+                or (
+                    self.heater is None
+                    and want.state == "hold"
+                    and want.reason == "heater_state_not_controlled"
+                    and want.plan.get("unconfirmed_restore_target_c") in TARGET_C.values()
+                )
+            )
+            and not self.hold
+            and self.state != OWNER_OVERRIDE
+        )
+        if needs_restore:
+            since = _dt(self.parked_off_restore_since)
+            if since is None or since > now:
+                self.parked_off_restore_since = _iso(now)
+                since = now
+            if now - since >= timedelta(minutes=30):
+                alerts.append(
+                    (
+                        "parked_off_cannot_restore",
+                        "Hot water: parked OFF, cannot restore heat",
+                        "The last observed heater state was software OFF and a permitted heating target "
+                        "has been wanted for 30 minutes without confirmed restoration. Hot water may run out. "
+                        "Check cloud/authentication/controller faults and the Thermann app. No command or lock "
+                        "is automatically retried or reset. If the app is unavailable, follow the manufacturer's "
+                        "local-control instructions or contact qualified support; never bypass electrical protection. "
+                        "Strict peak lockout needs working control to restore heat. This warning does not authorise peak heating.",
+                    )
+                )
+        else:
+            self.parked_off_restore_since = None
+        if want.reason == "peak_lockout" and (self.heater != OFF or self.state == CONFIRMING):
+            alerts.append(
+                (
+                    "peak_lockout_unverified",
+                    "Hot water: peak lockout not yet confirmed",
+                    "Routine peak heating is locked out, but software OFF has not been confirmed. "
+                    "Cloud failures or an in-flight command may delay it. No command is blindly repeated. "
+                    "Software OFF never proves zero electrical power; native protections and owner intervention remain independent.",
+                )
+            )
+        if obs.heater_meter_mapped and obs.heater_meter_quality not in ("verified", "unverified"):
+            since = _dt(self.heater_meter_missing_since)
+            if since is None or since > now:
+                self.heater_meter_missing_since = _iso(now)
+                since = now
+            if now - since >= timedelta(minutes=5):
+                alerts.append(
+                    (
+                        "heater_meter_unavailable",
+                        "Hot water: raw circuit meter unavailable",
+                        f"Circuit power is {obs.heater_meter_quality or 'unknown'}. Optional solar heat is blocked; "
+                        "essential off-peak heat retains its normal guards. Check the raw meter entity, sign, units "
+                        "and last_reported cadence, including steady 0 W. Repeated evaluations do not prove liveness.",
+                    )
+                )
+        else:
+            self.heater_meter_missing_since = None
         if (
-            self.state == STORAGE_ACTIVE
+            self.state in {STORAGE_ACTIVE, NORMAL_ACTIVE}
+            and self.heater in TARGET_C
+            and obs.poll_at is not None
+            and 0 <= (now - obs.poll_at).total_seconds() <= (cfg.poll_interval_minutes + 5) * 60
             and obs.element == "off"
             and obs.element_confidence in {"verified", "high"}
         ):
@@ -801,28 +965,38 @@ class Controller:
             since = _dt(self.storage_idle_since)
             if (
                 obs.temperature_c is not None
-                and obs.temperature_c <= TARGET_C[STORAGE] - 8 - 2
+                and obs.temperature_c <= TARGET_C[self.heater] - 8 - 2
                 and now - since >= timedelta(minutes=15)
             ):
                 alerts.append(
                     (
                         "storage_not_heating",
-                        "Hot water: Manual 70 °C but not heating",
-                        f"Manual 70 °C is confirmed and the reading is {obs.temperature_c} °C, but "
+                        "Hot water: Manual target confirmed but not heating",
+                        f"Manual {TARGET_C[self.heater]} °C is confirmed and the reading is {obs.temperature_c} °C, but "
                         "the element has been off for 15 minutes. No command is repeated. Check "
                         "the heater and its power supply.",
                     )
                 )
         else:
             self.storage_idle_since = None
-        if obs.poll_at is None or (now - obs.poll_at) > timedelta(
-            minutes=2 * cfg.poll_interval_minutes + 5
+        passive_ok = (
+            obs.passive_status_deadline is not None
+            and obs.poll_at is not None
+            and obs.poll_at <= now <= obs.passive_status_deadline
+            and obs.passive_status_deadline - obs.poll_at <= timedelta(minutes=95)
+        )
+        if not passive_ok and (
+            obs.poll_at is None
+            or not timedelta(0)
+            <= now - obs.poll_at
+            <= timedelta(minutes=2 * cfg.poll_interval_minutes + 5)
         ):
             alerts.append(
                 (
                     "status_stale",
                     "Hot water: heater status missing",
-                    "No fresh Thermann status for over an hour. Automatic commands are paused. "
+                    "Thermann status is missing, future-dated or beyond the configured freshness window. "
+                    "Automatic commands require a valid status. "
                     "Check the Thermann Hot Water app and cloud health.",
                 )
             )
@@ -836,6 +1010,21 @@ class Controller:
                     "documentation.",
                 )
             )
+        if obs.forecast_available is False:
+            self.forecast_missing_since = self.forecast_missing_since or _iso(now)
+            if now - _dt(self.forecast_missing_since) >= FORECAST_ALERT_AFTER:
+                alerts.append(
+                    (
+                        "forecast_unavailable",
+                        "Hot water: EMHASS forecast unavailable",
+                        "No usable published PV and household-load forecast for over an hour. "
+                        "Heating is planned from measured solar only: weekday grid heating "
+                        "waits for the latest start, and weekend solar heating rarely starts. "
+                        "Check the EMHASS forecast sensors and 'Use published forecasts'.",
+                    )
+                )
+        else:
+            self.forecast_missing_since = None
         started = _dt(self.guest_started)
         if (
             self.guest_active(now)
@@ -857,8 +1046,8 @@ class Controller:
                 (
                     "evening_target_at_risk",
                     "Hot water: 70 °C may not be reached before the peak",
-                    "Heating continues on off-peak power until the peak starts "
-                    f"(expected reading about {want.plan.get('expected_reading_at_peak')} °C).",
+                    "Heating continues on permitted off-peak power until the peak starts. "
+                    "The bottom-sensor model cannot promise completion; inspect the last observed temperature and time.",
                 )
             )
         cooldown = timedelta(hours=cfg.notification_cooldown_hours)
@@ -916,4 +1105,6 @@ class Controller:
             "holiday_start": self.holiday_start,
             "holiday_return": self.holiday_return,
             "last_mode_refusal": self.refusal,
+            "last_observed_heater": self.last_observed_heater,
+            "parked_off_restore_since": self.parked_off_restore_since,
         }

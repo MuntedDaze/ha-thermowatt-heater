@@ -104,16 +104,26 @@ class Rig:
             entry_id="entry1",
             options={
                 "forecast_enabled": True,
+                "meter_verified": True,
+                "tariff_verified": True,
+                "import_positive": False,
+                "tariff_clock": "standard",
+                "normal_storage_c": "70",  # previous-strategy regression fixture
+                "peak_heating_policy": "Verified solar-only heating",
                 "forecast_uncertainty": 0.0,
                 "forecast_house_margin_kw": 0.0,
                 "controller_command_topic": TOPIC,
                 "controller_three_state_qualified": True,
+                "controller_four_state_qualified": True,
+                "heater_meter_verification": "sensor.synthetic_heater_w|W",
             },
         )
         self.sources = {
             **c.DEFAULT_SOURCES,
             "forecast_pv": FORECAST_PV,
             "forecast_load": FORECAST_LOAD,
+            "pv_ac": c.DEFAULT_PV_AC,
+            "heater_power": "sensor.synthetic_heater_w",
         }
         self.hass = SimpleNamespace(
             states=SimpleNamespace(get=self.states.get),
@@ -325,6 +335,11 @@ class Rig:
                 self.bridge.tick()
             self.tank.minute(self.t)
             self._meter()
+            self.report(
+                "sensor.synthetic_heater_w",
+                3000 if self.tank.element else 0,
+                {"unit_of_measurement": "W"},
+            )
             if self.now().minute in (0, 30):
                 self._forecast()  # EMHASS publishes every 30 minutes
             if every_minute:
@@ -424,9 +439,9 @@ def test_restart_while_confirming_never_resends(rig):
 
 
 def test_enable_is_refused_until_commissioning_is_complete(rig):
-    rig.entry.options["controller_three_state_qualified"] = False
+    rig.entry.options["controller_four_state_qualified"] = False
     rig.executor.configure(rig.entry.options)
-    with pytest.raises(RuntimeError, match="three_state_commands_not_qualified"):
+    with pytest.raises(RuntimeError, match="four_state_commands_not_qualified"):
         rig.enable()
     assert rig.executor.controller.enabled is False
 

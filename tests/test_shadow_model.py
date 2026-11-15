@@ -86,11 +86,11 @@ def test_bad_settings_rejected(option, value):
         c.parse_options({option: value})
 
 
-def test_sources_defaults_match_owner_and_validate_only_provisional_sign():
+def test_fresh_defaults_are_unverified_and_legacy_ids_remain_for_migration():
     settings, _ = c.parse_options({})
-    assert settings.import_positive is False
-    assert settings.meter_verified is settings.tariff_verified is True
-    assert settings.tariff_clock == "standard"
+    assert settings.import_positive is True
+    assert settings.meter_verified is False and settings.tariff_verified is False
+    assert settings.tariff_clock == "local"
     assert c.DEFAULT_SOURCES["heater"] == "water_heater.home_boiler_home"
     assert c.DEFAULT_SOURCES["mode"] == "sensor.home_boiler_home_vendor_mode"
 
@@ -112,15 +112,22 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
                 assert (node.module or "").split(".")[0] not in forbidden
             if isinstance(node, ast.Attribute) and node.attr in actuation:
                 seen.setdefault(path.name, set()).add(node.attr)
-        assert "_attr_state_class" not in source
+        if "_attr_state_class" in source:
+            # Only the actual/advisory polling durations are measurement
+            # statistics. Tank models and estimated energy remain unclassified.
+            assert path.name == "sensor.py"
+            assert 'if key in {"cloud_poll_interval", "adaptive_poll_interval"}' in source
+            assert "SensorStateClass.MEASUREMENT" in source
+            assert "SensorStateClass.TOTAL" not in source
     assert seen == {"executor.py": {"async_publish", "async_call"}}
     executor = (PACKAGE / "executor.py").read_text()
-    # One command publish, and one guarded on-demand status request (refresh topic only).
-    assert executor.count("mqtt.async_publish(") == 2
+    # One command, one guarded refresh and one bounded scheduling-plan publish.
+    # Plans use a separate topic and cannot operate HTTP or heater commands.
+    assert executor.count("mqtt.async_publish(") == 3
     assert "refresh_topic(self.cfg.command_topic)" in executor
     assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.9.0"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.13.0"
     assert manifest["integration_type"] == "hub"
     assert "mqtt" not in manifest.get("dependencies", [])  # loads without MQTT
 
@@ -144,8 +151,17 @@ def runtime(monkeypatch):
         states=SimpleNamespace(get=states.get),
         config=SimpleNamespace(units=SimpleNamespace(temperature_unit="°C")),
     )
-    settings, tariffs = c.parse_options({})
-    instance = module.ShadowRuntime(hass, c.DEFAULT_SOURCES, settings, tariffs)
+    settings, tariffs = c.parse_options(
+        {
+            "meter_verified": True,
+            "tariff_verified": True,
+            "import_positive": False,
+            "tariff_clock": "standard",
+        }
+    )
+    instance = module.ShadowRuntime(
+        hass, {**c.DEFAULT_SOURCES, "pv_ac": c.DEFAULT_PV_AC}, settings, tariffs
+    )
 
     def report(key, value, attrs=None, at=None):
         entity = c.DEFAULT_PV_AC if key == "pv_ac" else c.DEFAULT_SOURCES[key]

@@ -2,7 +2,7 @@
 
 *Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
-Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts two heater commands from the Hot Water Controller.
+Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Bridge 1.3.17 is an unmerged, uninstalled development candidate; four-state hardware behaviour still requires supervised qualification. See the [focused handoff](../docs/audit-remediation/HANDOFF.md) and [owner installation guide](../docs/pre-review/OWNER_INSTALLATION.md). Public distribution is deferred.
 
 **Defaults are safe:** cloud access off, commands off, polling every 30 minutes.
 
@@ -18,6 +18,9 @@ poll_interval_minutes: 30
 poll_interval_unit: minutes
 min_cloud_retry_minutes: 60
 on_demand_refresh_enabled: false
+adaptive_polling_enabled: false
+adaptive_polling_qualified: false
+event_aware_polling_qualified: false
 auth_retry_generation: 0
 ```
 
@@ -25,10 +28,12 @@ auth_retry_generation: 0
 | --- | --- |
 | `cloud_enabled` | Allows this add-on to use the cloud at all. |
 | `commands_enabled` | Allows MQTT heater commands. Leave `false` for read-only use. |
-| `command_policy` | `automation` (default) accepts only `MODE=Manual:70` and `MODE=off`, and refuses everything else before any cloud request. `legacy` restores the older, broader command set; only choose it deliberately. |
-| `poll_interval_minutes` + `poll_interval_unit` | Background polling: 1–120 minutes, or 60–7200 seconds. 30 minutes is recommended. From 1.3.13 polls are clock-aligned (with 30 minutes: :00 and :30). A restart reads once, then rejoins the clock slots. An on-demand, command or confirmation read never moves the schedule, and a due poll is skipped (the slot kept) when the heater was read in the last 3 minutes. |
+| `command_policy` | `automation` (default) accepts only the exact-prior transition allowlist below, plus the two retained legacy forms, and refuses unsupported payloads before a cloud request. `legacy` restores the older, broader command set; only choose it deliberately. |
+| `poll_interval_minutes` + `poll_interval_unit` | Fixed background polling: 1–120 minutes, or 60–7200 seconds. Default 30 minutes, clock-aligned (:00/:30). Restart reads once, then rejoins slots. In fixed mode, guarded reads keep the slots and a due poll reuses status from the last 3 minutes. Optional adaptive mode below uses the same worker with a successful-read anchor instead. |
 | `min_cloud_retry_minutes` | First wait after an ordinary cloud error, 5–1440 minutes (default 60). Repeated errors double it, up to 24 hours. A success resets it. |
 | `on_demand_refresh_enabled` | Optional read-only refresh on `P/<serial>/refresh`, at most one read per 5 minutes. Off by default; the controller does not need it. |
+| `adaptive_polling_enabled` + `adaptive_polling_qualified` | Both false by default. Both plus controller plan enable and fixed interval ≥15 minutes are required for bridge-owned bounded adaptive status scheduling. Requires independent qualification. Missing/expired plans select fixed fallback; auth/backoff/quotas/confirmation retain priority. See the [wire contract and telemetry](../docs/final-integration/TELEMETRY.md). |
+| `event_aware_polling_qualified` | New separate default-false permission, including upgrades. Allows v2 purpose-bound longer quiet observations only after independent review; the controller also needs its quiet permission and selected 30–90 minute owner-change bound. Active temperature validity and strict 60-second command checks stay unchanged. See [evidence and limits](../docs/pre-review/POLLING.md). |
 | `auth_retry_generation` | Increase by one to allow **one** new authentication attempt after a lock (see below). 0 starts locked. |
 
 Options are read from `/data/options.json` (`!secret` works). Credentials are never logged or passed on the command line.
@@ -51,6 +56,22 @@ Under the `automation` policy:
 - Anything else, including a change made in the app since the last poll, is refused with no request.
 - A command already in place (OFF while OFF) sends nothing.
 
+| Fresh expected prior | Allowed target payloads |
+|---|---|
+| OFF | `Manual:45@off`, `Manual:62@off`, `Manual:70@off` |
+| Manual 45°C | `off@45`, `Manual:62@45`, `Manual:70@45` |
+| Manual 62°C | `off@62`, `Manual:45@62`, `Manual:70@62` |
+| Manual 70°C | `off@70`, `Manual:45@70`, `Manual:62@70` |
+
+Manual 62°C is a thermostat setting, not proof the sensor has reached 62°C or
+that the element energises. Unsupported values and malformed payloads are refused.
+Native protection cycles remain independent. Confirmed cloud OFF is a software
+state, not proof of zero electrical consumption. A failed/unconfirmed protective
+OFF must be reported as an unverified lockout. CT-free baseline and required
+off-peak heating are supported by the controller; optional solar heat needs a
+fresh commissioned raw circuit measurement. See [upgrade/rollback](https://github.com/MuntedDaze/ha-thermowatt-heater/blob/codex/economic-dual-storage/docs/dual-storage/UPGRADE.md)
+before returning from a 62°C state to an older bridge.
+
 How a command is carried out:
 1. **Fresh status first.** A command needs status no older than 60 s. If it is older, the bridge reads once first, after checking the policy, the command's age (≤ 30 s), the device, authentication, quota and backoff. It allows at most 24 such reads a day.
 2. **Sent once.** The command is recorded privately, then sent **once**, never repeated.
@@ -68,7 +89,7 @@ Retained MQTT messages and commands older than 30 seconds are ignored.
 - **Transient failures** (timeouts, connection errors, HTTP 5xx) get at most three attempts, 60 s and then 300 s apart. The count survives restarts.
 - **Rejections lock immediately.** That covers 401, 403, 429, an unrecognised response, or a TLS error. The bridge then idles; it does not exit or loop.
 - **Locks are persistent.** Restarting, updating, changing the password or toggling Watchdog does **not** clear a lock.
-- **Token expiry:** the access token lasts under 30 minutes. From 1.3.13 a request made when the token is at least 20 minutes old (or of unknown age after a restart) refreshes it **first**, so a 30-minute poll costs 2 requests instead of 3. A refresh is never attempted inside the guard's 5-minute cooldown. A read that still gets 401 refreshes once and repeats once, and a 401 within 5 minutes of any refresh locks (`cloud_refresh_cooldown`), exactly as before.
+- **Refresh heuristic:** vendor token lifetime is not established. From 1.3.13 a request made when the token is at least 20 minutes old (or of unknown age after a restart) refreshes it **first**. A successful 30-minute poll then normally costs a refresh plus a status request; actual errors can add requests. A refresh is never attempted inside the guard's 5-minute cooldown. A read that still gets 401 refreshes once and repeats once, and a 401 within 5 minutes of any refresh locks (`cloud_refresh_cooldown`), exactly as before.
 - **Commands are never replayed** after an authentication failure.
 
 ### Clearing an authentication lock (owner action)

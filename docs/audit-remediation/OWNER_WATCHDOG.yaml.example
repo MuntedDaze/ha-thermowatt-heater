@@ -1,0 +1,21 @@
+# Optional separate HA automation. Replace BOTH entity and notify service with
+# verified actual IDs; merge as an automation list item, never replace all YAML.
+# Future owner approval/testing required. No heater or controller command.
+- id: thermann_owner_controller_watchdog
+  alias: "Hot water: controller monitoring has stopped"
+  triggers:
+    - trigger: template
+      value_template: >-
+        {{ as_timestamp(now()) -
+           as_timestamp(states('sensor.thermann_shadow_controller_last_evaluated'), 0) > 1800 }}
+      for: "00:05:00"
+  actions:
+    - action: notify.mobile_app_replace_me
+      data:
+        title: "Hot water monitoring needs attention"
+        message: >-
+          The controller has no recent evaluation. Check Home Assistant and the
+          Thermann app. If last parked OFF, heat cannot be restored without a
+          working control path. Follow the approved manual recovery guide.
+          No heater command has been sent by this notification.
+  mode: single

@@ -257,9 +257,11 @@ def test_the_daily_backstop_never_holds_back_a_park():
     c = ready(now, "Manual", 70.0)
     c.commands = [(now - timedelta(minutes=30 + i)).isoformat() for i in range(8)]
     assert publishes(c.step(obs(now, "Manual", 70.0), want("off"), cfg())) == ["off@70"]
+    # An optional solar start stops at the limit (0.9.1: essential commands
+    # have their own higher cap; see test_audit_regressions_0_9_1.py).
     d = ready(now)
-    d.commands = list(c.commands)
-    assert publishes(d.step(obs(now), want("storage"), cfg())) == []
+    d.commands = [(now - timedelta(minutes=30 + i)).isoformat() for i in range(8)]
+    assert publishes(d.step(obs(now), want("storage", "peak_solar_qualified"), cfg())) == []
     assert "daily_command_limit_reached" in d.gate_failures
 
 

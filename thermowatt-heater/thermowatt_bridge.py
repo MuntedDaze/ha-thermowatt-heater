@@ -20,6 +20,7 @@ from paho.mqtt.enums import CallbackAPIVersion
 import requests
 
 from thermowatt_read_only import RequestUsage, daily_limit, poll_seconds
+from thermowatt_polling import AdaptiveSchedule
 
 LOG = logging.getLogger("thermowatt")
 _APP_API_KEY = "YVjArWssxKH631jv1dnnWOTr6gijsSAGz7rQJ4hJoUNRffxYvbQaMbePBEZalena"
@@ -265,10 +266,10 @@ PLAIN_PAYLOADS = {"off", "Off", "Eco", "Auto", "Manual"}
 # any cloud request. "legacy" restores the full 1.3.8 command set and must be
 # chosen explicitly. Read-only monitoring is identical under both.
 COMMAND_POLICIES = ("automation", "legacy")
-# Three-state transitions (1.3.13): "<target>@<prior>". The controller states
+# Guarded transitions (1.3.14): "<target>@<prior>". The controller states
 # the exact state it expects to leave; the FRESH status (<= 60 s) must show it,
 # or the command is refused with no request (an owner change in the app is
-# never overwritten). Targets: software OFF, Manual 45 °C, Manual 70 °C.
+# never overwritten). Closed supported set: OFF, Manual 45/62/70 °C.
 TRANSITIONS = {
     "off@45": ("off", 45),
     "off@70": ("off", 70),
@@ -276,6 +277,12 @@ TRANSITIONS = {
     "Manual:45@70": (45, 70),
     "Manual:70@off": (70, "off"),
     "Manual:70@45": (70, 45),
+    "off@62": ("off", 62),
+    "Manual:62@off": (62, "off"),
+    "Manual:62@45": (62, 45),
+    "Manual:62@70": (62, 70),
+    "Manual:45@62": (45, 62),
+    "Manual:70@62": (70, 62),
 }
 # The 1.3.11 forms stay accepted for the installed controller: Manual:70 from
 # OFF only, off from Manual 70 only.
@@ -311,9 +318,10 @@ COMMAND_STATE_VERSION = 1
 # read of that heater happened within this many seconds (a command refresh, a
 # confirmation or an on-demand read): it already supplied the reading.
 POLL_REUSE_SECONDS = 180
-# Proactive token refresh (1.3.13; authentication change, owner approval). The
-# access token lasts under 30 minutes (every 30-minute poll in 1.3.11 was GET
-# 401 -> refresh -> GET). A request made when the token is at least this old
+# Proactive token refresh (1.3.13; authentication change, owner approval). Prior
+# field observations showed GET401 -> refresh -> GET at30-minute polling; this
+# does not establish a universal vendor token/session lifetime. Only an actual
+# cloud operation checks age: no idle keepalive is sent. A token this old
 # refreshes FIRST, saving the doomed 401 GET. The guard, its retry limits and
 # the 5-minute refresh cooldown are unchanged; a 401 still refreshes once.
 PROACTIVE_REFRESH_AGE = 1200
@@ -415,6 +423,17 @@ class MyThermowattBridge:
         self.refresh_requested = set()
         self.refresh_lock = threading.Lock()
         self.read_this_tick = set()  # serials whose status was read in this tick
+        self.poll_hints = {}
+        self.poll_schedule = AdaptiveSchedule(
+            self.options.get("adaptive_polling_enabled", False)
+            and self.options.get("adaptive_polling_qualified", False)
+            and self.poll_interval >= 900,
+            self.clock,
+            self.monotonic,
+            self.data_dir / "poll_state.json",
+            atomic_json,
+            extended_qualified=self.options.get("event_aware_polling_qualified", False),
+        )
         self.failures = self.usage.failures
         if self.usage.cooldown_until > self.clock():
             self.next_cloud = self.next_poll = self.usage.cooldown_until
@@ -601,7 +620,7 @@ class MyThermowattBridge:
         age = self._token_age()
         return age is None or age >= PROACTIVE_REFRESH_AGE
 
-    def request(self, method, endpoint, serial=None, **kwargs):
+    def request(self, method, endpoint, serial=None, _refresh_prepared=False, **kwargs):
         self.guard.check()
         if not self.options.get("cloud_enabled", False):
             raise AuthBlocked("cloud_disabled")
@@ -609,7 +628,7 @@ class MyThermowattBridge:
             raise CloudError("authentication_not_ready")
         if self.clock() < self.next_cloud:
             raise CloudError("cloud_backoff")
-        if self._token_due_for_refresh():
+        if not _refresh_prepared and self._token_due_for_refresh():
             operation = self.operation
             self.refresh_session()
             self.operation = operation
@@ -676,8 +695,10 @@ class MyThermowattBridge:
 
     def _offline(self):
         self.confirmed.clear()
+        self.poll_schedule.clear()
         with self.refresh_lock:
             self.refresh_requested.clear()
+            self.poll_hints.clear()
         for serial in self.config["devices"]:
             self._availability(serial, False)
         while True:
@@ -796,6 +817,7 @@ class MyThermowattBridge:
             health = self.cloud_health
         for serial in self.config["devices"]:
             timestamp = self.last_success.get(serial)
+            schedule = self.poll_schedule.summary(serial)
             payload = {
                 "last_successful_poll": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
                 if timestamp is not None
@@ -816,6 +838,7 @@ class MyThermowattBridge:
                 "poll_interval_seconds": self.poll_interval,
                 "consecutive_failures": self.failures,
                 "on_demand_refresh_enabled": self.options.get("on_demand_refresh_enabled", False),
+                "adaptive_plan_versions": [1, 2] if self.poll_schedule.extended_qualified else [1],
                 "commands_enabled": bool(self.options.get("commands_enabled", False)),
                 "command_policy": self.options.get("command_policy", "automation"),
                 "last_command": dict(self.last_command) if self.last_command else None,
@@ -827,6 +850,18 @@ class MyThermowattBridge:
                 # controller requires them) and the polling schedule.
                 "command_transitions": sorted(TRANSITIONS),
                 "poll_schedule": "clock_aligned",
+                "adaptive_polling": schedule,
+                "polling_mode": "adaptive"
+                if schedule["active"]
+                else "fixed_fallback"
+                if schedule["enabled"]
+                else "fixed",
+                "polling_reason": schedule["reason"],
+                "next_scheduled_poll": datetime.fromtimestamp(
+                    schedule["next_at"], timezone.utc
+                ).isoformat()
+                if schedule["next_at"] is not None and health == "ok"
+                else None,
                 "refused_while_pending": dict(self.refused_while_pending)
                 if self.refused_while_pending
                 else None,
@@ -838,6 +873,11 @@ class MyThermowattBridge:
         self.mqtt_client.subscribe(
             f"P/{serial}/CMD/#", options=mqtt.SubscribeOptions(qos=0, retainAsPublished=True)
         )
+        if self.poll_schedule.active:
+            self.mqtt_client.subscribe(
+                f"P/{serial}/poll_plan",
+                options=mqtt.SubscribeOptions(qos=0, retainAsPublished=True),
+            )
         if self.options.get("on_demand_refresh_enabled", False):
             self.mqtt_client.subscribe(
                 f"P/{serial}/refresh", options=mqtt.SubscribeOptions(qos=0, retainAsPublished=True)
@@ -862,6 +902,15 @@ class MyThermowattBridge:
         if msg.retain or not self.mqtt_connected.is_set():
             return
         parts = msg.topic.split("/")
+        if len(parts) == 3 and parts[0] == "P" and parts[2] == "poll_plan":
+            if (
+                self.poll_schedule.active
+                and parts[1] in self.active_devices
+                and len(msg.payload) <= 512
+            ):
+                with self.refresh_lock:
+                    self.poll_hints[parts[1]] = msg.payload
+            return
         if len(parts) == 3 and parts[0] == "P" and parts[2] == "refresh":
             serial = parts[1]
             if (
@@ -904,6 +953,38 @@ class MyThermowattBridge:
             and self.cloud_health not in {"backoff", "quota_limited"}
         )
 
+    def _adaptive_sync(self):
+        # This remains the only background polling timer. MQTT callbacks queue
+        # plans; they never authenticate or independently trigger a GET.
+        if (
+            not self.poll_schedule.active
+            or not self.discovered
+            or self.cloud_health != "ok"
+            or self.clock() < self.usage.cooldown_until
+        ):
+            return
+        with self.refresh_lock:
+            hints, self.poll_hints = self.poll_hints, {}
+        for serial, payload in hints.items():
+            if serial in self.active_devices:
+                self.poll_schedule.accept(serial, payload)
+        due_now = False
+        for serial in self.active_devices:
+            due = self.poll_schedule.deadline(serial)
+            if due is not None:
+                remaining = max(0, due - self.monotonic())
+                self.next_background[serial] = self.clock() + remaining
+                due_now |= remaining == 0
+        if self.next_background:
+            self.next_poll = min(
+                (self.next_background.get(serial, 0) for serial in self.active_devices),
+                default=self.clock() + self.poll_interval,
+            )
+        # UTC clock changes cannot stall an otherwise healthy monotonic poll.
+        # Backoff/lockout paths above are never shortened.
+        if due_now and not self.failures:
+            self.next_cloud = min(self.next_cloud, self.clock())
+
     def _take_demand(self):
         with self.refresh_lock:
             pending = self.refresh_requested & self.active_devices
@@ -937,7 +1018,10 @@ class MyThermowattBridge:
         self.active_devices = active
         self.operation = "device_cache_storage"
         atomic_json(self.config_path, self.config)
-        self.discovered = True
+        # An empty, valid response is not a usable device discovery. Retry only
+        # at the ordinary fixed deadline, rather than spinning or forgetting to
+        # rediscover after a device returns.
+        self.discovered = bool(active)
 
     def poll_status(self, serial, category=None, operation=None):
         self.last_status_attempt[serial] = self.monotonic()
@@ -984,6 +1068,13 @@ class MyThermowattBridge:
         self.mqtt_client.publish(f"P/{serial}/STATUS", json.dumps({"result": safe}), retain=True)
         self._availability(serial, True)
         self.last_success[serial] = self.clock()
+        self.poll_schedule.observed(serial, self.last_success[serial], self.poll_interval)
+        if category == "status":
+            self.poll_schedule.counts["ordinary_reads"] += 1
+        else:
+            self.poll_schedule.counts["reused_reads"] += 1
+        if self.poll_schedule.enabled:
+            self.poll_schedule.save()
         self.cloud_health = "ok"
         self.publish_diagnostics(force=True)
         # Every fresh read after a command's POST is evidence for its outcome.
@@ -1388,6 +1479,31 @@ class MyThermowattBridge:
                 expected = ({9}, observed)
             else:
                 arguments = {"data": ""}
+        # A due refresh is known NOT to be a heater POST. Finish it before
+        # recording an uncertain command. A refresh failure refuses this intent;
+        # it must not be described as a command that was sent once.
+        if self._token_due_for_refresh():
+            try:
+                self.refresh_session()
+            except CloudError as error:
+                self._command_result(
+                    kind,
+                    payload,
+                    "refused_authentication_before_command",
+                    refresh=refresh,
+                    error=self.quota_signal or (error.args[0] if error.args else None),
+                )
+                raise
+            if not self._status_is_fresh(serial):
+                self._command_result(
+                    kind, payload, "refused_status_expired_during_authentication", refresh=refresh
+                )
+                return
+            if self.monotonic() - issued > COMMAND_MAX_AGE_AFTER_REFRESH:
+                self._command_result(
+                    kind, payload, "dropped_command_expired_during_refresh", refresh=refresh
+                )
+                return
         # Persist the uncertain command BEFORE the POST: a crash or restart from
         # here on never re-sends it, and the next reads decide its outcome.
         self.pending = {
@@ -1416,7 +1532,9 @@ class MyThermowattBridge:
         self.operation = "heater_command"
         self._availability(serial, False)
         try:
-            response = self.request("POST", endpoint, serial, **arguments)
+            # No authentication operation may start inside the uncertain-POST
+            # window. request still checks the guard, cloud flag and backoff.
+            response = self.request("POST", endpoint, serial, _refresh_prepared=True, **arguments)
         except CloudError as error:
             # Unknown whether the cloud acted (e.g. a timeout after delivery):
             # never re-sent; the bounded reads decide, or the deadline does.
@@ -1460,6 +1578,7 @@ class MyThermowattBridge:
         polling = False
         self.read_this_tick = set()
         try:
+            self._adaptive_sync()
             self.operation = "authentication_guard"
             self.guard.check()
             if self.clock() < self.next_cloud:
@@ -1517,9 +1636,12 @@ class MyThermowattBridge:
                 if self.last_diagnostic is not None:
                     LOG.info("Bridge resumed: code=cloud_cycle_recovered.")
                 self.last_diagnostic = None
-                self.cloud_health = "ok"
+                self.cloud_health = "ok" if self.active_devices else "no_devices"
+                if not self.active_devices:
+                    self.last_error = "device_list_empty"
                 self.publish_diagnostics(force=True)
             self.next_cloud = min(self.clock() + self.COMMAND_INTERVAL, self.next_poll)
+            self._adaptive_sync()
         except (CloudError, OSError, ValueError, TypeError) as error:
             self._offline()
             self.failures = min(self.failures + 1, 5)
@@ -1621,7 +1743,14 @@ def load_options(path):
     for key in ("email", "password"):
         if not isinstance(options.get(key, ""), str):
             raise ValueError
-    for key in ("cloud_enabled", "commands_enabled", "on_demand_refresh_enabled"):
+    for key in (
+        "cloud_enabled",
+        "commands_enabled",
+        "on_demand_refresh_enabled",
+        "adaptive_polling_enabled",
+        "adaptive_polling_qualified",
+        "event_aware_polling_qualified",
+    ):
         if type(options.get(key, False)) is not bool:
             raise ValueError
     if options.get("command_policy", "automation") not in COMMAND_POLICIES:

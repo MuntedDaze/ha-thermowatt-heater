@@ -7,6 +7,8 @@ from datetime import time
 from .model import Settings, Tariff, number, validate_tariffs, validate_settings
 
 DOMAIN = "thermann_shadow"
+# Legacy IDs remain solely for migration and documented household examples.
+CLOUD_SOURCES = frozenset({"heater", "mode", "last_poll", "cloud_health", "requests"})
 DEFAULT_SOURCES = {
     "heater": "water_heater.home_boiler_home",
     "mode": "sensor.home_boiler_home_vendor_mode",
@@ -19,7 +21,13 @@ DEFAULT_SOURCES = {
     "import_energy": "sensor.goodwe_inverter_meter_total_energy_import",
     "export_energy": "sensor.goodwe_inverter_meter_total_energy_export",
 }
-OPTIONAL_SOURCES = {"forecast_pv": "", "forecast_load": "", "pv_ac": "", "heater_power": ""}
+OPTIONAL_SOURCES = {
+    "forecast_pv": "",
+    "forecast_load": "",
+    "pv_ac": "",
+    "heater_power": "",
+    "heater_energy": "",
+}
 # AC-side inverter output, consistent with the AC meter and house load. Used
 # when no explicit pv_ac mapping is saved (existing 0.3.0 entries).
 DEFAULT_PV_AC = "sensor.goodwe_inverter_total_power"
@@ -28,10 +36,14 @@ DEFAULT_PV_AC = "sensor.goodwe_inverter_total_power"
 LEGACY_MORNING_THRESHOLD_C = 40.0
 DEFAULT_OPTIONS = {
     "paused": False,
-    "meter_verified": True,  # owner-reported HK1000 load test; direction preserved
-    "tariff_verified": True,  # owner-confirmed Tariff 93, fixed AEST
-    "import_positive": False,
-    "tariff_clock": "standard",
+    "meter_verified": False,
+    "tariff_verified": False,
+    "import_positive": True,
+    "tariff_clock": "local",
+    "time_zone": "Australia/Hobart",  # preserved legacy fallback, not fresh setup
+    "daytime_start": "09:00",
+    "storage_ready_time": "16:00",
+    "baseline_start": "21:00",
     "target_c": 70.0,
     "morning_threshold_c": 42.0,
     "morning_preferred_c": 45.0,
@@ -95,6 +107,28 @@ DEFAULT_OPTIONS = {
     "controller_max_requests_per_day": 220.0,
     "controller_execution_latency_minutes": 30.0,
     "controller_notify_service": "",
+    "heater_meter_verification": "",  # commissioned entity_id|W (or |kW); no default authority
+    "adaptive_polling_shadow": False,
+    "adaptive_polling_enabled": False,
+    "event_aware_polling_enabled": False,
+    "owner_change_check_minutes": 60.0,
+    "learned_planning_enabled": False,
+    "learning_hardware_qualified": False,
+    "adaptive_poll_heating_minutes": 60.0,
+    "adaptive_poll_stable_minutes": 90.0,
+    "optional_heat_margin_aud_per_kwh": 0.02,
+    "pause_min_saving_aud": 0.30,
+    "baseline_c": "45",
+    "normal_storage_c": "62",
+    "solar_boost_c": "70",
+    "tank_litres": 315.0,
+    "element_kw": 3.0,
+    "completion_margin_minutes": 30.0,
+    "optional_solar_boost": True,
+    "peak_heating_policy": "Never schedule heating during peak",
+    "boost_useful_fraction": 0.9,
+    "boost_min_saving_aud": 0.10,
+    "controller_four_state_qualified": False,
 }
 # 0.7.1 (settings audit): ranges a saved value must respect. Values saved by
 # older versions outside them are brought inside once, by the entry migration
@@ -113,6 +147,10 @@ REST_BEYOND_LATENCY_MINUTES = 30.0
 NOTIFY_SERVICE_PATTERN = re.compile(r"^[a-z0-9_]{1,64}$")
 # Readable reasons for rejected settings (ValueError codes from parse_options).
 REJECTION_MESSAGES = {
+    "time_zone_invalid": "Select a valid IANA time zone, such as Australia/Perth.",
+    "daytime_times_invalid": "Storage window start must be before ready time, and ready time before the overnight baseline returns.",
+    "unsupported_target_roles": "Use only supported 45/62/70 targets, with baseline no higher than normal and normal no higher than solar boost.",
+    "dual_storage_settings_invalid": "Check tank capacity (50–500 L), nominal element (2–3.6 kW), completion margin (5–120 minutes), useful-heat fraction (0–1) and the peak policy.",
     "settings_invalid": "A value is outside its allowed range.",
     "morning_preferred_below_minimum": "The morning preferred reserve cannot be below the morning minimum.",
     "morning_times_order": "Morning times must be before noon, with the preferred time not after the hard deadline.",
@@ -156,7 +194,7 @@ def _minute(value):
     return hour * 60 + minute
 
 
-def _periods(raw, rates, clock):
+def _periods(raw, rates, clock, zone="Australia/Hobart"):
     """Parse and fully validate one weekly tariff table (gap- and overlap-free)."""
     if not isinstance(raw, str) or len(raw) > 8192:
         raise ValueError("tariff_invalid")
@@ -165,21 +203,29 @@ def _periods(raw, rates, clock):
         raise ValueError("tariff_invalid")
     tariffs = []
     for item in periods:
-        if not isinstance(item, dict) or set(item) != {"days", "start", "end", "kind"}:
+        if (
+            not isinstance(item, dict)
+            or not {"days", "start", "end", "kind"} <= set(item)
+            or set(item) - {"days", "start", "end", "kind", "months", "rate"}
+        ):
             raise ValueError("tariff_invalid")
         if not isinstance(item["days"], list) or item["kind"] not in rates:
+            raise ValueError("tariff_invalid")
+        rate = number(item.get("rate", rates[item["kind"]]))
+        if not 0 <= rate <= 2:
             raise ValueError("tariff_invalid")
         tariffs.append(
             Tariff(
                 tuple(item["days"]),
                 _minute(item["start"]),
                 _minute(item["end"]),
-                rates[item["kind"]],
+                rate,
                 item["kind"],
+                tuple(item.get("months", range(1, 13))),
             )
         )
     result = tuple(tariffs)
-    validate_tariffs(result, clock)
+    validate_tariffs(result, clock, zone)
     return result
 
 
@@ -198,6 +244,13 @@ def parse_options(options):
         "shower_time_enabled",
         "controller_bridge_qualified",
         "controller_three_state_qualified",
+        "adaptive_polling_shadow",
+        "adaptive_polling_enabled",
+        "event_aware_polling_enabled",
+        "learned_planning_enabled",
+        "learning_hardware_qualified",
+        "optional_solar_boost",
+        "controller_four_state_qualified",
     ):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
@@ -207,6 +260,40 @@ def parse_options(options):
     for key in ("controller_command_topic", "controller_notify_service"):
         if not isinstance(values[key], str) or len(values[key]) > 64:
             raise ValueError("controller_setting_invalid")
+    stamp = values["heater_meter_verification"]
+    from .targets import validate_roles
+
+    validate_roles(
+        *(number(values[key]) for key in ("baseline_c", "normal_storage_c", "solar_boost_c"))
+    )
+    if (
+        not 50 <= number(values["tank_litres"]) <= 500
+        or not 2 <= number(values["element_kw"]) <= 3.6
+        or not 5 <= number(values["completion_margin_minutes"]) <= 120
+        or not 0 <= number(values["boost_useful_fraction"]) <= 1
+        or not 0 <= number(values["boost_min_saving_aud"]) <= 2
+        or values["peak_heating_policy"]
+        not in ("Never schedule heating during peak", "Verified solar-only heating")
+    ):
+        raise ValueError("dual_storage_settings_invalid")
+    if not (
+        0 <= number(values["optional_heat_margin_aud_per_kwh"]) <= 0.20
+        and 0.10 <= number(values["pause_min_saving_aud"]) <= 2
+    ):
+        raise ValueError("economic_setting_out_of_range")
+    if not (
+        15 <= number(values["adaptive_poll_heating_minutes"]) <= 60
+        and 30 <= number(values["adaptive_poll_stable_minutes"]) <= 90
+        and 30 <= number(values["owner_change_check_minutes"]) <= 90
+        and number(values["owner_change_check_minutes"]).is_integer()
+    ):
+        raise ValueError("polling_bounds_invalid")
+    if (
+        not isinstance(stamp, str)
+        or len(stamp) > 258
+        or (stamp and not re.fullmatch(r"sensor\.[a-z0-9_]+\|(W|kW)", stamp))
+    ):
+        raise ValueError("heater_meter_verification_invalid")
     notify = values["controller_notify_service"].strip()
     if notify and not NOTIFY_SERVICE_PATTERN.match(notify):
         raise ValueError("notify_service_invalid")  # F4: was silently ignored
@@ -227,13 +314,17 @@ def parse_options(options):
         and values["tariff_periods"] != DEFAULT_OPTIONS["tariff_periods"]
     ):
         profile = "custom"
-    if profile not in {"aurora_93", "custom"}:
+    if profile not in {"flat", "aurora_93", "custom"}:
         raise ValueError("tariff_invalid")
     raw = values["tariff_periods"]
     # The stored custom weekly table is ALWAYS validated, even while the Aurora
     # profile is active. It is persisted, and switching the profile select later
     # must never activate an unvalidated table. One invalid field saves nothing.
-    _periods(raw, rates, values["tariff_clock"])
+    _periods(raw, rates, values["tariff_clock"], values["time_zone"])
+    if profile == "flat":
+        raw = json.dumps(
+            [{"days": list(range(7)), "start": "00:00", "end": "00:00", "kind": "off_peak"}]
+        )
     if profile == "aurora_93":
         edges = [
             "00:00",
@@ -267,7 +358,13 @@ def parse_options(options):
                 else [{"days": [5, 6], "start": "00:00", "end": "00:00", "kind": "off_peak"}]
             )
         )
-    tariffs = _periods(raw, rates, values["tariff_clock"])
+    tariffs = _periods(raw, rates, values["tariff_clock"], values["time_zone"])
+    if (
+        not _minute(values["daytime_start"])
+        < _minute(values["storage_ready_time"])
+        < _minute(values["baseline_start"])
+    ):
+        raise ValueError("daytime_times_invalid")
     settings = Settings(
         **{
             key: values[key]
@@ -278,6 +375,7 @@ def parse_options(options):
                 "tariff_verified",
                 "import_positive",
                 "tariff_clock",
+                "time_zone",
                 "forecast_enabled",
                 "shower_time_enabled",
                 "base_load_source",

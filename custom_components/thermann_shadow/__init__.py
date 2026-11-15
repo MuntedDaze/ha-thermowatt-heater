@@ -1,4 +1,4 @@
-"""Thermann Controller 0.9.0: one coordinated policy (simple_policy.py) and the
+"""Thermann Controller 0.10.0: one coordinated policy (simple_policy.py) and the
 production controller. The controller (executor.py/controller.py) is the only
 component that may publish a Thermann mode command, and it cannot do so until
 the owner completes commissioning and enables automatic control. With control
@@ -79,6 +79,22 @@ async def async_setup_entry(hass, entry):
     from .thermal import ThermalObserver
 
     runtime.thermal_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.thermal")
+    from .performance import MeasuredHistory
+
+    legacy_history_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.measured_history")
+    runtime.history_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.measured_history_v2")
+    try:
+        saved_history = await runtime.history_store.async_load()
+        if saved_history is None:
+            saved_history = await legacy_history_store.async_load()
+        runtime.history = MeasuredHistory.from_dict(saved_history)
+    except Exception:  # noqa: BLE001 - observations remain usable without learned history
+        runtime.history = MeasuredHistory()
+    runtime.history.configure(
+        settings.tank_litres,
+        settings.element_kw,
+        entry.options.get("heater_meter_verification", ""),
+    )
     try:
         runtime.thermal = ThermalObserver.from_dict(await runtime.thermal_store.async_load())
     except Exception:  # noqa: BLE001 - diagnostics only; start empty
@@ -114,7 +130,7 @@ async def async_migrate_entry(hass, entry):
     Only the exact old default is moved; any value the owner chose is kept.
     Major version stays 1, so a 0.3.0 rollback can still load the entry.
     """
-    if entry.version != 1 or entry.minor_version >= 3:
+    if entry.version != 1 or entry.minor_version >= 5:
         return True
     options = dict(entry.options)
     if entry.minor_version < 2 and options.get("morning_threshold_c") == LEGACY_MORNING_THRESHOLD_C:
@@ -122,12 +138,25 @@ async def async_migrate_entry(hass, entry):
     # 1.2 -> 1.3 (0.7.1, settings audit): values outside the tightened ranges
     # move to the nearest allowed value, and each is logged. A 0.7.0 rollback
     # still loads a 1.3 entry (same major version).
-    options, changes = migrate_0_7_1(options)
+    options, changes = migrate_0_7_1(options) if entry.minor_version < 3 else (options, {})
     for key, (old, new) in changes.items():
         logging.getLogger(__name__).warning(
             "Setting %s was %s, outside the range allowed since 0.7.1; now %s.", key, old, new
         )
-    hass.config_entries.async_update_entry(entry, options=options, minor_version=3)
+    from .installation import preserve_existing
+
+    if entry.minor_version < 4:
+        options = preserve_existing(options, getattr(entry, "data", {}))
+    else:
+        options = {
+            "meter_verified": False,
+            "tariff_verified": False,
+            "import_positive": True,
+            "tariff_clock": "local",
+            "time_zone": "Australia/Hobart",
+            **options,
+        }
+    hass.config_entries.async_update_entry(entry, options=options, minor_version=5)
     return True
 
 
@@ -136,10 +165,15 @@ async def _reload(hass, entry):
     runtime.apply_options(entry.options, entry.options.get("sources", entry.data))
     if runtime.executor is not None:
         runtime.executor.configure(entry.options)
+        # 0.9.1: the commissioning requirements shown on the master switch follow
+        # a settings change at once (they were stale until the next minute).
+        runtime.executor._notify_listeners()
 
 
 async def async_unload_entry(hass, entry):
     if await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        runtime = hass.data[DOMAIN][entry.entry_id]
+        await runtime._save_history()
         hass.data[DOMAIN].pop(entry.entry_id)
         return True
     return False

@@ -1,5 +1,114 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.13.0 — independent-audit remediation (unreleased)
+
+- Follow-up: retain the parked-OFF warning through fault-locked/unknown-current
+  HOLD using a diagnostic-only requirement from the same policy. Genuine newer
+  uncontrolled reports invalidate old OFF evidence. The actual desired state,
+  commands, threshold/deduplication, guards and temperature strategy are unchanged.
+- Adds a persisted warning when the last observed heater state is software OFF
+  and permitted heating has been wanted for 30 minutes without restoration.
+  No peak, owner, authentication, command-budget or confirmation bypass is added.
+- Adds read-only completed-evaluation and restoration-wait timestamps, with an
+  optional separate notification-only watchdog for controller failure while HA
+  remains running. Phone/manual recovery are commissioning requirements.
+- CT-free required heat is not paused using raw grid readings that may include
+  its own unknown element draw. Economical required-start planning is retained.
+- Preserves the owner's agreed 45/62/70°C roles, existing peak policy and all
+  guarded setpoints. Documents appliance/native-protection limits without a new
+  temperature gate or independently established compliance claim.
+- Uses normal same-identity bridge Update after a separately approved integrated
+  main merge; unsupported Supervisor cache staging is removed. Start fixed30,
+  adaptive and learning off; longer checks need independent inactivity evidence.
+- Pair with bridge1.3.17. No merge, installation or live operation performed.
+
+## 0.12.0 — focused pre-review improvements (unreleased)
+
+- Adds default-off Allow longer checks during quiet periods plus a bounded
+  app-change check setting. Confirmed quiet thermostat/OFF holds do not extend
+  temperature freshness or command gates. Passive alert age is a separate purpose.
+- Aligns observations with actual decisions/pre-peak OFF, avoiding advance reads
+  that expire before strict command checks; active planning uses half-hour slots.
+- CT-free required off-peak economics can use verified raw grid export without
+  inferred element credit. Optional solar still requires a commissioned CT.
+- Adds explicitly conditional nominal heating duration and clear dashboard notes;
+  no CT-free element verification or promised wall-clock completion is invented.
+- Full-week HTTP-category comparisons include60/90min quiet limits, critical
+  versus passive stale temperature and owner-change/detection/outage trade-offs.
+- Fixes Restore/Undo’s cached preference list being finalised before later
+  protected time-zone/service/poll/learning settings were added. Those choices
+  now survive actual Restore/Undo; old unsafe Undo payloads are refused.
+- Adds six-week plan-loss/refresh-rejection comparisons: fixed recovery and a
+  persistent auth lock produce no follow-up HTTP; unavailable control is not savings.
+- Provides beginner guides, an exact-commit local owner bundle and guarded same-ID
+  source-cache staging for later owner approval. No install/start or private-state
+  edit occurs in the helper. Existing entries, IDs/options/migrations are retained.
+- Requires bridge 1.3.16 for v2; missing v2 capability/qualification uses fixed fallback.
+  Physical commissioning and independent review remain outstanding.
+
+## 0.11.0 — integrated intelligence (unreleased development candidate)
+
+- Integrates Fable’s seven-view read-only monitoring on a separate draft branch;
+  raw signed CT control stays independent from dashboard and optional circuits.
+- Optional bridge-owned adaptive plans are disabled by default. Actual poll
+  deadlines/reasons and the old shadow comparison are distinct telemetry.
+- Adds target/model/meter-specific clean sessions, robust whole-day held-out
+  tests and a conservative planning gate. Learning enable and independent
+  hardware qualification default false; missing evidence uses nominal planning.
+  Bounded history retains 120 sessions so three 20-session cohorts can coexist.
+- Fresh installations inherit the HA IANA zone, start on an unverified flat
+  placeholder plan, have no household entity IDs, and disable forecasts/boost.
+  Initial baseline and normal targets are 62°C awaiting compliance qualification.
+  Existing owner choices remain unchanged. Entry minor version is now 5.
+- One tariff model supports local/fixed-standard clocks, editable weekday/weekend,
+  shoulder, multi-window, midday and seasonal prices. Basic CT-free/no-solar
+  tariff operation no longer requires EMHASS. All command/commissioning guards remain.
+- Whole-week actual-worker simulations compare fixed30/fixed60/shadow/adaptive;
+  synthetic outcomes disclose missed targets, outage lockout and detection trade-offs.
+- Requires bridge 1.3.15 for adaptive scheduling. Review and separate physical
+  commissioning precede operation; public distribution is deferred.
+
+## 0.10.0 — economical dual storage (unreleased development candidate)
+
+- Default roles: overnight/weekend Manual 45, required weekday Manual 62,
+  optional economically useful solar storage to 70; 12-hour Override remains 70.
+  Direct sunny-day 70 and later top-ups share one policy. Native hysteresis and
+  protective/owner/confirmation guards remain authoritative.
+- Independent peak policy (default Never) and optional-boost switch. CT-free
+  required heating remains supported; optional solar requires verified circuit
+  measurements, never nominal power or aggregate inference.
+- Supported temperature selections only, configurable nominal volume/power,
+  useful-heat assumption and preferred completion margin. New installations
+  select their own source entities and start unverified. Entry 1.4 migration
+  materializes old defaults without resetting explicit options or mappings.
+- New history sidecar v2 tags actual targets and model parameters; old history
+  remains intact. Untagged old sessions are retained as unclassified diagnostics.
+  Adaptive polling remains shadow; calibration remains diagnostic.
+- Requires bridge 1.3.14 and separately completed four-state qualification.
+  Upgrade/rollback: `docs/dual-storage/UPGRADE.md`. No installation or merge.
+
+## 0.9.1 — corrections from the independent audit of 13 Nov 2026 (owner approval required)
+
+Fixes to 0.9.0 found by the audit of `main` `04a8d3d`. The strategy is unchanged. Nothing here was installed; 0.9.0 was never enabled. No app change: Thermann Hot Water stays **1.3.13**.
+
+- **Command budget (audit C1).** Optional solar starts (a peak-solar start, a weekend solar start) stop at *Maximum commands per day*. The weekday 70 °C heat, Manual 45 °C and the 12hr Override are essential: they may go 6 commands beyond that limit, so solar cycling can no longer block them, and the higher cap still stops a fault that loops. OFF is never held back. Before, a partly cloudy morning used the whole budget: no heating before the evening peak and the heater OFF all night.
+- **Peak withdrawal (audit H1, owner-approved).** The OFF sent when peak solar is withdrawn (`peak_solar_withdrawn`) is exempt from the 15-minute command spacing, in the policy and in the controller's gate. It is the only exemption: the park, a pause, every start and every Manual 45 °C still wait, and a restart still needs a new 10-minute qualification and the spacing.
+- **12hr Override ending (audit M1).** Cancelling the override, or its expiry, no longer re-inspects a controller that already knows the heater state, so the policy resumes on the next minute. Before, Manual 70 °C stayed on until the next poll (up to 30 minutes, in a peak).
+- **Element estimate (audits M2 and N1).** The element's 3 kW is added back to the measured surplus only while the policy is in Manual 70 °C and the estimate is at least medium confidence. In OFF or Manual 45 °C an appliance's load step can no longer read as the element and create solar that is not there (it qualified a peak start from OFF, and a weekend Manual 70 °C from Manual 45 °C). A genuine Manual 45 °C reheat is not counted either, which only makes the surplus look smaller.
+- **Published forecasts (audit M4).**
+  - Automatic control cannot be turned on until *Use published forecasts* is on (`published_forecasts_not_enabled`), and the switch is locked while control is on.
+  - *Restore recommended preferences* no longer turns it off.
+  - With no forecast at all, grid-only weekday heating waits for the latest start (`storage_waiting_no_forecast`); measured solar still starts it sooner. Before, it started on grid as soon as the morning peak ended.
+  - A forecast missing for over an hour raises the *EMHASS forecast unavailable* alert.
+  - The commissioning requirements shown on *Automatic heater control* now follow a settings change at once (they were stale for up to a minute).
+- **Sample windows (audit M5).** "10 minutes" and "5 minutes" now mean it: the sample at the start of the window and the latest sample must both pass, with at least 80 % passing between. Before, a start could follow 8 minutes of surplus and a withdrawal 4 minutes of import.
+- **Shadow log (audit M7).** A repeated would-be command is recorded once a day, not once ever, so each day's park appears.
+- **Documentation (audit M3).** The heating time uses the physical rate (about 8.2 °C an hour). The observed rate is not used; the thermal observer stays diagnostic.
+
+- **Commissioning guide** rewritten for 0.9.1: the merge step, the installation order, the package names and the rollback versions; supervised tests Q2 and Q5 now record the raw `WaterHeaterSts` at the first 60 s read.
+
+Not changed (deferred): the Low findings of the first audit, M6 (a rollback note only), and N2 of the second audit (whether the real status bit follows the element promptly: to be observed in the supervised tests before automatic control is enabled; the estimator is unchanged).
+
 ## 0.9.0 — the simplified three-state controller (owner approval required)
 
 Replaces the 0.4–0.8 planner, economic permission and morning fail-safe with the agreed policy (`simple_policy.py`, [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md)). Requires Thermann Hot Water **1.3.13**.

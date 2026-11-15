@@ -18,8 +18,9 @@
           "export_energy": "Cumulative grid export (not used; kept for reference)",
           "forecast_pv": "Optional published PV forecast",
           "forecast_load": "Optional household load forecast or measured baseline",
-          "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
-          "heater_power": "Optional heater power sensor (element detection)"
+          "pv_ac": "Optional inverter AC output",
+          "heater_power": "Hot-water circuit active power (W/kW; commissioning required)",
+          "heater_energy": "Optional same-circuit cumulative import energy (Wh/kWh)"
         }
       }
     },
@@ -55,7 +56,8 @@
           "forecast_pv": "Optional published PV forecast",
           "forecast_load": "Optional household load forecast or measured baseline",
           "pv_ac": "Optional inverter AC output (default: GoodWe total power)",
-          "heater_power": "Optional heater power sensor (element detection)"
+          "heater_power": "Hot-water circuit active power (W/kW; commissioning required)",
+          "heater_energy": "Optional same-circuit cumulative import energy (Wh/kWh)"
         }
       },
       "preferences": {
@@ -63,6 +65,8 @@
         "description": "Tariff peak times use the tariff clock (Aurora 93: fixed AEST, so one hour later in summer) and must increase. The tariff contract can only be changed while Automatic heater control is off. Every change is checked together with the rest of the configuration; an invalid combination saves nothing.",
         "data": {
           "forecast_enabled": "Use published forecasts",
+          "optional_heat_margin_aud_per_kwh": "Optional heat minimum saving",
+          "pause_min_saving_aud": "Minimum saving to pause weekday heat",
           "forecast_uncertainty": "Forecast uncertainty margin",
           "forecast_house_margin_kw": "Extra forecast household load",
           "tariff_clock": "Tariff clock",
@@ -78,7 +82,21 @@
           "peak_morning_start": "Peak morning start",
           "peak_morning_end": "Peak morning end",
           "peak_evening_start": "Peak evening start",
-          "peak_evening_end": "Peak evening end"
+          "peak_evening_end": "Peak evening end",
+          "baseline_c": "Overnight baseline temperature",
+          "normal_storage_c": "Normal weekday storage temperature",
+          "solar_boost_c": "Optional solar storage temperature",
+          "tank_litres": "Tank capacity",
+          "element_kw": "Nominal element power",
+          "completion_margin_minutes": "Preferred completion before peak",
+          "optional_solar_boost": "Enable optional solar boost",
+          "peak_heating_policy": "Heating during peak periods",
+          "boost_useful_fraction": "Expected useful fraction of extra solar heat",
+          "boost_min_saving_aud": "Minimum benefit of optional solar boost",
+          "time_zone": "Household time zone",
+          "daytime_start": "Weekday storage window starts",
+          "storage_ready_time": "Weekday storage ready time without peak",
+          "baseline_start": "Return to overnight baseline without peak"
         }
       },
       "system": {
@@ -95,7 +113,22 @@
           "controller_max_commands_per_day": "Maximum commands per day",
           "controller_confirmation_timeout_minutes": "Command confirmation timeout",
           "controller_max_requests_per_day": "Cloud request budget per day",
-          "controller_notify_service": "Notification service"
+          "controller_notify_service": "Notification service",
+          "heater_meter_verification": "Commissioned hot-water power entity and unit",
+          "adaptive_polling_shadow": "Compare adaptive polling (shadow only)",
+          "adaptive_poll_heating_minutes": "Shadow heating poll maximum",
+          "adaptive_poll_stable_minutes": "Shadow stable poll maximum",
+          "controller_four_state_qualified": "Four-state commands qualified (1.3.14)",
+          "adaptive_polling_enabled": "Send adaptive cloud scheduling plans",
+          "learned_planning_enabled": "Use validated conservative learned heating rate",
+          "learning_hardware_qualified": "Heating learning independently qualified",
+          "event_aware_polling_enabled": "Allow longer checks during quiet periods",
+          "owner_change_check_minutes": "Maximum time between app-change checks (minutes)"
+        },
+        "data_description": {
+          "adaptive_polling_enabled": "Let the existing bridge schedule cloud observations. Requires its separate enable/qualification. No direct heater command is sent by this setting; keep off until review.",
+          "event_aware_polling_enabled": "Check a confirmed quiet baseline or OFF less often. Temperatures still expire normally and app changes can be detected later. Requires the bridge’s separate longer-check qualification.",
+          "owner_change_check_minutes": "Healthy-cloud limit of 30–90 minutes between quiet checks. Longer saves requests but delays noticing app changes; brief changes can be missed and outages can delay checks further."
         }
       }
     },

@@ -23,7 +23,7 @@ def snapshot(version="1.3.2"):
 def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(source_version):
     old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == source_version and new["version"] == "1.3.13"
+    assert old["version"] == source_version and new["version"] == "1.3.17"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
     assert {"1.3.8", "1.3.9", "1.3.10", "1.3.11", "1.3.12", "1.3.13"} <= set(
         new["breaking_versions"]
@@ -32,6 +32,13 @@ def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(sou
     assert new["schema"].pop("command_policy") == "list(automation|legacy)"
     assert new["options"].pop("on_demand_refresh_enabled") is False
     assert new["schema"].pop("on_demand_refresh_enabled") == "bool"
+    for key in (
+        "adaptive_polling_enabled",
+        "adaptive_polling_qualified",
+        "event_aware_polling_qualified",
+    ):
+        assert new["options"].pop(key) is False
+        assert new["schema"].pop(key) == "bool"
     assert new["options"].pop("poll_interval_minutes") == 30
     assert new["schema"].pop("poll_interval_minutes") == "int(1,7200)"
     assert new["options"].pop("poll_interval_unit") == "minutes"

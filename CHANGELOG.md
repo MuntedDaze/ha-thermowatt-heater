@@ -1,5 +1,60 @@
 # Changelog
 
+## [1.3.17] - Independent-audit remediation candidate (unreleased, uninstalled)
+
+- Refuses a command whose due token refresh fails before the heater POST, without
+  creating false pending/sent state. Refresh finishes before pending persistence;
+  exact-prior freshness and queue age are rechecked. Genuine uncertain POSTs
+  remain persisted, confirmed by bounded reads and never blindly repeated.
+- Empty device lists use fixed rediscovery with an explicit no_devices diagnostic;
+  adaptive synchronisation errors are contained within the normal tick boundary.
+- Pair with controller 0.13.0: persisted parked-OFF restore warning and last-observed
+  state, independent controller evaluation timestamp and no CT-free pause based on the element's own grid draw.
+- Replaces unsupported Supervisor cache staging with merge-then-normal-update
+  preparation. Existing identity, options, private state and all default-off
+  adaptive/learning gates remain. Owner45/62/70 strategy is unchanged; start fixed30.
+- Authentication lifetimes, locks, retry/backoff and command budgets are unchanged.
+  No release, merge, installation, authentication or physical operation performed.
+
+## [1.3.16] - Event-aware polling candidate (unreleased, uninstalled)
+
+- Adds purpose-bounded v2 scheduling plans: explicit quiet baseline/OFF owner
+  checks can use 30–90 minutes, while consequential temperature planning rejoins
+  half-hour observations. V1 limits and the original fixed fallback remain.
+- Advertises supported plan versions. Owner-bound/purpose checks, monotonic
+  anchor, expiring lease and journal failure handling cannot authorise a command.
+- Command-specific 60-second exact-prior checks, confirmations, credentials,
+  token/session heuristics, auth locks/retry/backoff and quotas are unchanged.
+  Token refresh remains request-driven, with no idle keepalive.
+- Pair with controller 0.12.0. The additional quiet-period permission defaults
+  false, including existing installations; all adaptive/learning gates remain
+  default off. Source-only owner staging preserves the existing add-on identity.
+  No release, installation, authentication or physical heater test occurred.
+
+## [1.3.15] - Integrated adaptive candidate (unreleased, uninstalled)
+
+- Adds disabled-by-default bridge-owned adaptive status scheduling. Expiring,
+  status-anchored MQTT plans use monotonic bounded deadlines; missing controller,
+  corrupt scheduling state or lost lease falls back to fixed polling.
+- Actual request categories, poll deadlines and scheduling reasons are published.
+  Confirmation reads replace the anchor; stale hints cannot slide deadlines.
+- Authentication, cloud/command enable flags, quotas, backoff and the closed
+  OFF/45/62/70 exact-prior protocol retain their guards. No POST retry added.
+- Pair with controller 0.11.0 only after review. Both scheduling flags default
+  false; hardware qualification and owner-approved rollout remain outstanding.
+  No release, tag, merge, deployment, live authentication or heater operation.
+
+## [1.3.14] - Four-state guarded commands (unreleased development candidate)
+
+- Adds only the six missing exact-prior transitions involving Manual 62 to the
+  OFF/45/70 protocol; the advertised closed set now has twelve transitions.
+- Existing guarded commands, old controller compatibility, authentication,
+  credentials, request/backoff budgets, pending-command storage and bounded
+  confirmation remain unchanged. No POST is retried.
+- Listed as a breaking version so installation requires a deliberate upgrade.
+  Pair with controller 0.10.0 after review and separate physical commissioning.
+  PR #27/#33 and bridge 1.3.13/controller 0.9.1 checkpoints are preserved.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

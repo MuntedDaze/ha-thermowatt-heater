@@ -68,3 +68,14 @@ jobs:
             --mount "type=bind,src=$PWD/tools/readiness/validate_supervisor.py,dst=/validate.py,readonly" \
             --mount "type=bind,src=$PWD/app-config.json,dst=/app-config.json,readonly" \
             "$SUPERVISOR_IMAGE" /validate.py
+      - name: Normal main-branch update and forward recovery, synthetic only
+        env:
+          SUPERVISOR_IMAGE: ghcr.io/home-assistant/amd64-hassio-supervisor:${{ matrix.version }}
+        run: |
+          for source_url in 'https://github.com/MuntedDaze/ha-thermowatt-heater' 'https://github.com/MuntedDaze/ha-thermowatt-heater.git'; do
+            docker run --rm --network none --entrypoint python3 \
+              -e "THERMANN_TEST_ORIGIN=$source_url" \
+              --mount "type=bind,src=$PWD/tools/readiness/normal_update_smoke.py,dst=/normal-update-smoke.py,readonly" \
+              --mount "type=bind,src=$PWD/thermowatt-heater,dst=/addon-source,readonly" \
+              "$SUPERVISOR_IMAGE" /normal-update-smoke.py
+          done

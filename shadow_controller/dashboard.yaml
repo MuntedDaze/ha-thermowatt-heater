@@ -103,25 +103,26 @@ views:
       text_only: true
       content: '{% set code = states(''sensor.thermann_shadow_decision_code'') %}{% set kind = {"storage_cheapest_now":
         "success", "storage_until_peak": "success", "storage_latest_start": "warning", "storage_target_may_be_missed":
-        "error", "storage_waiting_for_cheaper_window": "info", "storage_paused_for_cheaper_window": "info",
-        "storage_target_reached": "success", "storage_within_thermostat_band": "success", "peak_no_grid_heating":
-        "info", "peak_ahead_no_qualified_solar": "info", "peak_solar_qualified": "success", "peak_solar_continues":
-        "success", "peak_solar_withdrawn": "warning", "peak_meter_unavailable": "error", "peak_command_reserved":
-        "info", "solar_opportunity": "success", "solar_opportunity_continues": "success", "solar_opportunity_ended":
-        "info", "baseline": "info", "owner_override": "warning", "heater_state_not_controlled": "warning",
-        "holiday": "info", "12hr_override": "info", "command_spacing": "info"}.get(code, ''info'') %}{%
-        set icon = {"storage_cheapest_now": "mdi:water-boiler", "storage_until_peak": "mdi:water-boiler",
-        "storage_latest_start": "mdi:transmission-tower", "storage_target_may_be_missed": "mdi:clock-alert-outline",
-        "storage_waiting_for_cheaper_window": "mdi:weather-sunny", "storage_paused_for_cheaper_window":
-        "mdi:pause-circle-outline", "storage_target_reached": "mdi:check-circle-outline", "storage_within_thermostat_band":
-        "mdi:thermometer-check", "peak_no_grid_heating": "mdi:transmission-tower-off", "peak_ahead_no_qualified_solar":
-        "mdi:transmission-tower-off", "peak_solar_qualified": "mdi:solar-power-variant", "peak_solar_continues":
-        "mdi:solar-power-variant", "peak_solar_withdrawn": "mdi:weather-cloudy", "peak_meter_unavailable":
-        "mdi:lan-disconnect", "peak_command_reserved": "mdi:timer-sand", "solar_opportunity": "mdi:solar-power",
-        "solar_opportunity_continues": "mdi:solar-power", "solar_opportunity_ended": "mdi:weather-sunset-down",
-        "baseline": "mdi:water-thermometer-outline", "owner_override": "mdi:account-alert-outline", "heater_state_not_controlled":
-        "mdi:account-alert-outline", "holiday": "mdi:airplane", "12hr_override": "mdi:account-clock",
-        "command_spacing": "mdi:timer-sand"}.get(code, ''mdi:water-boiler'') %}
+        "error", "storage_waiting_for_cheaper_window": "info", "storage_waiting_no_forecast": "warning",
+        "storage_paused_for_cheaper_window": "info", "storage_target_reached": "success", "storage_within_thermostat_band":
+        "success", "peak_no_grid_heating": "info", "peak_ahead_no_qualified_solar": "info", "peak_solar_qualified":
+        "success", "peak_solar_continues": "success", "peak_solar_withdrawn": "warning", "peak_meter_unavailable":
+        "error", "peak_command_reserved": "info", "solar_opportunity": "success", "solar_opportunity_continues":
+        "success", "solar_opportunity_ended": "info", "baseline": "info", "owner_override": "warning",
+        "heater_state_not_controlled": "warning", "holiday": "info", "12hr_override": "info", "command_spacing":
+        "info"}.get(code, ''info'') %}{% set icon = {"storage_cheapest_now": "mdi:water-boiler", "storage_until_peak":
+        "mdi:water-boiler", "storage_latest_start": "mdi:transmission-tower", "storage_target_may_be_missed":
+        "mdi:clock-alert-outline", "storage_waiting_for_cheaper_window": "mdi:weather-sunny", "storage_waiting_no_forecast":
+        "mdi:weather-cloudy-alert", "storage_paused_for_cheaper_window": "mdi:pause-circle-outline", "storage_target_reached":
+        "mdi:check-circle-outline", "storage_within_thermostat_band": "mdi:thermometer-check", "peak_no_grid_heating":
+        "mdi:transmission-tower-off", "peak_ahead_no_qualified_solar": "mdi:transmission-tower-off", "peak_solar_qualified":
+        "mdi:solar-power-variant", "peak_solar_continues": "mdi:solar-power-variant", "peak_solar_withdrawn":
+        "mdi:weather-cloudy", "peak_meter_unavailable": "mdi:lan-disconnect", "peak_command_reserved":
+        "mdi:timer-sand", "solar_opportunity": "mdi:solar-power", "solar_opportunity_continues": "mdi:solar-power",
+        "solar_opportunity_ended": "mdi:weather-sunset-down", "baseline": "mdi:water-thermometer-outline",
+        "owner_override": "mdi:account-alert-outline", "heater_state_not_controlled": "mdi:account-alert-outline",
+        "holiday": "mdi:airplane", "12hr_override": "mdi:account-clock", "command_spacing": "mdi:timer-sand"}.get(code,
+        ''mdi:water-boiler'') %}
 
         <ha-alert alert-type="{{ kind }}"><h1><ha-icon icon="{{ icon }}"></ha-icon> {{ states(''sensor.thermann_shadow_policy_wanted_state'')
         | upper }}</h1>{{ code | replace(''_'', '' '') }} · mode {{ states(''sensor.thermann_shadow_policy_mode'')
@@ -270,14 +271,17 @@ views:
   - type: markdown
     content: "### Advanced — current, recommended and original values\n\n**Use published forecasts** —\
       \ current **{{ states('switch.thermann_shadow_use_published_forecasts') }}** · recommended & original\
-      \ **Off** · *restored by Restore*  \nOptional local PV AND household-load forecasts with generation\
-      \ timestamps; missing forecasts never delay fallback.\n\n**Forecast uncertainty margin** — current\
-      \ **{{ states('number.thermann_shadow_forecast_uncertainty_margin') }}** · recommended & original\
-      \ **0.25** · *restored by Restore*  \nFraction: reduce PV and increase household load. 0.25 means\
-      \ 25%; never guaranteed surplus.\n\n**Extra forecast household load** — current **{{ states('number.thermann_shadow_extra_forecast_household_load')\
-      \ }} kW** · recommended & original **0.3 kW** · *restored by Restore*  \nAdditional allowance for\
-      \ competing appliances, beyond forecast demand.\n\n**Tariff clock** — current **{{ states('select.thermann_shadow_tariff_clock')\
-      \ }}** · recommended & original **standard** · *kept by Restore*  \nConfirmed Aurora 93 uses standard\
+      \ **Off** · *kept by Restore*  \nThe EMHASS PV AND household-load forecasts with generation timestamps.\
+      \ Required for automatic control (it cannot be turned on without them, and they cannot be turned\
+      \ off while it is on). If the forecast is missing, weekday grid heating waits for the latest start\
+      \ instead of starting at once, and an alert is raised after an hour.\n\n**Forecast uncertainty margin**\
+      \ — current **{{ states('number.thermann_shadow_forecast_uncertainty_margin') }}** · recommended\
+      \ & original **0.25** · *restored by Restore*  \nFraction: reduce PV and increase household load.\
+      \ 0.25 means 25%; never guaranteed surplus.\n\n**Extra forecast household load** — current **{{\
+      \ states('number.thermann_shadow_extra_forecast_household_load') }} kW** · recommended & original\
+      \ **0.3 kW** · *restored by Restore*  \nAdditional allowance for competing appliances, beyond forecast\
+      \ demand.\n\n**Tariff clock** — current **{{ states('select.thermann_shadow_tariff_clock') }}**\
+      \ · recommended & original **standard** · *kept by Restore*  \nConfirmed Aurora 93 uses standard\
       \ (fixed AEST UTC+10), automatically one hour later in Hobart summer.\n\n**Tariff periods mode**\
       \ — current **{{ states('select.thermann_shadow_tariff_periods_mode') }}** · recommended & original\
       \ **aurora_93** · *kept by Restore*  \naurora_93 uses editable weekday peak times below; custom\
@@ -350,9 +354,12 @@ views:
       \ of Thermann Hot Water 1.3.13 showed every transition between OFF, Manual 45 °C and Manual 70 °C\
       \ reproduces the app result, and an owner change is refused (COMMISSIONING_SIMPLIFIED.md). Automatic\
       \ control cannot be enabled until it is ON.\n\n**Maximum commands per day** — current **{{ states('number.thermann_shadow_maximum_commands_per_day')\
-      \ }}** · recommended & original **6** · *kept by Restore*  \nBackstop: rolling 24 h limit on commands\
-      \ that start or change heating. A typical weekday needs 4 commands in all; a switch to OFF (the\
-      \ park) is never held back by this limit.\n\n**Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
+      \ }}** · recommended & original **6** · *kept by Restore*  \nRolling 24 h limit for OPTIONAL solar\
+      \ starts (a peak-solar start, a weekend solar start): none is sent once this many commands have\
+      \ gone out. Essential commands (the weekday 70 °C heat, Manual 45 °C, the 12hr Override) may go\
+      \ 6 beyond it, so optional solar activity can never block them; that higher cap still stops a fault\
+      \ that loops. A switch to OFF is never held back. A typical weekday needs 4 commands in all.\n\n\
+      **Command confirmation timeout** — current **{{ states('number.thermann_shadow_command_confirmation_timeout')\
       \ }} min** · recommended & original **65 min** · *kept by Restore*  \nIf no status confirms a command\
       \ within this time, automatic control locks until you acknowledge. At least one poll interval plus\
       \ margin.\n\n**Cloud request budget per day** — current **{{ states('number.thermann_shadow_cloud_request_budget_per_day')\
