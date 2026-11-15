@@ -1,9 +1,15 @@
 # Integration contract: energy monitoring ↔ Thermann Controller
 
-Combined candidate: controller 0.11.0 / bridge 1.3.15 on draft PR #35,
+Focused candidate: controller 0.12.0 / bridge 1.3.16, based on preserved draft PR #35,
 integrating Fable's unchanged reviewed checkpoint `4c078f0` before the changes
 described here. The original PR #32 branch/worktree remains untouched. Neither
 side imports the other; they meet only through Home Assistant entities.
+
+The added `hot_water.nominal_heating_time` maps
+`sensor.thermann_shadow_nominal_time_if_heating_stays_on`: conditional minutes
+from a fresh probe to the current supported target at nominal power. It is
+unknown for stale probes and is never physical ON/OFF verification or a promised
+completion clock. The Hot water view explains this explicitly for CT-free use.
 
 The default `tariff.source: controller` reads the verified controller period,
 import price and constant feed-in price. It supports its flat, shoulder,

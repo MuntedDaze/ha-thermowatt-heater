@@ -110,6 +110,8 @@ DEFAULT_OPTIONS = {
     "heater_meter_verification": "",  # commissioned entity_id|W (or |kW); no default authority
     "adaptive_polling_shadow": False,
     "adaptive_polling_enabled": False,
+    "event_aware_polling_enabled": False,
+    "owner_change_check_minutes": 60.0,
     "learned_planning_enabled": False,
     "learning_hardware_qualified": False,
     "adaptive_poll_heating_minutes": 60.0,
@@ -244,6 +246,7 @@ def parse_options(options):
         "controller_three_state_qualified",
         "adaptive_polling_shadow",
         "adaptive_polling_enabled",
+        "event_aware_polling_enabled",
         "learned_planning_enabled",
         "learning_hardware_qualified",
         "optional_solar_boost",
@@ -281,6 +284,8 @@ def parse_options(options):
     if not (
         15 <= number(values["adaptive_poll_heating_minutes"]) <= 60
         and 30 <= number(values["adaptive_poll_stable_minutes"]) <= 90
+        and 30 <= number(values["owner_change_check_minutes"]) <= 90
+        and number(values["owner_change_check_minutes"]).is_integer()
     ):
         raise ValueError("polling_bounds_invalid")
     if (

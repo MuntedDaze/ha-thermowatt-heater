@@ -327,6 +327,7 @@ class MeasuredHistory:
             "latest": None,
             "reported_target_reached": False,
             "state": "unknown",
+            "nominal_continuous_minutes": None,
         }
         if (
             temperature is None
@@ -336,6 +337,11 @@ class MeasuredHistory:
         ):
             return result
         result["reported_target_reached"] = temperature >= target
+        # Conditional duration only: no CT means no verified switch state or
+        # promised wall time. Stale probes never seed a nominal prediction.
+        result["nominal_continuous_minutes"] = round(
+            max(0, target - temperature) * self.physics / self.nominal_kw * 60, 1
+        )
         if not power.valid or power.state != "on":
             result["state"] = "idle_next_cut_in_unknown" if power.valid else "meter_unknown"
             return result

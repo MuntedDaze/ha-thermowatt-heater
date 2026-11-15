@@ -31,6 +31,7 @@ from homeassistant.util import dt as dt_util
 from .config import DOMAIN
 from .controller import (
     CONFIRMING,
+    STEADY,
     Controller,
     ControllerConfig,
     Observation,
@@ -42,7 +43,7 @@ from .controller import (
 )
 from zoneinfo import ZoneInfo
 from .polling import PollContext, PollingShadow
-from .adaptive import make_plan
+from .adaptive import make_plan, event_plan
 from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
 
 LOG = logging.getLogger(__name__)
@@ -294,7 +295,106 @@ class Executor:
             if self.runtime.settings.forecast_enabled
             else None
         )
+        if health is not None:
+            self._quiet_deadline(obs, health.attributes.get("adaptive_polling"))
         return obs
+
+    def _quiet_state(self, obs, decision):
+        controller = self.controller
+        if (
+            not controller.enabled
+            or controller.state not in STEADY
+            or controller.hold
+            or controller.intent
+            or decision is None
+            or decision.command
+            or decision.state != obs.heater_state
+            or obs.heater_state != controller.heater
+            or (obs.heater_meter_mapped and obs.heater_meter_quality != "verified")
+        ):
+            return None
+        if decision.reason == "baseline":
+            # A reported cold baseline is a useful progress observation, even
+            # though CT-free operation cannot prove the element energised.
+            if (
+                obs.temperature_c is None
+                or obs.temperature_c < self.policy.s.baseline_c - self.policy.s.hysteresis_c
+            ):
+                return None
+            return "baseline"
+        if (
+            decision.state == "off"
+            and decision.plan.get("mode") == "peak"
+            and self.runtime.native_options["peak_heating_policy"]
+            == "Never schedule heating during peak"
+        ):
+            return "off"
+        return None
+
+    def _quiet_deadline(self, obs, schedule):
+        """Only suppress a passive-age alert; never grants command/temperature authority."""
+        if (
+            not self.runtime.native_options["event_aware_polling_enabled"]
+            or not self.runtime.native_options["adaptive_polling_enabled"]
+            or not self._quiet_state(obs, self.last_decision)
+            or obs.cloud_health != "ok"
+            or obs.auth_mode != "authorized"
+            or not isinstance(schedule, dict)
+            or schedule.get("active") is not True
+            or schedule.get("plan_version") != 2
+            or schedule.get("reason") not in ("stable_baseline", "stable_off")
+            or obs.poll_at is None
+            or obs.poll_at > obs.now
+        ):
+            return
+        owner = schedule.get("owner_check_seconds")
+        next_at = schedule.get("next_at")
+        maximum = self.runtime.native_options["owner_change_check_minutes"] * 60
+        if (
+            type(owner) is not int
+            or not 1800 <= owner <= min(5400, maximum)
+            or type(next_at) not in (int, float)
+            or not obs.poll_at.timestamp() <= next_at <= obs.poll_at.timestamp() + owner + 1
+        ):
+            return
+        obs.passive_status_deadline = obs.poll_at + timedelta(seconds=owner + 300)
+
+    def _event_decision_at(self, now, decision, decision_at):
+        """Observe at the real policy transition, allowing the strict prior to be reused."""
+        moments = []
+        boundary = self.runtime.values.get("next_tariff_change")
+        if boundary is not None:
+            moments.append(
+                boundary - self.policy.s.peak_lead
+                if self.runtime.values.get("next_tariff_kind") == "peak"
+                else boundary
+            )
+        # Flat/no-afternoon-peak service windows also have known local transitions.
+        zone = ZoneInfo(self.runtime.settings.time_zone)
+        today = now.astimezone(zone).date()
+        for day in (today, today + timedelta(days=1)):
+            if day.weekday() < 5:
+                for clock in (self.policy.s.daytime_start, self.policy.s.baseline_start):
+                    when = datetime.combine(day, clock, zone)
+                    if when >= now and self.policy._kind(when) != "peak":
+                        moments.append(when)
+        # Retain actual start/pause/override decisions, but use the adjusted peak
+        # boundary above rather than the old ten-minute advance fetch.
+        if decision_at is not None and decision_at != boundary:
+            moments.append(decision_at)
+        if decision.command:
+            moments.append(now)
+        # A verified full-solar opportunity can make a new probe consequential.
+        if (
+            self.runtime.temperature_c is None
+            and self.runtime.power_budget is not None
+            and self.runtime.native_options["optional_solar_boost"]
+            and self.policy.sustained(
+                now, self.policy.s.qualify, lambda x: x[2] >= self.policy.s.peak_start_kw
+            )
+        ):
+            moments.append(now)
+        return min((at for at in moments if at >= now), default=None)
 
     def decide(self, now: datetime, obs: Observation):
         """One policy decision from the measurements (never a request)."""
@@ -339,6 +439,7 @@ class Executor:
                 for target in (45, 62, 70)
                 if (info := runtime.learning(now, target))["affects_control"]
             },
+            required_export_kw=max(0, -grid) if grid is not None else None,
             forecast=tuple(forecast),
             last_command_at=last,
             heater_meter_valid=runtime.power_budget is not None,
@@ -492,16 +593,37 @@ class Executor:
         topic = refresh_topic(self.cfg.command_topic)
         if topic is None or obs.cloud_health != "ok" or obs.auth_mode != "authorized":
             return
-        plan = make_plan(
-            now,
-            obs.poll_at,
-            heating=self.runtime.circuit.state == "on",
-            has_ct=self.runtime.circuit.valid,
-            temperature_valid=self.runtime.temperature_c is not None,
-            decision_at=decision_at,
-            completion_at=_dt(self.runtime.completion.get("earliest")),
-            status_max_minutes=self.runtime.settings.status_max_age_minutes,
+        health = self.hass.states.get(self.runtime.sources.get("cloud_health", ""))
+        versions = health.attributes.get("adaptive_plan_versions", []) if health else []
+        wants_event_aware = self.runtime.native_options["event_aware_polling_enabled"]
+        event_aware = (
+            wants_event_aware
+            and isinstance(versions, list)
+            and any(type(v) is int and v == 2 for v in versions)
         )
+        if wants_event_aware and not event_aware:
+            return  # no v2 qualification/capability: expire into fixed fallback
+        if event_aware:
+            plan = event_plan(
+                now,
+                obs.poll_at,
+                stable_state=self._quiet_state(obs, decision),
+                temperature_valid=self.runtime.temperature_c is not None,
+                decision_at=self._event_decision_at(now, decision, decision_at),
+                owner_check_minutes=self.runtime.native_options["owner_change_check_minutes"],
+                status_max_minutes=self.runtime.settings.status_max_age_minutes,
+            )
+        else:
+            plan = make_plan(
+                now,
+                obs.poll_at,
+                heating=self.runtime.circuit.state == "on",
+                has_ct=self.runtime.circuit.valid,
+                temperature_valid=self.runtime.temperature_c is not None,
+                decision_at=decision_at,
+                completion_at=_dt(self.runtime.completion.get("earliest")),
+                status_max_minutes=self.runtime.settings.status_max_age_minutes,
+            )
         if plan is None:
             return
         self._last_poll_plan_at = now

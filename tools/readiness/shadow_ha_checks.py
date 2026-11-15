@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.11.0"
+CURRENT_VERSION = "0.12.0"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -1106,6 +1106,9 @@ ADDED_IN_0_9_0 = {
 # Backend-only additions on the separate smart-controller development branch.
 # Existing registry IDs must still be preserved; enumerate additions explicitly.
 ADDED_IN_SMART_DEVELOPMENT = {
+    "nominal_heating_minutes",
+    "setting_event_aware_polling_enabled",
+    "setting_owner_change_check_minutes",
     "tariff_verification",
     "feed_in_rate_aud",
     "setting_learned_planning_enabled",

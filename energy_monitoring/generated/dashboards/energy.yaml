@@ -238,6 +238,10 @@ views:
         name: Heating time needed
       - entity: sensor.thermann_shadow_expected_heating_completion
         name: Expected completion
+      - entity: sensor.thermann_shadow_nominal_time_if_heating_stays_on
+        name: Nominal minutes if heating stays on
+    - type: markdown
+      content: Without a commissioned hot-water meter, electrical ON/OFF and a completion clock are unknown. Nominal minutes assume continuous heating at the configured power; the native thermostat may wait, water use may change the estimate, and an old temperature expires. This is not a promise of ready hot water.
     - type: markdown
       content: '{% set c = state_attr(''sensor.thermann_shadow_controller_telemetry'', ''completion'') or {} %}Conditional continuous-heating range: {{ c.get(''earliest'') or ''unavailable'' }} to {{ c.get(''latest'') or ''unavailable'' }}. A bottom-probe estimate is not a promised completion or hygiene measurement.'
   - type: grid

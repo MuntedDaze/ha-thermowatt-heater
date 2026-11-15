@@ -68,3 +68,12 @@ jobs:
             --mount "type=bind,src=$PWD/tools/readiness/validate_supervisor.py,dst=/validate.py,readonly" \
             --mount "type=bind,src=$PWD/app-config.json,dst=/app-config.json,readonly" \
             "$SUPERVISOR_IMAGE" /validate.py
+      - name: Pinned same-identity owner source staging, synthetic only
+        env:
+          SUPERVISOR_IMAGE: ghcr.io/home-assistant/amd64-hassio-supervisor:${{ matrix.version }}
+        run: |
+          docker run --rm --network none --entrypoint python3 \
+            --mount "type=bind,src=$PWD/tools/owner_checkout.py,dst=/owner-tools/owner_checkout.py,readonly" \
+            --mount "type=bind,src=$PWD/tools/readiness/owner_staging_smoke.py,dst=/owner-staging-smoke.py,readonly" \
+            --mount "type=bind,src=$PWD/thermowatt-heater,dst=/addon-source,readonly" \
+            "$SUPERVISOR_IMAGE" /owner-staging-smoke.py

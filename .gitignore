@@ -31,3 +31,6 @@ auth_state.json
 thermowatt_config.json
 request_usage.json
 .mypy_cache/
+
+# Local exact-commit owner handoffs (not public releases).
+/owner-staging/

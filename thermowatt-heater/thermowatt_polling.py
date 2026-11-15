@@ -11,10 +11,13 @@ import math
 
 MIN_INTERVAL = 900
 MAX_INTERVAL = 2400
+MAX_QUIET_INTERVAL = 5400
 LEASE_SECONDS = 180
 REASONS = frozenset(
     {"stable", "heating", "ct_free", "uncertain", "before_decision", "near_completion", "recovery"}
 )
+QUIET_REASONS = {"stable_baseline", "stable_off"}
+EVENT_REASONS = QUIET_REASONS | {"required_temperature", "before_decision", "uncertain"}
 
 
 def finite(value):
@@ -22,8 +25,11 @@ def finite(value):
 
 
 class AdaptiveSchedule:
-    def __init__(self, enabled, clock, monotonic, path=None, writer=None):
+    def __init__(
+        self, enabled, clock, monotonic, path=None, writer=None, *, extended_qualified=False
+    ):
         self.enabled, self.clock, self.monotonic = enabled, clock, monotonic
+        self.extended_qualified = extended_qualified
         self.path, self.writer = path, writer
         self.healthy = True
         self.records = {}
@@ -65,6 +71,8 @@ class AdaptiveSchedule:
             "due": None,
             "lease": 0,
             "reason": "fixed_fallback",
+            "version": None,
+            "owner_limit": None,
         }
 
     def clear(self):
@@ -76,11 +84,15 @@ class AdaptiveSchedule:
             plan = json.loads(payload)
             if not self.active or record is None or not isinstance(plan, dict):
                 raise ValueError
-            if (
-                set(plan) != {"version", "status_at", "issued_at", "delay_seconds", "reason"}
-                or type(plan["version"]) is not int
-                or plan["version"] != 1
-            ):
+            version = plan.get("version")
+            keys = {"version", "status_at", "issued_at", "delay_seconds", "reason"}
+            if type(version) is not int or version not in (1, 2):
+                raise ValueError
+            if version == 2:
+                if not self.extended_qualified:
+                    raise ValueError
+                keys.add("owner_check_seconds")
+            if set(plan) != keys:
                 raise ValueError
             if not all(finite(plan[k]) for k in ("status_at", "issued_at", "delay_seconds")):
                 raise ValueError
@@ -90,9 +102,17 @@ class AdaptiveSchedule:
                 raise ValueError
             if record["issued"] is not None and plan["issued_at"] <= record["issued"]:
                 raise ValueError
-            if (
-                not MIN_INTERVAL <= plan["delay_seconds"] <= MAX_INTERVAL
-                or plan["reason"] not in REASONS
+            limit = MAX_INTERVAL
+            owner_limit = None
+            if version == 2:
+                owner_limit = plan["owner_check_seconds"]
+                if type(owner_limit) is not int or not 1800 <= owner_limit <= MAX_QUIET_INTERVAL:
+                    raise ValueError
+                if plan["reason"] in QUIET_REASONS:
+                    limit = MAX_QUIET_INTERVAL
+                limit = min(limit, owner_limit)
+            if not MIN_INTERVAL <= plan["delay_seconds"] <= limit or plan["reason"] not in (
+                REASONS if version == 1 else EVENT_REASONS
             ):
                 raise ValueError
             due = record["mono"] + plan["delay_seconds"]
@@ -103,6 +123,8 @@ class AdaptiveSchedule:
                 issued=plan["issued_at"],
                 lease=self.monotonic() + LEASE_SECONDS,
                 reason=plan["reason"],
+                version=version,
+                owner_limit=owner_limit,
             )
             self.counts["accepted"] += 1
             return True
@@ -135,5 +157,7 @@ class AdaptiveSchedule:
             "next_at": self.clock() + max(0, due - self.monotonic()) if due is not None else None,
             "interval_seconds": max(0, due - r["mono"]) if due is not None else None,
             "lease_remaining_seconds": max(0, r["lease"] - self.monotonic()) if leased else 0,
+            "plan_version": r["version"] if leased else None,
+            "owner_check_seconds": r["owner_limit"] if leased else None,
             "counts": dict(self.counts),
         }

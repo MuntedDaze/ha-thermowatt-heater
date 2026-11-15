@@ -262,9 +262,18 @@ def hot_water_view(config):
             ("soft_target_time", "Soft target time"),
             ("heating_time_needed", "Heating time needed"),
             ("expected_completion", "Expected completion"),
+            ("nominal_heating_time", "Nominal minutes if heating stays on"),
         ),
     )
     planning = [heading("Plan and decision", "mdi:robot-outline"), rows("Current plan", plan)]
+    planning.append(
+        note(
+            "Without a commissioned hot-water meter, electrical ON/OFF and a completion clock "
+            "are unknown. Nominal minutes assume continuous heating at the configured power; "
+            "the native thermostat may wait, water use may change the estimate, and an old "
+            "temperature expires. This is not a promise of ready hot water."
+        )
+    )
     if not hot_water.get("expected_completion"):
         planning.append(
             note(

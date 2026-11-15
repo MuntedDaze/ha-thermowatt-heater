@@ -576,6 +576,25 @@ CATALOG["adaptive_polling_enabled"] = Setting(
     "Disabled until independent review and supervised validation. Sends bounded expiring hints only; the bridge needs its separate enabled and qualified options. Fixed fallback and every cloud/command guard remain.",
     kind="switch",
 )
+CATALOG["event_aware_polling_enabled"] = Setting(
+    "Allow longer checks during quiet periods",
+    "System",
+    "Default off. Requires adaptive polling and the reviewed event-aware bridge. "
+    "May hold a confirmed baseline/OFF setting longer, without trusting an old temperature. "
+    "App changes can remain unseen until the selected check limit; brief changes can be missed. "
+    "Command prior checks and confirmation are unchanged.",
+    kind="switch",
+)
+CATALOG["owner_change_check_minutes"] = Setting(
+    "Maximum time between app-change checks",
+    "System",
+    "Healthy-cloud maximum between ordinary observations in quiet periods, 30–90 minutes. "
+    "Longer saves requests but delays detecting external changes. Outages can delay detection "
+    "further. Applies only with longer quiet checks enabled; temperatures still expire normally.",
+    30,
+    90,
+    "min",
+)
 CATALOG["learned_planning_enabled"] = Setting(
     "Use validated conservative learned heating rate",
     "System",
@@ -858,6 +877,14 @@ def describe(key, current):
 
 
 LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {"adaptive_polling_enabled"}
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
+    "event_aware_polling_enabled",
+    "owner_change_check_minutes",
+}
+PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
+    "event_aware_polling_enabled",
+    "owner_change_check_minutes",
+}
 PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
     "learned_planning_enabled",
     "learning_hardware_qualified",

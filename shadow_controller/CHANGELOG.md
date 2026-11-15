@@ -1,5 +1,24 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.12.0 — focused pre-review improvements (unreleased)
+
+- Adds default-off Allow longer checks during quiet periods plus a bounded
+  app-change check setting. Confirmed quiet thermostat/OFF holds do not extend
+  temperature freshness or command gates. Passive alert age is a separate purpose.
+- Aligns observations with actual decisions/pre-peak OFF, avoiding advance reads
+  that expire before strict command checks; active planning uses half-hour slots.
+- CT-free required off-peak economics can use verified raw grid export without
+  inferred element credit. Optional solar still requires a commissioned CT.
+- Adds explicitly conditional nominal heating duration and clear dashboard notes;
+  no CT-free element verification or promised wall-clock completion is invented.
+- Full-week HTTP-category comparisons include60/90min quiet limits, critical
+  versus passive stale temperature and owner-change/detection/outage trade-offs.
+- Provides beginner guides, an exact-commit local owner bundle and guarded same-ID
+  source-cache staging for later owner approval. No install/start or private-state
+  edit occurs in the helper. Existing entries, IDs/options/migrations are retained.
+- Requires bridge 1.3.16 for v2; missing v2 capability/qualification uses fixed fallback.
+  Physical commissioning and independent review remain outstanding.
+
 ## 0.11.0 — integrated intelligence (unreleased development candidate)
 
 - Integrates Fable’s seven-view read-only monitoring on a separate draft branch;

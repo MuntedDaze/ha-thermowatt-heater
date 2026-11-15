@@ -121,7 +121,9 @@
           "controller_four_state_qualified": "Four-state commands qualified (1.3.14)",
           "adaptive_polling_enabled": "Send adaptive cloud scheduling plans",
           "learned_planning_enabled": "Use validated conservative learned heating rate",
-          "learning_hardware_qualified": "Heating learning independently qualified"
+          "learning_hardware_qualified": "Heating learning independently qualified",
+          "event_aware_polling_enabled": "Allow longer checks during quiet periods",
+          "owner_change_check_minutes": "Maximum time between app-change checks (minutes)"
         }
       }
     },

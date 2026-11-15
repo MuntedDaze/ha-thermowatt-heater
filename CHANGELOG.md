@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.16] - Event-aware polling candidate (unreleased, uninstalled)
+
+- Adds purpose-bounded v2 scheduling plans: explicit quiet baseline/OFF owner
+  checks can use 30–90 minutes, while consequential temperature planning rejoins
+  half-hour observations. V1 limits and the original fixed fallback remain.
+- Advertises supported plan versions. Owner-bound/purpose checks, monotonic
+  anchor, expiring lease and journal failure handling cannot authorise a command.
+- Command-specific 60-second exact-prior checks, confirmations, credentials,
+  token/session heuristics, auth locks/retry/backoff and quotas are unchanged.
+  Token refresh remains request-driven, with no idle keepalive.
+- Pair with controller 0.12.0. The additional quiet-period permission defaults
+  false, including existing installations; all adaptive/learning gates remain
+  default off. Source-only owner staging preserves the existing add-on identity.
+  No release, installation, authentication or physical heater test occurred.
+
 ## [1.3.15] - Integrated adaptive candidate (unreleased, uninstalled)
 
 - Adds disabled-by-default bridge-owned adaptive status scheduling. Expiring,

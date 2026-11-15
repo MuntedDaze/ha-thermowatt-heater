@@ -32,3 +32,6 @@ configuration:
   adaptive_polling_qualified:
     name: Adaptive polling independently qualified
     description: Leave false until the owner has separately reviewed and supervised polling, freshness, restart and guard behaviour. Does not change authentication or heater-command permission.
+  event_aware_polling_qualified:
+    name: Longer quiet checks independently qualified
+    description: Default false, including upgrades. Separately approve v2 purpose-bound owner checks up to 90 minutes; controller quiet permission and chosen bound are also required. Command freshness, confirmations and auth safeguards stay unchanged.

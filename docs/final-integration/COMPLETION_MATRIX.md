@@ -1,5 +1,8 @@
 # Requirements completion and remaining gates
 
+This records the preserved PR #35 checkpoint. The current focused phase is in
+the [pre-review handoff](../pre-review/HANDOFF.md).
+
 Combined candidate bridge **1.3.15** / controller **0.11.0**, draft PR #35.
 Implemented means code and offline evidence exist, not that anything is deployed.
 No new runtime feature is commissioned by a test, selector or documentation.

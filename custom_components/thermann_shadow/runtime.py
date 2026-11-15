@@ -499,6 +499,7 @@ class ShadowRuntime:
             expected_completion=datetime.fromisoformat(self.completion["latest"])
             if self.completion.get("latest")
             else None,
+            nominal_heating_minutes=self.completion.get("nominal_continuous_minutes"),
             prediction_confidence="provisional_range"
             if self.completion.get("latest")
             else "unknown",

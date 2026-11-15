@@ -318,9 +318,10 @@ COMMAND_STATE_VERSION = 1
 # read of that heater happened within this many seconds (a command refresh, a
 # confirmation or an on-demand read): it already supplied the reading.
 POLL_REUSE_SECONDS = 180
-# Proactive token refresh (1.3.13; authentication change, owner approval). The
-# access token lasts under 30 minutes (every 30-minute poll in 1.3.11 was GET
-# 401 -> refresh -> GET). A request made when the token is at least this old
+# Proactive token refresh (1.3.13; authentication change, owner approval). Prior
+# field observations showed GET401 -> refresh -> GET at30-minute polling; this
+# does not establish a universal vendor token/session lifetime. Only an actual
+# cloud operation checks age: no idle keepalive is sent. A token this old
 # refreshes FIRST, saving the doomed 401 GET. The guard, its retry limits and
 # the 5-minute refresh cooldown are unchanged; a 401 still refreshes once.
 PROACTIVE_REFRESH_AGE = 1200
@@ -431,6 +432,7 @@ class MyThermowattBridge:
             self.monotonic,
             self.data_dir / "poll_state.json",
             atomic_json,
+            extended_qualified=self.options.get("event_aware_polling_qualified", False),
         )
         self.failures = self.usage.failures
         if self.usage.cooldown_until > self.clock():
@@ -836,6 +838,7 @@ class MyThermowattBridge:
                 "poll_interval_seconds": self.poll_interval,
                 "consecutive_failures": self.failures,
                 "on_demand_refresh_enabled": self.options.get("on_demand_refresh_enabled", False),
+                "adaptive_plan_versions": [1, 2] if self.poll_schedule.extended_qualified else [1],
                 "commands_enabled": bool(self.options.get("commands_enabled", False)),
                 "command_policy": self.options.get("command_policy", "automation"),
                 "last_command": dict(self.last_command) if self.last_command else None,
@@ -1713,6 +1716,7 @@ def load_options(path):
         "on_demand_refresh_enabled",
         "adaptive_polling_enabled",
         "adaptive_polling_qualified",
+        "event_aware_polling_qualified",
     ):
         if type(options.get(key, False)) is not bool:
             raise ValueError

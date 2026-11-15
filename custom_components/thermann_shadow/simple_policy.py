@@ -122,6 +122,9 @@ class Snapshot:
     measured_element_kw: float | None = None  # verified instantaneous ON power; never inference
     optional_allowed: bool = True
     learned_rates: dict[int, float] = field(default_factory=dict)
+    required_export_kw: float | None = (
+        None  # raw verified grid export, never inferred element credit
+    )
 
 
 @dataclass(frozen=True)
@@ -502,6 +505,10 @@ class SimplePolicy:
             return OFF, "peak_no_grid_heating", 4, plan
 
         measured = self.typical_available(now)
+        # Required off-peak heat can use the observed raw export without a CT.
+        # This never enters optional qualification samples or credits nominal
+        # element watts; a forecast/meter remains an estimate of future surplus.
+        required_measured = measured if measured is not None else snap.required_export_kw
         price = tariff_at(now, self.tariffs, s.tariff_clock, s.time_zone).rate
         local = now.astimezone(ZoneInfo(s.time_zone))
         daytime = s.daytime_start <= local.time().replace(tzinfo=None)
@@ -598,7 +605,7 @@ class SimplePolicy:
                     5,
                     plan,
                 )
-            profile = self.surplus_profile(now, soft, snap.forecast, measured)
+            profile = self.surplus_profile(now, soft, snap.forecast, required_measured)
             costs = self._windows(profile, self._prices(now, len(profile)), need)
             if state == normal:
                 best = self._cheapest(costs, math.ceil(s.command_spacing / SLOT))

@@ -242,6 +242,9 @@ class Observation:
     requests_total: int | None = None
     mqtt_ready: bool = False
     forecast_available: bool | None = None  # published forecast usable now (None: unknown)
+    passive_status_deadline: datetime | None = (
+        None  # validated quiet lease; never command authority
+    )
 
     @property
     def heater_state(self) -> str | None:
@@ -932,8 +935,17 @@ class Controller:
                 )
         else:
             self.storage_idle_since = None
-        if obs.poll_at is None or not timedelta(0) <= now - obs.poll_at <= timedelta(
-            minutes=2 * cfg.poll_interval_minutes + 5
+        passive_ok = (
+            obs.passive_status_deadline is not None
+            and obs.poll_at is not None
+            and obs.poll_at <= now <= obs.passive_status_deadline
+            and obs.passive_status_deadline - obs.poll_at <= timedelta(minutes=95)
+        )
+        if not passive_ok and (
+            obs.poll_at is None
+            or not timedelta(0)
+            <= now - obs.poll_at
+            <= timedelta(minutes=2 * cfg.poll_interval_minutes + 5)
         ):
             alerts.append(
                 (

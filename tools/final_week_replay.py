@@ -29,7 +29,7 @@ def denied(*args, **kwargs):
 
 
 class Week(Rig):
-    def __init__(self, folder, monkeypatch, strategy, ct):
+    def __init__(self, folder, monkeypatch, strategy, ct, event_aware=False, owner_minutes=60):
         self.strategy, self.ct = strategy, ct
         self.events, self.decisions = [], []
         self.poll_reasons = Counter()
@@ -40,6 +40,7 @@ class Week(Rig):
         self.original_owner_state = None
         self.status_max_age = self.unknown_minutes = 0
         self.healthy_status_max_age = 0
+        self.critical_unknown_minutes = self.stale_command_blocks = 0
         self.forecast_abs = self.prediction_errors = 0.0
         self.prediction_n = 0
         self.prediction = None
@@ -76,6 +77,8 @@ class Week(Rig):
             "peak_heating_policy": "Never schedule heating during peak",
             "adaptive_polling_enabled": strategy == "actual_adaptive",
             "adaptive_polling_shadow": strategy == "previous_shadow",
+            "event_aware_polling_enabled": event_aware,
+            "owner_change_check_minutes": owner_minutes,
         }
         self.entry.options.update(options)
         if not ct:
@@ -89,9 +92,12 @@ class Week(Rig):
             self.bridge.publish_diagnostics(force=True)
         if strategy == "actual_adaptive":
             self.bridge.options.update(
-                adaptive_polling_enabled=True, adaptive_polling_qualified=True
+                adaptive_polling_enabled=True,
+                adaptive_polling_qualified=True,
+                event_aware_polling_qualified=event_aware,
             )
             self.bridge.poll_schedule.enabled = True
+            self.bridge.poll_schedule.extended_qualified = event_aware
             self.bridge.poll_schedule.observed(
                 SERIAL, self.bridge.last_success[SERIAL], self.bridge.poll_interval
             )
@@ -240,6 +246,14 @@ class Week(Rig):
             self.runtime.update(self.now())
             drive(self.runtime._save_history())
             drive(self.executor.async_step(self.now()))
+            if (
+                self.executor.last_decision.plan.get("mode") == "deadline"
+                and self.runtime.temperature_c is None
+            ):
+                self.critical_unknown_minutes += 1
+            self.stale_command_blocks += (
+                "heater_status_too_old" in self.executor.controller.gate_failures
+            )
             watts = 3 if self.tank.element else 0
             pv = self.weather(self.now())
             imported = min(watts, max(0, watts + 0.5 - pv)) / 60
@@ -333,6 +347,8 @@ class Week(Rig):
             "maximum_status_age_minutes": self.status_max_age,
             "maximum_healthy_status_age_minutes": self.healthy_status_max_age,
             "unknown_temperature_minutes": self.unknown_minutes,
+            "required_planning_unknown_minutes": self.critical_unknown_minutes,
+            "stale_command_blocked_minutes": self.stale_command_blocks,
             "persistent_owner_detection_minutes": self.owner_detection,
             "transient_app_change_observed": self.transient_detected,
             "forecast_mae_kw": self.forecast_abs / (7 * 1440),
@@ -350,10 +366,14 @@ class Week(Rig):
         }
 
 
-def results():
+def results(strategies=None):
+    strategies = strategies or [
+        (name, name, False, 60)
+        for name in ("fixed_30", "fixed_60", "previous_shadow", "actual_adaptive")
+    ]
     rows = []
     for ct in (False, True):
-        for strategy in ("fixed_30", "fixed_60", "previous_shadow", "actual_adaptive"):
+        for label, strategy, event_aware, owner_minutes in strategies:
             with tempfile.TemporaryDirectory() as folder, pytest.MonkeyPatch.context() as patch:
                 patch.setattr(socket.socket, "connect", denied)
                 patch.setattr(socket.socket, "connect_ex", denied)
@@ -369,8 +389,10 @@ def results():
                         str(path), json.loads(json.dumps(data))
                     ),
                 )
-                rows.append(Week(Path(folder), patch, strategy, ct).run_week())
-        group = rows[-4:]
+                row = Week(Path(folder), patch, strategy, ct, event_aware, owner_minutes).run_week()
+                row["strategy"] = label
+                rows.append(row)
+        group = rows[-len(strategies) :]
         terminal = max(r["end_stored_above_15_kwh"] for r in group)
         for row in group:
             missing = terminal - row["end_stored_above_15_kwh"]

@@ -2,7 +2,7 @@
 
 *Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
-Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Bridge 1.3.15 is an unmerged, uninstalled development candidate; new four-state hardware behaviour still requires supervised qualification. See the [current candidate guide](../docs/final-integration/COMPLETION_MATRIX.md). Public distribution is deferred.
+Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Bridge 1.3.16 is an unmerged, uninstalled development candidate; four-state hardware behaviour still requires supervised qualification. See the [focused handoff](../docs/pre-review/HANDOFF.md) and [owner installation guide](../docs/pre-review/OWNER_INSTALLATION.md). Public distribution is deferred.
 
 **Defaults are safe:** cloud access off, commands off, polling every 30 minutes.
 
@@ -20,6 +20,7 @@ min_cloud_retry_minutes: 60
 on_demand_refresh_enabled: false
 adaptive_polling_enabled: false
 adaptive_polling_qualified: false
+event_aware_polling_qualified: false
 auth_retry_generation: 0
 ```
 
@@ -32,6 +33,7 @@ auth_retry_generation: 0
 | `min_cloud_retry_minutes` | First wait after an ordinary cloud error, 5–1440 minutes (default 60). Repeated errors double it, up to 24 hours. A success resets it. |
 | `on_demand_refresh_enabled` | Optional read-only refresh on `P/<serial>/refresh`, at most one read per 5 minutes. Off by default; the controller does not need it. |
 | `adaptive_polling_enabled` + `adaptive_polling_qualified` | Both false by default. Both plus controller plan enable and fixed interval ≥15 minutes are required for bridge-owned bounded adaptive status scheduling. Requires independent qualification. Missing/expired plans select fixed fallback; auth/backoff/quotas/confirmation retain priority. See the [wire contract and telemetry](../docs/final-integration/TELEMETRY.md). |
+| `event_aware_polling_qualified` | New separate default-false permission, including upgrades. Allows v2 purpose-bound longer quiet observations only after independent review; the controller also needs its quiet permission and selected 30–90 minute owner-change bound. Active temperature validity and strict 60-second command checks stay unchanged. See [evidence and limits](../docs/pre-review/POLLING.md). |
 | `auth_retry_generation` | Increase by one to allow **one** new authentication attempt after a lock (see below). 0 starts locked. |
 
 Options are read from `/data/options.json` (`!secret` works). Credentials are never logged or passed on the command line.
