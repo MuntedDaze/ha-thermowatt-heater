@@ -1,5 +1,23 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.13.0 — independent-audit remediation (unreleased)
+
+- Adds a persisted warning when the last observed heater state is software OFF
+  and permitted heating has been wanted for 30 minutes without restoration.
+  No peak, owner, authentication, command-budget or confirmation bypass is added.
+- Adds read-only completed-evaluation and restoration-wait timestamps, with an
+  optional separate notification-only watchdog for controller failure while HA
+  remains running. Phone/manual recovery are commissioning requirements.
+- CT-free required heat is not paused using raw grid readings that may include
+  its own unknown element draw. Economical required-start planning is retained.
+- Preserves the owner's agreed 45/62/70°C roles, existing peak policy and all
+  guarded setpoints. Documents appliance/native-protection limits without a new
+  temperature gate or independently established compliance claim.
+- Uses normal same-identity bridge Update after a separately approved integrated
+  main merge; unsupported Supervisor cache staging is removed. Start fixed30,
+  adaptive and learning off; longer checks need independent inactivity evidence.
+- Pair with bridge1.3.17. No merge, installation or live operation performed.
+
 ## 0.12.0 — focused pre-review improvements (unreleased)
 
 - Adds default-off Allow longer checks during quiet periods plus a bounded

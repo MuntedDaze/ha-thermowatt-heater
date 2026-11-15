@@ -13,6 +13,10 @@ untouched. No broad audit was restarted. PR36 and earlier branches, including
 Fable's separate4c078f0 worktree, remain preserved. No merge, live HA/vendor access,
 authentication/MQTT, installation, actual heater command or enablement occurred.
 
+Source report SHA256:
+`eef7030c52d519a04207af11319cecc6881f74c763bf736eb579521a1a781509`.
+The local report is not republished or modified by this remediation.
+
 **Owner correction takes precedence:** retain Manual 45°C overnight/weekends,
 Manual 62°C normal weekday storage, optional economical Manual 70°C and the existing
 configured peak-OFF policy. Owner plumber discussion is recorded; this project
