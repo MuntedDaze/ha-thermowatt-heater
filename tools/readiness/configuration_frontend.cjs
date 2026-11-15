@@ -22,11 +22,13 @@ async function main() {
   page.setDefaultTimeout(20000);
   const reports = [];
   let confirmedHttp = false;
+  const fieldText = label => new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\*?$`);
+  const snapshot = () => page.evaluate(() => document.querySelector("home-assistant").hass.callApi("GET", "thermann_ui_snapshot"));
   const paths = {
     hot_water: [], prices: ["electricity"], peak_times: ["electricity"],
     tariff_json: ["electricity"], schedule: ["electricity"], solar: ["solar_meters"],
     sources: ["solar_meters"], equipment: ["advanced"], polling: ["advanced"],
-    commissioning: ["advanced"], bridge_sources: ["advanced"],
+    commissioning: ["advanced"], bridge_sources: ["advanced"], period: ["electricity", "schedule"],
   };
   try {
     for (const width of [1280, 390]) {
@@ -50,12 +52,15 @@ async function main() {
         await configure.click();
         await expect(page.getByText("Hot Water", { exact: true })).toBeVisible();
         if (id === "hot_water") await page.screenshot({ path: `${output}/menu-${width}.png` });
-        for (const target of [...parents, id]) {
+        for (const target of [...parents, ...(id === "period" ? [] : [id])]) {
           await page.getByText(steps[target].title, { exact: true }).last().click();
         }
+        if (id === "period") {
+          await page.getByText("Add a period", { exact: true }).click();
+          await page.getByRole("button", { name: "Submit", exact: true }).click();
+        }
         for (const label of Object.values(steps[id].data || {})) {
-          const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          await expect(page.getByText(new RegExp(`^${escaped}\\s*\\*?$`)).first()).toBeVisible();
+          await expect(page.getByText(fieldText(label)).first()).toBeVisible();
         }
         // Check actual rendered inline help, not just downloaded translations.
         for (const help of Object.values(steps[id].data_description || {})) {
@@ -74,6 +79,18 @@ async function main() {
         });
         if (overflow) throw new Error(`Horizontal form overflow: ${id} ${width}`);
         await page.screenshot({ path: `${output}/${id}-${width}.png` });
+        const labels = Object.values(steps[id].data || {});
+        if (labels.length) {
+          await page.getByText(fieldText(labels.at(-1))).first().scrollIntoViewIfNeeded();
+          await page.screenshot({ path: `${output}/${id}-bottom-${width}.png` });
+        }
+        if (["hot_water", "prices", "sources"].includes(id)) {
+          const before = await snapshot();
+          const saved = page.waitForResponse(response => response.url().includes("/options/flow/") && response.request().method() === "POST");
+          await page.getByRole("button", { name: "Submit", exact: true }).click();
+          expect((await (await saved).json()).type).toBe("create_entry");
+          expect(await snapshot()).toEqual(before);
+        }
         reports.push({ page: id, width, labels: Object.keys(steps[id].data || {}).length, inline_help: true, overflow: false });
         console.log(`Rendered ${id} at ${width}px with inline help`);
       }

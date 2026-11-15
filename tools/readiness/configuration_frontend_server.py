@@ -15,6 +15,7 @@ import sys
 
 from homeassistant import bootstrap, loader
 from homeassistant.core import HomeAssistant, ServiceRegistry
+from homeassistant.components.http import HomeAssistantView
 
 ROOT = Path("/workspace")
 CONFIG = Path("/tmp/thermann-ui")
@@ -88,6 +89,17 @@ async def main():
     hass.config_entries.async_update_entry(entry, options=options)
     await hass.async_block_till_done()
     checks = await check_configuration(hass, entry)
+
+    class SnapshotView(HomeAssistantView):
+        """Authenticated test-only view, registered only in this disposable server."""
+
+        url = "/api/thermann_ui_snapshot"
+        name = "api:thermann_ui_snapshot"
+
+        async def get(self, request):
+            return self.json(dict(entry.options))
+
+    hass.http.register_view(SnapshotView)
     user = await hass.auth.async_create_user("Synthetic UI reviewer", group_ids=["system-admin"])
     refresh = await hass.auth.async_create_refresh_token(user, client_id="http://127.0.0.1:8123/")
     access = hass.auth.async_create_access_token(refresh)
