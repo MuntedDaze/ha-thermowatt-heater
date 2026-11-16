@@ -1,32 +1,27 @@
 # Thermann Controller
 
-For the new four-section configuration screens, inline help, cents/percent units
-and guided tariff editing, see the [beginner settings walkthrough](../docs/configuration/SETTINGS.md).
+The owner already runs **0.14.0** in Shadow Mode with bridge **1.3.17**, GoodWe
+and EMHASS. This release prepares controller **0.15.0** in the same installation.
+The bridge code/version and existing integration identities remain unchanged.
 
-Current development candidate: **0.10.0** with bridge **1.3.14**, in draft PR #34.
+Use the [current in-place upgrade and commissioning guide](../docs/completion/UPGRADE.md),
+[compatible interfaces](../docs/completion/INTERFACES.md),
+[beginner settings walkthrough](../docs/configuration/SETTINGS.md) and
+[controller changelog](CHANGELOG.md). Earlier draft guides are historical references.
 
-Start with the [four-state guide](../docs/dual-storage/README.md),
-[installation and commissioning](../docs/dual-storage/INSTALLATION.md),
-[upgrade/rollback](../docs/dual-storage/UPGRADE.md) and
-[backend telemetry contract](../docs/dual-storage/TELEMETRY_INTERFACE.md).
+One policy chooses OFF / Manual45 baseline / required weekday Manual62 / optional
+Manual70. Peak lockout and optional boost are independent owner choices. A
+separately commissioned CT-free grid-only path supports peak and off-peak solar;
+a verified exclusive circuit meter adds physical element/energy evidence.
+Without it, electrical ON/OFF remains unknown. No missing reading becomes zero.
 
-The default strategy is OFF / Manual45 baseline / required weekday Manual62 /
-optional economical solar Manual70. Dedicated CT measurement is optional for
-baseline and required off-peak storage. Peak policy and optional boost are
-independent user settings. No new transition has been physically commissioned.
-Automatic control remains disabled for new users, with a separate four-state
-qualification gate. The bounded owner 12hr Override remains at 70°C.
+One guarded command arbiter persists intent before the bridge receives it.
+Protective OFF requirements survive a pending start, restart and returning sun;
+unknown outcomes are never replayed or authentication safeguards bypassed.
+The same policy remains read-only in Shadow Mode. An upgrade grants no new
+live command, automatic-control, adaptive-polling or learned-planning permission.
 
-`thermann_shadow` and existing entity IDs remain for compatibility. The same
-single policy runs read-only when automatic control is off. Calibration remains
-diagnostic and adaptive polling remains shadow-only. Cloud OFF is not proof of
-zero electrical consumption. Fable's dashboard remains a separate draft PR.
-
-The earlier [SIMPLIFIED_STRATEGY](SIMPLIFIED_STRATEGY.md),
-[HOW_IT_DECIDES](HOW_IT_DECIDES.md) and
-[COMMISSIONING_SIMPLIFIED](COMMISSIONING_SIMPLIFIED.md) describe the three-state
-0.9.x recovery candidate in unchanged PR #33, not this four-state candidate.
-Keep them as versioned recovery references.
-
-[Forecast input setup](FORECAST_SETUP.md) and the [controller changelog](CHANGELOG.md)
-remain useful. Development has not installed, enabled or operated this candidate.
+The existing seven-view dashboard reads these entities; it is not a second
+controller. EMHASS remains the external forecast/optimisation source. Future
+whole-house and bathroom projects use the documented interfaces without adding
+another heater command path. [Forecast setup](FORECAST_SETUP.md) remains compatible.

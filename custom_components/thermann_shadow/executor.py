@@ -36,7 +36,9 @@ from .controller import (
     Controller,
     ControllerConfig,
     Observation,
+    OPTIONAL_REASONS,
     Want,
+    OPTIONAL_EXIT_REQUEST_RESERVE,
     expected_command_topic,
     heater_state,
     payload_for,
@@ -46,6 +48,7 @@ from zoneinfo import ZoneInfo
 from .polling import PollContext, PollingShadow
 from .adaptive import make_plan, event_plan
 from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
+from .solar import ct_free_record
 
 LOG = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -73,6 +76,7 @@ def controller_config(
         tariff_verified=values["tariff_verified"] is True,
         requires_four_states=True,
         four_state_qualified=values["controller_four_state_qualified"] is True,
+        element_kw=float(values["element_kw"]),
     )
 
 
@@ -150,6 +154,7 @@ class Executor:
                 kwh_per_c=float(self.runtime.native_options["tank_litres"]) * 4.186 / 3600,
                 peak_start_kw=float(self.runtime.native_options["element_kw"])
                 + settings.export_headroom_kw,
+                meter_max_age=timedelta(seconds=settings.grid_max_age_seconds),
                 soft_target_margin=timedelta(
                     minutes=float(self.runtime.native_options["completion_margin_minutes"])
                 ),
@@ -255,6 +260,7 @@ class Executor:
         states, sources = self.hass.states, self.runtime.sources
         obs = Observation(now=now, mqtt_ready="mqtt" in self.hass.config.components)
         obs.poll_at = self.runtime.poll_at
+        obs.morning_availability = self.runtime.values.get("morning_availability")
         obs.heater_meter_mapped = bool(self.runtime.sources.get("heater_power"))
         obs.heater_meter_quality = self.runtime.circuit.quality
         mode = states.get(sources.get("mode", ""))
@@ -283,8 +289,18 @@ class Executor:
             obs.bridge_command_policy = policy if isinstance(policy, str) else None
             transitions = attrs.get("command_transitions")
             obs.bridge_transitions = list(transitions) if isinstance(transitions, list) else None
+        health_reading = self.runtime._reading("cloud_health")
+        diagnostics_fresh = bool(
+            health_reading
+            and not health_reading.restored
+            and self.runtime.boot <= health_reading.observed_at <= now
+            and now - health_reading.observed_at <= timedelta(minutes=self._poll_minutes() + 5)
+        )
         obs.bridge_available = (
-            mode is not None and mode.state != "unavailable" and obs.cloud_health is not None
+            mode is not None
+            and mode.state != "unavailable"
+            and obs.cloud_health is not None
+            and diagnostics_fresh
         )
         counter = states.get(sources.get("requests", ""))
         if counter is not None:
@@ -391,9 +407,7 @@ class Executor:
             self.runtime.temperature_c is None
             and self.runtime.power_budget is not None
             and self.runtime.native_options["optional_solar_boost"]
-            and self.policy.sustained(
-                now, self.policy.s.qualify, lambda x: x[2] >= self.policy.s.peak_start_kw
-            )
+            and self.policy.surplus_qualified(now)
         ):
             moments.append(now)
         return min((at for at in moments if at >= now), default=None)
@@ -412,6 +426,20 @@ class Executor:
             state = heater_state(obs.mode, obs.target_c)
             last = _dt(self.shadow[-1]["at"]) if self.shadow else None
         grid = runtime.grid_import_kw
+        grid_reading = runtime._reading("grid")
+        expected_record = ct_free_record(
+            runtime.sources.get("grid"),
+            grid_reading.unit if grid_reading else None,
+            runtime.settings.import_positive,
+            runtime.settings.element_kw,
+        )
+        ct_free_valid = bool(
+            grid is not None
+            and expected_record
+            and runtime.native_options["ct_free_solar_verification"] == expected_record
+            and not runtime.sources.get("heater_power")
+            and not runtime.native_options["heater_meter_verification"]
+        )
         if grid is not None:
             # Physical budget always uses measured watts. Optional upgrades from
             # baseline still require raw export: existing baseline heat is not a
@@ -428,7 +456,7 @@ class Executor:
                 self.policy.add_meter(at, grid, heater_kw=watts / 1000)
         else:
             self.policy.samples.clear()  # a loss breaks qualification continuity
-        if runtime.power_budget is None:
+        if runtime.power_budget is None and not ct_free_valid:
             self.policy.samples.clear()
         forecast = runtime.forecast.slots if runtime.forecast is not None else ()
         snapshot = Snapshot(
@@ -445,12 +473,22 @@ class Executor:
             forecast=tuple(forecast),
             last_command_at=last,
             heater_meter_valid=runtime.power_budget is not None,
+            ct_free_solar_valid=ct_free_valid,
+            protective_exit_pending=controller.protective_exit is not None,
+            optional_cooldown_until=_dt(controller.optional_cooldown_until),
+            optional_session_active=controller.solar_session_active
+            or bool(
+                controller.intent
+                and controller.intent.get("reason") in OPTIONAL_REASONS
+                and controller.intent.get("target") != "off"
+            ),
             optional_allowed=(
                 not controller.enabled
                 or (
                     len(controller.commands) < self.cfg.max_commands_per_day
                     and controller.requests_last_24h(now) is not None
-                    and controller.requests_last_24h(now) + 10 <= self.cfg.max_requests_per_day
+                    and controller.requests_last_24h(now) + OPTIONAL_EXIT_REQUEST_RESERVE
+                    <= self.cfg.max_requests_per_day
                 )
             ),
             measured_element_kw=runtime.circuit.watts / 1000
@@ -788,6 +826,30 @@ class Executor:
             "requests_last_24h": summary["requests_last_24h"],
             "fault": summary["fault"] or "none",
             "parked_off_restore_since": _parse(summary["parked_off_restore_since"]),
+            "solar_session_status": "STOPPING"
+            if summary["protective_exit"]
+            or (summary["pending_intent"] and summary["pending_intent"]["target"] == "off")
+            else "COOLDOWN"
+            if summary["optional_cooldown_until"] and now < _dt(summary["optional_cooldown_until"])
+            else "ACTIVE"
+            if summary["solar_session_active"]
+            else "WAITING",
+            "solar_cooldown_until": _parse(summary["optional_cooldown_until"]),
+            "protective_exit_wait_seconds": summary["protective_exit_wait_seconds"],
+            "protective_exit_nominal_kwh": round(
+                summary["protective_exit_wait_seconds"] / 3600 * self.cfg.element_kw, 4
+            ),
+            "protective_exit_nominal_cost_aud": round(
+                summary["protective_exit_wait_seconds"]
+                / 3600
+                * self.cfg.element_kw
+                * (summary["protective_exit"] or {}).get("price_aud_per_kwh", 0),
+                4,
+            )
+            if summary["protective_exit"] and "price_aud_per_kwh" in summary["protective_exit"]
+            else None,
+            "optional_exit_request_reserve": OPTIONAL_EXIT_REQUEST_RESERVE,
+            "morning_availability": self.runtime.values.get("morning_availability"),
             "operating_mode": summary["operating_mode"],
             "guest_mode_ends": _parse(summary["guest_until"]),
             "desired_temperature": decision.plan.get("desired_target_c") if decision else None,
@@ -819,7 +881,7 @@ class Executor:
             **self.controller.summary(now),
             "commissioning_missing": self.cfg.missing_commissioning(),
             "command_topic_configured": bool(self.cfg.command_topic),
-            "payloads": "<target>@<prior>: off / Manual:45 / Manual:70 (bridge 1.3.13)",
+            "payloads": "<target>@<prior>: off / Manual:45 / Manual:62 / Manual:70 (bridge >= 1.3.14)",
             "command_timing": "single_message_bridge_fresh_status_no_retry",
             "policy_decision": self.plan_details(),
             "state_saved": not self.save_failed,
@@ -839,6 +901,7 @@ class Executor:
             "Manual 45 °C, or turn the heater OFF. Never reset authentication locks "
             "automatically; see the app documentation.",
             "confirming": self.controller.state == CONFIRMING,
+            "exposure_estimate": "Nominal element power times unresolved duration; cost uses the highest observed import price. Not metered energy or a physical shutdown guarantee.",
         }
 
 

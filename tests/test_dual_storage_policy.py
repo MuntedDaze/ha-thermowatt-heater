@@ -70,9 +70,9 @@ def test_boost_disabled_cannot_target_70_but_owner_override_keeps_70():
 def test_later_clouds_revert_optional_boost_to_required_62_after_debounce():
     p = sp.SimplePolicy(D, TARIFFS)
     now = at(MON, 13)
-    for i in range(6):
+    for i in range(11):
         p.add_meter(now + i * MIN, 3, heater_kw=3)
-    d = p.decide(snap(now + 5 * MIN, STORE, reading=58, forecast=fc(now, 5, 4)))
+    d = p.decide(snap(now + 10 * MIN, STORE, reading=58, forecast=fc(now, 5, 4)))
     assert d.command == "Manual:62" and d.reason == "weekday_solar_boost_withdrawn"
 
 

@@ -23,6 +23,7 @@ from homeassistant.util import dt as dt_util
 
 from .config import DEFAULT_OPTIONS
 from .forecast import build_forecast
+from .comfort import morning_availability
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
 from .measurement import CircuitPower, circuit_power, energy_reading, power_balance
@@ -338,6 +339,7 @@ class ShadowRuntime:
             self.hass.states.get(self.sources.get("forecast_pv", "")),
             self.hass.states.get(self.sources.get("forecast_load", "")),
             measured_pv,
+            measured_house=house_kw,
         )
         self.forecast.measured_pv_average_kw = (
             None if measured_pv is None else round(measured_pv, 3)
@@ -567,6 +569,15 @@ class ShadowRuntime:
             None if export_now is None else round(max(0.0, export_now), 3)
         )
         values["forecast_age_minutes"] = self.forecast.age_minutes if self.forecast else None
+        values["forecast_load_quality"] = self.forecast.load_quality if self.forecast else None
+        comfort = morning_availability(
+            now,
+            temperature,
+            self.poll_at,
+            self.settings.time_zone,
+            self.settings.status_max_age_minutes,
+        )
+        values["morning_availability"] = comfort["state"]
         self._requests(now)
         executor = self.executor
         policy = executor.policy_values() if executor is not None else {}
@@ -575,6 +586,7 @@ class ShadowRuntime:
             "automatic_control" if self.controller_active else "shadow_observation"
         )
         self.details = {
+            "morning_availability": comfort,
             "circuit_measurement": {
                 "watts": self.circuit.watts,
                 "state": self.circuit.state,
@@ -614,6 +626,8 @@ class ShadowRuntime:
                 if self.forecast
                 else None,
                 "load_basis": self.forecast.load_basis if self.forecast else None,
+                "load_quality": self.forecast.load_quality if self.forecast else None,
+                "load_floor_kw": self.forecast.load_floor_kw if self.forecast else None,
                 "intervals": len(self.forecast.slots) if self.forecast else 0,
             },
             "policy_plan": executor.plan_details() if executor is not None else None,

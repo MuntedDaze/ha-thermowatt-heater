@@ -1,0 +1,36 @@
+"""Read-only morning availability evidence; never changes the agreed thermostat target."""
+
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
+
+def morning_availability(now, reading, observed_at, time_zone, max_age_minutes=45):
+    local = now.astimezone(ZoneInfo(time_zone))
+    preferred = datetime.combine(local.date(), time(6), ZoneInfo(time_zone))
+    hard = datetime.combine(local.date(), time(7), ZoneInfo(time_zone))
+    result = {
+        "state": "not_due",
+        "preferred_c": 45,
+        "minimum_c": 42,
+        "preferred_at": preferred.isoformat(),
+        "minimum_at": hard.isoformat(),
+        "observed_at": observed_at.isoformat() if observed_at else None,
+        "reading_c": reading,
+        "proves_deadline_met": False,
+    }
+    if not time(5) <= local.time().replace(tzinfo=None) < time(9):
+        return result
+    fresh = (
+        reading is not None
+        and observed_at is not None
+        and timedelta(0) <= now - observed_at <= timedelta(minutes=max_age_minutes)
+    )
+    if not fresh:
+        result["state"] = "unverified"
+    elif now >= hard and observed_at >= hard and reading < 42:
+        result["state"] = "minimum_shortfall_observed"
+    elif reading < (42 if now >= hard else 45):
+        result["state"] = "at_risk"
+    else:
+        result["state"] = "latest_probe_above_requirement"
+    return result

@@ -17,6 +17,8 @@ class ShadowText(SettingEntity, TextEntity):
             self._attr_native_max = 64
         elif key == "heater_meter_verification":
             self._attr_native_max = 258  # full raw entity ID plus |W or |kW
+        elif key == "ct_free_solar_verification":
+            self._attr_native_max = 300
 
     @property
     def native_value(self):

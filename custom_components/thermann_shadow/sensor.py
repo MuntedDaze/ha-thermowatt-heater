@@ -29,6 +29,8 @@ SENSORS = {
     "measured_export_kw": ("Measured grid export", "kW"),
     "forecast_net_surplus_kw": ("Forecast net surplus", "kW"),
     "forecast_age_minutes": ("Forecast age", "min"),
+    "forecast_load_quality": ("Household forecast quality", None),
+    "morning_availability": ("Morning hot water availability", None),
     "decision": ("Decision code", None),
     "heater_element_state": ("Heater element state", None),
     "heater_state_confidence": ("Heater state confidence", None),
@@ -105,6 +107,12 @@ CONTROLLER_SENSORS = {
     "boost_reason": ("Solar boost reason", None),
     "planned_heat_kwh": ("Planned heating energy estimate", "kWh"),
     "parked_off_restore_since": ("Waiting to restore heat since", None),
+    "solar_session_status": ("Solar boost status", None),
+    "solar_cooldown_until": ("Solar boost cooldown ends", None),
+    "protective_exit_wait_seconds": ("Protective OFF waiting time", "s"),
+    "protective_exit_nominal_kwh": ("Unconfirmed OFF nominal energy exposure", "kWh"),
+    "protective_exit_nominal_cost_aud": ("Unconfirmed OFF nominal cost exposure", "AUD"),
+    "optional_exit_request_reserve": ("Solar exit request reserve", "requests"),
 }
 CONTROLLER_TIMESTAMPS = {
     "controller_evaluated_at",
@@ -114,6 +122,7 @@ CONTROLLER_TIMESTAMPS = {
     "guest_mode_ends",
     "next_adaptive_poll",
     "parked_off_restore_since",
+    "solar_cooldown_until",
 }
 
 

@@ -108,6 +108,7 @@ DEFAULT_OPTIONS = {
     "controller_execution_latency_minutes": 30.0,
     "controller_notify_service": "",
     "heater_meter_verification": "",  # commissioned entity_id|W (or |kW); no default authority
+    "ct_free_solar_verification": "",  # separate supervised grid-only commissioning record
     "adaptive_polling_shadow": False,
     "adaptive_polling_enabled": False,
     "event_aware_polling_enabled": False,
@@ -261,6 +262,19 @@ def parse_options(options):
         if not isinstance(values[key], str) or len(values[key]) > 64:
             raise ValueError("controller_setting_invalid")
     stamp = values["heater_meter_verification"]
+    solar_stamp = values["ct_free_solar_verification"]
+    if (
+        not isinstance(solar_stamp, str)
+        or len(solar_stamp) > 300
+        or (
+            solar_stamp
+            and not re.fullmatch(
+                r"sensor\.[a-z0-9_]+\|(W|kW)\|(import_positive|export_positive)\|[0-9]+(?:\.[0-9]+)?",
+                solar_stamp,
+            )
+        )
+    ):
+        raise ValueError("controller_setting_invalid")
     from .targets import validate_roles
 
     validate_roles(

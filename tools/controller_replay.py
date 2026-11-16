@@ -54,6 +54,7 @@ def dispatch_case(name, availability, withdrawal=5, later_solar=False):
                 forecast=(m.Forecast(start, start + timedelta(hours=2), 3.5),),
                 last_command_at=last,
                 heater_meter_valid=True,
+                optional_session_active=state == sp.STORAGE and last is not None,
             )
         )
         if decision.command:
@@ -171,7 +172,7 @@ def report():
         "evidence": "synthetic offline comparisons, not observed outcomes or savings promises",
         "operating_policy": "Manual 45 baseline, weekday Manual 70 retained; native protections unchanged",
         "dispatch": [
-            dispatch_case(name, fn, minutes) for name, fn in cases.items() for minutes in (5, 2)
+            dispatch_case(name, fn, minutes) for name, fn in cases.items() for minutes in (10, 5, 2)
         ],
         "polling": [polling_day(strategy) for strategy in ("30", "60", "adaptive")],
         "full_controller_evidence": "tests/test_integration_0_9_0.py and tests/test_audit_regressions_0_9_1.py exercise real executor/bridge with synthetic cloud",

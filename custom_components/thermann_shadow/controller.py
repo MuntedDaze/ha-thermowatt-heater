@@ -22,6 +22,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
+from .solar import COOLDOWN, PROTECTIVE_REASONS, SPACING, WITHDRAWAL_REASONS
 
 OFF, BASELINE, STORAGE = "off", "baseline", "storage"  # simple_policy states
 NORMAL = "normal_storage"
@@ -97,14 +98,7 @@ ESSENTIAL_EXTRA_COMMANDS = 6
 # transitions. This local estimate never grants additional vendor quota.
 OPTIONAL_EXIT_REQUEST_RESERVE = 10
 # Must match the policy: only justified protective peak OFF bypasses spacing.
-SPACING_EXEMPT_REASONS = frozenset(
-    {
-        "peak_solar_withdrawn",
-        "peak_meter_unavailable",
-        "peak_heater_meter_unavailable",
-        "peak_lockout",
-    }
-)
+SPACING_EXEMPT_REASONS = PROTECTIVE_REASONS
 FORECAST_ALERT_AFTER = timedelta(minutes=60)
 BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
 BRIDGE_UNEXPECTED_STATE = "unexpected_state_after_command"
@@ -162,7 +156,8 @@ class ControllerConfig:
     tariff_verified: bool = True
     requires_four_states: bool = False
     four_state_qualified: bool = False
-    command_spacing_minutes: float = 15.0  # the shared spacing rule, enforced here too
+    command_spacing_minutes: float = SPACING.total_seconds() / 60
+    element_kw: float = 3.0  # exposure estimate only, never electrical evidence
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
     poll_interval_minutes: float = 30.0
@@ -240,6 +235,7 @@ class Observation:
     bridge_command_policy: str | None = None
     bridge_transitions: list | None = None  # 1.3.13 diagnostics
     requests_total: int | None = None
+    morning_availability: str | None = None
     mqtt_ready: bool = False
     forecast_available: bool | None = None  # published forecast usable now (None: unknown)
     passive_status_deadline: datetime | None = (
@@ -319,6 +315,8 @@ class Controller:
     history: list = field(default_factory=list)  # last 20 resolved intents
     commands: list = field(default_factory=list)  # ISO times of published commands (24 h)
     request_samples: list = field(default_factory=list)  # [ISO poll time, total]
+    request_counter_last: int | None = None
+    request_counter_offset: int = 0
     last_poll_seen: str | None = None
     last_transition_at: str | None = None
     inspect_after: str | None = None  # a NEW poll after this time is required to act
@@ -337,6 +335,9 @@ class Controller:
     heater_meter_missing_since: str | None = None
     last_observed_heater: str | None = None
     parked_off_restore_since: str | None = None
+    protective_exit: dict | None = None
+    optional_cooldown_until: str | None = None
+    solar_session_active: bool = False
 
     # ------------------------------------------------------------------ persistence
     def to_dict(self) -> dict:
@@ -375,6 +376,7 @@ class Controller:
         """After an HA restart: never assume the heater is in the last REQUESTED
         state. Re-inspect from a NEW status; an unresolved intent is reconciled
         from observed status only and is never re-sent."""
+        self.solar_session_active = False  # local qualification history was interrupted
         if (seen := _dt(self.last_poll_seen)) is not None and seen > now:
             self.last_poll_seen = None
         self.inspect_after = _iso(now)
@@ -389,6 +391,7 @@ class Controller:
     def set_enabled(self, enabled: bool, now: datetime) -> None:
         self.enabled = enabled
         if not enabled:
+            self.solar_session_active = False
             if self.state != CONFIRMING:
                 self.state, self.reason = DISABLED, "automatic_control_disabled"
             return
@@ -398,6 +401,7 @@ class Controller:
 
     def set_hold(self, now: datetime) -> None:
         self.hold = True
+        self.solar_session_active = False
         if self.state != CONFIRMING:
             self.state, self.reason = OWNER_OVERRIDE, "owner_hold"
 
@@ -561,8 +565,42 @@ class Controller:
         self.active_alerts = []
         self._expire_modes(now)
 
+        # Preserve the exit independently of the original transaction. Sun
+        # returning must not erase a withdrawal while START is unconfirmed.
+        if (
+            self.enabled
+            and not self.hold
+            and not self.guest_active(now)
+            and self.state != OWNER_OVERRIDE
+            and want.state == OFF
+            and want.reason in PROTECTIVE_REASONS
+            and (self.heater in (NORMAL, STORAGE) or self.intent)
+        ):
+            if self.protective_exit is None:
+                self.protective_exit = {"since": _iso(now), "reason": want.reason}
+            price = want.plan.get("current_import_price_aud")
+            if isinstance(price, (int, float)) and 0 <= price <= 10:
+                self.protective_exit["price_aud_per_kwh"] = max(
+                    price, self.protective_exit.get("price_aud_per_kwh", 0)
+                )
+
         if self.state == CONFIRMING and self.intent:
             self._confirm(obs, cfg, new_poll, effects)
+        if (
+            self.protective_exit
+            and obs.heater_state == OFF
+            and obs.poll_at is not None
+            and obs.poll_at <= now
+            and obs.poll_at >= _dt(self.protective_exit["since"])
+            and obs.bridge_confirmation_pending is False
+            and obs.bridge_available
+            and obs.cloud_health == "ok"
+            and obs.auth_mode == "authorized"
+            and self.intent is None
+        ):
+            self.protective_exit = None
+            self.optional_cooldown_until = _iso(now + COOLDOWN)
+            self.solar_session_active = False
         if self.state == CONFIRMING:
             self._supervise_alerts(obs, want, cfg, effects)
             return effects
@@ -592,33 +630,51 @@ class Controller:
                 self._supervise_alerts(obs, want, cfg, effects)
                 return effects
 
+        if self.protective_exit and not self.guest_active(now):
+            want = Want(OFF, self.protective_exit["reason"], 4, want.plan)
         self._decide(obs, want, cfg, effects)
         self._supervise_alerts(obs, want, cfg, effects)
         return effects
 
     # ------------------------------------------------------------------ helpers
     def _ingest_poll(self, obs: Observation) -> bool:
+        # Diagnostics may arrive without a new temperature/status poll. Keep
+        # command and refresh usage visible too, including bridge counter reset.
+        if obs.requests_total is not None and obs.requests_total >= 0:
+            previous = self.request_counter_last
+            if previous is None and self.request_samples:
+                # 0.14.0 stored raw counters only. Its final sample is also the
+                # reset anchor on the first upgrade observation.
+                previous = max(0, self.request_samples[-1][1] - self.request_counter_offset)
+            if previous is not None and obs.requests_total < previous:
+                self.request_counter_offset += previous
+            self.request_counter_last = obs.requests_total
+            total = self.request_counter_offset + obs.requests_total
+            samples = [
+                s for s in self.request_samples if obs.now - _dt(s[0]) <= timedelta(hours=25)
+            ]
+            if not samples or total != samples[-1][1]:
+                samples.append([_iso(obs.now), total])
+            self.request_samples = samples[-4096:]
         if obs.poll_at is None or obs.poll_at > obs.now:
             return False
         seen = _dt(self.last_poll_seen)
         if seen is not None and obs.poll_at <= seen:
             return False
         self.last_poll_seen = _iso(obs.poll_at)
-        if obs.requests_total is not None:
-            samples = [
-                s for s in self.request_samples if obs.now - _dt(s[0]) <= timedelta(hours=25)
-            ]
-            if samples and obs.requests_total < samples[-1][1]:
-                samples = []  # bridge restart: counter reset, history restarts
-            samples.append([_iso(obs.poll_at), obs.requests_total])
-            self.request_samples = samples[-60:]
         return True
 
     def requests_last_24h(self, now: datetime) -> int | None:
-        window = [s for s in self.request_samples if now - _dt(s[0]) <= timedelta(hours=24)]
+        cutoff = now - timedelta(hours=24)
+        # Include the last boundary anchor; dropping it hides the first delta.
+        before = [s for s in self.request_samples if _dt(s[0]) <= cutoff]
+        window = ([before[-1]] if before else []) + [
+            s for s in self.request_samples if cutoff < _dt(s[0]) <= now
+        ]
         if len(window) < 2:
             return 0 if window else None
-        return window[-1][1] - window[0][1]
+        used = window[-1][1] - window[0][1]
+        return used if used >= 0 else None
 
     def _fresh_after_inspection(self, obs: Observation) -> bool:
         after = _dt(self.inspect_after)
@@ -643,6 +699,7 @@ class Controller:
             self._override("mode_or_target_changed_outside_controller", obs, effects)
 
     def _override(self, reason: str, obs: Observation, effects: list[Effect]) -> None:
+        self.solar_session_active = False
         self.state, self.reason, self.heater = OWNER_OVERRIDE, reason, None
         effects.append(
             Effect(
@@ -654,6 +711,7 @@ class Controller:
         )
 
     def _lock(self, reason: str, detail: str, effects: list[Effect]) -> None:
+        self.solar_session_active = False
         self.state, self.reason, self.fault, self.heater = FAULT_LOCKED, reason, reason, None
         effects.append(
             Effect(
@@ -719,6 +777,14 @@ class Controller:
         conclusive = after_publish and not in_progress
         observed = obs.heater_state
         if conclusive and observed == target:
+            if intent.get("reason") in WITHDRAWAL_REASONS:
+                self.optional_cooldown_until = _iso(obs.now + COOLDOWN)
+            self.solar_session_active = (
+                self.enabled
+                and not self.hold
+                and target != OFF
+                and intent.get("reason") in OPTIONAL_REASONS
+            )
             self._resolve("confirmed", obs)
             self._settle(target, f"{target}_confirmed")
             self.last_transition_at = _iso(obs.poll_at)
@@ -787,6 +853,8 @@ class Controller:
             failures.append("bridge_1_3_13_required")
         if obs.bridge_confirmation_pending:
             failures.append("bridge_confirmation_pending")
+        elif obs.bridge_confirmation_pending is not False:
+            failures.append("bridge_confirmation_state_unknown")
         if obs.poll_at is None:
             failures.append("no_heater_status")
         else:
@@ -832,6 +900,12 @@ class Controller:
             and used + OPTIONAL_EXIT_REQUEST_RESERVE > cfg.max_requests_per_day
         ):
             failures.append("optional_exit_request_reserve")
+        if target != OFF and reason in OPTIONAL_REASONS:
+            if self.protective_exit:
+                failures.append("protective_exit_unresolved")
+            until = _dt(self.optional_cooldown_until)
+            if until is not None and now < until:
+                failures.append("solar_withdrawal_cooldown")
         return failures
 
     def _decide(
@@ -889,6 +963,33 @@ class Controller:
             effects[:] = [e for e in effects if e.kind != "notify"]
             return
         alerts: list[tuple[str, str, str]] = []
+        if obs.morning_availability in {
+            "at_risk",
+            "minimum_shortfall_observed",
+        } and not self.holiday_active(now):
+            alerts.append(
+                (
+                    "morning_availability_risk",
+                    "Hot water: morning availability at risk",
+                    "The latest tank probe is below the morning requirement (45 C preferred by 06:00, "
+                    "42 C minimum by 07:00 local). Check the reading time, selected mode and command/cloud "
+                    "health. This is a probe-based warning, not a whole-tank measurement. "
+                    "The configured peak rule and native thermostat still apply; no peak import is authorised.",
+                )
+            )
+        if self.protective_exit:
+            alerts.append(
+                (
+                    "protective_exit_unresolved",
+                    "Hot water: protective OFF is not confirmed",
+                    "Solar permission was withdrawn at "
+                    + self.protective_exit["since"]
+                    + ". A previous command or command safeguard is blocking confirmed OFF. "
+                    "Electrical consumption remains unknown without a verified circuit meter. "
+                    "Check the controller fault/gates and the Thermann app; use the documented "
+                    "manual recovery if remote control cannot complete. No command is replayed.",
+                )
+            )
         # Last OBSERVED software state is retained through unavailable entities
         # and restart. This is a reliability warning, never an element-state
         # assertion or permission to bypass peak/owner/confirmation guards.
@@ -1107,4 +1208,12 @@ class Controller:
             "last_mode_refusal": self.refusal,
             "last_observed_heater": self.last_observed_heater,
             "parked_off_restore_since": self.parked_off_restore_since,
+            "protective_exit": self.protective_exit,
+            "optional_cooldown_until": self.optional_cooldown_until,
+            "solar_session_active": self.solar_session_active,
+            "protective_exit_wait_seconds": max(
+                0, (now - _dt(self.protective_exit["since"])).total_seconds()
+            )
+            if self.protective_exit
+            else 0,
         }

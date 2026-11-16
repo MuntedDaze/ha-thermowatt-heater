@@ -72,8 +72,8 @@ the guided editor and prices form instead.
 Leave optional readings empty if equipment is absent. Basic required heating
 does not need solar, EMHASS or a dedicated hot-water CT. Without the CT, nominal
 tank size and element rating estimate time; cloud mode does not prove the element
-is electrically on. Optional solar-only boost requires commissioned signed raw
-circuit power, fresh grid readings and all existing economic/safety checks.
+is electrically on. Optional solar-only boost requires a separately qualified CT-free grid-only record
+or commissioned signed raw circuit power, fresh grid readings and all economic/command checks.
 An unavailable previously commissioned meter stays a fault, never measured zero.
 
 Forecasts are predictions, not spare power. The percentage allowance reduces
@@ -122,7 +122,7 @@ not verified prices or permission to enable any feature. Capture source:
 [real-frontend CI run](https://github.com/MuntedDaze/ha-thermowatt-heater/actions/runs/43729092473).
 The complete desktop/phone screenshots for both versions are in that run's
 `configuration-ui-*` artifacts. Final-head CI is linked in
-[draft PR #38](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/38).
+[merged PR #38](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/38).
 
 | See the actual screens | What to notice |
 |---|---|

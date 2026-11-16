@@ -71,6 +71,7 @@ def replay(case, strategy):
     last_command = pending = None
     reading, poll_at = temperature, start
     element = False
+    solar_session = False
     commands, peak_observations = [], []
     buckets = {"peak_import": 0.0, "off_peak_import": 0.0, "solar": 0.0}
     costs = {"grid": 0.0, "feed_in_foregone": 0.0}
@@ -123,6 +124,7 @@ def replay(case, strategy):
                 forecast=forecast,
                 last_command_at=last_command,
                 heater_meter_valid=case.ct,
+                optional_session_active=solar_session,
                 measured_element_kw=heater_kw if case.ct and element else None,
                 optional_allowed=len(commands)
                 < int(c.DEFAULT_OPTIONS["controller_max_commands_per_day"]),
@@ -135,6 +137,7 @@ def replay(case, strategy):
             http("status", i)
             http("command_post", i)
             physical, last_command, pending = decision.state, now, i + 1
+            solar_session = decision.plan.get("heating_role") == "optional"
             commands.append(
                 {
                     "at_aest": wall.isoformat(),

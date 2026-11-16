@@ -9,7 +9,7 @@ from test_simple_policy import BASE, MIN, MON, OFF, S, SAT, STORE, TARIFFS, at, 
 def test_weekend_forecast_cannot_sustain_imported_optional_heat():
     p = sp.SimplePolicy(S, TARIFFS)
     start = at(SAT, 13)
-    for minute in range(7):
+    for minute in range(11):
         now = start + minute * MIN
         p.add_meter(now, 3.0, True)
     d = p.decide(snap(now, STORE, forecast=fc(now, 4, 4.0)))

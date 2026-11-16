@@ -136,6 +136,13 @@ hot_water:
   heating_requirement: sensor.thermann_shadow_heating_requirement
   boost_eligibility: sensor.thermann_shadow_solar_boost_eligibility
   boost_reason: sensor.thermann_shadow_solar_boost_reason
+  solar_session_status: sensor.thermann_shadow_solar_boost_status
+  solar_cooldown_until: sensor.thermann_shadow_solar_boost_cooldown_ends
+  protective_exit_wait: sensor.thermann_shadow_protective_off_waiting_time
+  protective_exit_cost: sensor.thermann_shadow_unconfirmed_off_nominal_cost_exposure
+  exit_request_reserve: sensor.thermann_shadow_solar_exit_request_reserve
+  forecast_load_quality: sensor.thermann_shadow_household_forecast_quality
+  morning_availability: sensor.thermann_shadow_morning_hot_water_availability
   planned_heat: sensor.thermann_shadow_planned_heating_energy_estimate
   prediction_confidence: sensor.thermann_shadow_heating_prediction_confidence
   nominal_heating_time: sensor.thermann_shadow_continuous_heating_time_estimate

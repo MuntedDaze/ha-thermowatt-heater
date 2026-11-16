@@ -115,9 +115,15 @@ async def async_setup_entry(hass, entry):
         update(dt_util.utcnow())
 
     entry.async_on_unload(async_track_time_interval(hass, update, timedelta(minutes=1)))
-    poll_entity = runtime.sources.get("last_poll")
-    if isinstance(poll_entity, str) and poll_entity:
-        entry.async_on_unload(async_track_state_change_event(hass, [poll_entity], new_poll))
+    event_entities = sorted(
+        {
+            entity
+            for key in ("last_poll", "grid", "heater_power")
+            if isinstance(entity := runtime.sources.get(key), str) and entity
+        }
+    )
+    if event_entities:
+        entry.async_on_unload(async_track_state_change_event(hass, event_entities, new_poll))
     entry.async_on_unload(entry.add_update_listener(_reload))
     update(dt_util.utcnow())
     return True
