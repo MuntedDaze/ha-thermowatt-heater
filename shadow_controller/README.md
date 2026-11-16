@@ -1,7 +1,7 @@
 # Thermann Controller
 
 The owner already runs **0.14.0** in Shadow Mode with bridge **1.3.17**, GoodWe
-and EMHASS. This release prepares controller **0.15.0** in the same installation.
+and EMHASS. This release prepares controller **0.15.1** in the same installation.
 The bridge code/version and existing integration identities remain unchanged.
 
 Use the [current in-place upgrade and commissioning guide](../docs/completion/UPGRADE.md),

@@ -1,4 +1,4 @@
-# Existing Thermowatt installation: controller 0.15.0 upgrade
+# Existing Thermowatt installation: controller 0.15.1 upgrade
 
 Jacob already has **bridge 1.3.17** and **controller 0.14.0** installed. The owner
 reports working bridge communication, Shadow Mode evaluation, GoodWe/HK1000
@@ -10,7 +10,7 @@ installation. Older candidate/install notes describe historical development.
 | Component | Installed baseline | This upgrade | Owner action |
 |---|---|---|---|
 | Thermann Hot Water |1.3.17|1.3.17, source unchanged|No add-on update needed |
-| Thermann Controller |0.14.0|0.15.0|Replace component source in its existing directory, restart HA once |
+| Thermann Controller |0.14.0|0.15.1|Replace component source in its existing directory, restart HA once |
 | Existing seven-view dashboard |Existing owner copy|Small hot-water status additions|Optional merge of new read-only rows; preserve custom mappings/views |
 | GoodWe/HK1000 and MQTT |Working existing integrations|Unchanged|Keep existing entities, sign verification and broker |
 | EMHASS |Already running|Existing forecast adapter, safer missing-load handling|Keep optimisation automation and generation timestamps |
@@ -19,6 +19,10 @@ installation. Older candidate/install notes describe historical development.
 The source-review/tested commit, final CI and squash merge are recorded in the
 completion PR and final owner report. Do not infer a merge from a version string
 in a development archive. Use the exact reviewed main commit after merge.
+
+The0.15.1 patch also handles a heater already on Manual62 during peak: qualified,
+economical extra solar can select Manual70 through the same guarded command
+path. Update directly from the installed0.14.0 baseline.
 
 ## Normal in-place update
 
@@ -35,7 +39,7 @@ in a development archive. Use the exact reviewed main commit after merge.
    overwriting source files. Keep that directory name and domain. Do not delete
    the config entry, re-add the integration, change MQTT discovery or edit
    `.storage`. Do not copy private runtime data from another installation.
-4. Restart **Home Assistant once**, then verify controller 0.15.0, the original
+4. Restart **Home Assistant once**, then verify controller 0.15.1, the original
    config entry, entity IDs/history, source mappings, targets, tariffs, holiday/
    override settings, command address and Shadow Mode. The bridge should still
    be1.3.17 and communicating through the same installed add-on identity.

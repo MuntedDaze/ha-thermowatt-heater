@@ -1,3 +1,20 @@
+# Final peak top-up completion checkpoint
+
+The owner still runs bridge1.3.17/controller0.14.0; no live update was performed.
+PR40 merged controller0.15.0 as1f6bd0c after all30 final-head checks and1,547 local
+tests passed. A final handoff review found that an existing Manual62 target did
+not evaluate an otherwise eligible70C peak top-up. The focused0.15.1 follow-up
+uses the same optional boost test and command guards, without bridge changes.
+
+Current branch: codex/complete-peak-normal-boost. Direct owner upgrade is0.14.0
+→0.15.1; no intermediate installation is needed. Final independent review and
+all applicable final-head CI are recorded in the follow-up PR and owner report.
+Physical commissioning/activation remain separate. The source tree/versions are
+verified after each merge; source-only upgrade ZIP is regenerated for the final
+reviewed head and merged tree.
+
+The earlier completion checkpoint follows for provenance.
+
 # Thermowatt existing-installation completion checkpoint
 
 Baseline: main `b8de33673691e1c05cc3d86311cf88a9f400e02c`, after merged PR37/38/39.

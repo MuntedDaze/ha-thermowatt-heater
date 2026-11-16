@@ -1,5 +1,22 @@
 # Independent technical review
 
+## Final 0.15.1 peak top-up review
+
+The final handoff check found an existing Manual62 target never evaluated an
+otherwise eligible Manual70 peak boost. The focused follow-up calls the same
+optional economic test after all protective checks and uses the existing
+`peak_solar_qualified` reason, so exact-prior `Manual:70@62`, optional budgets,
+exit reserve, spacing, cooldown and pending-exit guards remain authoritative.
+
+Independent review approves the patch with **no outstanding material findings**;
+all **57 focused cases passed** independently. Both CT-free and measured-CT
+transitions pass through the actual mocked bridge, with insufficient-surplus,
+low-value, disabled, budget, cooldown, exit, reserve and spacing refusals covered.
+Updated38-file digest: `eba8ed228bd0c5760372f33e58841b9e0e4c97f07e77e3b5a35a6e68d67bf92a`.
+Final tested head, CI and merge evidence are recorded in the focused follow-up PR.
+
+The earlier0.15.0 review record follows for provenance.
+
 An independent code-review agent inspected the controller runtime changes,
 existing bridge contracts, new regressions and source-preserving upgrade.
 It changed no source files and used no live system. Final result:
