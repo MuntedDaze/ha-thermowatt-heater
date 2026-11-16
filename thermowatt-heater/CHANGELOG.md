@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.0] — Smart polling development candidate
+
+- Explicit Smart/fixed/minimum request modes; existing upgrades retain their
+  saved settings. v3 expiring leases extend the same bridge scheduler with
+  bounded overnight quiet intervals and the original 30-minute crash fallback.
+- Ordinary Smart status GETs reuse credentials and retain the existing bounded
+  401 refresh/retry path. Command/discovery/confirmation preparation, TLS,
+  authentication lockouts, backoff, quotas and exact-prior safeguards remain.
+- No live installation, authentication or heater operation by development.
+
 ## Controller 0.15.1 companion patch
 
 Completes the missing guarded Manual62 to Manual70 peak-solar top-up using

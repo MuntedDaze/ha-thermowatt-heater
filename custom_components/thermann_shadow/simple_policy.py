@@ -5,7 +5,7 @@ reported setting/temperature; only a commissioned, fresh circuit meter verifies
 physical heating. CT-free installations retain baseline and required off-peak
 storage, with nominal physics used solely for conservative planning.
 
-Owner holds and the explicit 12-hour 70-degree Override take precedence. Routine
+Owner holds and the explicit 12-hour 62-degree Override take precedence. Routine
 peak heating is parked unless the user selects verified solar-only operation.
 The single weekday planner meets the normal target before peak; a shared solar
 qualification may select optional storage directly or as a later top-up when
@@ -80,6 +80,12 @@ class PolicySettings:
     evening_peak_from_hour: int = 12  # a peak starting at/after this is an evening peak
     reading_max_age: timedelta = timedelta(minutes=75)
     meter_max_age: timedelta = timedelta(minutes=3)
+    weekend_enabled: bool = True
+    weekend_pv_kw: float = 0.5
+    weekend_qualify: timedelta = timedelta(minutes=15)
+    weekend_end: time = time(18)
+    sunset_kw: float = 0.2
+    sunset_delay: timedelta = timedelta(minutes=30)
 
     def __post_init__(self) -> None:
         validate_roles(self.baseline_c, self.normal_c, self.storage_c)
@@ -111,9 +117,13 @@ class Snapshot:
     owner_override: bool = False
     holiday: bool = False
     override_12h: bool = False
+    override_target_c: int = 62
+    weekend_latched: bool = False
+    weekend_ended: bool = False
     cloud_ready: bool = True
     heater_meter_valid: bool = False  # optional starts require explicit verified input
     ct_free_solar_valid: bool = False  # separately commissioned grid-only policy
+    optional_start_quality: str | None = None
     optional_cooldown_until: datetime | None = None
     protective_exit_pending: bool = False
     optional_session_active: bool = False
@@ -140,9 +150,86 @@ class SimplePolicy:
         self.tariffs = tariffs
         # (at, import_kw, available_kw, element_on); available EXCLUDES the element.
         self.samples: deque[tuple[datetime, float, float, bool]] = deque()
+        self.pv_samples: deque[tuple[datetime, float]] = deque()
         self._peak_cache: tuple[datetime, datetime | None, datetime] | None = None
 
     # --- local meter ---------------------------------------------------------------
+
+    def add_pv(self, at, kw):
+        """Independent production evidence; never substituted for grid surplus."""
+        if at is None or kw is None or not math.isfinite(kw) or kw < 0:
+            self.pv_samples.clear()
+            return
+        if self.pv_samples and at <= self.pv_samples[-1][0]:
+            return
+        self.pv_samples.append((at, kw))
+        while self.pv_samples and at - self.pv_samples[0][0] > 2 * max(
+            self.s.weekend_qualify, self.s.sunset_delay
+        ):
+            self.pv_samples.popleft()
+
+    def pv_sustained(self, now, duration, predicate):
+        recent = [p for p in self.pv_samples if now - duration - SAMPLE_SLACK <= p[0] <= now]
+        return bool(
+            recent
+            and now - recent[-1][0] <= self.s.meter_max_age
+            and recent[0][0] <= now - duration
+            and recent[-1][0] - recent[0][0] >= duration
+            and all(predicate(p[1]) for p in recent)
+            and all(
+                b[0] - a[0] <= self.s.meter_max_age
+                for a, b in zip(recent, recent[1:], strict=False)
+            )
+        )
+
+    def _weekend(self, snap, reading, fresh, rate, plan, local, baseline, normal, boost):
+        s, now = self.s, snap.now
+        clock = local.time().replace(tzinfo=None)
+        ended = (
+            snap.weekend_ended
+            or clock >= s.weekend_end
+            or (
+                snap.weekend_latched
+                and clock >= time(12)
+                and self.pv_sustained(now, s.sunset_delay, lambda kw: kw < s.sunset_kw)
+            )
+        )
+        if ended:
+            plan.update(weekend_day_ended=True, mode=OPPORTUNITY)
+            return baseline, "weekend_day_ended", 5, plan
+        if clock < s.daytime_start:
+            return baseline, "baseline", 5, plan
+        qualified = self.pv_sustained(now, s.weekend_qualify, lambda kw: kw >= s.weekend_pv_kw)
+        day_active = snap.weekend_latched or qualified
+        if day_active:
+            plan.update(weekend_day_latched=True, weekend_grid_assistance_permitted=True)
+        # An authorised 70 session does not need the original 3.3 kW export to
+        # persist after the element starts consuming it. Withdrawal uses actual
+        # import and meter liveness; return to underlying comfort, not OFF.
+        if snap.heater_state == boost and boost != baseline:
+            if self.importing_continuously(now):
+                return (normal if day_active else baseline), "solar_opportunity_import", 5, plan
+            if (
+                s.boost_enabled
+                and self.optional_measurement_valid(snap)
+                and self.meter_fresh(now)
+                and not self.importing_continuously(now)
+            ):
+                return boost, "solar_opportunity_continues", 5, plan
+            return (normal if day_active else baseline), "solar_opportunity_ended", 5, plan
+        end = datetime.combine(local.date(), s.weekend_end, ZoneInfo(s.time_zone))
+        peak = plan.get("next_peak")
+        if peak is not None:
+            end = min(end, peak - s.soft_target_margin)
+        eligible, info = self._boost(
+            snap, reading, fresh, rate, end, s.normal_c if day_active else s.baseline_c
+        )
+        plan.update(info, mode=OPPORTUNITY, next_baseline=end)
+        if eligible:
+            return boost, "solar_opportunity", 5, plan
+        if day_active:
+            return normal, "weekend_daytime_storage", 5, plan
+        return baseline, "baseline", 5, plan
 
     def add_meter(
         self, at: datetime, grid_kw: float, element_on: bool | None = None, *, heater_kw=None
@@ -342,7 +429,7 @@ class SimplePolicy:
         if snap.holiday:
             return self._send(snap, OFF, "holiday", 2, {})
         if snap.override_12h:
-            return self._send(snap, STORAGE, "12hr_override", 2, {})
+            return self._send(snap, state_at(snap.override_target_c), "12hr_override", 2, {})
         desired, reason, layer, plan = self._policy(snap)
         # 3. Reserve the command slot for the peak transition: in the spacing
         # before the peak lead, send nothing that would need another command
@@ -383,6 +470,8 @@ class SimplePolicy:
             if desired == OFF
             else "required"
             if plan.get("mode") == DEADLINE and desired == state_at(self.s.normal_c)
+            else "weekend_comfort"
+            if plan.get("weekend_day_latched") and desired == state_at(self.s.normal_c)
             else "baseline"
             if desired == state_at(self.s.baseline_c)
             else "optional",
@@ -419,6 +508,8 @@ class SimplePolicy:
 
         if not s.boost_enabled and target is None:
             return reject("boost_disabled")
+        if snap.optional_start_quality is not None:
+            return reject(snap.optional_start_quality)
         if goal <= reference_c:
             return reject("same_as_normal_target")
         if not snap.optional_allowed:
@@ -563,6 +654,8 @@ class SimplePolicy:
         required_measured = measured if measured is not None else snap.required_export_kw
         price = tariff_at(now, self.tariffs, s.tariff_clock, s.time_zone).rate
         local = now.astimezone(ZoneInfo(s.time_zone))
+        if local.weekday() >= 5 and s.weekend_enabled:
+            return self._weekend(snap, reading, fresh, rate, plan, local, baseline, normal, boost)
         daytime = s.daytime_start <= local.time().replace(tzinfo=None)
         evening = (
             daytime

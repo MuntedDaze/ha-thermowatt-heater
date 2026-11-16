@@ -100,6 +100,17 @@ async def async_setup_entry(hass, entry):
     except Exception:  # noqa: BLE001 - diagnostics only; start empty
         runtime.thermal = ThermalObserver()
     runtime.executor = executor
+    # Separate bounded diagnostic log; never a command/permission authority.
+    runtime.owner_event_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.owner_events")
+    try:
+        from .report import event
+
+        saved = await runtime.owner_event_store.async_load() or {}
+        for item in saved.get("events", [])[-200:]:
+            if isinstance(item, dict):
+                runtime.owner_events.append(event(item))
+    except Exception:  # noqa: BLE001 - diagnostic loss must not disrupt command guards
+        logging.getLogger(__name__).warning("Owner diagnostic history unavailable; starting empty.")
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

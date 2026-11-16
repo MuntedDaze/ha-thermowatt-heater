@@ -116,7 +116,7 @@ def test_exit_survives_pending_start_restart_and_returning_sun_then_confirms_coo
     effects = controller.step(observation(now + 5 * MIN, poll_at=now + 5 * MIN), sunny, config())
     assert not published(effects)
     assert controller.protective_exit is None
-    assert controller.optional_cooldown_until == (now + 20 * MIN).isoformat()
+    assert controller.optional_cooldown_until == (now + 15 * MIN).isoformat()
     assert "solar_withdrawal_cooldown" in controller.gate_failures
     p = sp.SimplePolicy(S, TARIFFS)
     sun(p, now + 20 * MIN)  # qualification overlaps cooldown

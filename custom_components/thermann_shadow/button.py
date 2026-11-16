@@ -25,7 +25,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 entry, runtime, "acknowledge", "Acknowledge controller fault", "mdi:check-decagram"
             ),
             ControllerAction(
-                entry, runtime, "guest_start", "Start 12hr Override", "mdi:account-clock"
+                entry, runtime, "guest_start", "12hr Override 62°C", "mdi:account-clock"
             ),
             ControllerAction(
                 entry, runtime, "guest_cancel", "Cancel 12hr Override", "mdi:clock-remove-outline"

@@ -46,9 +46,9 @@ from .controller import (
 )
 from zoneinfo import ZoneInfo
 from .polling import PollContext, PollingShadow
-from .adaptive import make_plan, event_plan
+from .adaptive import make_plan, event_plan, smart_plan
 from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
-from .solar import ct_free_record
+from .solar import ct_free_record, grid_sanity
 
 LOG = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -77,6 +77,7 @@ def controller_config(
         requires_four_states=True,
         four_state_qualified=values["controller_four_state_qualified"] is True,
         element_kw=float(values["element_kw"]),
+        solar_cooldown_minutes=float(values["solar_cooldown_minutes"]),
     )
 
 
@@ -123,6 +124,13 @@ class Executor:
                 "peak_heating_policy",
                 "boost_useful_fraction",
                 "boost_min_saving_aud",
+                "weekend_solar_heating",
+                "weekend_pv_start_kw",
+                "weekend_qualify_minutes",
+                "weekend_end_time",
+                "weekend_sunset_kw",
+                "weekend_sunset_minutes",
+                "peak_command_lead_minutes",
             )
         )
         self.runtime.set_native_reference(options)
@@ -149,6 +157,19 @@ class Executor:
                 normal_c=int(self.runtime.native_options["normal_storage_c"]),
                 storage_c=int(self.runtime.native_options["solar_boost_c"]),
                 boost_enabled=self.runtime.native_options["optional_solar_boost"],
+                weekend_enabled=self.runtime.native_options["weekend_solar_heating"],
+                weekend_pv_kw=self.runtime.native_options["weekend_pv_start_kw"],
+                weekend_qualify=timedelta(
+                    minutes=self.runtime.native_options["weekend_qualify_minutes"]
+                ),
+                weekend_end=time.fromisoformat(self.runtime.native_options["weekend_end_time"]),
+                sunset_kw=self.runtime.native_options["weekend_sunset_kw"],
+                sunset_delay=timedelta(
+                    minutes=self.runtime.native_options["weekend_sunset_minutes"]
+                ),
+                peak_lead=timedelta(
+                    minutes=self.runtime.native_options["peak_command_lead_minutes"]
+                ),
                 peak_policy=self.runtime.native_options["peak_heating_policy"],
                 element_kw=float(self.runtime.native_options["element_kw"]),
                 kwh_per_c=float(self.runtime.native_options["tank_litres"]) * 4.186 / 3600,
@@ -261,6 +282,7 @@ class Executor:
         obs = Observation(now=now, mqtt_ready="mqtt" in self.hass.config.components)
         obs.poll_at = self.runtime.poll_at
         obs.morning_availability = self.runtime.values.get("morning_availability")
+        obs.low_water_assessment = self.runtime.details.get("morning_availability")
         obs.heater_meter_mapped = bool(self.runtime.sources.get("heater_power"))
         obs.heater_meter_quality = self.runtime.circuit.quality
         mode = states.get(sources.get("mode", ""))
@@ -331,6 +353,16 @@ class Executor:
             or (obs.heater_meter_mapped and obs.heater_meter_quality != "verified")
         ):
             return None
+        if (
+            self.runtime.temperature_c is None
+            and self.runtime.native_options["optional_solar_boost"]
+            and (
+                self.runtime.power_budget is not None
+                or getattr(self.runtime, "ct_free_solar_start_ready", False)
+            )
+            and self.policy.surplus_qualified(obs.now)
+        ):
+            return None
         if decision.reason == "baseline":
             # A reported cold baseline is a useful progress observation, even
             # though CT-free operation cannot prove the element energised.
@@ -352,15 +384,21 @@ class Executor:
     def _quiet_deadline(self, obs, schedule):
         """Only suppress a passive-age alert; never grants command/temperature authority."""
         if (
-            not self.runtime.native_options["event_aware_polling_enabled"]
-            or not self.runtime.native_options["adaptive_polling_enabled"]
+            (
+                self.runtime.native_options["polling_mode"] not in {"smart", "minimum"}
+                and (
+                    not self.runtime.native_options["event_aware_polling_enabled"]
+                    or not self.runtime.native_options["adaptive_polling_enabled"]
+                )
+            )
             or not self._quiet_state(obs, self.last_decision)
             or obs.cloud_health != "ok"
             or obs.auth_mode != "authorized"
             or not isinstance(schedule, dict)
             or schedule.get("active") is not True
-            or schedule.get("plan_version") != 2
-            or schedule.get("reason") not in ("stable_baseline", "stable_off")
+            or schedule.get("plan_version") not in (2, 3)
+            or schedule.get("reason")
+            not in ("stable_baseline", "stable_off", "quiet_before_decision")
             or obs.poll_at is None
             or obs.poll_at > obs.now
         ):
@@ -368,9 +406,17 @@ class Executor:
         owner = schedule.get("owner_check_seconds")
         next_at = schedule.get("next_at")
         maximum = self.runtime.native_options["owner_change_check_minutes"] * 60
+        cap = 5400
+        if schedule.get("plan_version") == 3 and self.runtime.native_options["polling_mode"] in {
+            "smart",
+            "minimum",
+        }:
+            cap = maximum = (
+                43200 if self.runtime.native_options["polling_mode"] == "minimum" else 28800
+            )
         if (
             type(owner) is not int
-            or not 1800 <= owner <= min(5400, maximum)
+            or not 1800 <= owner <= min(cap, maximum)
             or type(next_at) not in (int, float)
             or not obs.poll_at.timestamp() <= next_at <= obs.poll_at.timestamp() + owner + 1
         ):
@@ -387,6 +433,21 @@ class Executor:
                 if self.runtime.values.get("next_tariff_kind") == "peak"
                 else boundary
             )
+        if boundary is not None and self.runtime.values.get("next_tariff_kind") == "peak":
+            check = boundary - timedelta(
+                minutes=self.runtime.native_options["pre_peak_observation_minutes"]
+            )
+            poll_at = self.last_observation.poll_at if self.last_observation else None
+            if check >= now and (poll_at is None or poll_at < check):
+                moments.append(check)
+        for stamp in (
+            self.controller.guest_until,
+            self.controller.holiday_start,
+            self.controller.holiday_return,
+        ):
+            when = _dt(stamp)
+            if when is not None and when >= now:
+                moments.append(when)
         # Flat/no-afternoon-peak service windows also have known local transitions.
         zone = ZoneInfo(self.runtime.settings.time_zone)
         today = now.astimezone(zone).date()
@@ -405,7 +466,10 @@ class Executor:
         # A verified full-solar opportunity can make a new probe consequential.
         if (
             self.runtime.temperature_c is None
-            and self.runtime.power_budget is not None
+            and (
+                self.runtime.power_budget is not None
+                or getattr(self.runtime, "ct_free_solar_start_ready", False)
+            )
             and self.runtime.native_options["optional_solar_boost"]
             and self.policy.surplus_qualified(now)
         ):
@@ -433,12 +497,24 @@ class Executor:
             runtime.settings.import_positive,
             runtime.settings.element_kw,
         )
+        site_quality = grid_sanity(
+            grid,
+            runtime._kw("pv_ac", now),
+            runtime._kw("house", now),
+            runtime.settings.pv_ac_limit_kw,
+        )
+        runtime.ct_free_site_quality = site_quality
         ct_free_valid = bool(
             grid is not None
             and expected_record
             and runtime.native_options["ct_free_solar_verification"] == expected_record
             and not runtime.sources.get("heater_power")
             and not runtime.native_options["heater_meter_verification"]
+            and -grid <= runtime.settings.pv_ac_limit_kw * 1.10
+        )
+        runtime.ct_free_solar_valid = ct_free_valid
+        runtime.ct_free_solar_start_ready = (
+            ct_free_valid and site_quality == "consistent_measured_site_power"
         )
         if grid is not None:
             # Physical budget always uses measured watts. Optional upgrades from
@@ -458,6 +534,9 @@ class Executor:
             self.policy.samples.clear()  # a loss breaks qualification continuity
         if runtime.power_budget is None and not ct_free_valid:
             self.policy.samples.clear()
+        pv = runtime._kw("pv", now)
+        pv_reading = runtime._reading("pv")
+        self.policy.add_pv(pv_reading.observed_at if pv_reading else None, pv)
         forecast = runtime.forecast.slots if runtime.forecast is not None else ()
         snapshot = Snapshot(
             now=now,
@@ -474,6 +553,9 @@ class Executor:
             last_command_at=last,
             heater_meter_valid=runtime.power_budget is not None,
             ct_free_solar_valid=ct_free_valid,
+            optional_start_quality=site_quality
+            if ct_free_valid and not runtime.ct_free_solar_start_ready
+            else None,
             protective_exit_pending=controller.protective_exit is not None,
             optional_cooldown_until=_dt(controller.optional_cooldown_until),
             optional_session_active=controller.solar_session_active
@@ -498,6 +580,11 @@ class Executor:
             and (controller.hold or controller.state == "owner_override"),
             holiday=controller.holiday_active(now),
             override_12h=controller.guest_active(now),
+            override_target_c=controller.guest_target_c,
+            weekend_latched=controller.weekend_heat_date
+            == now.astimezone(ZoneInfo(runtime.settings.time_zone)).date().isoformat(),
+            weekend_ended=controller.weekend_end_date
+            == now.astimezone(ZoneInfo(runtime.settings.time_zone)).date().isoformat(),
         )
         decision = self.policy.decide(snapshot)
         if (
@@ -561,6 +648,11 @@ class Executor:
             self.last_observation = obs
             decision, state = self.decide(now, obs)
             self._record_shadow(now, decision, state)
+            day = now.astimezone(ZoneInfo(self.runtime.settings.time_zone)).date().isoformat()
+            if self.controller.enabled and decision.plan.get("weekend_day_latched"):
+                self.controller.weekend_heat_date = day
+            if self.controller.enabled and decision.plan.get("weekend_day_ended"):
+                self.controller.weekend_end_date = day
             want = Want(decision.state, decision.reason, decision.layer, dict(decision.plan))
             effects = self.controller.step(obs, want, self.cfg)
             self.runtime.controller_active = self.controller.enabled
@@ -639,7 +731,8 @@ class Executor:
         self._notify_listeners()
 
     async def _publish_poll_plan(self, now, obs, decision, decision_at):
-        if not self.runtime.native_options["adaptive_polling_enabled"]:
+        mode = self.runtime.native_options["polling_mode"]
+        if mode == "existing" and not self.runtime.native_options["adaptive_polling_enabled"]:
             return
         if self.controller.state == CONFIRMING:
             return  # the bridge owns the existing confirmation read sequence
@@ -659,9 +752,25 @@ class Executor:
             and isinstance(versions, list)
             and any(type(v) is int and v == 2 for v in versions)
         )
-        if wants_event_aware and not event_aware:
+        if mode == "existing" and wants_event_aware and not event_aware:
             return  # no v2 qualification/capability: expire into fixed fallback
-        if event_aware:
+        if mode != "existing":
+            if not isinstance(versions, list) or 3 not in versions:
+                return  # older bridge remains on its original fixed fallback
+            zone = ZoneInfo(self.runtime.settings.time_zone)
+            clock = now.astimezone(zone).time().replace(tzinfo=None)
+            overnight = clock < self.policy.s.daytime_start or clock >= self.policy.s.baseline_start
+            plan = smart_plan(
+                now,
+                obs.poll_at,
+                mode=mode,
+                stable_state=self._quiet_state(obs, decision),
+                overnight=overnight,
+                temperature_valid=self.runtime.temperature_c is not None,
+                decision_at=self._event_decision_at(now, decision, decision_at),
+                completion_at=_dt(self.runtime.completion.get("earliest")),
+            )
+        elif event_aware:
             plan = event_plan(
                 now,
                 obs.poll_at,
@@ -763,9 +872,16 @@ class Executor:
     # ------------------------------------------------------------------ display
     def policy_values(self) -> dict:
         """Read-only policy sensors (runtime display)."""
+        from .report import WHY
+
         decision = self.last_decision
         plan = decision.plan if decision else {}
         return {
+            "plan_summary": WHY.get(
+                decision.reason, decision.reason.replace("_", " ").capitalize() + "."
+            )
+            if decision
+            else "Waiting for a heater observation.",
             "policy_state": decision.state if decision else None,
             "decision": decision.reason if decision else None,
             "policy_mode": plan.get("mode"),
@@ -897,7 +1013,7 @@ class Executor:
                 "bridge_last_command": obs.last_command if obs else None,
                 "bridge_transitions": obs.bridge_transitions if obs else None,
             },
-            "recovery_manual": "Official Thermann app: select Manual at 70 °C (hot water now), "
+            "recovery_manual": "Official Thermann app: select Manual at 62 °C (comfort override), "
             "Manual 45 °C, or turn the heater OFF. Never reset authentication locks "
             "automatically; see the app documentation.",
             "confirming": self.controller.state == CONFIRMING,

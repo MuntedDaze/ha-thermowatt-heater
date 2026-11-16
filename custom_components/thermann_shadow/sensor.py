@@ -1,13 +1,20 @@
 """Only sensors: estimates deliberately have no energy-measurement state class."""
 
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorEntityDescription,
+    SensorDeviceClass,
+    SensorStateClass,
+)
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .naming import RETIRED_SENSORS as RETIRED  # noqa: F401 (re-exported)
 from .naming import device_info_fields, entity_id
 from .config import DOMAIN
+from .presentation import HELP, Heartbeat
 
 SENSORS = {
+    "plan_summary": ("Current heating plan", None),
     "controller": ("Controller", None),
     "temperature": ("Bottom temperature", "°C"),
     "target": ("Reported target", "°C"),
@@ -148,7 +155,8 @@ class ShadowSensor(SensorEntity):
     def __init__(self, runtime, entry, key, name, unit):
         self.runtime = runtime
         self.key = key
-        self._attr_name = name
+        self._attr_name = HELP.get(key, (name, ""))[0]
+        self.entity_description = SensorEntityDescription(key=key, translation_key=key)
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self.entity_id = entity_id("sensor", name)
         self._attr_native_unit_of_measurement = unit
@@ -168,7 +176,9 @@ class ShadowSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        return self.runtime.details if self.key == "controller" else None
+        if self.key == "controller":
+            return self.runtime.details
+        return {"explanation": HELP[self.key][1]} if self.key in HELP else None
 
 
 class ControllerSensor(ShadowSensor):
@@ -178,6 +188,7 @@ class ControllerSensor(ShadowSensor):
 
     def __init__(self, runtime, entry, key, name, unit):
         super().__init__(runtime, entry, key, name, unit)
+        self._heartbeat = Heartbeat()
         if key in CONTROLLER_TIMESTAMPS:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
@@ -187,11 +198,21 @@ class ControllerSensor(ShadowSensor):
 
     @property
     def native_value(self):
+        if self.key == "controller_evaluated_at":
+            executor = self.runtime.executor
+            ctl = executor.controller
+            return self._heartbeat.value(
+                executor.last_evaluated_at, (ctl.enabled, ctl.state, ctl.fault, ctl.reason)
+            )
         return self.runtime.executor.values().get(self.key)
 
     @property
     def extra_state_attributes(self):
-        return self.runtime.executor.details() if self.key == "controller_state" else None
+        return (
+            self.runtime.executor.details()
+            if self.key == "controller_state"
+            else super().extra_state_attributes
+        )
 
 
 class ThermalStateSensor(ShadowSensor):

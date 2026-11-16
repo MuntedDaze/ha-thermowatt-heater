@@ -26,10 +26,19 @@ def finite(value):
 
 class AdaptiveSchedule:
     def __init__(
-        self, enabled, clock, monotonic, path=None, writer=None, *, extended_qualified=False
+        self,
+        enabled,
+        clock,
+        monotonic,
+        path=None,
+        writer=None,
+        *,
+        extended_qualified=False,
+        smart_mode="existing",
     ):
         self.enabled, self.clock, self.monotonic = enabled, clock, monotonic
         self.extended_qualified = extended_qualified
+        self.smart_mode = smart_mode
         self.path, self.writer = path, writer
         self.healthy = True
         self.records = {}
@@ -86,12 +95,21 @@ class AdaptiveSchedule:
                 raise ValueError
             version = plan.get("version")
             keys = {"version", "status_at", "issued_at", "delay_seconds", "reason"}
-            if type(version) is not int or version not in (1, 2):
+            if type(version) is not int or version not in (1, 2, 3):
                 raise ValueError
             if version == 2:
                 if not self.extended_qualified:
                     raise ValueError
                 keys.add("owner_check_seconds")
+            if version == 3:
+                if self.smart_mode not in {"smart", "minimum"}:
+                    raise ValueError
+                mode = plan.get("polling_mode")
+                if mode not in {"smart", "fixed_30", "minimum"} or (
+                    mode == "minimum" and self.smart_mode != "minimum"
+                ):
+                    raise ValueError
+                keys |= {"owner_check_seconds", "polling_mode"}
             if set(plan) != keys:
                 raise ValueError
             if not all(finite(plan[k]) for k in ("status_at", "issued_at", "delay_seconds")):
@@ -111,8 +129,28 @@ class AdaptiveSchedule:
                 if plan["reason"] in QUIET_REASONS:
                     limit = MAX_QUIET_INTERVAL
                 limit = min(limit, owner_limit)
+            if version == 3:
+                owner_limit = plan["owner_check_seconds"]
+                maximum = 43200 if mode == "minimum" else 28800
+                if type(owner_limit) is not int or not 1800 <= owner_limit <= maximum:
+                    raise ValueError
+                limit = (
+                    owner_limit
+                    if plan["reason"] in (QUIET_REASONS | {"quiet_before_decision"})
+                    else min(2400, owner_limit)
+                )
+                if mode == "fixed_30" and (
+                    plan["reason"] != "fixed_30"
+                    or plan["delay_seconds"] != 1800
+                    or owner_limit != 1800
+                ):
+                    raise ValueError
             if not MIN_INTERVAL <= plan["delay_seconds"] <= limit or plan["reason"] not in (
-                REASONS if version == 1 else EVENT_REASONS
+                REASONS
+                if version == 1
+                else EVENT_REASONS
+                if version == 2
+                else EVENT_REASONS | {"fixed_30", "quiet_before_decision"}
             ):
                 raise ValueError
             due = record["mono"] + plan["delay_seconds"]

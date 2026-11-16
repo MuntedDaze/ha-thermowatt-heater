@@ -15,6 +15,7 @@ PATHS = (
     "thermowatt-heater",
     "custom_components/thermann_shadow",
     "energy_monitoring",
+    "homeowner",
     "README.md",
     "docs",
     "shadow_controller/FORECAST_SETUP.md",

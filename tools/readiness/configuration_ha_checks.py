@@ -26,6 +26,9 @@ async def check_configuration(hass, entry):
         path = {
             "hot_water": [],
             "sources": ["solar_meters"],
+            "heating_preferences": ["solar_meters"],
+            "ct_free_setup": ["solar_meters"],
+            "diagnostic_report": [],
             "bridge_sources": ["advanced"],
             "solar": ["solar_meters"],
             "prices": ["electricity"],
@@ -198,6 +201,52 @@ async def check_configuration(hass, entry):
     result = await submit(flow, mapping)
     assert result["type"] == "create_entry", result
     assert "heater_power" not in entry.options["sources"]
+    hass.config_entries.async_update_entry(entry, options=before)
+    await hass.async_block_till_done()
+
+    # Native report is read-only, including edited submitted text.
+    flow = await open_page("diagnostic_report")
+    data = flow["data_schema"]({})
+    assert "Thermowatt diagnostic report" in data["report"]
+    result = await submit(flow, {"report": "discard this edit"})
+    assert result["type"] == "abort" and dict(entry.options) == before
+    from custom_components.thermann_shadow.diagnostics import async_get_config_entry_diagnostics
+
+    assert (await async_get_config_entry_diagnostics(hass, entry))["schema"] == 1
+
+    # Genuine HA power states -> supported selectors -> compatible CT-free record.
+    sources = {
+        **before["sources"],
+        "grid": "sensor.synthetic_signed_grid",
+        "pv_ac": "sensor.synthetic_ac",
+        "house": "sensor.synthetic_house",
+        "heater_power": "",
+    }
+    hass.config_entries.async_update_entry(
+        entry, options={**before, "sources": sources, "heater_meter_verification": ""}
+    )
+    await hass.async_block_till_done()
+    for name, watts in (("grid", 4000), ("pv_ac", 5000), ("house", 1000)):
+        hass.states.async_set(sources[name], watts, {"unit_of_measurement": "W"})
+    flow = await open_page("ct_free_setup")
+    data = {
+        "direction": "export_positive",
+        "confirm_direction": False,
+        "accept_experimental": False,
+        "enable_boost": True,
+        "allow_peak": True,
+    }
+    flow = await submit(flow, data)
+    assert flow["errors"]["base"] == "experimental_ack_required", flow
+    result = await submit(flow, {**data, "confirm_direction": True, "accept_experimental": True})
+    assert result["type"] == "create_entry", result
+    assert entry.options["ct_free_solar_verification"] == sources["grid"] + "|W|export_positive|3"
+    assert (
+        entry.options["controller_four_state_qualified"]
+        == before["controller_four_state_qualified"]
+    )
+    assert entry.options["learning_hardware_qualified"] == before["learning_hardware_qualified"]
+    assert hass.data[DOMAIN][entry.entry_id].executor.controller.enabled is False
     hass.config_entries.async_update_entry(entry, options=before)
     await hass.async_block_till_done()
 

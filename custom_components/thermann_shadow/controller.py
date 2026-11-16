@@ -22,7 +22,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
-from .solar import COOLDOWN, PROTECTIVE_REASONS, SPACING, WITHDRAWAL_REASONS
+from .solar import PROTECTIVE_REASONS, SPACING, WITHDRAWAL_REASONS
 
 OFF, BASELINE, STORAGE = "off", "baseline", "storage"  # simple_policy states
 NORMAL = "normal_storage"
@@ -135,7 +135,7 @@ RECOVERY = {
     "mode_or_target_changed_outside_controller": "The Thermann mode or target changed without a controller command (for example in the app). Automatic control stays paused until you press Resume automatic control.",
     "unexpected_mode_or_target": "The heater is not OFF or a supported Manual 45/62/70 °C target (for example it is in Schedule, Eco or another Manual target). Automatic control will not touch it. In the Thermann app choose an independently qualified supported state, then press Resume automatic control.",
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
-    "guest_mode_not_applied": "The 12hr Override wants Manual at 70 °C but the controller could not apply it (see the reason and gate failures). Check the Thermann Hot Water app and the Thermann app; you can select Manual at 70 °C in the app yourself.",
+    "guest_mode_not_applied": "The 12hr Override wants Manual at 62 °C but the controller could not apply it (see the reason and gate failures). Check the Thermann Hot Water app and the Thermann app; you can select the intended temperature in the app yourself.",
 }
 HOBART = ZoneInfo("Australia/Hobart")
 GUEST_HOURS = 12.0
@@ -158,6 +158,7 @@ class ControllerConfig:
     four_state_qualified: bool = False
     command_spacing_minutes: float = SPACING.total_seconds() / 60
     element_kw: float = 3.0  # exposure estimate only, never electrical evidence
+    solar_cooldown_minutes: float = 10.0
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
     poll_interval_minutes: float = 30.0
@@ -235,7 +236,8 @@ class Observation:
     bridge_command_policy: str | None = None
     bridge_transitions: list | None = None  # 1.3.13 diagnostics
     requests_total: int | None = None
-    morning_availability: str | None = None
+    morning_availability: str | None = None  # legacy diagnostic key
+    low_water_assessment: dict | None = None
     mqtt_ready: bool = False
     forecast_available: bool | None = None  # published forecast usable now (None: unknown)
     passive_status_deadline: datetime | None = (
@@ -328,6 +330,9 @@ class Controller:
     storage_idle_since: str | None = None
     guest_started: str | None = None
     guest_until: str | None = None
+    guest_target_c: int = 62  # active pre-0.16 overrides retain their original target
+    weekend_heat_date: str | None = None
+    weekend_end_date: str | None = None
     holiday_start: str | None = None
     holiday_return: str | None = None
     refusal: str | None = None
@@ -351,6 +356,10 @@ class Controller:
             return cls()
         known = {key: data[key] for key in cls.__dataclass_fields__ if key in data}
         controller = cls(**known)
+        if data.get("guest_until") and "guest_target_c" not in data:
+            controller.guest_target_c = 70  # preserve an active legacy instruction/expiry
+        if controller.guest_target_c not in (62, 70):
+            controller.guest_target_c = 62
         if controller.state not in STATES:
             controller.state = OBSERVING
         # 0.7-0.8 stored dates AND times; 0.9.0 keeps each Hobart date (00:00).
@@ -455,7 +464,7 @@ class Controller:
         self.inspect_after = _iso(now)
 
     def start_guest(self, now: datetime, hours: float = GUEST_HOURS) -> bool:
-        """Owner: Manual 70 °C for ``hours`` (the 12hr Override). An explicit
+        """Owner: Manual 62 °C for ``hours`` (the 12hr Override). An explicit
         owner instruction, so it also releases Hold (the heater is re-inspected
         first; an app-selected other mode still pauses control)."""
         if not self.enabled:
@@ -469,6 +478,7 @@ class Controller:
             return False
         self.refusal = None
         self.guest_started, self.guest_until = _iso(now), _iso(now + timedelta(hours=hours))
+        self.guest_target_c = 62
         if self.hold or self.state == OWNER_OVERRIDE:
             self.hold = False
             self._reinspect(now, "guest_mode_started_reinspecting")
@@ -599,7 +609,7 @@ class Controller:
             and self.intent is None
         ):
             self.protective_exit = None
-            self.optional_cooldown_until = _iso(now + COOLDOWN)
+            self.optional_cooldown_until = _iso(now + timedelta(minutes=cfg.solar_cooldown_minutes))
             self.solar_session_active = False
         if self.state == CONFIRMING:
             self._supervise_alerts(obs, want, cfg, effects)
@@ -778,7 +788,9 @@ class Controller:
         observed = obs.heater_state
         if conclusive and observed == target:
             if intent.get("reason") in WITHDRAWAL_REASONS:
-                self.optional_cooldown_until = _iso(obs.now + COOLDOWN)
+                self.optional_cooldown_until = _iso(
+                    obs.now + timedelta(minutes=cfg.solar_cooldown_minutes)
+                )
             self.solar_session_active = (
                 self.enabled
                 and not self.hold
@@ -963,18 +975,16 @@ class Controller:
             effects[:] = [e for e in effects if e.kind != "notify"]
             return
         alerts: list[tuple[str, str, str]] = []
-        if obs.morning_availability in {
-            "at_risk",
-            "minimum_shortfall_observed",
-        } and not self.holiday_active(now):
+        water = obs.low_water_assessment or {}
+        if water.get("state") == "low" and not self.holiday_active(now):
             alerts.append(
                 (
-                    "morning_availability_risk",
-                    "Hot water: morning availability at risk",
-                    "The latest tank probe is below the morning requirement (45 C preferred by 06:00, "
-                    "42 C minimum by 07:00 local). Check the reading time, selected mode and command/cloud "
-                    "health. This is a probe-based warning, not a whole-tank measurement. "
-                    "The configured peak rule and native thermostat still apply; no peak import is authorised.",
+                    "pre_peak_low_hot_water",
+                    "Hot water may be running low",
+                    f"The bottom tank sensor is reading {water['reading_c']:g}°C before peak electricity hours "
+                    f"(observed {water['observed_at']}). There may be less hot water available than usual. "
+                    "This does not measure every litre in the tank or automatically authorise peak heating. "
+                    "Check the selected mode and cloud status; use the owner override if you want normal comfort storage.",
                 )
             )
         if self.protective_exit:
@@ -1084,7 +1094,7 @@ class Controller:
             obs.passive_status_deadline is not None
             and obs.poll_at is not None
             and obs.poll_at <= now <= obs.passive_status_deadline
-            and obs.passive_status_deadline - obs.poll_at <= timedelta(minutes=95)
+            and obs.passive_status_deadline - obs.poll_at <= timedelta(hours=12, minutes=5)
         )
         if not passive_ok and (
             obs.poll_at is None
@@ -1131,24 +1141,19 @@ class Controller:
             self.guest_active(now)
             and started is not None
             and now - started >= GUEST_ALERT_AFTER
-            and self.state not in {STORAGE_ACTIVE, CONFIRMING}
+            and self.state
+            not in {
+                ACTIVE_OF["normal_storage" if self.guest_target_c == 62 else STORAGE],
+                CONFIRMING,
+            }
         ):
             detail = ", ".join(self.gate_failures) or self.reason
             alerts.append(
                 (
                     "guest_mode_not_applied",
                     "Hot water: 12hr Override not applied",
-                    f"The 12hr Override wants Manual at 70 °C but the controller could not "
+                    f"The 12hr Override wants Manual at {self.guest_target_c} °C but the controller could not "
                     f"apply it ({detail}). {RECOVERY['guest_mode_not_applied']}",
-                )
-            )
-        if want.reason == "storage_target_may_be_missed":
-            alerts.append(
-                (
-                    "evening_target_at_risk",
-                    "Hot water: 70 °C may not be reached before the peak",
-                    "Heating continues on permitted off-peak power until the peak starts. "
-                    "The bottom-sensor model cannot promise completion; inspect the last observed temperature and time.",
                 )
             )
         cooldown = timedelta(hours=cfg.notification_cooldown_hours)
@@ -1186,6 +1191,8 @@ class Controller:
     def summary(self, now: datetime) -> dict:
         last = self.history[-1] if self.history else None
         return {
+            "override_target_c": self.guest_target_c if self.guest_active(now) else None,
+            "legacy_override": self.guest_active(now) and self.guest_target_c == 70,
             "state": self.state,
             "reason": self.reason,
             "enabled": self.enabled,

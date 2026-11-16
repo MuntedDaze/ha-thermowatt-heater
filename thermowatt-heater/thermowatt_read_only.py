@@ -32,7 +32,11 @@ def poll_seconds(options: Mapping[str, object]) -> int:
     seconds = value * (60 if unit == "minutes" else 1)
     if not 60 <= seconds <= 7200:
         raise ValueError("poll_interval_invalid")
-    return seconds
+    return (
+        1800
+        if options.get("polling_mode", "existing") in {"smart", "fixed_30", "minimum"}
+        else seconds
+    )
 
 
 def daily_limit(body: object) -> bool:

@@ -11,6 +11,9 @@ configuration:
   command_policy:
     name: Command policy
     description: automation accepts only the closed exact-prior OFF/45/62/70 transition protocol and retained narrow legacy forms. Other setpoints and malformed commands are refused. legacy is the older broader protocol and must not be used to bypass qualification.
+  polling_mode:
+    name: Cloud polling mode
+    description: existing preserves all saved polling and qualification choices. smart explicitly permits bounded event-aware quiet checks with a 30-minute crash fallback, coordinated with the controller; minimum accepts up to 12-hour owner-change detection delay. fixed_30 keeps compatibility. No option changes heater command permissions or certifies physical tests. Ordinary Smart status GETs use the existing bounded 401/refresh path; command authentication and all lockouts remain.
   poll_interval_minutes:
     name: Polling interval
     description: Value in the selected unit. Seconds 60–7200; Minutes 1–120. This historic YAML key is retained for upgrades; missing units mean Minutes.

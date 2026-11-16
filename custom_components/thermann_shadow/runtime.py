@@ -23,7 +23,7 @@ from homeassistant.util import dt as dt_util
 
 from .config import DEFAULT_OPTIONS
 from .forecast import build_forecast
-from .comfort import morning_availability
+from .comfort import pre_peak_availability
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
 from .measurement import CircuitPower, circuit_power, energy_reading, power_balance
@@ -107,6 +107,8 @@ class ShadowRuntime:
         self.completion = {}
         self.telemetry = None
         self._event_key = None
+        self.owner_events = deque(maxlen=200)
+        self.owner_event_store = None
 
     def set_native_reference(self, options):
         self.native_options = {**DEFAULT_OPTIONS, **options}
@@ -397,6 +399,24 @@ class ShadowRuntime:
         if key == self._event_key:
             return
         self._event_key = key
+        from .report import event
+
+        self.owner_events.append(
+            event(
+                {
+                    "at": now,
+                    "state": self.executor.controller.state,
+                    "reason": decision.reason,
+                    "wanted": decision.state,
+                    "cloud": obs.cloud_health,
+                    "command": last.get("status"),
+                    "bottom_c": obs.temperature_c,
+                    "grid_import_kw": self.grid_import_kw,
+                }
+            )
+        )
+        if self.owner_event_store:
+            self.owner_event_store.async_delay_save(lambda: {"events": list(self.owner_events)}, 30)
         self.telemetry = {
             "schema_version": 2,
             "at": now.isoformat(),
@@ -570,12 +590,15 @@ class ShadowRuntime:
         )
         values["forecast_age_minutes"] = self.forecast.age_minutes if self.forecast else None
         values["forecast_load_quality"] = self.forecast.load_quality if self.forecast else None
-        comfort = morning_availability(
+        comfort = pre_peak_availability(
             now,
             temperature,
             self.poll_at,
-            self.settings.time_zone,
-            self.settings.status_max_age_minutes,
+            values.get("next_tariff_change") if values.get("next_tariff_kind") == "peak" else None,
+            threshold=self.native_options["low_water_warning_c"],
+            lead_minutes=self.native_options["pre_peak_observation_minutes"],
+            max_age_minutes=self.settings.status_max_age_minutes,
+            boot=self.boot,
         )
         values["morning_availability"] = comfort["state"]
         self._requests(now)

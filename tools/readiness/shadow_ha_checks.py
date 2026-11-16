@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.15.1"
+CURRENT_VERSION = "0.16.0"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -1144,6 +1144,18 @@ ADDED_IN_0_9_0 = {
 # Backend-only additions on the separate smart-controller development branch.
 # Existing registry IDs must still be preserved; enumerate additions explicitly.
 ADDED_IN_SMART_DEVELOPMENT = {
+    "plan_summary",
+    "setting_polling_mode",
+    "setting_weekend_solar_heating",
+    "setting_weekend_pv_start_kw",
+    "setting_weekend_qualify_minutes",
+    "setting_weekend_end_time",
+    "setting_weekend_sunset_kw",
+    "setting_weekend_sunset_minutes",
+    "setting_solar_cooldown_minutes",
+    "setting_pre_peak_observation_minutes",
+    "setting_peak_command_lead_minutes",
+    "setting_low_water_warning_c",
     "forecast_load_quality",
     "morning_availability",
     "solar_session_status",

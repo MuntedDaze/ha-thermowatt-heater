@@ -1,0 +1,320 @@
+title: Thermowatt
+views:
+- title: Home
+  path: home
+  icon: mdi:home
+  cards:
+  - type: markdown
+    content: '# Thermowatt
+
+      Comfortable hot water with cheaper electricity and useful solar.
+
+
+      **Current plan:** {{ states(''sensor.thermann_shadow_current_heating_plan'') }}
+
+
+      The latest temperature is at the **bottom** of the tank. It does not describe every litre of
+      hot water.'
+  - type: entities
+    title: Your hot water
+    show_header_toggle: false
+    entities:
+    - entity: switch.thermann_shadow_automatic_heater_control
+      name: Automatic heating
+    - entity: sensor.thermann_shadow_thermann_mode
+      name: Confirmed cloud mode
+    - entity: sensor.thermann_shadow_thermann_target
+      name: Reported thermostat target
+    - entity: sensor.thermann_shadow_bottom_temperature
+      name: Latest bottom temperature
+    - entity: sensor.thermann_shadow_status_age
+      name: Minutes since cloud observation
+    - entity: sensor.thermann_shadow_heater_element_state
+      name: Estimated activity — not CT verification
+    - entity: sensor.thermann_shadow_circuit_measurement_mode
+      name: Dedicated circuit measurement
+  - type: entities
+    title: What happens next
+    show_header_toggle: false
+    entities:
+    - entity: sensor.thermann_shadow_current_tariff
+      name: Electricity period
+    - entity: sensor.thermann_shadow_next_tariff_change
+      name: Next price boundary
+    - entity: sensor.thermann_shadow_next_intended_action
+      name: Requested mode — not yet confirmation
+    - entity: sensor.thermann_shadow_next_heating_start
+      name: Planned start
+    - entity: sensor.thermann_shadow_solar_boost_status
+      name: Optional solar heating
+    - entity: sensor.thermann_shadow_cloud_health
+      name: Cloud connection
+    - entity: sensor.thermann_shadow_controller_fault
+      name: Heating control problem
+  - type: button
+    name: Copy diagnostic report / settings
+    icon: mdi:cog-outline
+    tap_action:
+      action: navigate
+      navigation_path: /config/integrations/integration/thermann_shadow
+  - type: markdown
+    content: '**Cloud OFF is a software state, not electrical isolation.** Without a dedicated circuit
+      meter, physical element ON/OFF remains unverified. Native protective cycles, manual changes
+      and outages can still occur.'
+- title: Controls
+  path: controls
+  icon: mdi:gesture-tap
+  cards:
+  - type: markdown
+    content: '# Everyday controls
+
+      **Hold** preserves owner control. **Resume** re-inspects before normal policy can act. The
+      **12hr Override 62°C** explicitly permits comfort heating, including peak hours; it expires
+      after 12 hours. Native protections and command verification remain.
+
+
+      Turning automatic heating off stops new routine commands; it does not electrically isolate
+      the heater or cancel a command already sent.'
+  - type: entities
+    title: Preferences
+    show_header_toggle: false
+    entities:
+    - entity: switch.thermann_shadow_automatic_heater_control
+      name: Automatic heating
+    - entity: switch.thermann_shadow_enable_optional_solar_boost
+      name: Enable optional solar boost
+    - entity: sensor.thermann_shadow_guest_mode_ends
+      name: Override ends
+  - type: button
+    name: Hold automatic heating
+    icon: mdi:water-boiler
+    tap_action:
+      action: perform-action
+      perform_action: button.press
+      target:
+        entity_id: button.thermann_shadow_hold_heater_owner_override
+      confirmation:
+        text: Hold automatic heating? Existing controller safeguards still apply.
+  - type: button
+    name: Resume automatic heating
+    icon: mdi:water-boiler
+    tap_action:
+      action: perform-action
+      perform_action: button.press
+      target:
+        entity_id: button.thermann_shadow_resume_automatic_control
+      confirmation:
+        text: Resume automatic heating? Existing controller safeguards still apply.
+  - type: button
+    name: 12hr Override 62°C
+    icon: mdi:water-boiler
+    tap_action:
+      action: perform-action
+      perform_action: button.press
+      target:
+        entity_id: button.thermann_shadow_start_guest_mode_12_h
+      confirmation:
+        text: 12hr Override 62°C? Existing controller safeguards still apply.
+  - type: button
+    name: Cancel override
+    icon: mdi:water-boiler
+    tap_action:
+      action: perform-action
+      perform_action: button.press
+      target:
+        entity_id: button.thermann_shadow_cancel_guest_mode
+      confirmation:
+        text: Cancel override? Existing controller safeguards still apply.
+  - type: entities
+    title: Holiday dates
+    show_header_toggle: false
+    entities:
+    - entity: date.thermann_shadow_holiday_departure_date
+      name: Leave home
+    - entity: date.thermann_shadow_holiday_return_date
+      name: Return home
+  - type: button
+    name: Cancel holiday
+    icon: mdi:water-boiler
+    tap_action:
+      action: perform-action
+      perform_action: button.press
+      target:
+        entity_id: button.thermann_shadow_cancel_holiday_mode
+      confirmation:
+        text: Cancel holiday? Existing controller safeguards still apply.
+  - type: markdown
+    content: '**Fault recovery:** check the official Thermann app and connection first. Acknowledgement
+      does not repeat an uncertain command or unlock authentication. If OFF restoration is unconfirmed,
+      choose your intended mode in the official app; cloud access may still be unavailable.'
+  - type: button
+    name: Acknowledge checked fault
+    icon: mdi:water-boiler
+    tap_action:
+      action: perform-action
+      perform_action: button.press
+      target:
+        entity_id: button.thermann_shadow_acknowledge_controller_fault
+      confirmation:
+        text: Acknowledge checked fault? Existing controller safeguards still apply.
+- title: Heating preferences
+  path: heating
+  icon: mdi:thermometer-water
+  cards:
+  - type: markdown
+    content: '# Heating preferences
+
+      Open **Configure → Hot Water** for target temperatures and peak permissions. Open **Solar &
+      Meters → Weekend and heating preferences** for weekend solar, sunset, restart cooldown and
+      low-water warnings. Every field includes help. Protected changes require automatic heating
+      off. Your saved settings are retained.'
+  - type: entities
+    title: Selected targets
+    show_header_toggle: false
+    entities:
+    - entity: sensor.thermann_shadow_overnight_baseline_target
+      name: Night/weekend baseline
+    - entity: sensor.thermann_shadow_normal_storage_target
+      name: Normal weekday/daytime storage
+    - entity: sensor.thermann_shadow_solar_boost_target
+      name: Optional extra solar storage
+    - entity: sensor.thermann_shadow_peak_heating_policy
+      name: Heating during peak periods
+    - entity: sensor.thermann_shadow_optional_solar_boost_enabled
+      name: Extra solar storage enabled
+  - type: button
+    name: Configure heating preferences
+    icon: mdi:cog-outline
+    tap_action:
+      action: navigate
+      navigation_path: /config/integrations/integration/thermann_shadow
+  - type: markdown
+    content: '**Owner example: 45 / 62 / 70°C.** The thermostat maintains the chosen setpoint with
+      approximately 8°C hysteresis. Weekend PV of at least 500 W for 15 continuous minutes opens
+      62°C comfort heating; this deliberately permits off-peak grid assistance. Optional 70°C has
+      stronger measured-surplus and economic requirements. The daytime latch avoids reacting to each
+      cloud; configured sunset/end limits return to baseline.
+
+
+      These are this owner''s choices, not a universal water-hygiene recommendation. Follow appliance
+      instructions and your plumber''s advice. Occasional hotter cycles do not independently establish
+      hygiene compliance.'
+- title: Electricity and optimisation
+  path: electricity
+  icon: mdi:solar-power
+  cards:
+  - type: markdown
+    content: '# Electricity and optimisation
+
+      **Configure → Electricity Tariffs** explains your prices and guided schedule. Peak is usually
+      dearer; off-peak cheaper; shoulder intermediate. Use your retail contract, not a network price
+      assumed to be your bill. Fixed-standard clocks ignore daylight saving; local clocks follow
+      it.
+
+
+      **Configure → Advanced/System → Cloud checks and data age** selects Smart, Fixed 30-minute
+      compatibility or Experimental minimum. Match the bridge App''s choice. Existing installations
+      keep their saved polling choices until you explicitly change them.'
+  - type: entities
+    title: Local electricity — no cloud request per sample
+    show_header_toggle: false
+    entities:
+    - entity: sensor.thermann_shadow_measured_pv_ac_output
+      name: Usable inverter solar power
+    - entity: sensor.thermann_shadow_measured_house_load
+      name: Household power
+    - entity: sensor.thermann_shadow_measured_signed_grid
+      name: Raw signed grid power
+    - entity: sensor.thermann_shadow_measured_grid_export
+      name: Power exported
+    - entity: sensor.thermann_shadow_measured_grid_import
+      name: Power imported
+    - entity: sensor.thermann_shadow_current_import_price
+      name: Import price in dollars/kWh
+    - entity: sensor.thermann_shadow_configured_feed_in_rate
+      name: Export payment in dollars/kWh
+    - entity: sensor.thermann_shadow_household_forecast_quality
+      name: Forecast reliability
+  - type: entities
+    title: Cloud requests and estimates
+    show_header_toggle: false
+    entities:
+    - entity: sensor.thermann_shadow_next_cloud_poll
+      name: Next useful cloud check
+    - entity: sensor.thermann_shadow_cloud_poll_interval
+      name: Seconds between cloud checks
+    - entity: sensor.thermann_shadow_cloud_requests_in_last_24_hours
+      name: Actual request attempts in 24 hours
+    - entity: sensor.thermann_shadow_cloud_request_budget_remaining
+      name: Remaining request budget
+    - entity: sensor.thermann_shadow_expected_heating_completion
+      name: Estimated finish
+    - entity: sensor.thermann_shadow_heating_prediction_confidence
+      name: Estimate confidence
+    - entity: sensor.thermann_shadow_learned_heating_rate
+      name: Measured heating performance
+  - type: button
+    name: Configure electricity and polling
+    icon: mdi:cog-outline
+    tap_action:
+      action: navigate
+      navigation_path: /config/integrations/integration/thermann_shadow
+  - type: markdown
+    content: '**CT-free:** normal tariff heating needs no dedicated circuit meter or solar forecast.
+      Experimental optional solar heating requires real, fresh, signed grid evidence and explicit
+      setup. Estimated watts never verify physical heating. Learning needs clean dedicated-meter
+      cycles; nominal predictions are deliberately conservative.
+
+
+      **Smart polling:** quiet confirmed overnight targets can be left to the native thermostat for
+      hours, with observations arranged before useful decisions. This delays detecting app changes
+      (up to 8 hours; Experimental minimum up to 12). Every command still requires its exact current
+      prior and confirmation. Original fixed fallback remains if the controller lease expires.'
+- title: Advanced and diagnostics
+  path: diagnostics
+  icon: mdi:stethoscope
+  cards:
+  - type: markdown
+    content: '# Copy diagnostic report
+
+      Open the button below, choose **Configure → Copy diagnostic report**, select all text and copy
+      it. On a computer use Ctrl+A then Ctrl+C inside the field; on a phone touch and hold → Select
+      all → Copy. Closing does not save edits or send commands.
+
+
+      **Download detailed diagnostics:** integration three-dot menu → Download diagnostics. This
+      authenticated JSON uses the same allowlist. Review HA''s surrounding system metadata before
+      sharing. Source names and device/MQTT identifiers are omitted.'
+  - type: button
+    name: Copy diagnostic report / Download detailed diagnostics
+    icon: mdi:cog-outline
+    tap_action:
+      action: navigate
+      navigation_path: /config/integrations/integration/thermann_shadow
+  - type: entities
+    title: Engineering status
+    show_header_toggle: false
+    entities:
+    - entity: sensor.thermann_shadow_automatic_control_state
+      name: Controller supervision
+    - entity: sensor.thermann_shadow_automatic_control_reason
+      name: Blocking reason code
+    - entity: sensor.thermann_shadow_controller_last_evaluated
+      name: Controller heartbeat (up to 15 minutes)
+    - entity: sensor.thermann_shadow_last_command_result
+      name: Last command outcome
+    - entity: sensor.thermann_shadow_waiting_to_restore_heat_since
+      name: Unconfirmed restoration since
+    - entity: sensor.thermann_shadow_solar_boost_cooldown_ends
+      name: Restart cooldown ends
+    - entity: sensor.thermann_shadow_controller_telemetry
+      name: Decision evidence
+  - type: markdown
+    content: 'Sensor mappings, qualification records and quotas remain in **Advanced/System** and
+      **Solar & Meters**. They are engineering permissions, not everyday controls. Do not tick physical
+      qualifications to hide a fault.
+
+
+      The heartbeat publishes genuine completed timestamps at most 15 minutes apart or on a supervision
+      change. Local evaluation, solar supervision and command confirmations keep their normal fast
+      timing; the exact latest evaluation is in the report. Existing 30-minute watchdogs remain conservative.'

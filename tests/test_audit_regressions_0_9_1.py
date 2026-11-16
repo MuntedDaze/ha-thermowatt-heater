@@ -343,9 +343,9 @@ def test_m1_cancelling_the_override_in_a_peak_parks_without_waiting_for_a_poll(
     rig.run(hobart(MON, 17, 40))
     assert rig.executor.controller.start_guest(rig.now())
     rig.run(hobart(MON, 18, 12))
-    assert rig.tank.mode == "Manual" and rig.executor.controller.state == "storage_70"
+    assert rig.tank.mode == "Manual" and rig.executor.controller.state == "normal_storage_62"
     drive(rig.executor.async_owner_action("guest_cancel"))
-    assert rig.executor.controller.state == "storage_70"  # no re-inspection needed
+    assert rig.executor.controller.state == "normal_storage_62"  # no re-inspection needed
     rig.run(hobart(MON, 18, 40))
     stop = rig.posts_local()[-1]
     # Before 0.9.1 the park waited for the 18:30 poll (26 minutes on peak grid).
@@ -586,6 +586,11 @@ class Weekend(Sim):
     """Actual PV and the published forecast are scripted separately."""
 
     forecast_pv = staticmethod(lambda loc: 0.0)
+
+    def __init__(self, *args, **kwargs):
+        # These historical N1 tests isolate optional solar/estimator authority.
+        # New, deliberately grid-assisted weekend comfort has separate tests.
+        super().__init__(*args, options={"weekend_solar_heating": False}, **kwargs)
 
     def _forecast(self, pv=None):
         super()._forecast(self.forecast_pv)

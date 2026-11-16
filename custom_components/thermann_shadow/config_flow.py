@@ -167,6 +167,31 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         return self._menu("init")
 
+    async def async_step_diagnostic_report(self, user_input=None):
+        """Native copyable multiline view; closing never saves preferences."""
+        from homeassistant.const import __version__
+        from homeassistant.util import dt as dt_util
+        from .report import build, text_report
+
+        if user_input is not None:
+            return self.async_abort(reason="report_closed")
+        runtime = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        report = (
+            text_report(build(runtime, dt_util.utcnow(), __version__))
+            if runtime
+            else "Controller not loaded. Download diagnostics after resolving setup."
+        )
+        return self.async_show_form(
+            step_id="diagnostic_report",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("report", default=report): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True)
+                    )
+                }
+            ),
+        )
+
     def _menu(self, step_id):
         return self.async_show_menu(step_id=step_id, menu_options=list(MENUS[step_id]))
 
@@ -182,13 +207,13 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
     def _current_sources(self):
         return dict(self._entry.options.get("sources", self._entry.data))
 
-    def _finish(self, before, result, step_id, schema):
+    def _finish(self, before, result, step_id, schema, facts=None):
         from .settings_entity import control_active
 
         locked = locked_changes(before, result)
         if locked and control_active(self.hass, self._entry):
             self._locked = locked_message(locked)
-            placeholders = {"detail": self._locked}
+            placeholders = {**(facts or {}), "detail": self._locked}
             if step_id == "schedule":
                 from .configuration_text import schedule_summary
 
@@ -235,6 +260,119 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_hot_water(self, user_input=None):
         return await self._settings_page("hot_water", user_input)
+
+    async def async_step_heating_preferences(self, user_input=None):
+        return await self._settings_page("heating_preferences", user_input)
+
+    async def async_step_ct_free_setup(self, user_input=None):
+        """Real-meter sanity and experimental owner choice; no heater commands."""
+        from homeassistant.util import dt as dt_util
+        from .solar import ct_free_record, grid_sanity
+
+        runtime = self.hass.data.get(DOMAIN, {}).get(self._entry.entry_id)
+        now = dt_util.utcnow()
+        values = saved_options(self._entry.options)
+        grid = runtime._reading("grid") if runtime else None
+        source = self._current_sources().get("grid", "unmapped")
+        live_kw = runtime._kw("grid", now) if runtime else None
+        direction = (user_input or {}).get(
+            "direction", "import_positive" if values["import_positive"] else "export_positive"
+        )
+        signed = (
+            (live_kw if direction == "import_positive" else -live_kw)
+            if live_kw is not None
+            else None
+        )
+        quality = grid_sanity(
+            signed,
+            runtime._kw("pv_ac", now) if runtime else None,
+            runtime._kw("house", now) if runtime else None,
+            values["pv_ac_limit_kw"],
+        )
+        record = ct_free_record(
+            source,
+            grid.unit if grid else None,
+            direction == "import_positive",
+            values["element_kw"],
+        )
+        identity = (source, grid.unit if grid else None, values["element_kw"])
+        if user_input is None:
+            self._ct_free_identity = identity
+        facts = {
+            "source": source,
+            "unit": str(grid.unit if grid else "unknown"),
+            "quality": quality.replace("_", " "),
+        }
+        errors = {}
+        data = user_input or {
+            "direction": direction,
+            "confirm_direction": False,
+            "accept_experimental": False,
+            "enable_boost": values["optional_solar_boost"],
+            "allow_peak": values["peak_heating_policy"] == "Verified solar-only heating",
+        }
+        schema = vol.Schema(
+            {
+                vol.Required("direction", default=data["direction"]): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["import_positive", "export_positive"],
+                        translation_key="grid_direction",
+                    )
+                ),
+                **{
+                    vol.Required(k, default=data[k]): selector.BooleanSelector()
+                    for k in (
+                        "confirm_direction",
+                        "accept_experimental",
+                        "enable_boost",
+                        "allow_peak",
+                    )
+                },
+            }
+        )
+        if user_input is not None:
+            if identity != getattr(self, "_ct_free_identity", None):
+                errors["base"] = "meter_changed_reopen"
+            elif not user_input["confirm_direction"] or not user_input["accept_experimental"]:
+                errors["base"] = "experimental_ack_required"
+            elif (
+                not record
+                or quality != "consistent_measured_site_power"
+                or self._current_sources().get("heater_power")
+                or values["heater_meter_verification"]
+            ):
+                errors["base"] = "meter_not_ready"
+            else:
+                changes = {
+                    "ct_free_solar_verification": record,
+                    "import_positive": direction == "import_positive",
+                    "meter_verified": True,
+                    "optional_solar_boost": user_input["enable_boost"],
+                    "peak_heating_policy": "Verified solar-only heating"
+                    if user_input["allow_peak"]
+                    else "Never schedule heating during peak",
+                }
+                result = apply_changes(values, changes)
+                parse_options(result)
+                before = {**values, "sources": self._current_sources()}
+                return self._finish(
+                    before,
+                    {**result, "sources": self._current_sources()},
+                    "ct_free_setup",
+                    schema,
+                    facts,
+                )
+        return self.async_show_form(
+            step_id="ct_free_setup",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "source": source,
+                "unit": str(grid.unit if grid else "unknown"),
+                "quality": quality.replace("_", " "),
+                "detail": self._locked,
+            },
+        )
 
     async def async_step_prices(self, user_input=None):
         return await self._settings_page("prices", user_input)

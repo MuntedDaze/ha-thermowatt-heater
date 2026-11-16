@@ -21,6 +21,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -r requirements-dev.txt
       - run: python tools/build_configuration_strings.py --check
+      - run: python tools/build_homeowner_dashboard.py --check
       - run: python -m pytest
       - run: python -m ruff check .
       - run: python -m ruff format --check .
