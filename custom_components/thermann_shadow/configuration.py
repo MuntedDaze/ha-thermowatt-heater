@@ -271,7 +271,7 @@ FIELDS = {
     ),
     "ct_free_solar_verification": (
         "CT-free solar commissioning record",
-        "Leave blank during development and Shadow Mode. After supervised qualification, record grid_entity|W_or_kW|import_positive_or_export_positive|nominal_kW. It must match the current grid sensor, unit, sign and element rating, for example sensor.goodwe_inverter_meter_active_power|W|export_positive|3. This permits grid-only solar decisions, never claims measured element ON/OFF. A configured CT fault cannot fall back to this record.",
+        "Leave blank in Shadow Mode. Follow the upgrade guide after supervised checks. Join four values with | and no spaces: grid entity, W or kW, direction, and rated kW. Use import_positive or export_positive for direction. The record must match this installation. Grid-only decisions do not prove element operation; a configured CT fault cannot fall back to this record.",
     ),
     "learned_planning_enabled": (
         "Use qualified heating-performance learning",

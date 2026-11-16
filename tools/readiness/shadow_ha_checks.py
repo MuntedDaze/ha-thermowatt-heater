@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.14.0"
+CURRENT_VERSION = "0.15.0"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -343,6 +343,7 @@ def alternate(key, meta, default):
             "controller_notify_service": "mobile_app_test",  # 0.7.1: name validated
             "controller_command_topic": "P/TEST999/CMD/MODE",
             "heater_meter_verification": "sensor.synthetic_hws_power|W",
+            "ct_free_solar_verification": "sensor.synthetic_grid|W|export_positive|3",
         }.get(key, "2026-10-05")
     if meta.kind == "time":
         hour, minute = int(default[:2]), int(default[3:5])
@@ -589,10 +590,16 @@ async def check_forecasts(hass, entry, entity_for):
         {"unit_of_measurement": "W", "watts": watts, "forecast_generated_at": generated},
         force_update=True,
     )
-    hass.states.async_set(load_id, "700", {"unit_of_measurement": "W"}, force_update=True)
+    hass.states.async_set(
+        load_id,
+        "700",
+        {"unit_of_measurement": "W", "age_coverage_ratio": 0.9, "source_value_valid": True},
+        force_update=True,
+    )
     runtime.update(dt_util.utcnow())
     assert runtime.forecast.source == "published_pv_and_house_load", runtime.forecast.warnings
     assert runtime.forecast.load_basis == "flat_measured_household_baseline"
+    assert runtime.forecast.load_quality == "provisional_covered_window_not_daily_history"
     results["forecast_solar_flat_load"] = runtime.values.get("decision")
     # Stale generation, invalid units and missing entities fall back safely.
     stale = (dt_util.utcnow() - timedelta(hours=3)).isoformat()
