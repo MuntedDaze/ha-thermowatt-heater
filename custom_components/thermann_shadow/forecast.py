@@ -18,6 +18,10 @@ MAX_POINT_GAP_SECONDS = 7200
 # the afternoon. While the inverter clips, measured AC is only a LOWER bound.
 MAX_UPWARD_CORRECTION = 1.3
 CLIPPING_MARGIN_KW = 0.15
+# Explicit conservative assumption when published demand is unusable. This is
+# not a learned daily average, and cannot authorise an optional solar start.
+FALLBACK_LOAD_KW = 1.0
+MIN_LOAD_KW = 0.1
 
 
 @dataclass
@@ -30,6 +34,8 @@ class ForecastResult:
     correction_hours: float = CORRECTION_HOURS
     measured_pv_average_kw: float | None = None
     load_basis: str | None = None
+    load_quality: str = "unknown"
+    load_floor_kw: float | None = None
     pv_series: tuple = ()  # ((start, end, AC kW corrected and clipped), ...)
     load_series: tuple = ()  # ((start, end, published household kW), ...)
     clipped_now: bool = False
@@ -110,8 +116,12 @@ def _flat_load(state, now: datetime, boot: datetime, settings: Settings) -> floa
     if unit not in {"W", "kW"}:
         raise ValueError("forecast_unit_invalid")
     value = number(state.state) / (1000 if unit == "W" else 1)
-    if not 0 <= value <= 30:
+    if not MIN_LOAD_KW <= value <= 30:
         raise ValueError("forecast_series_invalid")
+    # A newly created mean with a few minutes of samples is not a daily baseline.
+    coverage = number(state.attributes.get("age_coverage_ratio", 0))
+    if not 0.75 <= coverage <= 1 or state.attributes.get("source_value_valid") is not True:
+        raise ValueError("household_baseline_insufficient_coverage")
     return value
 
 
@@ -123,20 +133,46 @@ def _value_at(points, at):
     return None
 
 
-def build_forecast(now, boot, settings, pv_state, load_state, measured_pv=None):
+def build_forecast(
+    now, boot, settings, pv_state, load_state, measured_pv=None, measured_house=None
+):
     result = ForecastResult()
     if not settings.forecast_enabled:
         return result
     try:
         pv, pv_age = _series(pv_state, "pv", now, boot, settings)
-        if load_state is not None and "forecasts" not in load_state.attributes:
-            flat = _flat_load(load_state, now, boot, settings)
-            load = [(now + timedelta(hours=hour), flat) for hour in range(49)]
-            load_age = (now - load_state.last_reported).total_seconds() / 60
-            result.load_basis = "flat_measured_household_baseline"
-        else:
-            load, load_age = _series(load_state, "load", now, boot, settings)
-            result.load_basis = "published_household_load_forecast"
+        try:
+            if load_state is not None and "forecasts" not in load_state.attributes:
+                flat = _flat_load(load_state, now, boot, settings)
+                load = [(now + timedelta(hours=hour), flat) for hour in range(49)]
+                load_age = (now - load_state.last_reported).total_seconds() / 60
+                result.load_basis = "flat_measured_household_baseline"
+                result.load_quality = "provisional_covered_window_not_daily_history"
+                result.warnings.append("household_baseline_window_unverified_not_daily_history")
+            else:
+                load, load_age = _series(load_state, "load", now, boot, settings)
+                result.load_basis = "published_household_load_forecast"
+                result.load_quality = "published_uncertain"
+            if any(value < MIN_LOAD_KW for _, value in load):
+                raise ValueError("household_forecast_zero_or_insufficient")
+        except (ValueError, TypeError, AttributeError, KeyError, OverflowError):
+            # Keep independently valid PV provenance. Missing demand never
+            # becomes zero. The current household value can only raise this
+            # assumed flat floor; do not invent a daily appliance schedule.
+            floor = FALLBACK_LOAD_KW
+            if measured_house is not None:
+                try:
+                    current = number(measured_house)
+                    if 0 < current <= 30:
+                        floor = max(floor, current)
+                except (ValueError, TypeError, OverflowError):
+                    pass
+            load = [(now + timedelta(hours=hour), floor) for hour in range(49)]
+            load_age = 0
+            result.load_basis = "conservative_assumed_household_floor"
+            result.load_quality = "provisional_not_daily_history"
+            result.load_floor_kw = floor
+            result.warnings.append("household_history_insufficient_using_assumed_load_floor")
         result.age_minutes = round(max(pv_age, load_age), 1)
         result.source = "published_pv_and_house_load"
         limit = settings.pv_ac_limit_kw
@@ -206,6 +242,8 @@ def build_forecast(now, boot, settings, pv_state, load_state, measured_pv=None):
         result.pv_series = result.load_series = ()
         result.source = "unavailable"
         result.load_basis = None
+        result.load_quality = "unavailable"
+        result.load_floor_kw = None
         result.pv_error_kw = None
         result.correction = 1.0
         result.warnings.append(code)

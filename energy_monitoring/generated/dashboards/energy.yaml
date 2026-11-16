@@ -222,6 +222,14 @@ views:
         name: Solar boost eligibility
       - entity: sensor.thermann_shadow_solar_boost_reason
         name: Solar boost selected / rejected
+      - entity: sensor.thermann_shadow_solar_boost_status
+        name: 'Solar boost: waiting / active / stopping / cooldown'
+      - entity: sensor.thermann_shadow_solar_boost_cooldown_ends
+        name: Next optional start after
+      - entity: sensor.thermann_shadow_morning_hot_water_availability
+        name: Morning hot-water availability
+      - entity: sensor.thermann_shadow_household_forecast_quality
+        name: Household forecast quality
       - entity: sensor.thermann_shadow_planned_heating_energy_estimate
         name: Planned energy estimate (not metered)
       - entity: sensor.thermann_shadow_heating_prediction_confidence
@@ -273,6 +281,12 @@ views:
         name: Adaptive polling status / reason
       - entity: sensor.thermann_shadow_cloud_request_budget_remaining
         name: Request budget remaining (rolling 24h)
+      - entity: sensor.thermann_shadow_solar_exit_request_reserve
+        name: Requests reserved before a solar start
+      - entity: sensor.thermann_shadow_protective_off_waiting_time
+        name: Waiting for confirmed protective OFF
+      - entity: sensor.thermann_shadow_unconfirmed_off_nominal_cost_exposure
+        name: Unconfirmed OFF cost exposure (nominal estimate)
       - entity: sensor.thermann_shadow_cloud_poll_interval
         name: Actual background poll interval
       - entity: sensor.home_last_cloud_error

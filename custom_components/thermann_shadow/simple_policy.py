@@ -30,6 +30,7 @@ from statistics import median
 from .model import ELEMENT_KW, TANK_KWH_PER_C, Forecast, Tariff, tariff_at, tariff_zone
 from zoneinfo import ZoneInfo
 from .targets import NORMAL, TARGET_C, state_at, validate_roles
+from .solar import IMPORT_TOLERANCE_KW, PROTECTIVE_REASONS, QUALIFY, SPACING, WITHDRAW
 
 OFF, BASELINE, STORAGE, HOLD = "off", "baseline", "storage", "hold"
 STATES = (OFF, BASELINE, NORMAL, STORAGE)
@@ -43,14 +44,7 @@ SCAN_STEP = timedelta(minutes=15)
 SCAN_HORIZON = timedelta(days=4)
 SAMPLE_SLACK = timedelta(seconds=30)  # timer drift allowed at the start of a sample window
 # Protective peak OFF only. Restarts, holiday and ordinary transitions still wait.
-SPACING_EXEMPT_REASONS = frozenset(
-    {
-        "peak_solar_withdrawn",
-        "peak_meter_unavailable",
-        "peak_heater_meter_unavailable",
-        "peak_lockout",
-    }
-)
+SPACING_EXEMPT_REASONS = PROTECTIVE_REASONS
 
 
 @dataclass(frozen=True)
@@ -72,13 +66,13 @@ class PolicySettings:
     storage_ready: time = time(16)
     baseline_start: time = time(21)
     peak_start_kw: float = 3.3  # element 3.0 kW + 0.3 kW buffer
-    peak_import_tolerance_kw: float = 0.2
+    peak_import_tolerance_kw: float = IMPORT_TOLERANCE_KW
     solar_floor_kw: float = 1.0  # least measured surplus for optional (weekend) heating
     optional_heat_margin: float = 0.02  # $/kWh saving needed for heat not otherwise needed
     pause_min_saving: float = 0.30  # $ a later window must save to justify a pause
-    qualify: timedelta = timedelta(minutes=10)
-    withdraw: timedelta = timedelta(minutes=5)
-    command_spacing: timedelta = timedelta(minutes=15)
+    qualify: timedelta = QUALIFY
+    withdraw: timedelta = WITHDRAW
+    command_spacing: timedelta = SPACING
     # One decision tick (1 min) plus the bridge's pre-command refresh, POST and
     # the measured cloud readback (about 2-63 s, T3c).
     peak_lead: timedelta = timedelta(minutes=2)
@@ -119,6 +113,10 @@ class Snapshot:
     override_12h: bool = False
     cloud_ready: bool = True
     heater_meter_valid: bool = False  # optional starts require explicit verified input
+    ct_free_solar_valid: bool = False  # separately commissioned grid-only policy
+    optional_cooldown_until: datetime | None = None
+    protective_exit_pending: bool = False
+    optional_session_active: bool = False
     measured_element_kw: float | None = None  # verified instantaneous ON power; never inference
     optional_allowed: bool = True
     learned_rates: dict[int, float] = field(default_factory=dict)
@@ -189,6 +187,8 @@ class SimplePolicy:
         recent = self._window(now, window + SAMPLE_SLACK)
         if not recent or not self.meter_fresh(now) or recent[0][0] > now - window + SAMPLE_SLACK:
             return False
+        if recent[-1][0] - recent[0][0] < window:
+            return False  # evaluation ticks cannot extend genuine report coverage
         if any(
             b[0] - a[0] > self.s.meter_max_age for a, b in zip(recent, recent[1:], strict=False)
         ):
@@ -203,6 +203,33 @@ class SimplePolicy:
         if not recent or not self.meter_fresh(now):
             return None
         return median(smp[2] for smp in recent)
+
+    def importing_continuously(self, now: datetime) -> bool:
+        """Acceptable readings reset withdrawal; stale/gapped evidence cannot vote."""
+        recent = self._window(now, self.s.withdraw + SAMPLE_SLACK)
+        return (
+            bool(recent)
+            and self.meter_fresh(now)
+            and recent[0][0] <= now - self.s.withdraw
+            and recent[-1][0] - recent[0][0] >= self.s.withdraw
+            and all(smp[1] > self.s.peak_import_tolerance_kw for smp in recent)
+            and all(
+                b[0] - a[0] <= self.s.meter_max_age
+                for a, b in zip(recent, recent[1:], strict=False)
+            )
+        )
+
+    def surplus_qualified(self, now: datetime) -> bool:
+        def test(sample):
+            return sample[2] >= self.s.peak_start_kw
+
+        return self.sustained(now, self.s.qualify, test) and all(
+            test(sample) for sample in self._window(now, self.s.qualify + SAMPLE_SLACK)
+        )
+
+    @staticmethod
+    def optional_measurement_valid(snap):
+        return snap.heater_meter_valid or snap.ct_free_solar_valid
 
     # --- tariff calendar --------------------------------------------------------------
 
@@ -396,13 +423,17 @@ class SimplePolicy:
             return reject("same_as_normal_target")
         if not snap.optional_allowed:
             return reject("optional_budget_reserved_for_essential_heat")
-        if not snap.heater_meter_valid or not self.meter_fresh(now):
+        if snap.protective_exit_pending:
+            return reject("protective_exit_unresolved")
+        if snap.optional_cooldown_until is not None and now < snap.optional_cooldown_until:
+            return reject("solar_withdrawal_cooldown")
+        if not self.optional_measurement_valid(snap) or not self.meter_fresh(now):
             return reject("verified_circuit_and_grid_required")
         if not fresh:
             return reject("fresh_temperature_required")
         if reading > goal - s.hysteresis_c and snap.measured_element_kw is None:
             return reject("inside_native_hysteresis_no_verified_heat")
-        if not self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw):
+        if not self.surplus_qualified(now):
             return reject("sustained_full_solar_required")
         hours = max(0, goal - reading) / rate
         if end is not None and now + timedelta(hours=hours) > end:
@@ -464,6 +495,15 @@ class SimplePolicy:
             "peak_heating_policy": s.peak_policy,
             "optional_boost_enabled": s.boost_enabled,
             "circuit_measurement_available": snap.heater_meter_valid,
+            "solar_measurement_basis": "verified_circuit"
+            if snap.heater_meter_valid
+            else "commissioned_grid_only"
+            if snap.ct_free_solar_valid
+            else "unqualified",
+            "optional_cooldown_until": snap.optional_cooldown_until,
+            "current_import_price_aud": tariff_at(
+                now, self.tariffs, s.tariff_clock, s.time_zone
+            ).rate,
             "boost_eligible": False,
             "boost_reason": "not_qualified",
             "target_reached": fresh and reading >= s.normal_c,
@@ -476,22 +516,27 @@ class SimplePolicy:
             if s.peak_policy == PEAK_NEVER:
                 plan["boost_reason"] = "peak_heating_locked_out"
                 return OFF, "peak_lockout", 4, plan
-            qualified = self.sustained(now, s.qualify, lambda x: x[2] >= s.peak_start_kw)
+            qualified = self.surplus_qualified(now)
             if state in (NORMAL, STORAGE):
                 if not self.meter_fresh(now):
                     return OFF, "peak_meter_unavailable", 4, plan
-                if not snap.heater_meter_valid:
+                if not self.optional_measurement_valid(snap):
                     return OFF, "peak_heater_meter_unavailable", 4, plan
-                if not in_peak and not qualified:
+                carried_session = (
+                    snap.optional_session_active
+                    and self.samples[-1][1] <= s.peak_import_tolerance_kw
+                )
+                if not in_peak and not qualified and not carried_session:
                     return OFF, "peak_ahead_no_qualified_solar", 4, plan
-                lost = s.element_kw - s.peak_import_tolerance_kw
-                if self.sustained(
-                    now, s.withdraw, lambda x: x[1] > s.peak_import_tolerance_kw or x[2] < lost
-                ):
+                if not snap.optional_session_active and not qualified:
+                    return OFF, "peak_no_qualified_session", 4, plan
+                if self.importing_continuously(now):
                     return OFF, "peak_solar_withdrawn", 4, plan
                 later = min((t.rate for t in self.tariffs if t.kind != "peak"), default=0)
                 if s.feed_in_rate > later - s.optional_heat_margin:
                     return OFF, "peak_solar_uneconomic", 6, plan
+                if fresh and reading >= s.storage_c:
+                    return OFF, "peak_solar_no_useful_heat", 4, plan
                 if not s.boost_enabled and state == STORAGE and normal != STORAGE:
                     return normal, "peak_normal_solar_only", 4, plan
                 return state, "peak_solar_continues", 4, plan
@@ -567,14 +612,11 @@ class SimplePolicy:
             plan.update(info)
             optional_running = state == boost and boost != normal
             if optional_running:
-                lost = s.element_kw - s.peak_import_tolerance_kw
                 withdrawn = (
                     not s.boost_enabled
-                    or not snap.heater_meter_valid
+                    or not self.optional_measurement_valid(snap)
                     or measured is None
-                    or self.sustained(
-                        now, s.withdraw, lambda x: x[1] > s.peak_import_tolerance_kw or x[2] < lost
-                    )
+                    or self.importing_continuously(now)
                 )
                 if not withdrawn:
                     return boost, "weekday_solar_boost_continues", 5, plan
@@ -639,14 +681,14 @@ class SimplePolicy:
 
         plan["mode"] = OPPORTUNITY
         if state == boost and boost != baseline:
-            if not s.boost_enabled or measured is None or not snap.heater_meter_valid:
+            if not s.boost_enabled or measured is None or not self.optional_measurement_valid(snap):
                 return baseline, "solar_opportunity_ended", 5, plan
-            if self.sustained(now, s.withdraw, lambda x: x[1] > s.peak_import_tolerance_kw):
+            if self.importing_continuously(now):
                 return baseline, "solar_opportunity_import", 5, plan
             faded = self.sustained(now, s.withdraw, lambda x: x[2] < s.solar_floor_kw)
             ahead = self.surplus_profile(now, now + timedelta(hours=1), snap.forecast, None)
             returns = sum(ahead) / len(ahead) >= s.solar_floor_kw
-            if faded and not returns:
+            if faded and not returns and not snap.ct_free_solar_valid:
                 return baseline, "solar_opportunity_ended", 5, plan
             return boost, "solar_opportunity_continues", 5, plan
         end = None if peak is None else peak - s.soft_target_margin

@@ -521,13 +521,13 @@ CATALOG.update(
         "optional_solar_boost": Setting(
             "Enable optional solar boost",
             "Everyday",
-            "Optional heat requires verified raw circuit measurement and useful monetary benefit. Independent of the peak policy. 12-hour Override stays 70.",
+            "Optional heat requires a verified circuit meter or a separately commissioned CT-free grid record, and useful monetary benefit. Independent of the peak policy. 12-hour Override stays 70.",
             kind="switch",
         ),
         "peak_heating_policy": Setting(
             "Heating during peak periods",
             "Everyday",
-            "The Never option takes priority over routine solar opportunities. Solar-only requires verified raw circuit power, fresh grid and all qualifications. Explicit owner override/native protections remain independent.",
+            "The Never option takes priority over routine solar opportunities. Solar-only requires fresh verified grid measurements, qualified circuit or CT-free operation and all command safeguards. Explicit owner override/native protections remain independent.",
             kind="select",
             choices=("Never schedule heating during peak", "Verified solar-only heating"),
         ),
@@ -651,6 +651,15 @@ CATALOG["boost_min_saving_aud"] = Setting(
     "AUD",
 )
 _DUAL_PROTECTED = _DUAL_PROTECTED | {"boost_min_saving_aud"}
+CATALOG["ct_free_solar_verification"] = Setting(
+    "CT-free solar commissioning record",
+    "System",
+    "Leave blank until supervised grid-sign, continuity, command and protective OFF tests pass. "
+    "Exact grid_entity|W_or_kW|import_positive_or_export_positive|nominal_kW record. "
+    "Does not prove element operation. A mapped circuit meter must remain valid instead.",
+    kind="text",
+)
+_DUAL_PROTECTED = _DUAL_PROTECTED | {"ct_free_solar_verification"}
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety

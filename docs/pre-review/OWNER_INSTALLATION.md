@@ -1,3 +1,8 @@
+> Historical development instructions. The owner has since installed bridge
+> **1.3.17** and controller **0.14.0**. Use the
+> [current in-place upgrade guide](../completion/UPGRADE.md); do not repeat an
+> installation, change the repository identity or reset working components.
+
 # Jacob’s normal CT-free installation, then Shelly later
 
 **Future instructions only. Nothing is merged or installed.** First obtain

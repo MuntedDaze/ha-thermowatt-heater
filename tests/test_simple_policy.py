@@ -46,6 +46,7 @@ def feed(policy, start, minutes, grid_kw, element=False):
 
 def snap(now, state, reading=60.0, **kw):
     kw.setdefault("heater_meter_valid", True)  # synthetic direct-meter tank fixture
+    kw.setdefault("optional_session_active", state == STORE)  # prequalified running fixture
     return sp.Snapshot(now, state, reading, kw.pop("reading_at", now - 5 * MIN), **kw)
 
 
@@ -93,7 +94,7 @@ def test_agreed_design_values():
     assert (S.baseline_c, S.storage_c) == (45, 70)
     assert sp.PolicySettings().baseline_c == 45
     assert S.peak_lead == 2 * MIN and S.soft_target_margin == 30 * MIN
-    assert (S.qualify, S.withdraw, S.command_spacing) == (10 * MIN, 5 * MIN, 15 * MIN)
+    assert (S.qualify, S.withdraw, S.command_spacing) == (10 * MIN, 10 * MIN, 15 * MIN)
 
 
 def test_commands_are_the_three_states_only():
@@ -162,9 +163,11 @@ def test_peak_start_needs_ten_minutes_of_3_3_kw_excluding_the_element():
     assert q.decide(snap(now, OFF, reading=50)).state == OFF
 
 
-def test_peak_start_tolerates_a_short_kettle_dip():
+def test_peak_start_requalifies_after_a_short_kettle_dip():
     p = sp.SimplePolicy(S, TARIFFS)
     now = feed(p, at(MON, 9), 11, lambda i: 0.5 if i in (4, 5) else -3.6)
+    assert p.decide(snap(now, OFF, reading=50)).state == OFF
+    now = feed(p, now + MIN, 6, -3.6)
     assert p.decide(snap(now, OFF, reading=50)).state == STORE
 
 
@@ -181,35 +184,27 @@ def test_element_load_is_not_mistaken_for_lost_solar_and_small_imports_are_ignor
     assert p.decide(snap(now, STORE, reading=55)).state == STORE
 
 
-def test_sustained_import_withdraws_after_five_minutes_not_four():
+def test_sustained_import_withdraws_after_ten_minutes_not_nine():
     p = sp.SimplePolicy(S, TARIFFS)
     t0 = feed(p, at(MON, 9, 30), 10, -0.3, element=True)
-    now = feed(p, t0 + MIN, 4, 1.2, element=True)  # cloud: 1.2 kW import
+    now = feed(p, t0 + MIN, 9, 1.2, element=True)  # cloud: 1.2 kW import
     assert p.decide(snap(now, STORE)).state == STORE
     now = feed(p, now + MIN, 2, 1.2, element=True)
     d = p.decide(snap(now, STORE))
     assert (d.state, d.reason, d.command) == (OFF, "peak_solar_withdrawn", "off")
 
 
-def test_lost_solar_withdraws_even_while_the_thermostat_has_the_element_off():
-    # Tank at 70: the element is off, so there is no import to see. The surplus
-    # falls from 3.5 to 1.0 kW, which would not cover the element.
+def test_satisfied_tank_withdraws_permission_without_claiming_element_watts():
     p = sp.SimplePolicy(S, TARIFFS)
-    t0 = feed(p, at(MON, 18), 10, -3.5)
-    now = feed(p, t0 + MIN, 4, -1.0)
-    assert p.decide(snap(now, STORE, reading=70)).state == STORE
-    now = feed(p, now + MIN, 2, -1.0)
+    now = feed(p, at(MON, 18), 11, -1.0)
     d = p.decide(snap(now, STORE, reading=70))
-    assert (d.state, d.reason) == (OFF, "peak_solar_withdrawn")
-    q = sp.SimplePolicy(S, TARIFFS)
-    now = feed(q, at(MON, 18), 20, -3.0)  # 3.0 kW still covers the element
-    assert q.decide(snap(now, STORE, reading=70)).state == STORE
+    assert (d.state, d.reason) == (OFF, "peak_solar_no_useful_heat")
 
 
 def test_appliance_load_during_peak_solar_heating_withdraws():
     p = sp.SimplePolicy(S, TARIFFS)
     t0 = feed(p, at(MON, 18), 10, -0.4, element=True)
-    now = feed(p, t0 + MIN, 6, 1.6, element=True)  # oven on: 2 kW extra
+    now = feed(p, t0 + MIN, 11, 1.6, element=True)  # oven on: 2 kW extra
     assert p.decide(snap(now, STORE)).state == OFF
 
 
@@ -421,7 +416,7 @@ def test_weekend_floor_is_economic_not_a_peak_style_prohibition():
 def test_weekend_session_survives_a_cloud_and_ends_when_solar_has_gone():
     p = sp.SimplePolicy(S, TARIFFS)
     t0 = feed(p, at(SAT, 13), 10, -0.5, element=True)  # heating: available 3.5 kW
-    now = feed(p, t0 + MIN, 8, 2.7, element=True)  # cloud: available 0.3 kW for 8 min
+    now = feed(p, t0 + MIN, 11, 2.7, element=True)  # continuous import for a full ten-minute span
     sun_returns = fc(now, 4, 2.5)
     d = p.decide(snap(now, STORE, reading=55, forecast=sun_returns))
     assert (d.state, d.reason) == (BASE, "solar_opportunity_import")
@@ -492,6 +487,7 @@ def simulate(
     start, hours, reading, state, pv, forecast_pv=None, draws=None, loads=None, settings=S
 ):
     policy, tank = sp.SimplePolicy(settings, TARIFFS), Tank(reading, state, settings)
+    solar_session = False
     forecast_pv = forecast_pv or pv
     draws, loads = draws or {}, loads or {}
     seen, last_cmd, forecast, times, reasons = (reading, start), None, (), [], []
@@ -518,13 +514,21 @@ def simulate(
             )
         d = policy.decide(
             sp.Snapshot(
-                now, tank.state, seen[0], seen[1], forecast, last_cmd, heater_meter_valid=True
+                now,
+                tank.state,
+                seen[0],
+                seen[1],
+                forecast,
+                last_cmd,
+                heater_meter_valid=True,
+                optional_session_active=solar_session,
             )
         )
         log["reasons"].add(d.reason)
         if d.command:
             log["commands"].append((loc.strftime("%a %H:%M"), d.state, d.reason))
             tank.state, last_cmd = d.state, now
+            solar_session = d.plan.get("heating_role") == "optional"
             times.append(now)
             reasons.append(d.reason)
         heat_grid = min(settings.element_kw, max(0.0, grid)) if tank.element else 0.0

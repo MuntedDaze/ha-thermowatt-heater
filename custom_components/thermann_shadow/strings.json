@@ -76,7 +76,7 @@
           "normal_storage_c": "Required weekday thermostat target, for example 62°C in the owner's agreed strategy. It must be at least the baseline. This is a target, not a guarantee of hot-water quantity.",
           "solar_boost_c": "Upper target for worthwhile extra solar heating, for example 70°C. Must be at least normal storage. Equal targets avoid a separate top-up; choosing a target alone does not enable boosting.",
           "optional_solar_boost": "Allow extra storage only with commissioned hot-water circuit measurement and all economic and safety checks. Leave off if you do not want extra heat. Required storage still works without a circuit meter; the separate 12-hour Override is unchanged.",
-          "peak_heating_policy": "Never schedule heating takes priority even with high solar export. The solar-only choice requires verified circuit power and every existing safeguard. Owner overrides and native protective cycles remain possible. Cloud OFF is not proof of zero electricity use.",
+          "peak_heating_policy": "Never schedule heating takes priority even with high solar export. The solar-only choice requires a commissioned circuit meter or separately qualified CT-free grid-only operation and every command safeguard. Owner overrides and native protective cycles remain possible. Cloud OFF is not proof of zero electricity use.",
           "completion_margin_minutes": "Minutes reserved before the required finish time; 30 minutes is a useful planning starting point. Required heating may continue to the hard peak boundary. This is a planning allowance, not extra permission to heat during peak.",
           "daytime_start": "Household local time, for example 09:00. Used when the plan has no peak deadline. Must be before the ready time. Tariff peak boundaries take priority on time-of-use plans. Leave seconds at 00 if Home Assistant shows them.",
           "storage_ready_time": "Household local time, for example 16:00, when there is no peak deadline. After the window starts and before the baseline returns. A planning goal, not a temperature or hygiene guarantee. Leave seconds at 00 if Home Assistant shows them.",
@@ -95,7 +95,7 @@
       },
       "solar_meters": {
         "title": "Solar & Meters",
-        "description": "Everything here is optional for basic tariff-based heating. Without a dedicated hot-water circuit meter, normal required heating uses conservative estimates; electrical ON/OFF is unverified and optional solar-only boost is unavailable. A missing previously commissioned meter remains a fault.",
+        "description": "Everything here is optional for basic tariff-based heating. Without a dedicated hot-water circuit meter, normal required heating uses conservative estimates; electrical ON/OFF is unverified and optional solar-only boost requires its separate CT-free commissioning record. A missing previously commissioned meter remains a fault.",
         "menu_options": {
           "solar": "Solar forecasts and grid meter",
           "sources": "Solar and meter readings"
@@ -165,7 +165,7 @@
       },
       "solar": {
         "title": "Solar forecasts and grid meter",
-        "description": "Forecasts predict future solar and household demand; they do not prove spare electricity. Basic tariff control needs neither solar nor EMHASS. Verified grid export can help choose required off-peak heating without a circuit meter; optional solar-only heating still requires one. {detail}",
+        "description": "Forecasts predict future solar and household demand; they do not prove spare electricity. Basic tariff control needs neither solar nor EMHASS. Verified grid export can help choose required off-peak heating without a circuit meter; optional solar-only heating requires a separately qualified CT-free record or commissioned circuit meter. {detail}",
         "data": {
           "forecast_enabled": "Use solar and household forecasts",
           "forecast_uncertainty": "Forecast safety allowance",
@@ -176,7 +176,7 @@
           "import_positive": "Positive grid power means buying electricity"
         },
         "data_description": {
-          "forecast_enabled": "Use timestamped predictions of solar production and household demand to choose economical required heating windows. Optional: leave off without solar/EMHASS. Missing or old forecasts cause conservative nominal planning, not assumed free solar. Optional boost still requires a commissioned circuit meter.",
+          "forecast_enabled": "Use timestamped predictions of solar production and household demand to choose economical required heating windows. Optional: leave off without solar/EMHASS. Missing or old forecasts cause conservative nominal planning, not assumed free solar. Optional boost requires a commissioned circuit meter or separately qualified CT-free grid-only operation.",
           "forecast_uncertainty": "Percentage to subtract from predicted solar and add to predicted household demand. Example: 25% is stored as 0.25. Larger values are more cautious; forecasts never guarantee surplus electricity.",
           "forecast_house_margin_kw": "Additional kW reserved for competing appliances beyond the forecast. Example: 0.3 kW is 300 W. Higher values reduce assumed solar available for heating.",
           "forecast_max_age_minutes": "Minutes since the forecast was generated, not when an old forecast was republished. For 30-minute EMHASS updates use at least 35 minutes; 120 is a starting example. Old forecasts are ignored rather than treated as future solar.",
@@ -229,7 +229,7 @@
           "element_kw": "Nominal electrical kW from the appliance label, for example 3 kW. Without a circuit meter this estimates heating time only; it never proves the element is on. Changing it clears learned-planning hardware qualification.",
           "boost_useful_fraction": "Estimated percentage of extra boosted heat used before the next cheap heating opportunity. Example: 90%. Lower values make extra boosting less attractive; 0% prevents it. This assumption is not learned evidence.",
           "boost_min_saving_aud": "Australian dollars expected to be saved per boost, for example $0.10. Avoids extra commands for trivial benefit. The per-kWh margin and all measured-power guards also apply.",
-          "optional_heat_margin_aud_per_kwh": "Australian cents per kWh saved against off-peak grid heating, including lost solar export income. Example: 2 means $0.02/kWh. This does not relax circuit-measurement or grid-import checks.",
+          "optional_heat_margin_aud_per_kwh": "Australian cents per kWh saved against off-peak grid heating, including lost solar export income. Example: 2 means $0.02/kWh. This does not relax measurement-qualification or grid-import checks.",
           "pause_min_saving_aud": "Australian dollars a later window must save, for example $0.30. Heating must still fit before the planning deadline. Increasing this reduces changes for small estimated savings."
         }
       },
@@ -261,6 +261,7 @@
         "title": "Commissioning and safeguards",
         "description": "Advanced; do not tick qualifications to bypass a warning. Follow separately approved supervised commissioning. Saving this form neither authorises physical tests nor turns on automatic control. Leave command address/CT record blank if not commissioned. {detail}",
         "data": {
+          "ct_free_solar_verification": "CT-free solar commissioning record",
           "controller_command_topic": "Bridge command address (MQTT topic)",
           "controller_three_state_qualified": "Legacy OFF / 45 / 70 command tests completed",
           "controller_four_state_qualified": "OFF / 45 / 62 / 70 command tests completed",
@@ -273,6 +274,7 @@
           "controller_notify_service": "Phone notification service"
         },
         "data_description": {
+          "ct_free_solar_verification": "Leave blank during development and Shadow Mode. After supervised qualification, record grid_entity|W_or_kW|import_positive_or_export_positive|nominal_kW. It must match the current grid sensor, unit, sign and element rating, for example sensor.goodwe_inverter_meter_active_power|W|export_positive|3. This permits grid-only solar decisions, never claims measured element ON/OFF. A configured CT fault cannot fall back to this record.",
           "controller_command_topic": "Commissioning only. Copy the exact mode-command topic announced by your existing bridge. Blank prevents controller commands. Do not guess it or point at another appliance; keep automatic control off while changing it.",
           "controller_three_state_qualified": "Historical commissioning record retained for existing installations. Set only after separately approved supervised tests, including owner-change refusal. It does not replace four-state qualification or authorise heater operation.",
           "controller_four_state_qualified": "Commissioning only, default off. Set only after separately approved supervised testing of every required transition and refusal case. This record does not itself authorise automatic control or physical operation.",

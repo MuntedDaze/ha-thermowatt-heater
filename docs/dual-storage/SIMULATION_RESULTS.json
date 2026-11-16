@@ -540,7 +540,7 @@
           "reason": "weekday_solar_boost"
         },
         {
-          "at_aest": "2026-11-16T10:40:00+10:00",
+          "at_aest": "2026-11-16T10:45:00+10:00",
           "state": "normal_storage",
           "target_c": 62,
           "reason": "weekday_solar_boost_withdrawn"
@@ -552,7 +552,7 @@
           "reason": "weekday_solar_boost"
         },
         {
-          "at_aest": "2026-11-16T11:40:00+10:00",
+          "at_aest": "2026-11-16T11:45:00+10:00",
           "state": "normal_storage",
           "target_c": 62,
           "reason": "weekday_solar_boost_withdrawn"
@@ -1390,7 +1390,7 @@
           "reason": "solar_opportunity"
         },
         {
-          "at_aest": "2026-11-21T16:05:00+10:00",
+          "at_aest": "2026-11-21T16:10:00+10:00",
           "state": "baseline",
           "target_c": 45,
           "reason": "solar_opportunity_ended"

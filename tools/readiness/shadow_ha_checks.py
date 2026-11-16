@@ -1137,6 +1137,15 @@ ADDED_IN_0_9_0 = {
 # Backend-only additions on the separate smart-controller development branch.
 # Existing registry IDs must still be preserved; enumerate additions explicitly.
 ADDED_IN_SMART_DEVELOPMENT = {
+    "forecast_load_quality",
+    "morning_availability",
+    "solar_session_status",
+    "solar_cooldown_until",
+    "protective_exit_wait_seconds",
+    "protective_exit_nominal_kwh",
+    "protective_exit_nominal_cost_aud",
+    "optional_exit_request_reserve",
+    "setting_ct_free_solar_verification",
     "controller_evaluated_at",
     "parked_off_restore_since",
     "nominal_heating_minutes",

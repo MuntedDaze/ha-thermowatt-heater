@@ -1,3 +1,8 @@
+> Current owner baseline: EMHASS and GoodWe already work. Preserve their existing
+> helpers, generation timestamps and entity mappings. Controller0.15.0 adds a
+> provisional nonzero load fallback; see [current interface notes](../docs/completion/INTERFACES.md).
+> No new load-forecasting engine or duplicate optimisation automation is required.
+
 # Forecast setup
 
 Forecasts are **optional and off by default**. Without them the planner still

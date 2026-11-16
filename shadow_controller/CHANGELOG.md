@@ -1,5 +1,21 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.15.0 - existing-installation completion
+
+- Separately commissioned CT-free peak/off-peak optional solar operation using
+  genuine signed grid readings, without nominal element credit or invented CT data.
+- Shared10-minute qualification/continuous-import withdrawal and15-minute command
+  spacing/post-confirmed-withdrawal cooldown. A good import reading resets withdrawal.
+- Durable protective-OFF requirement across pending START, returning sunshine,
+  restart and failure. No concurrent command, retry, auth bypass or fault auto-clear.
+- Retires solar-session authority on owner intervention/restart; unknown pending
+  diagnostics block commands. Legacy request accounting survives counter resets.
+- Nonzero provisional household-load fallback, morning probe-risk reporting,
+  local grid-event evaluation and small additions to existing hot-water diagnostics.
+- Existing domain, config entry, storage names, entity IDs, targets, credentials,
+  bridge protocol and enable flags retained; CT-free record defaults blank.
+- Bridge 1.3.17 unchanged. In-place upgrade: docs/completion/UPGRADE.md.
+
 ## 0.14.0 — configuration usability (unmerged development)
 
 - Four topical options menus with native inline descriptions for every active
@@ -31,9 +47,9 @@
   guarded setpoints. Documents appliance/native-protection limits without a new
   temperature gate or independently established compliance claim.
 - Uses normal same-identity bridge Update after a separately approved integrated
-  main merge; unsupported Supervisor cache staging is removed. Start fixed30,
+  main merge; unsupported Supervisor cache staging is removed. Start fixed 30,
   adaptive and learning off; longer checks need independent inactivity evidence.
-- Pair with bridge1.3.17. No merge, installation or live operation performed.
+- Pair with bridge 1.3.17. No merge, installation or live operation performed.
 
 ## 0.12.0 — focused pre-review improvements (unreleased)
 
@@ -76,7 +92,7 @@
 - One tariff model supports local/fixed-standard clocks, editable weekday/weekend,
   shoulder, multi-window, midday and seasonal prices. Basic CT-free/no-solar
   tariff operation no longer requires EMHASS. All command/commissioning guards remain.
-- Whole-week actual-worker simulations compare fixed30/fixed60/shadow/adaptive;
+- Whole-week actual-worker simulations compare fixed 30/fixed60/shadow/adaptive;
   synthetic outcomes disclose missed targets, outage lockout and detection trade-offs.
 - Requires bridge 1.3.15 for adaptive scheduling. Review and separate physical
   commissioning precede operation; public distribution is deferred.

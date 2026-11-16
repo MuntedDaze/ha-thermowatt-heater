@@ -95,13 +95,13 @@ def test_measured_pv_correction_fades_and_is_bounded():
         {"forecast_enabled": True, "forecast_uncertainty": 0, "forecast_house_margin_kw": 0}
     )
     pv = series(now, value=4)
-    load = series(now, "load", 0)
+    load = series(now, "load", 0.1)
     result = forecast.build_forecast(now, now - timedelta(minutes=1), settings, pv, load, 1)
     assert result.correction == 0.25 and result.pv_error_kw == -3
     by_start = {slot.start: slot.export_kw for slot in result.slots}
-    assert by_start[now] == pytest.approx(1)
-    assert by_start[now + timedelta(hours=1.5)] == pytest.approx(4 * (1 - 0.5 * 0.75))
-    assert by_start[now + timedelta(hours=3)] == pytest.approx(4)  # faded out
+    assert by_start[now] == pytest.approx(0.9)
+    assert by_start[now + timedelta(hours=1.5)] == pytest.approx(4 * (1 - 0.5 * 0.75) - 0.1)
+    assert by_start[now + timedelta(hours=3)] == pytest.approx(3.9)  # faded out
     assert max(by_start.values()) <= 4
     # Upward correction exists but is bounded and never exceeds the AC limit.
     up = forecast.build_forecast(
@@ -117,7 +117,13 @@ def test_flat_statistics_household_baseline_and_its_freshness():
         {"forecast_enabled": True, "forecast_uncertainty": 0.25, "forecast_house_margin_kw": 0.3}
     )
     baseline = SimpleNamespace(
-        state="800", attributes={"unit_of_measurement": "W"}, last_reported=now
+        state="800",
+        attributes={
+            "unit_of_measurement": "W",
+            "age_coverage_ratio": 0.9,
+            "source_value_valid": True,
+        },
+        last_reported=now,
     )
     result = forecast.build_forecast(
         now, now - timedelta(minutes=1), settings, series(now), baseline
@@ -127,7 +133,7 @@ def test_flat_statistics_household_baseline_and_its_freshness():
     assert "household_load_is_flat_baseline_not_daily_profile" in result.warnings
     baseline.last_reported = now - timedelta(hours=3)
     stale = forecast.build_forecast(now, now - timedelta(hours=4), settings, series(now), baseline)
-    assert not stale.slots and "forecast_stale_or_pre_restart" in stale.warnings
+    assert stale.slots and stale.load_quality == "provisional_not_daily_history"
 
 
 # --- Restore, undo and truthful defaults -------------------------------------------

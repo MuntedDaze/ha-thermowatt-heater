@@ -104,7 +104,11 @@ def test_bad_forecasts_fall_back_without_blocking_temperature_plan(case):
     elif case == "no_load":
         load = None
     result = forecast.build_forecast(now, now - timedelta(minutes=1), settings, pv, load)
-    assert not result.slots and result.warnings  # the policy then sees no forecast
+    if case == "no_load":
+        assert result.slots and result.load_floor_kw == 1.0
+        assert result.load_quality == "provisional_not_daily_history"
+    else:
+        assert not result.slots and result.warnings  # no valid PV provenance
 
 
 def test_forecast_solar_watts_adapter_and_grid_load_spike():

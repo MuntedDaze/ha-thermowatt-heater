@@ -76,6 +76,7 @@ PAGES = {
         "grid_max_age_seconds",
     ),
     "commissioning": (
+        "ct_free_solar_verification",
         "controller_command_topic",
         "controller_three_state_qualified",
         "controller_four_state_qualified",
@@ -110,7 +111,7 @@ FIELDS = {
     ),
     "peak_heating_policy": (
         "Heating during peak periods",
-        "Never schedule heating takes priority even with high solar export. The solar-only choice requires verified circuit power and every existing safeguard. Owner overrides and native protective cycles remain possible. Cloud OFF is not proof of zero electricity use.",
+        "Never schedule heating takes priority even with high solar export. The solar-only choice requires a commissioned circuit meter or separately qualified CT-free grid-only operation and every command safeguard. Owner overrides and native protective cycles remain possible. Cloud OFF is not proof of zero electricity use.",
     ),
     "completion_margin_minutes": (
         "Aim to finish heating this much early",
@@ -170,7 +171,7 @@ FIELDS = {
     ),
     "forecast_enabled": (
         "Use solar and household forecasts",
-        "Use timestamped predictions of solar production and household demand to choose economical required heating windows. Optional: leave off without solar/EMHASS. Missing or old forecasts cause conservative nominal planning, not assumed free solar. Optional boost still requires a commissioned circuit meter.",
+        "Use timestamped predictions of solar production and household demand to choose economical required heating windows. Optional: leave off without solar/EMHASS. Missing or old forecasts cause conservative nominal planning, not assumed free solar. Optional boost requires a commissioned circuit meter or separately qualified CT-free grid-only operation.",
     ),
     "forecast_uncertainty": (
         "Forecast safety allowance",
@@ -214,7 +215,7 @@ FIELDS = {
     ),
     "optional_heat_margin_aud_per_kwh": (
         "Minimum saving per unit of optional heat",
-        "Australian cents per kWh saved against off-peak grid heating, including lost solar export income. Example: 2 means $0.02/kWh. This does not relax circuit-measurement or grid-import checks.",
+        "Australian cents per kWh saved against off-peak grid heating, including lost solar export income. Example: 2 means $0.02/kWh. This does not relax measurement-qualification or grid-import checks.",
     ),
     "pause_min_saving_aud": (
         "Minimum saving before waiting for a better window",
@@ -267,6 +268,10 @@ FIELDS = {
     "heater_meter_verification": (
         "Hot-water meter commissioning record",
         "Expert commissioning record: verified_entity_id|W or verified_entity_id|kW. Requires an exclusive circuit, correct signed units, reporting cadence and OFF/ON/outage tests. Leave blank for CT-free operation. A saved record is not proof the meter is currently available; remapping clears it.",
+    ),
+    "ct_free_solar_verification": (
+        "CT-free solar commissioning record",
+        "Leave blank during development and Shadow Mode. After supervised qualification, record grid_entity|W_or_kW|import_positive_or_export_positive|nominal_kW. It must match the current grid sensor, unit, sign and element rating, for example sensor.goodwe_inverter_meter_active_power|W|export_positive|3. This permits grid-only solar decisions, never claims measured element ON/OFF. A configured CT fault cannot fall back to this record.",
     ),
     "learned_planning_enabled": (
         "Use qualified heating-performance learning",

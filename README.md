@@ -2,15 +2,21 @@
 
 Use cheaper electricity for your hot water, with a dashboard that explains the
 plan. The controller prepares normal storage when it is needed and can avoid
-unnecessary extra heating. With a commissioned hot-water meter, it can also use
-worthwhile surplus solar for extra storage. Savings depend on your demand,
+unnecessary extra heating. After separate CT-free grid-only or circuit-meter commissioning, it can also
+use worthwhile surplus solar for extra storage. Savings depend on your demand,
 electricity contract and heater; they are not guaranteed.
 
-**Configuration usability candidate: controller 0.14.0, bridge unchanged at 1.3.17.**
-[Draft PR #38](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/38) improves settings screens. It is not installed
-or approved for deployment. Automatic heating, adaptive polling and learned
-planning retain all existing qualification requirements. Public distribution is
-deferred.
+**Existing owner installation:** Thermann Hot Water **1.3.17** and Thermann
+Controller **0.14.0** are already installed and being tested in Shadow Mode.
+Bridge communication, GoodWe measurements and EMHASS are working as reported by
+the owner. This checkout prepares a normal **controller 0.15.0** in-place upgrade;
+the bridge remains **1.3.17** because its code is unchanged.
+
+[Current upgrade and commissioning guide](docs/completion/UPGRADE.md) ·
+[Completion checkpoint](docs/completion/IMPLEMENTATION_PROGRESS.md) ·
+[Compatible data/control interfaces](docs/completion/INTERFACES.md).
+No development test enables owner commands, automatic control, adaptive polling
+or learned authority. Earlier draft/candidate notes are historical checkpoints.
 
 ## How the parts fit together
 
@@ -51,8 +57,8 @@ verified grid export and forecasts can help choose economical **required off-pea
 
 Without a CT, electrical ON/OFF and an exact completion clock remain unknown.
 “Continuous heating time estimate” is a conditional duration, not proof the
-element is on or a promise of ready water. Optional solar-only boost stays
-unavailable until dedicated measurement is commissioned. A failed previously
+element is on or a promise of ready water. Optional solar-only boost requires separately qualified CT-free grid-only operation
+or a commissioned dedicated meter. A failed previously
 commissioned meter raises a fault; missing readings never become measured zero.
 
 ## Heating choices you can change
@@ -111,7 +117,7 @@ freshness limit, even during a permitted quiet hold. The existing request-driven
 authentication heuristic is unchanged; no vendor session lifetime is assumed.
 
 In the synthetic week, a 60-minute quiet limit used 447 versus 713 requests CT-free,
-and 493 versus 740 with CT, preserving fixed-30 cost and target outcomes. The
+and 483 versus 732 with CT, preserving fixed-30 cost and target outcomes. The
 persistent app change was detected after 45 versus 15 minutes in that example.
 These are simulated trade-offs, not measured household savings.
 [Polling evidence and recommendations](docs/pre-review/POLLING.md).
@@ -135,11 +141,9 @@ templates; desktop/mobile appearance still needs visual review.
 
 Start with [Jacob’s complete CT-free installation guide](docs/pre-review/OWNER_INSTALLATION.md)
 for the existing Proxmox/HAOS, Thermann 315 L, GoodWe/HK1000, EMHASS and fixed-AEST
-Aurora 93 system. It covers verified backups, exact reviewed files, guarded
-normal **Update of the same stopped bridge after an approved integrated merge**, controller/dashboard installation,
-entity mapping, supervised commissioning, request measurements, later Shelly and
-recovery. The old Supervisor cache-pin method is unsupported and removed.
-Adding an unmerged branch URL is not an in-place upgrade.
+Aurora 93 system. It covers verified backups, the controller0.14.0 to0.15.0 update, preserved bridge1.3.17,
+existing mappings, supervised commissioning, request measurements and later CTs.
+No duplicate add-on, uninstall or Supervisor cache manipulation is needed.
 
 Strict peak OFF can leave the heater OFF if cloud/authentication/controller access
 fails. A distinct warning appears after permitted heat has been wanted for30
@@ -161,7 +165,7 @@ authentication locks and private backups; do not retry by restarting repeatedly.
 - [Bridge options and authentication guards](thermowatt-heater/DOCS.md)
 
 Previous tested draft PRs remain untouched, including PR #35 at 8d2b1e4.
-No merge, deployment, live authentication, heater operation, public release or
-licence selection is part of this work. This unofficial project is not affiliated
+This completion cycle includes reviewed code merge when all gates pass; deployment,
+live authentication, heater operation and automatic activation remain owner-controlled. This unofficial project is not affiliated
 with Thermann, Thermowatt, Reece or Ariston. Existing redacted security findings
 remain an owner task before any future distribution.
