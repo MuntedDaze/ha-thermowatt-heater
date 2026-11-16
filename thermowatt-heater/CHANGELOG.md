@@ -1,6 +1,13 @@
 # Changelog
 
-## [1.3.17] - Independent-audit remediation candidate (unreleased, uninstalled)
+## Controller 0.15.0 companion upgrade
+
+Bridge 1.3.17 is already installed and remains unchanged. The controller's
+completion changes and compatible in-place upgrade are documented in
+[its changelog](shadow_controller/CHANGELOG.md) and
+[the current guide](docs/completion/UPGRADE.md). No bridge version bump is needed.
+
+## [1.3.17] - Independent-audit remediation (merged; owner-installed baseline)
 
 - Refuses a command whose due token refresh fails before the heater POST, without
   creating false pending/sent state. Refresh finishes before pending persistence;
@@ -12,7 +19,7 @@
   state, independent controller evaluation timestamp and no CT-free pause based on the element's own grid draw.
 - Replaces unsupported Supervisor cache staging with merge-then-normal-update
   preparation. Existing identity, options, private state and all default-off
-  adaptive/learning gates remain. Owner45/62/70 strategy is unchanged; start fixed30.
+  adaptive/learning gates remain. Owner45/62/70 strategy is unchanged; start fixed 30.
 - Authentication lifetimes, locks, retry/backoff and command budgets are unchanged.
   No release, merge, installation, authentication or physical operation performed.
 
