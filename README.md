@@ -9,7 +9,7 @@ electricity contract and heater; they are not guaranteed.
 **Existing owner installation:** Thermann Hot Water **1.3.17** and Thermann
 Controller **0.14.0** are already installed and being tested in Shadow Mode.
 Bridge communication, GoodWe measurements and EMHASS are working as reported by
-the owner. This checkout prepares a normal **controller 0.15.0** in-place upgrade;
+the owner. This checkout prepares a normal **controller 0.15.1** in-place upgrade;
 the bridge remains **1.3.17** because its code is unchanged.
 
 [Current upgrade and commissioning guide](docs/completion/UPGRADE.md) ·
@@ -141,7 +141,7 @@ templates; desktop/mobile appearance still needs visual review.
 
 Start with [Jacob’s complete CT-free installation guide](docs/pre-review/OWNER_INSTALLATION.md)
 for the existing Proxmox/HAOS, Thermann 315 L, GoodWe/HK1000, EMHASS and fixed-AEST
-Aurora 93 system. It covers verified backups, the controller0.14.0 to0.15.0 update, preserved bridge1.3.17,
+Aurora 93 system. It covers verified backups, the controller0.14.0 to0.15.1 update, preserved bridge1.3.17,
 existing mappings, supervised commissioning, request measurements and later CTs.
 No duplicate add-on, uninstall or Supervisor cache manipulation is needed.
 

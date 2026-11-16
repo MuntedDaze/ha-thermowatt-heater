@@ -1,5 +1,14 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.15.1 - peak solar top-up from existing normal storage
+
+- A confirmed Manual62 target may now select economical Manual70 during a
+  qualified peak solar opportunity. Uses the existing optional boost test,
+  exact-prior protocol, spacing, cooldown, budget, exit-reserve and latch guards.
+- Covers CT-free and verified-CT starts through the real mocked bridge and
+  explicit refusals for insufficient surplus/value or a blocked optional command.
+- Direct in-place upgrade from the owner's0.14.0 baseline; bridge1.3.17 remains.
+
 ## 0.15.0 - existing-installation completion
 
 - Separately commissioned CT-free peak/off-peak optional solar operation using

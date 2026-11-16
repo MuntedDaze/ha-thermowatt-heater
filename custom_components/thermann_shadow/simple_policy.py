@@ -539,6 +539,13 @@ class SimplePolicy:
                     return OFF, "peak_solar_no_useful_heat", 4, plan
                 if not s.boost_enabled and state == STORAGE and normal != STORAGE:
                     return normal, "peak_normal_solar_only", 4, plan
+                if state == normal and boost != normal and s.boost_enabled:
+                    eligible, info = self._boost(
+                        snap, reading, fresh, rate, None, s.normal_c, peak=True
+                    )
+                    plan.update(info)
+                    if eligible:
+                        return boost, "peak_solar_qualified", 4, plan
                 return state, "peak_solar_continues", 4, plan
             goal = s.storage_c if s.boost_enabled else s.normal_c
             eligible, info = self._boost(

@@ -1,5 +1,11 @@
 # Changelog
 
+## Controller 0.15.1 companion patch
+
+Completes the missing guarded Manual62 to Manual70 peak-solar top-up using
+existing optional economics and command guards. Bridge runtime/version stays
+1.3.17; upgrade the installed controller0.14.0 directly to0.15.1.
+
 ## Controller 0.15.0 companion upgrade
 
 Bridge 1.3.17 is already installed and remains unchanged. The controller's

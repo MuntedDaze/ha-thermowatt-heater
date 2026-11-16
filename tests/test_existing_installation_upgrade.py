@@ -534,3 +534,86 @@ def test_importing_optional_session_does_not_carry_grid_heat_into_peak():
     p.add_meter(now, 0.5, heater_kw=3)
     d = p.decide(snap(now, STORE, optional_session_active=True))
     assert d.command == "off" and d.reason == "peak_ahead_no_qualified_solar"
+
+
+@pytest.mark.parametrize("ct", [False, True])
+def test_existing_normal_62_can_upgrade_to_economic_70_during_peak(ct):
+    now = at(MON, 18)
+    p = sp.SimplePolicy(replace(S, normal_c=62), TARIFFS)
+    sun(p, now)
+    d = p.decide(
+        snap(now, sp.NORMAL, reading=62, heater_meter_valid=ct, ct_free_solar_valid=not ct)
+    )
+    assert (d.state, d.reason, d.command) == (STORE, "peak_solar_qualified", "Manual:70")
+    assert d.plan["boost_expected_saving_aud"] >= p.s.boost_min_saving
+    assert ctl.payload_for(d.state, sp.NORMAL) == "Manual:70@62"
+
+
+@pytest.mark.parametrize("block", ["disabled", "budget", "cooldown", "unresolved_exit"])
+def test_peak_normal_upgrade_keeps_all_optional_gates(block):
+    now = at(MON, 18)
+    p = sp.SimplePolicy(replace(S, normal_c=62, boost_enabled=block != "disabled"), TARIFFS)
+    sun(p, now)
+    d = p.decide(
+        snap(
+            now,
+            sp.NORMAL,
+            reading=62,
+            optional_allowed=block != "budget",
+            optional_cooldown_until=now + MIN if block == "cooldown" else None,
+            protective_exit_pending=block == "unresolved_exit",
+        )
+    )
+    assert d.state == sp.NORMAL and d.command is None
+
+
+@pytest.mark.parametrize("ct", [False, True])
+def test_real_bridge_upgrades_existing_62_to_70_with_peak_surplus(tmp_path, monkeypatch, ct):
+    rig = Rig(
+        tmp_path,
+        monkeypatch,
+        hobart(MON, 8, 50),
+        reading=62,
+        mode="Manual",
+        setpoint=62,
+        pv=lambda loc: 4.5,
+    )
+    if not ct:
+        ct_free(rig)
+    else:
+        rig.entry.options["normal_storage_c"] = "62"
+        rig.runtime.apply_options(rig.entry.options, rig.sources)
+        rig.executor.configure(rig.entry.options)
+    rig.enable()
+    rig.run(hobart(MON, 9, 10))
+    assert rig.commands() == ["Manual:70@62"]
+    assert len(rig.posts) == 1 and rig.posts[0][2] == {"T_SetPoint": 70}
+    assert rig.executor.controller.solar_session_active is True
+
+
+@pytest.mark.parametrize("block", ["surplus", "value"])
+def test_peak_normal_upgrade_requires_real_surplus_and_extra_heat_value(block):
+    now = at(MON, 18)
+    p = sp.SimplePolicy(
+        replace(S, normal_c=62, boost_min_saving=2 if block == "value" else 0.1), TARIFFS
+    )
+    for minute in range(11):
+        p.add_meter(now - (10 - minute) * MIN, -3.2 if block == "surplus" else -4)
+    d = p.decide(snap(now, sp.NORMAL, reading=62))
+    assert d.command != "Manual:70"
+
+
+@pytest.mark.parametrize("block", ["reserve", "spacing"])
+def test_peak_normal_upgrade_passes_optional_arbiter_backstops(block):
+    now = at(MON, 18)
+    controller = controller_ready(now, "Manual", 62)
+    obs = observation(now, "Manual", 62)
+    obs.bridge_transitions.append("Manual:70@62")
+    if block == "spacing":
+        controller.commands.append((now - MIN).isoformat())
+    cfg = config(four_state_qualified=True, max_requests_per_day=15 if block == "reserve" else 220)
+    effects = controller.step(obs, ctl.Want(STORE, "peak_solar_qualified"), cfg)
+    assert not published(effects)
+    assert (
+        "optional_exit_request_reserve" if block == "reserve" else "command_spacing"
+    ) in controller.gate_failures
