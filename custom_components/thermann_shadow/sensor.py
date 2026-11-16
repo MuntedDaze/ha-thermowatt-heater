@@ -11,7 +11,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from .naming import RETIRED_SENSORS as RETIRED  # noqa: F401 (re-exported)
 from .naming import device_info_fields, entity_id
 from .config import DOMAIN
-from .presentation import HELP, Heartbeat
+from .presentation import HELP, STATE_LABELS, Heartbeat
 
 SENSORS = {
     "plan_summary": ("Current heating plan", None),
@@ -161,6 +161,9 @@ class ShadowSensor(SensorEntity):
         self.entity_id = entity_id("sensor", name)
         self._attr_native_unit_of_measurement = unit
         self._attr_device_info = DeviceInfo(**device_info_fields(DOMAIN, entry.entry_id))
+        if key in STATE_LABELS:
+            self._attr_device_class = SensorDeviceClass.ENUM
+            self._attr_options = list(STATE_LABELS[key])
         if key in TIMESTAMPS:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
         if key in {"cloud_poll_interval", "adaptive_poll_interval"}:

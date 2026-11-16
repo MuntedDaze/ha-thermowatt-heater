@@ -9,6 +9,24 @@ permissions:
   contents: read
 
 jobs:
+  owner-source-bundle:
+    name: Exact-commit owner source bundle
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install PyYAML==6.0.3
+      - name: Build and hash source only (no installation or private data)
+        run: |
+          python tools/build_owner_bundle.py --commit "$GITHUB_SHA" --out "owner-artifacts/thermowatt-$GITHUB_SHA.zip"
+          cd owner-artifacts
+          sha256sum *.zip > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thermowatt-owner-source-${{ github.sha }}
+          path: owner-artifacts/
   image-and-smoke:
     name: Native image and smoke (${{ matrix.arch }})
     strategy:

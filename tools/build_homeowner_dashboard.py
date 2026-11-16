@@ -75,8 +75,8 @@ def build():
                         sensor("Thermann target", "Reported thermostat target"),
                         sensor("Bottom temperature", "Latest bottom temperature"),
                         sensor("Status age", "Minutes since cloud observation"),
-                        sensor("Heater element state", "Estimated activity — not CT verification"),
-                        sensor("Circuit measurement mode", "Dedicated circuit measurement"),
+                        sensor("Heater element state", "Heating estimate"),
+                        sensor("Circuit measurement mode", "Circuit meter"),
                     ],
                 ),
                 rows(
@@ -84,7 +84,7 @@ def build():
                     [
                         sensor("Current tariff", "Electricity period"),
                         sensor("Next tariff change", "Next price boundary"),
-                        sensor("Next intended action", "Requested mode — not yet confirmation"),
+                        sensor("Next intended action", "Requested mode"),
                         sensor("Next heating start", "Planned start"),
                         sensor("Solar boost status", "Optional solar heating"),
                         sensor("Cloud health", "Cloud connection"),
@@ -243,6 +243,11 @@ def build():
     views[-1]["cards"][-2]["entities"][-1]["entity"] = naming.entity_id(
         "sensor", "Controller telemetry"
     )
+    # Supported sections layout bounds desktop columns; HA stacks sections on a phone.
+    for view in views:
+        view["type"] = "sections"
+        view["max_columns"] = 2
+        view["sections"] = [{"type": "grid", "cards": [card]} for card in view.pop("cards")]
     return {"title": "Thermowatt", "views": views}
 
 

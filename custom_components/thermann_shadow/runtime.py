@@ -416,7 +416,12 @@ class ShadowRuntime:
             )
         )
         if self.owner_event_store:
-            self.owner_event_store.async_delay_save(lambda: {"events": list(self.owner_events)}, 30)
+            try:
+                self.owner_event_store.async_delay_save(
+                    lambda: {"events": list(self.owner_events)}, 30
+                )
+            except Exception:  # noqa: BLE001 - diagnostic logging cannot block supervision
+                LOG.warning("Owner diagnostic history could not be scheduled for saving.")
         self.telemetry = {
             "schema_version": 2,
             "at": now.isoformat(),

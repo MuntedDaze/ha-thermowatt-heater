@@ -396,7 +396,7 @@ CATALOG = {
     "controller_max_commands_per_day": Setting(
         "Maximum commands per day",
         "System",
-        "Rolling 24 h limit for OPTIONAL solar starts (a peak-solar start, a weekend solar start): none is sent once this many commands have gone out. Essential commands (the weekday 70 °C heat, Manual 45 °C, the 12hr Override) may go 6 beyond it, so optional solar activity can never block them; that higher cap still stops a fault that loops. A switch to OFF is never held back. A typical weekday needs 4 commands in all.",
+        "Rolling 24 h limit for OPTIONAL solar starts: none is sent once this many commands have gone out. Essential commands (normal storage, baseline maintenance and the 12hr Override 62°C) may go 6 beyond it, so optional solar activity cannot consume their reserved capacity; that higher cap still stops a fault that loops. A switch to OFF is never held back. A typical weekday needs about 4 commands.",
         4,
         10,
     ),
@@ -521,7 +521,7 @@ CATALOG.update(
         "optional_solar_boost": Setting(
             "Enable optional solar boost",
             "Everyday",
-            "Optional heat requires a verified circuit meter or a separately commissioned CT-free grid record, and useful monetary benefit. Independent of the peak policy. 12-hour Override stays 70.",
+            "Optional heat requires a verified circuit meter or a separately commissioned CT-free grid record, and useful monetary benefit. Independent of the peak policy. The separate 12hr Override requests 62°C.",
             kind="switch",
         ),
         "peak_heating_policy": Setting(

@@ -1,4 +1,4 @@
-"""Read-only morning availability evidence; never changes the agreed thermostat target."""
+"""Fresh pre-peak warnings; legacy morning helper retained for historical replays."""
 
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -41,6 +41,7 @@ def pre_peak_availability(
 
 
 def morning_availability(now, reading, observed_at, time_zone, max_age_minutes=45):
+    """Retired diagnostic helper; production uses pre_peak_availability only."""
     local = now.astimezone(ZoneInfo(time_zone))
     preferred = datetime.combine(local.date(), time(6), ZoneInfo(time_zone))
     hard = datetime.combine(local.date(), time(7), ZoneInfo(time_zone))

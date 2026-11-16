@@ -946,7 +946,7 @@ async def _upgrade_from_0_6(folder, version):
         assert "Unofficial" in device.manufacturer, device.manufacturer
         if version == "0.7.0":
             override = hass.states.get("button.thermann_shadow_start_guest_mode_12_h")
-            assert override.attributes["friendly_name"] == "Thermann Controller Start 12hr Override"
+            assert override.attributes["friendly_name"] == "Thermann Controller 12hr Override 62°C"
             ends = hass.states.get("sensor.thermann_shadow_guest_mode_ends")
             assert ends.attributes["friendly_name"] == "Thermann Controller 12hr Override ends"
         after = {

@@ -1,5 +1,17 @@
 # Thermann hot water for Home Assistant
 
+**Next development candidate: controller0.16.0 / bridge1.4.0.**
+[Draft PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42) contains
+the new62°C override, solar-led weekend comfort, explicit Smart polling,
+practical experimental CT-free setup and focused homeowner interface.
+Use the reviewed commit and final successful checks, not a version string alone.
+
+[Owner handbook](docs/next-major/OWNER_HANDBOOK.md) ·
+[Existing-system upgrade](docs/next-major/OWNER_UPGRADE.md) ·
+[Every setting](docs/next-major/SETTINGS.md) ·
+[Dashboard and diagnostic report](docs/next-major/INTERFACE.md) ·
+[Engineering evidence](docs/next-major/EVIDENCE.md).
+
 Use cheaper electricity for your hot water, with a dashboard that explains the
 plan. The controller prepares normal storage when it is needed and can avoid
 unnecessary extra heating. After separate CT-free grid-only or circuit-meter commissioning, it can also
@@ -25,7 +37,7 @@ or learned authority. Earlier draft/candidate notes are historical checkpoints.
 | Home Assistant | The home computer that brings readings, preferences and the dashboard together |
 | Thermann cloud bridge | One add-on that reads the Thermann service and sends only guarded, enabled commands; it tracks requests and confirms results |
 | Intelligent controller | Chooses when normal hot-water storage is needed and compares permitted heating opportunities using prices, forecasts and local measurements |
-| Dashboard | Seven read-only pages showing the heater, its plan, energy/cost estimates, learning, cloud requests and problems |
+| Dashboards | Five focused Thermowatt pages with existing guarded controls, plus the independent seven-view whole-home energy dashboard |
 
 The native heater thermostat and protection remain in charge of the element.
 An app change pauses automation when observed. Commands need a fresh matching
@@ -91,7 +103,12 @@ Fresh setup initially selects 62°C baseline/normal pending compliance checks.
 manufacturer’s instructions and applicable storage hygiene/plumbing requirements.
 The selectors are limited to supported 45/62/70 roles; arbitrary temperatures
 cannot be sent. A setpoint does not prove the whole tank reached it or guarantee
-shower volume. The separate 12-hour Override is a real 70°C request and may heat at peak.
+shower volume. The separate **12hr Override 62°C** is a real 62°C request and may heat at peak.
+
+Weekend daytime PV can open normal62 comfort storage with deliberate off-peak
+grid assistance. This day latch avoids toggling with every cloud; sunset/end
+settings return to baseline. Optional70 still needs stronger actual surplus
+and economic checks. [How weekends and CT-free solar work](docs/next-major/OWNER_HANDBOOK.md#solar-and-weekends).
 
 Flat-rate, time-of-use, shoulder, multiple daily/weekend, midday-discount and
 month-based seasonal windows use one tariff model. Enter **retail contract**
@@ -109,18 +126,15 @@ planning returns to half-hour observations; lease loss uses the original fixed
 fallback. It does not lengthen the bridge’s 60-second command-prior rule or skip
 confirmation.
 
-A separate default-off permission allows longer quiet checks. You choose a
-healthy-cloud owner-change check bound of 30–90 minutes. Longer intervals save
-requests but delay detecting app changes; brief changes can be missed. Outages
-can delay detection further. Temperatures still expire after their normal
-freshness limit, even during a permitted quiet hold. The existing request-driven
-authentication heuristic is unchanged; no vendor session lifetime is assumed.
-
-In the synthetic week, a 60-minute quiet limit used 447 versus 713 requests CT-free,
-and 483 versus 732 with CT, preserving fixed-30 cost and target outcomes. The
-persistent app change was detected after 45 versus 15 minutes in that example.
-These are simulated trade-offs, not measured household savings.
-[Polling evidence and recommendations](docs/pre-review/POLLING.md).
+New explicit choices are **Smart — Recommended**, **Fixed30 — Compatibility**
+and **Experimental minimum requests**. Existing installations retain earlier
+choices until deliberately changed in both the App and controller. Healthy quiet
+Smart nights may wait up to8 hours; Minimum up to12. Longer intervals delay
+detecting app changes, and brief changes can be missed. Outages delay detection
+further. Temperature still expires normally; a long quiet hold does not make it
+fresh. Smart ordinary status reads reuse sessions with the existing bounded401
+refresh/retry; command authentication preparation and confirmation remain guarded.
+No vendor token lifetime is assumed. [Actual-worker comparisons and their limits](docs/next-major/EVIDENCE.md).
 
 ## What it learns and what you see
 
@@ -131,18 +145,22 @@ sufficient clean sessions, held-out accuracy, hardware qualification and explici
 enablement all pass. Nominal planning remains the fallback. One bottom probe
 cannot reliably identify whole-tank heat, water use or every extra boost’s value.
 
-The seven dashboard views are Overview, Hot water, Costs, Appliances, History,
-Energy and Health. They show requested versus reported temperatures, plans,
-measurement availability, conditional estimates, actual/shadow polls, request
-budgets and faults. The dashboard never controls the heater. CI checks HA schemas, entities and
-templates; desktop/mobile appearance still needs visual review.
+The existing seven whole-home views remain independent. The new Thermowatt
+dashboard has Home, Controls, Heating preferences, Electricity and optimisation,
+and Advanced and diagnostics. It separates reported and requested states,
+measurement availability, estimates and faults. Native Configure forms provide
+inline help and a **Copy diagnostic report** view: select all and copy once.
+Standard authenticated JSON diagnostics are also available. Real HA desktop/mobile
+frontend checks and screenshots supplement Python/YAML tests.
+[Install the focused dashboard and copy a report](docs/next-major/INTERFACE.md).
 
 ## Install, stop or get help
 
-Start with [Jacob’s complete CT-free installation guide](docs/pre-review/OWNER_INSTALLATION.md)
+Start with [Jacob’s complete existing-system upgrade guide](docs/next-major/OWNER_UPGRADE.md)
 for the existing Proxmox/HAOS, Thermann 315 L, GoodWe/HK1000, EMHASS and fixed-AEST
-Aurora 93 system. It covers verified backups, the controller0.14.0 to0.15.1 update, preserved bridge1.3.17,
-existing mappings, supervised commissioning, request measurements and later CTs.
+Aurora93 system. It covers backups, controller0.15.1→0.16.0 and the existing
+bridge1.3.17→1.4.0 in-place update, preserved credentials/guards/mappings,
+owner-approved trials, request measurements and adding a CT later.
 No duplicate add-on, uninstall or Supervisor cache manipulation is needed.
 
 Strict peak OFF can leave the heater OFF if cloud/authentication/controller access
@@ -150,8 +168,8 @@ fails. A distinct warning appears after permitted heat has been wanted for30
 minutes without restoration. It cannot restore heat without a working path.
 A tested phone notification and manual recovery plan are commissioning items.
 [Fault recovery and inactivity qualification](docs/audit-remediation/OPERATIONS.md).
-Longer adaptive polling requires seven-day read-only inactivity evidence at each
-chosen60/90-minute interval; simulations do not qualify vendor sessions.
+New experimental choices explain their limits rather than pretending synthetic
+tests qualify physical hardware or establish a vendor session lifetime.
 
 Turning **Automatic heater control** off sends no OFF command: the appliance’s
 current setting can remain active. Use approved manual operation during recovery.
@@ -159,7 +177,7 @@ Unconfirmed OFF is an unverified lockout, not a claim of zero consumption. Prese
 authentication locks and private backups; do not retry by restarting repeatedly.
 
 - [Audit remediation/review handoff](docs/audit-remediation/HANDOFF.md)
-- [Development checkpoint](docs/audit-remediation/PROGRESS.md)
+- [Current development checkpoint](docs/next-major/PROGRESS.md)
 - [Dashboard mapping and saved-statistics reports](energy_monitoring/README.md)
 - [Learning gates and limitations](docs/final-integration/LEARNING.md)
 - [Bridge options and authentication guards](thermowatt-heater/DOCS.md)

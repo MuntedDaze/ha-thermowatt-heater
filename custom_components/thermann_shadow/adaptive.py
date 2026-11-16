@@ -114,7 +114,8 @@ def smart_plan(
         return None
     owner = maximum if overnight else (10800 if mode == "minimum" else 5400)
     quiet = stable_state in {"baseline", "off"}
-    delay = owner if quiet else 1800
+    next_slot = (math.floor(status_at.timestamp() / 1800) + 1) * 1800
+    delay = owner if quiet else min(1800, max(900, next_slot - status_at.timestamp()))
     reason = "stable_" + stable_state if quiet else "required_temperature"
     if mode == "fixed_30":
         owner, delay, reason = 1800, 1800, "fixed_30"

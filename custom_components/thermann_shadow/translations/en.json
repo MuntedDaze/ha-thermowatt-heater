@@ -502,5 +502,86 @@
         "save": "Save and use this custom schedule"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "circuit_measurement_mode": {
+        "state": {
+          "ct_free": "No circuit meter",
+          "measured": "Circuit meter available",
+          "meter_fault": "Circuit meter unavailable"
+        }
+      },
+      "current_tariff": {
+        "state": {
+          "peak": "Peak",
+          "off_peak": "Off-peak",
+          "shoulder": "Shoulder"
+        }
+      },
+      "next_tariff_kind": {
+        "state": {
+          "peak": "Peak",
+          "off_peak": "Off-peak",
+          "shoulder": "Shoulder"
+        }
+      },
+      "heater_element_state": {
+        "state": {
+          "on": "Likely heating",
+          "off": "Likely idle",
+          "unknown": "Unverified"
+        }
+      },
+      "heater_meter_state": {
+        "state": {
+          "on": "Measured heating",
+          "off": "Measured idle",
+          "unknown": "Unverified"
+        }
+      },
+      "solar_session_status": {
+        "state": {
+          "WAITING": "Waiting",
+          "ACTIVE": "Active",
+          "STOPPING": "OFF unconfirmed",
+          "COOLDOWN": "Waiting to restart"
+        }
+      },
+      "boost_eligibility": {
+        "state": {
+          "eligible": "Available",
+          "unavailable": "Not available"
+        }
+      },
+      "morning_availability": {
+        "state": {
+          "not_due": "No check due",
+          "unverified": "Reading unavailable",
+          "low": "Bottom temperature low",
+          "latest_probe_above_warning": "Latest probe above warning level"
+        }
+      },
+      "cloud_health": {
+        "state": {
+          "ok": "Connected",
+          "disabled": "Cloud access disabled",
+          "auth_locked": "Authentication locked",
+          "quota_limited": "Request limit reached",
+          "backoff": "Waiting after a failure",
+          "unavailable": "Connection unavailable",
+          "unrecognised": "Waiting for bridge status"
+        }
+      },
+      "next_action": {
+        "state": {
+          "off": "OFF",
+          "baseline": "Baseline temperature",
+          "normal_storage": "Normal storage",
+          "storage": "Solar storage",
+          "hold": "Wait / keep owner control"
+        }
+      }
+    }
   }
 }

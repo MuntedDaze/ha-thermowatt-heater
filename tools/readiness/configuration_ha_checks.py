@@ -238,6 +238,16 @@ async def check_configuration(hass, entry):
     }
     flow = await submit(flow, data)
     assert flow["errors"]["base"] == "experimental_ack_required", flow
+    flow = await submit(
+        flow,
+        {
+            **data,
+            "direction": "import_positive",
+            "confirm_direction": True,
+            "accept_experimental": True,
+        },
+    )
+    assert flow["errors"]["base"] == "meter_not_ready", flow
     result = await submit(flow, {**data, "confirm_direction": True, "accept_experimental": True})
     assert result["type"] == "create_entry", result
     assert entry.options["ct_free_solar_verification"] == sources["grid"] + "|W|export_positive|3"

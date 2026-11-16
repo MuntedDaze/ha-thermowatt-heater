@@ -2,6 +2,51 @@
 
 from datetime import timedelta
 
+STATE_LABELS = {
+    "circuit_measurement_mode": {
+        "ct_free": "No circuit meter",
+        "measured": "Circuit meter available",
+        "meter_fault": "Circuit meter unavailable",
+    },
+    "current_tariff": {"peak": "Peak", "off_peak": "Off-peak", "shoulder": "Shoulder"},
+    "next_tariff_kind": {"peak": "Peak", "off_peak": "Off-peak", "shoulder": "Shoulder"},
+    "heater_element_state": {"on": "Likely heating", "off": "Likely idle", "unknown": "Unverified"},
+    "heater_meter_state": {
+        "on": "Measured heating",
+        "off": "Measured idle",
+        "unknown": "Unverified",
+    },
+    "solar_session_status": {
+        "WAITING": "Waiting",
+        "ACTIVE": "Active",
+        "STOPPING": "OFF unconfirmed",
+        "COOLDOWN": "Waiting to restart",
+    },
+    "boost_eligibility": {"eligible": "Available", "unavailable": "Not available"},
+    "morning_availability": {
+        "not_due": "No check due",
+        "unverified": "Reading unavailable",
+        "low": "Bottom temperature low",
+        "latest_probe_above_warning": "Latest probe above warning level",
+    },
+    "cloud_health": {
+        "ok": "Connected",
+        "disabled": "Cloud access disabled",
+        "auth_locked": "Authentication locked",
+        "quota_limited": "Request limit reached",
+        "backoff": "Waiting after a failure",
+        "unavailable": "Connection unavailable",
+        "unrecognised": "Waiting for bridge status",
+    },
+    "next_action": {
+        "off": "OFF",
+        "baseline": "Baseline temperature",
+        "normal_storage": "Normal storage",
+        "storage": "Solar storage",
+        "hold": "Wait / keep owner control",
+    },
+}
+
 
 HELP = {
     "temperature": (

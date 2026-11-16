@@ -76,3 +76,16 @@ def test_nonfinite_or_secret_measurements_and_invalid_timestamps_are_omitted():
     assert report.numeric("-2300") == -2300
     assert report.stamp("2026-11-17T12:00:00") is None
     assert report.stamp("PRIVATE") is None
+
+
+def test_diagnostic_save_failure_cannot_interrupt_controller_supervision(tmp_path, monkeypatch):
+    class BrokenStore:
+        def async_delay_save(self, *args):
+            raise OSError("synthetic diagnostic failure")
+
+    rig = Rig(tmp_path, monkeypatch, hobart(MON, 2), mode="Manual", setpoint=45)
+    rig.enable()
+    rig.runtime.owner_event_store = BrokenStore()
+    rig.run(hobart(MON, 2, 5))
+    assert rig.executor.last_evaluated_at == rig.now()
+    assert not rig.posts

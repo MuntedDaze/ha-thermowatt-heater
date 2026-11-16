@@ -91,7 +91,9 @@ def results(seasons=None):
         ("winter", (2026, 7, 13), 10, False),
         ("dst_and_failures", (2026, 9, 28), 12, True),
     ]
-    for name, date, daylight, failures in seasons:
+    for item in seasons:
+        name, date, daylight, failures = item[:4]
+        ttl = item[4] if len(item) > 4 else 24
         start = datetime(*date, tzinfo=base.m.STANDARD)
         with base.pytest.MonkeyPatch.context() as patch:
             patch.setattr(
@@ -102,13 +104,14 @@ def results(seasons=None):
             )
             patch.setattr(SmartWeek, "daylight", daylight)
             patch.setattr(SmartWeek, "failure_week", failures)
+            patch.setattr(SmartWeek, "session_hours", ttl)
             report = base.results(
                 [(s, s, False, 60) for s in ("fixed_30", "fixed_60", "smart", "minimum")],
                 week_class=SmartWeek,
             )
             report["season"] = name
             report["assumptions"]["cloud"] = (
-                "Actual worker HTTP categories; legacy fixed modes use20-minute proactive heuristic. Smart ordinary GET reuses the session with bounded401 refresh/retry; command checks/POST/confirmation retain proactive preparation. Synthetic session24h, not vendor evidence."
+                f"Actual worker HTTP categories; legacy fixed modes use20-minute proactive heuristic. Smart ordinary GET reuses the session with bounded401 refresh/retry; command checks/POST/confirmation retain proactive preparation. Synthetic session{ttl}h, not vendor evidence."
             )
             report["assumptions"]["polling"] = (
                 "Smart8h quiet night/90min day; Minimum12h/180min; useful pre-boundary observations; original30min lease-loss fallback. Temperature never promoted to fresh."

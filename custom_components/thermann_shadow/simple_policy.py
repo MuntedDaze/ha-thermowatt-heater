@@ -10,7 +10,7 @@ peak heating is parked unless the user selects verified solar-only operation.
 The single weekday planner meets the normal target before peak; a shared solar
 qualification may select optional storage directly or as a later top-up when
 useful heat exceeds its opportunity cost, standby allowance and switching margin.
-Weekends retain baseline without mandatory normal storage. Small forecast
+Weekends retain baseline until measured PV opens latched comfort storage. Small forecast
 changes do not toggle an already qualified boost; measured loss/import withdraws
 it. All sends still pass the separate executor and bridge guards.
 

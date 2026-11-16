@@ -59,9 +59,26 @@ Progress (implementation incomplete):
 -218 targeted new/legacy policy, controller, CT-free and adaptive tests pass.
   Ruff and bridge strict type check pass. New tests cover core timings and auth.
 - Candidate versions: controller0.16.0 / bridge1.4.0. No artifact/release yet.
-- Still required: diagnostics/report view/download, homeowner dashboard and
-  sensor presentation/Recorder-noise work, complete actual-HA/browser/regression
-  updates, scenario replays/category metrics, documentation, artifacts and review.
+- Implemented native copyable report/JSON download, allowlisted bounded event
+  history, focused five-view dashboard, friendly sensor names and enum translations.
+  Heartbeat publishes genuine completed timestamps at15min/semantic changes;
+  exact internal evaluation remains unchanged. Diagnostic save failure is isolated.
+- Initial actual HA2026.10.4/2026.11.1 desktop/mobile frontend passed at2fa7495.
+  Screenshots were inspected; corrected a phone truncation and raw-state labels
+  using native sections/enum translations. Final frontend rerun remains required.
+- Owner handbook, full generated setting index, existing-system upgrade/rollback,
+  local telemetry feasibility/unsent enquiry and actual-worker seasonal/short-TTL
+  evidence are implemented. New exact-commit CI source artifact includes hashes.
+- Last full regression:1590 passed/one artifact-fixture failure; that fixture and
+  current guide/dashboard packaging requirements are corrected and targeted tests
+  pass. Full final suite and newly added seasonal reproduction still required.
+- Current request evidence: Smart≈234 vs717 CT-free summer,284 vs743 CT winter.
+  CT-free target outcomes match fixed30; real-model CT cost differences up to
+  about$0.13/week are visible. Missed heavy-draw/outage targets are not concealed.
+  Synthetic20min sessions reduce savings; no vendor TTL claimed.
+- Implementation is ready for the authorised independent read-only review once
+  the current review checkpoint is committed. Remaining: resolve review/CI findings,
+  final-head full checks/screenshots, verified exact-commit artifacts/handoff.
 - Owner explicitly authorised a separate READ-ONLY final reviewer after the
   implementation is complete. Claude Fable5.2 is unavailable; use GPT-6 Astra
   at High effort (model override authorised by owner) with full master request,

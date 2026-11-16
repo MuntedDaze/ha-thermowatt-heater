@@ -127,3 +127,19 @@ Logs never contain credentials, tokens or response bodies.
 - **Roll back an update:** restore the partial backup of this add-on taken before updating. That is the only way back to an older version.
 
 Older detailed notes (per-version upgrade guides, diagnostic reviews, deployment evidence) are in [docs/history](https://github.com/MuntedDaze/ha-thermowatt-heater/tree/main/docs/history).
+# New explicit polling choices (bridge1.4)
+
+The new `polling_mode` defaults to `existing`, preserving earlier options,
+credentials, guard/generation, quotas and command journal. `smart` and `minimum`
+accept bounded v3 plans through the same scheduler with the unchanged180-second
+lease and30-minute crash fallback. Select the matching controller mode explicitly.
+Quiet healthy owner-change detection may take8h/12h; outages can take longer.
+`fixed_30` uses the familiar30-minute background schedule. Legacy numeric options
+and qualification flags remain stored; choosing a new mode does not rewrite them.
+
+Smart ordinary GETs reuse the session with the existing bounded401 refresh/retry.
+Discovery, command preparation/POST and confirmation retain proactive authentication
+guards. No vendor TTL is asserted, uncertain POSTs are not retried and authentication
+locks require deliberate operator recovery. [Evidence](../docs/next-major/EVIDENCE.md)
+and [in-place owner upgrade](../docs/next-major/OWNER_UPGRADE.md).
+

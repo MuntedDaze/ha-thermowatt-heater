@@ -82,7 +82,7 @@ BRIDGE_IN_PROGRESS_RESULTS = {
 # 0.9.1 (audit C1). OPTIONAL commands start heating that is not needed for hot
 # water: a peak-solar start and a weekend/night solar start. They stop at the
 # configured daily limit. Every other non-OFF command is ESSENTIAL (the weekday
-# 70 °C heat, the Manual 45 °C baseline, the 12hr Override): optional activity
+# normal storage heat, the baseline, the 12hr Override62): optional activity
 # can never use up its budget. Essential commands have their own higher cap, so
 # a fault that loops is still stopped. OFF is never held back.
 OPTIONAL_REASONS = frozenset(

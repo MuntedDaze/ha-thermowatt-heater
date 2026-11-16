@@ -34,6 +34,10 @@ WHY = {
 # Internal codes only. No arbitrary HA/vendor state strings enter exported text.
 CODES = frozenset(
     {
+        "normal_storage",
+        "Schedule",
+        "Eco",
+        "Holiday",
         "off",
         "baseline_45",
         "normal_62",
@@ -57,6 +61,7 @@ CODES = frozenset(
         "backoff",
         "authorized",
         "locked",
+        "blocked",
         "ready",
         "existing",
         "smart",
@@ -238,6 +243,9 @@ def build(runtime, now, ha_version="unknown"):
             "target_c": numeric(obs.target_c) if obs else None,
             "last_bottom_c": numeric(obs.temperature_c) if obs else None,
             "observed_at": stamp(obs.poll_at) if obs else None,
+            "age_minutes": (now - obs.poll_at).total_seconds() / 60
+            if obs and obs.poll_at
+            else None,
             "physical_element": code(values.get("heater_meter_state")),
             "measurement_mode": code(values.get("circuit_measurement_mode")),
             "note": "Cloud mode/target and the bottom probe do not prove element ON/OFF, whole-tank temperature or water hygiene.",
@@ -247,14 +255,17 @@ def build(runtime, now, ha_version="unknown"):
             "state": code(ctl.state),
             "reason": code(decision.reason) if decision else "unreported",
             "explanation": WHY.get(
-                decision.reason, "See the current heating plan and safeguards below."
+                decision.reason, code(decision.reason).replace("_", " ").capitalize() + "."
             )
             if decision
             else "Waiting for an observation.",
             "fault": code(ctl.fault or "none"),
+            "alerts": [code(v) for v in ctl.active_alerts],
+            "gates": [code(v) for v in ctl.gate_failures],
             "override_until": stamp(ctl.guest_until),
             "override_target_c": numeric(ctl.guest_target_c),
             "last_evaluated_at": stamp(executor.last_evaluated_at),
+            "ct_free_permission_configured": bool(opts.get("ct_free_solar_verification")),
         },
         "plan": {
             **{
@@ -322,6 +333,12 @@ def build(runtime, now, ha_version="unknown"):
             "authentication": code(obs.auth_mode) if obs else "unreported",
             "last_status_success": stamp(obs.poll_at) if obs else None,
             "requests_24h": numeric(summary.get("requests_last_24h")),
+            "requests_since_start": numeric(attrs.get("request_attempts")),
+            "remaining_request_budget": max(
+                0, executor.cfg.max_requests_per_day - summary["requests_last_24h"]
+            )
+            if summary.get("requests_last_24h") is not None
+            else None,
             "operations": {
                 k: numeric(counts.get(k))
                 for k in (
