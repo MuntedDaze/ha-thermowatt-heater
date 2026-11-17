@@ -363,7 +363,7 @@ class Executor:
             and self.policy.surplus_qualified(obs.now)
         ):
             return None
-        if decision.reason == "baseline":
+        if decision.reason in {"baseline", "weekend_day_ended"}:
             # A reported cold baseline is a useful progress observation, even
             # though CT-free operation cannot prove the element energised.
             if (
@@ -383,6 +383,14 @@ class Executor:
 
     def _quiet_deadline(self, obs, schedule):
         """Only suppress a passive-age alert; never grants command/temperature authority."""
+        health = self.runtime._reading("cloud_health")
+        if (
+            not health
+            or health.restored
+            or not self.runtime.boot <= health.observed_at <= obs.now
+            or obs.now - health.observed_at > timedelta(seconds=120)
+        ):
+            return
         if (
             (
                 self.runtime.native_options["polling_mode"] not in {"smart", "minimum"}
@@ -393,6 +401,7 @@ class Executor:
             )
             or not self._quiet_state(obs, self.last_decision)
             or obs.cloud_health != "ok"
+            or not obs.bridge_available
             or obs.auth_mode != "authorized"
             or not isinstance(schedule, dict)
             or schedule.get("active") is not True
@@ -421,7 +430,10 @@ class Executor:
             or not obs.poll_at.timestamp() <= next_at <= obs.poll_at.timestamp() + owner + 1
         ):
             return
-        obs.passive_status_deadline = obs.poll_at + timedelta(seconds=owner + 300)
+        obs.passive_status_deadline = min(
+            datetime.fromtimestamp(next_at, obs.poll_at.tzinfo),
+            obs.poll_at + timedelta(seconds=owner),
+        ) + timedelta(minutes=5)
 
     def _event_decision_at(self, now, decision, decision_at):
         """Observe at the real policy transition, allowing the strict prior to be reused."""
@@ -556,6 +568,7 @@ class Executor:
             optional_start_quality=site_quality
             if ct_free_valid and not runtime.ct_free_solar_start_ready
             else None,
+            optional_adoption_ready=controller.solar_adoption_ready(obs, self.cfg),
             protective_exit_pending=controller.protective_exit is not None,
             optional_cooldown_until=_dt(controller.optional_cooldown_until),
             optional_session_active=controller.solar_session_active

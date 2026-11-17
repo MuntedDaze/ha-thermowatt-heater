@@ -27,6 +27,7 @@ WHY = {
     "solar_opportunity_import": "Sustained grid import ended optional solar heating.",
     "solar_measurement_unavailable": "Required solar measurements are unavailable; withdraw optional heating.",
     "guest_mode": "The owner's 12-hour comfort override is active.",
+    "12hr_override": "The owner's 12-hour comfort override is active.",
     "holiday": "Holiday mode is active.",
     "owner_override": "An owner change or deliberate hold has priority.",
 }
@@ -62,6 +63,7 @@ CODES = frozenset(
         "authorized",
         "locked",
         "blocked",
+        "fresh_cloud_state_for_adoption_required",
         "ready",
         "existing",
         "smart",
@@ -175,7 +177,10 @@ def command(value):
     value = value if isinstance(value, dict) else {}
     return {
         **{k: code(value.get(k)) for k in ("prior", "target", "status", "reason")},
-        **{k: stamp(value.get(k)) for k in ("created_at", "sent_at", "confirmed_at")},
+        **{
+            k: stamp(value.get(k))
+            for k in ("created_at", "sent_at", "confirmed_at", "resolved_at", "since")
+        },
     }
 
 
@@ -185,6 +190,10 @@ def event(value):
         **{k: code(value.get(k)) for k in ("state", "reason", "wanted", "cloud", "command")},
         "bottom_c": numeric(value.get("bottom_c")),
         "grid_import_kw": numeric(value.get("grid_import_kw")),
+        "boost_eligible": value.get("boost_eligible")
+        if type(value.get("boost_eligible")) is bool
+        else None,
+        "boost_reason": code(value.get("boost_reason")),
     }
 
 

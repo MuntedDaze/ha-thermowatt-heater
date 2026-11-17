@@ -575,6 +575,18 @@ class Controller:
         self.active_alerts = []
         self._expire_modes(now)
 
+        # A required-storage hold outside peak is no longer an optional solar
+        # session. Do not carry an old morning permission into a later peak.
+        if (
+            self.intent is None
+            and want.plan.get("mode") != "peak"
+            and want.reason
+            not in (
+                OPTIONAL_REASONS | {"solar_opportunity_continues", "weekday_solar_boost_continues"}
+            )
+        ):
+            self.solar_session_active = False
+
         # Preserve the exit independently of the original transaction. Sun
         # returning must not erase a withdrawal while START is unconfirmed.
         if (
@@ -920,10 +932,35 @@ class Controller:
                 failures.append("solar_withdrawal_cooldown")
         return failures
 
+    def solar_adoption_ready(self, obs: Observation, cfg: ControllerConfig) -> bool:
+        """No command: recent exact observed state and capacity to protectively exit."""
+        current = self.heater
+        return bool(
+            self.enabled
+            and self.state in STEADY
+            and current in (NORMAL, STORAGE)
+            and not self.hold
+            and not self.fault
+            and not self.intent
+            and not self.protective_exit
+            and obs.poll_at is not None
+            and 0 <= (obs.now - obs.poll_at).total_seconds() <= BRIDGE_FRESH_SECONDS
+            and obs.heater_state == current
+            and not self.gates(obs, OFF, cfg, payload_for(OFF, current), "peak_lockout")
+        )
+
     def _decide(
         self, obs: Observation, want: Want, cfg: ControllerConfig, effects: list[Effect]
     ) -> None:
         current = self.heater
+        if (
+            want.state == current
+            and want.plan.get("adopt_solar_session") is True
+            and self.solar_adoption_ready(obs, cfg)
+        ):
+            # Permission to continue an already observed target, not a heater
+            # command or a new command confirmation. Restart clears permission.
+            self.solar_session_active = True
         if want.state == "hold" or want.state == current or current is None:
             self.state = ACTIVE_OF[current] if current else OBSERVING
             self.reason = want.reason

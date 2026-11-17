@@ -123,18 +123,35 @@ async def async_setup_entry(hass, entry):
     def new_poll(event):
         # Evaluate immediately when a bridge status lands: a command sent then
         # needs no pre-command status read by the bridge (fewer cloud requests).
-        update(dt_util.utcnow())
+        now = dt_util.utcnow()
+        runtime.capture_input_report(event, now)
+        update(now)
 
     entry.async_on_unload(async_track_time_interval(hass, update, timedelta(minutes=1)))
-    event_entities = sorted(
-        {
-            entity
-            for key in ("last_poll", "grid", "heater_power")
-            if isinstance(entity := runtime.sources.get(key), str) and entity
-        }
-    )
-    if event_entities:
-        entry.async_on_unload(async_track_state_change_event(hass, event_entities, new_poll))
+    runtime.input_unsubscribe = None
+
+    @callback
+    def unbind_inputs():
+        if runtime.input_unsubscribe:
+            runtime.input_unsubscribe()
+            runtime.input_unsubscribe = None
+
+    @callback
+    def bind_inputs():
+        unbind_inputs()
+        entities = sorted(
+            {
+                entity
+                for key in ("last_poll", "grid", "heater_power", "pv")
+                if isinstance(entity := runtime.sources.get(key), str) and entity
+            }
+        )
+        if entities:
+            runtime.input_unsubscribe = async_track_state_change_event(hass, entities, new_poll)
+
+    runtime.rebind_inputs = bind_inputs
+    bind_inputs()
+    entry.async_on_unload(unbind_inputs)
     entry.async_on_unload(entry.add_update_listener(_reload))
     update(dt_util.utcnow())
     return True
@@ -182,6 +199,8 @@ async def _reload(hass, entry):
     runtime.apply_options(entry.options, entry.options.get("sources", entry.data))
     if runtime.executor is not None:
         runtime.executor.configure(entry.options)
+        if getattr(runtime, "rebind_inputs", None):
+            runtime.rebind_inputs()
         # 0.9.1: the commissioning requirements shown on the master switch follow
         # a settings change at once (they were stale until the next minute).
         runtime.executor._notify_listeners()

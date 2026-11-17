@@ -519,7 +519,7 @@ FIELDS["pre_peak_observation_minutes"] = (
 )
 FIELDS["peak_command_lead_minutes"] = (
     "Request peak OFF this much early",
-    "Minutes reserved for local evaluation, cloud command and confirmation before peak. This is not a guaranteed electrical cutoff.",
+    "Minutes reserved for local evaluation, cloud command and confirmation before peak. Must be shorter than the heating completion margin in Hot Water. This is not a guaranteed electrical cutoff.",
 )
 FIELDS["low_water_warning_c"] = (
     "Low bottom-temperature warning",

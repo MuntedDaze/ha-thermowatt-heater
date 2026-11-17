@@ -167,9 +167,13 @@ async def options_page(hass, entry, page, data):
     """Use the real topical options-flow menus, one page per save."""
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     assert flow["type"] == "menu", flow
-    assert set(flow["menu_options"]) == {"hot_water", "electricity", "solar_meters", "advanced"}, (
-        flow
-    )
+    assert set(flow["menu_options"]) == {
+        "hot_water",
+        "electricity",
+        "solar_meters",
+        "diagnostic_report",
+        "advanced",
+    }, flow
     parent = (
         "solar_meters"
         if page in {"sources", "solar"}

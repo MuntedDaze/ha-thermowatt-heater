@@ -211,6 +211,53 @@ class ShadowRuntime:
             pass
         return None
 
+    def capture_input_report(self, event, now):
+        """Preserve intervening real reports even if queued evaluations coalesce.
+
+        No decision, command or HTTP here. Only actual signed measurements are
+        sampled; current circuit kW can be credited only after its normal checks.
+        """
+        entity = event.data.get("entity_id")
+        key = next((k for k in ("pv", "grid") if self.sources.get(k) == entity), None)
+        if key is None or self.executor is None:
+            return
+        state = event.data.get("new_state")
+        kw = None
+        at = state.last_reported if state else None
+        if state:
+            try:
+                reading = Reading(
+                    state.state,
+                    at,
+                    state.attributes.get("unit_of_measurement"),
+                    bool(state.attributes.get("restored", False)),
+                )
+                _fresh(reading, now, self.boot, self.settings.grid_max_age_seconds)
+                if not reading.restored:
+                    kw = _power(reading)
+            except (ValueError, TypeError, OverflowError):
+                pass
+        if key == "pv":
+            self.executor.policy.add_pv(at, kw)
+        elif kw is None or not self.settings.meter_verified:
+            self.executor.policy.samples.clear()
+        else:
+            signed = kw if self.settings.import_positive else -kw
+            circuit = circuit_power(
+                self._reading("heater_power"),
+                self.sources.get("heater_power"),
+                self.native_options["heater_meter_verification"],
+                now,
+                self.boot,
+                self.settings.grid_max_age_seconds,
+                nominal_kw=self.settings.element_kw,
+            )
+            storage = self.executor.controller.heater in {"normal_storage", "storage"}
+            measured = (
+                circuit.watts / 1000 if storage and circuit.valid and circuit.state == "on" else 0
+            )
+            self.executor.policy.add_meter(at, signed, heater_kw=measured)
+
     # ------------------------------------------------------------------ the tick
     def update(self, now):
         settings = self.settings
@@ -410,6 +457,8 @@ class ShadowRuntime:
                     "wanted": decision.state,
                     "cloud": obs.cloud_health,
                     "command": last.get("status"),
+                    "boost_eligible": decision.plan.get("boost_eligible"),
+                    "boost_reason": decision.plan.get("boost_reason"),
                     "bottom_c": obs.temperature_c,
                     "grid_import_kw": self.grid_import_kw,
                 }

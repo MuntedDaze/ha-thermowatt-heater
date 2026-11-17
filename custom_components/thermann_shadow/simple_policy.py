@@ -42,7 +42,6 @@ SLOT = timedelta(minutes=5)  # planning grid
 MEASURED_SPAN = timedelta(minutes=30)  # the measured surplus stands in for the forecast
 SCAN_STEP = timedelta(minutes=15)
 SCAN_HORIZON = timedelta(days=4)
-SAMPLE_SLACK = timedelta(seconds=30)  # timer drift allowed at the start of a sample window
 # Protective peak OFF only. Restarts, holiday and ordinary transitions still wait.
 SPACING_EXEMPT_REASONS = PROTECTIVE_REASONS
 
@@ -124,6 +123,7 @@ class Snapshot:
     heater_meter_valid: bool = False  # optional starts require explicit verified input
     ct_free_solar_valid: bool = False  # separately commissioned grid-only policy
     optional_start_quality: str | None = None
+    optional_adoption_ready: bool = False  # genuine recent cloud state + exit guards
     optional_cooldown_until: datetime | None = None
     protective_exit_pending: bool = False
     optional_session_active: bool = False
@@ -169,18 +169,27 @@ class SimplePolicy:
             self.pv_samples.popleft()
 
     def pv_sustained(self, now, duration, predicate):
-        recent = [p for p in self.pv_samples if now - duration - SAMPLE_SLACK <= p[0] <= now]
-        return bool(
-            recent
-            and now - recent[-1][0] <= self.s.meter_max_age
-            and recent[0][0] <= now - duration
-            and recent[-1][0] - recent[0][0] >= duration
-            and all(predicate(p[1]) for p in recent)
-            and all(
-                b[0] - a[0] <= self.s.meter_max_age
-                for a, b in zip(recent, recent[1:], strict=False)
-            )
-        )
+        recent = self._coverage(self.pv_samples, now, duration)
+        return bool(recent) and all(predicate(p[1]) for p in recent)
+
+    def _coverage(self, samples, now, duration):
+        """Shortest genuine suffix spanning duration; no divisibility assumption.
+
+        Anchor to the latest actual report, not an evaluation tick. Retain the
+        first report at/before that boundary, including a failing reset sample.
+        A stale/future latest report or any excessive gap invalidates coverage.
+        """
+        if not samples or not timedelta(0) <= now - samples[-1][0] <= self.s.meter_max_age:
+            return []
+        cutoff = samples[-1][0] - duration
+        recent = []
+        for sample in reversed(samples):
+            if recent and recent[-1][0] - sample[0] > self.s.meter_max_age:
+                return []
+            recent.append(sample)
+            if sample[0] <= cutoff:
+                return list(reversed(recent))
+        return []
 
     def _weekend(self, snap, reading, fresh, rate, plan, local, baseline, normal, boost):
         s, now = self.s, snap.now
@@ -264,21 +273,12 @@ class SimplePolicy:
         )
 
     def sustained(self, now: datetime, window: timedelta, test) -> bool:
-        """``test`` held for the WHOLE ``window`` (0.9.1): the sample at the
-        start of the window (to within half a minute) and the latest sample
-        both pass, the samples between have no gap above the meter age limit,
-        and at least 80 % of them pass (a kettle or a passing cloud for a
-        minute does not reset it). With one sample a minute, 10 minutes is 11
-        samples spanning the full 10 minutes, and 5 minutes is 6 spanning 5:
-        the condition can never be met sooner than the stated time."""
-        recent = self._window(now, window + SAMPLE_SLACK)
-        if not recent or not self.meter_fresh(now) or recent[0][0] > now - window + SAMPLE_SLACK:
-            return False
-        if recent[-1][0] - recent[0][0] < window:
-            return False  # evaluation ticks cannot extend genuine report coverage
-        if any(
-            b[0] - a[0] > self.s.meter_max_age for a, b in zip(recent, recent[1:], strict=False)
-        ):
+        """Legacy faded-solar majority check over a fully covered genuine span.
+
+        Strict startup/import/PV timers below require every report to pass.
+        """
+        recent = self._coverage(self.samples, now, window)
+        if not recent:
             return False
         if not (test(recent[0]) and test(recent[-1])):
             return False
@@ -293,26 +293,15 @@ class SimplePolicy:
 
     def importing_continuously(self, now: datetime) -> bool:
         """Acceptable readings reset withdrawal; stale/gapped evidence cannot vote."""
-        recent = self._window(now, self.s.withdraw + SAMPLE_SLACK)
-        return (
-            bool(recent)
-            and self.meter_fresh(now)
-            and recent[0][0] <= now - self.s.withdraw
-            and recent[-1][0] - recent[0][0] >= self.s.withdraw
-            and all(smp[1] > self.s.peak_import_tolerance_kw for smp in recent)
-            and all(
-                b[0] - a[0] <= self.s.meter_max_age
-                for a, b in zip(recent, recent[1:], strict=False)
-            )
-        )
+        recent = self._coverage(self.samples, now, self.s.withdraw)
+        return bool(recent) and all(smp[1] > self.s.peak_import_tolerance_kw for smp in recent)
 
     def surplus_qualified(self, now: datetime) -> bool:
         def test(sample):
             return sample[2] >= self.s.peak_start_kw
 
-        return self.sustained(now, self.s.qualify, test) and all(
-            test(sample) for sample in self._window(now, self.s.qualify + SAMPLE_SLACK)
-        )
+        recent = self._coverage(self.samples, now, self.s.qualify)
+        return bool(recent) and all(test(sample) for sample in recent)
 
     @staticmethod
     def optional_measurement_valid(snap):
@@ -628,9 +617,41 @@ class SimplePolicy:
                     return OFF, "peak_solar_uneconomic", 6, plan
                 if fresh and reading >= s.storage_c:
                     return OFF, "peak_solar_no_useful_heat", 4, plan
+                if not snap.optional_session_active:
+                    # A required normal target is not an authorised peak solar
+                    # session. Prefer a useful properly guarded top-up, otherwise
+                    # qualify an in-place carry with the complete startup test.
+                    if state == normal and boost != normal and s.boost_enabled:
+                        eligible, info = self._boost(
+                            snap, reading, fresh, rate, None, s.normal_c, peak=True
+                        )
+                        plan.update(info)
+                        if eligible:
+                            return boost, "peak_solar_qualified", 4, plan
+                    eligible, info = self._boost(
+                        snap,
+                        reading,
+                        fresh,
+                        rate,
+                        None,
+                        s.baseline_c,
+                        peak=True,
+                        target=self.setpoint(state),
+                    )
+                    plan.update(info)
+                    if not eligible or not snap.optional_adoption_ready:
+                        if eligible:
+                            plan["boost_reason"] = "fresh_cloud_state_for_adoption_required"
+                        return OFF, "peak_no_qualified_session", 4, plan
+                    plan["adopt_solar_session"] = True
                 if not s.boost_enabled and state == STORAGE and normal != STORAGE:
                     return normal, "peak_normal_solar_only", 4, plan
-                if state == normal and boost != normal and s.boost_enabled:
+                if (
+                    snap.optional_session_active
+                    and state == normal
+                    and boost != normal
+                    and s.boost_enabled
+                ):
                     eligible, info = self._boost(
                         snap, reading, fresh, rate, None, s.normal_c, peak=True
                     )

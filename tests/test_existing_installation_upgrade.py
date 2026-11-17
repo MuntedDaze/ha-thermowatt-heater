@@ -564,7 +564,9 @@ def test_peak_normal_upgrade_keeps_all_optional_gates(block):
             protective_exit_pending=block == "unresolved_exit",
         )
     )
-    assert d.state == sp.NORMAL and d.command is None
+    # No authorised session: a blocked top-up cannot silently carry required
+    # storage into peak without the full current startup/adoption checks.
+    assert d.state == OFF and d.command == "off"
 
 
 @pytest.mark.parametrize("ct", [False, True])

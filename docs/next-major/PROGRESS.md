@@ -90,3 +90,27 @@ Progress (implementation incomplete):
 Python: `C:/Users/jacob/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`.
 Local dependencies: absolute `.test-deps` in PYTHONPATH. Use UTF-8 stdout for
 Python scripts. Git writes/network use the configured sandbox escalation.
+
+Independent review correction checkpoint:
+
+- Astra High completed read-only review of0b374a2. TwoP1 and fiveP2 findings
+  accepted; details/evidence in REVIEW.md. All seven have code corrections and
+  targeted regressions (21 pass). Non-replay suite also passed. No new POST replay
+  or auth-lock bypass found. Must obtain final independent corrected-diff review.
+- Changes cover real-span irregular cadence, fully gated in-place peak adoption
+  without commands, margin/lead cross-validation, quiet weekend-end baseline,
+  fresh/actual quiet deadlines, original PV/grid event capture with rebinding,
+  and diagnostic solar reasons/real timestamps. Original safety/temperature roles
+  remain; no live operations. Source changes must now remain stable during tests.
+- Fixed CI guide portability (OS time-zone alias lists), outdated HA menu assertion
+  and old bridge DOCS baseline text. Actual HA same-turn PV dip/no-save pair tests added.
+- Regeneration running in exec sessions6374 (five older replay artifacts) and
+ 96056 (new seasonal +20min-TTL artifacts). After they finish, rebuild comparison
+  table with tools/build_polling_evidence.py; inspect outcomes and commit results.
+- Full local run20366 was invalidated by source edits while it was still executing;
+  do not claim it passed. Rerun the whole suite after current fixes/results settle.
+- Review agent /root/independent_review is idle, available for authorised read-only
+  follow-up final verification. Send corrected full diff/head and actual CI evidence.
+- Initial corrected UI at0b374a2 passed both browser versions and was visually
+  inspected (phone labels/translated states now readable, desktop2-column native
+  sections). Latest final source still needs all checks and final screenshot verification.

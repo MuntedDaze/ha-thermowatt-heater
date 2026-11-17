@@ -119,7 +119,7 @@
           "weekend_sunset_minutes": "Continuous minutes below the late-day threshold after noon. Missing readings never vote for sunset; the hard end time still bounds the window.",
           "solar_cooldown_minutes": "Minutes after confirmed withdrawal OFF before another optional solar start. Fresh qualification can overlap this wait. Ordinary 15-minute command spacing also applies.",
           "pre_peak_observation_minutes": "Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.",
-          "peak_command_lead_minutes": "Minutes reserved for local evaluation, cloud command and confirmation before peak. This is not a guaranteed electrical cutoff.",
+          "peak_command_lead_minutes": "Minutes reserved for local evaluation, cloud command and confirmation before peak. Must be shorter than the heating completion margin in Hot Water. This is not a guaranteed electrical cutoff.",
           "low_water_warning_c": "Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency."
         }
       },

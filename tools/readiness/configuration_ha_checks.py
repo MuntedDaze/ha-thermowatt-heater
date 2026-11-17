@@ -103,6 +103,21 @@ async def check_configuration(hass, entry):
     await hass.async_block_till_done()
 
     # Invalid target combination redisplays submitted values and saves nothing.
+    lead_options = {**before, "peak_command_lead_minutes": 5}
+    hass.config_entries.async_update_entry(entry, options=lead_options)
+    await hass.async_block_till_done()
+    flow = await open_page("hot_water")
+    data = {k: display_value(k, entry.options[k]) for k in PAGES["hot_water"]}
+    result = await submit(flow, {**data, "completion_margin_minutes": 5})
+    assert result["errors"] == {"base": "invalid_settings"} and dict(entry.options) == lead_options
+    assert (
+        result["data_schema"]({**data, "completion_margin_minutes": 5})["completion_margin_minutes"]
+        == 5
+    )
+    hass.config_entries.options.async_abort(result["flow_id"])
+    hass.config_entries.async_update_entry(entry, options=before)
+    await hass.async_block_till_done()
+
     flow = await open_page("hot_water")
     data = {k: display_value(k, entry.options[k]) for k in PAGES["hot_water"]}
     result = await submit(flow, {**data, "normal_storage_c": "70", "solar_boost_c": "62"})
@@ -257,6 +272,26 @@ async def check_configuration(hass, entry):
     )
     assert entry.options["learning_hardware_qualified"] == before["learning_hardware_qualified"]
     assert hass.data[DOMAIN][entry.entry_id].executor.controller.enabled is False
+    # A real PV dip/recovery in the same event-loop turn must break continuous
+    # weekend evidence even though the later decision sees the recovered state.
+    from homeassistant.util import dt as dt_util
+    from datetime import timedelta
+
+    pv_source = "sensor.synthetic_pv_events"
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "sources": {**sources, "pv": pv_source}}
+    )
+    await hass.async_block_till_done()
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    now = dt_util.utcnow()
+    for minute in range(16):
+        runtime.executor.policy.add_pv(now - timedelta(minutes=15 - minute), 1)
+    hass.states.async_set(pv_source, 100, {"unit_of_measurement": "W"})
+    hass.states.async_set(pv_source, 1000, {"unit_of_measurement": "W"})
+    await hass.async_block_till_done()
+    assert not runtime.executor.policy.pv_sustained(
+        dt_util.utcnow(), timedelta(minutes=15), lambda kw: kw >= 0.5
+    )
     hass.config_entries.async_update_entry(entry, options=before)
     await hass.async_block_till_done()
 

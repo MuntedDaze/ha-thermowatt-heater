@@ -73,6 +73,10 @@ def build():
                 if key in settings.LOCKED_WHILE_ACTIVE
                 else "Existing active-control guard applies where relevant."
             )
+            if key == "time_zone":
+                # OS/tzdata builds expose different aliases. Do not generate a
+                # platform-dependent list of hundreds of zones in an owner guide.
+                allowed = "A supported IANA zone, for example Australia/Hobart"
             lines += [
                 f"### {label}",
                 "",

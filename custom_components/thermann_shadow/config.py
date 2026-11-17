@@ -164,6 +164,7 @@ REJECTION_MESSAGES = {
     "unsupported_target_roles": "Use only supported 45/62/70 targets, with baseline no higher than normal and normal no higher than solar boost.",
     "dual_storage_settings_invalid": "Check tank capacity (50–500 L), nominal element (2–3.6 kW), completion margin (5–120 minutes), useful-heat fraction (0–1) and the peak policy.",
     "settings_invalid": "A value is outside its allowed range.",
+    "completion_margin_not_after_peak_lead": "The heating completion margin must be longer than the minutes reserved for the peak OFF command. Increase the completion margin or shorten the peak command lead; nothing was saved.",
     "morning_preferred_below_minimum": "The morning preferred reserve cannot be below the morning minimum.",
     "morning_times_order": "Morning times must be before noon, with the preferred time not after the hard deadline.",
     "afternoon_time_invalid": "The weekend afternoon ready time must be after noon.",
@@ -336,6 +337,8 @@ def parse_options(options):
     for key, low, high in NEXT_RANGES:
         if type(values[key]) is bool or not low <= number(values[key]) <= high:
             raise ValueError("settings_invalid")
+    if number(values["completion_margin_minutes"]) <= number(values["peak_command_lead_minutes"]):
+        raise ValueError("completion_margin_not_after_peak_lead")
     if type(values["weekend_solar_heating"]) is not bool or values["polling_mode"] not in {
         "existing",
         "smart",
