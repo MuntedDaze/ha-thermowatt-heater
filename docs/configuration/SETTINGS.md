@@ -72,8 +72,11 @@ the guided editor and prices form instead.
 Leave optional readings empty if equipment is absent. Basic required heating
 does not need solar, EMHASS or a dedicated hot-water CT. Without the CT, nominal
 tank size and element rating estimate time; cloud mode does not prove the element
-is electrically on. Optional solar-only boost requires a separately qualified CT-free grid-only record
-or commissioned signed raw circuit power, fresh grid readings and all economic/command checks.
+is electrically on. Optional solar-only boost supports either a commissioned
+dedicated hot-water circuit meter (CT) or the separately configured experimental
+CT-free GoodWe grid-meter setup. Turning **Enable optional solar boost** on alone
+does not start boosting: automatic control must be enabled and all measurement,
+solar surplus, cost, peak-policy and command-safety requirements must pass.
 An unavailable previously commissioned meter stays a fault, never measured zero.
 
 Forecasts are predictions, not spare power. The percentage allowance reduces

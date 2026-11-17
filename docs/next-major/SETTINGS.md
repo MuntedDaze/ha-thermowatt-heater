@@ -53,7 +53,7 @@ Upper target for worthwhile extra solar heating, for example 70°C. Must be at l
 
 Stored key: `optional_solar_boost`. Default: `True`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
 
-Allow extra storage only with commissioned hot-water circuit measurement and all economic and safety checks. Leave off if you do not want extra heat. Required storage still works without a circuit meter; the separate 12-hour Override is unchanged.
+Allow extra storage with either a commissioned dedicated hot-water circuit meter (CT) or the separately configured experimental CT-free GoodWe grid-meter setup. Turning this switch on alone does not start boosting: automatic control must be enabled, and measurement, solar surplus, cost, peak-policy and safety checks must all pass. Required storage still works without a CT; the separate 12-hour Override is unchanged.
 
 ### Heating during peak periods
 

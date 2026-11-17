@@ -8,26 +8,32 @@ untracked `review-1b29be1/` and `uv.lock`; no live HA/vendor/MQTT access.
 
 ## Current checkpoint: implementation and independent review complete
 
-Controller0.16.0 / bridge1.4.0 are in [draft PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42).
-The independently accepted code head is
-`0c85a0dea92838ca9056df2b2c8f31a092c026a1`; the closing increment changes only
-documentation. Astra High verified all nine remediated findings and accepted
-that head, conditional on final-head CI. No live operations or merge occurred.
+Controller0.16.0 / bridge1.4.0 are in [PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42).
+Astra High independently accepted
+`ff0307313882979c76ad825738dc9f000e909a07`; all32 final-head checks passed, including
+all1622 tests on Python3.12/3.13/3.14. The complete local run also passed1622 tests.
+No live operations or merge occurred.
 
 - Real HA2026.10.4/2026.11.1, desktop1280/phone390 frontend, nativeamd64/aarch64,
   isolatedMQTT/lifecycle/demand and Supervisor checks passed on that code head.
   Final phone/desktop screenshots were inspected: current plan, readable labels
-  and copyable report are confirmed. Final documentation-head checks still run.
-- Local full suite gave1621 passed/one stale comparison assertion; the corrected
-  targeted actual-worker replay passed both tests. Full1622-test CI on all three
-  Python versions is required; do not describe the earlier local run as passing.
-- The exact-head CI source archive and all170 per-file hashes were verified.
-  The documentation increment requires a new final-head archive/checksum.
+  and copyable report are confirmed.
+- Owner's follow-up is presentation/documentation only: optional-boost help now
+  explicitly describes both dedicated CT and separately configured experimental
+  CT-free GoodWe operation, and explains that the switch alone cannot start boost.
+  Updated source catalogue, generated English strings/settings guide, README and
+  homeowner help; labelled the earlier CT-only checkpoint as historical.
+- No controller, bridge, options, defaults, command protocol or safety logic changes.
+  Versions remain0.16.0/1.4.0. Rebuild generators and run relevant regression/static
+  checks; all final-head CI and fresh phone/desktop help inspection are required.
+- The previous exact-head source archive matched all170 committed files. The
+  wording increment requires a new final-head archive/checksum.
 - Remaining work: wait for **all** final-head CI; inspect full-suite/static
   outcomes; verify the new archive's SHA/manifest/all files; check PR reviews;
   record the final SHA, checks and artifact in the PR handoff. Avoid another
   documentation commit merely to stamp passing CI; use the final PR record.
-- Keep the full PR draft/unmerged until explicit owner merge approval. No
+- Owner now explicitly authorises marking PR42 ready for review after all checks
+  pass. Keep it unmerged until separate owner merge approval. No
   installation, authentication, automatic activation or heater operation is
   authorised. Fable's worktree and seven-view dashboard remain unchanged.
 

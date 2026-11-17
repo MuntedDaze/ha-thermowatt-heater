@@ -68,8 +68,12 @@ verified grid export and forecasts can help choose economical **required off-pea
 
 Without a CT, electrical ON/OFF and an exact completion clock remain unknown.
 “Continuous heating time estimate” is a conditional duration, not proof the
-element is on or a promise of ready water. Optional solar-only boost requires separately qualified CT-free grid-only operation
-or a commissioned dedicated meter. A failed previously
+element is on or a promise of ready water. Optional solar-only boost requires
+either a commissioned dedicated heater circuit meter (CT) or the separately
+configured experimental CT-free GoodWe grid-meter setup. Turning **Enable optional
+solar boost** on alone does not start boosting: automatic control and all measurement,
+solar surplus, cost, peak-policy and safety requirements must also be satisfied.
+A failed previously
 commissioned meter raises a fault; missing readings never become measured zero.
 
 ## Heating choices you can change

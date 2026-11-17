@@ -521,7 +521,7 @@ CATALOG.update(
         "optional_solar_boost": Setting(
             "Enable optional solar boost",
             "Everyday",
-            "Optional heat requires a verified circuit meter or a separately commissioned CT-free grid record, and useful monetary benefit. Independent of the peak policy. The separate 12hr Override requests 62°C.",
+            "Allow extra storage with either a commissioned dedicated hot-water circuit meter (CT) or the separately configured experimental CT-free GoodWe grid-meter setup. Turning this switch on alone does not start boosting: automatic control must be enabled, and measurement, solar surplus, cost, peak-policy and safety checks must all pass. Required storage still works without a CT; the separate 12-hour Override is unchanged.",
             kind="switch",
         ),
         "peak_heating_policy": Setting(

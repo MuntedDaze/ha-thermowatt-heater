@@ -88,6 +88,11 @@ take precedence. Ending returns to baseline without cloud-by-cloud toggling.
 
 Optional70 has separate stronger checks: enabled boost, useful heat, economic
 benefit, measured surplus, available budgets and no unresolved protective exit.
+It supports either a commissioned dedicated heater circuit meter (CT) or the
+separately configured experimental CT-free GoodWe grid-meter setup. Turning
+**Enable optional solar boost** on alone does not start boosting: automatic control
+and all measurement, solar surplus, cost, peak-policy and safety requirements
+must also be satisfied.
 The3kW example needs3.3kW surplus for10 continuous minutes to start. Forecasts
 or inferred watts cannot replace actual evidence. After startup it does **not**
 require3.3kW remaining export. A dedicated CT may credit genuine measured heater

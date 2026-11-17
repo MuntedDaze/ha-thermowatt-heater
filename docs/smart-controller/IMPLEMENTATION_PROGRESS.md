@@ -1,5 +1,10 @@
 # Smart controller implementation checkpoint
 
+Historical checkpoint: the CT-only optional-heating requirement below describes
+this earlier candidate. Current development also supports the separately configured
+experimental CT-free GoodWe grid-meter path; use the
+[current homeowner guide](../next-major/OWNER_HANDBOOK.md#solar-and-weekends).
+
 Branch: `codex/smart-controller-next`.
 Baseline: `1b29be165ddc61eb0b2e64a69eea9a435f7f7a53` (PR #27, unchanged).
 Owner request: implement the Thermann brief, backend first; Fable owns dashboards.
