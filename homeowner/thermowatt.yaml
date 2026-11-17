@@ -266,7 +266,7 @@ views:
   - type: grid
     cards:
     - type: entities
-      title: Local electricity — no cloud request per sample
+      title: Local electricity
       show_header_toggle: false
       entities:
       - entity: sensor.thermann_shadow_measured_pv_ac_output

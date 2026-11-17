@@ -360,6 +360,10 @@ async def check_configuration(hass, entry):
     runtime = hass.data[DOMAIN][entry.entry_id]
     runtime.update(dt_util.utcnow())
     await runtime.executor.async_step(dt_util.utcnow())
+    assert (
+        hass.states.get("sensor.thermann_shadow_current_heating_plan").state
+        == runtime.executor.policy_values()["plan_summary"]
+    )
     assert ids == {e.unique_id: e.entity_id for e in er.async_get(hass).entities.values()}
     assert dict(entry.options) == original
     assert ShadowOptionsFlow(entry)._entry.unique_id == entry.unique_id

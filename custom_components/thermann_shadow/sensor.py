@@ -172,9 +172,13 @@ class ShadowSensor(SensorEntity):
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.runtime.subscribe(self.async_write_ha_state))
+        if self.key == "plan_summary":
+            self.async_on_remove(self.runtime.executor.subscribe(self.async_write_ha_state))
 
     @property
     def native_value(self):
+        if self.key == "plan_summary":
+            return self.runtime.executor.policy_values().get(self.key)
         return self.runtime.values.get(self.key)
 
     @property

@@ -53,5 +53,5 @@ Both remainingP1 reproductions were resolved; no further actionable code defect
 was reported. The reviewer traced owner Hold, override, restart, failed save and
 pending-command handling and inspected regressions without running tests or
 contacting live equipment. Final CI and explicit owner merge approval are separate.
-Subsequent changes are documentation, test-fixture cleanup and exact-head source-artifact metadata,
+Subsequent changes are documentation, read-only plan presentation, test-fixture cleanup and exact-head source-artifact metadata,
 not controller behaviour. Final checks are linked from the PR's current head.

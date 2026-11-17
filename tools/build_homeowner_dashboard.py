@@ -178,7 +178,7 @@ def build():
                     "# Electricity and optimisation\n**Configure → Electricity Tariffs** explains your prices and guided schedule. Peak is usually dearer; off-peak cheaper; shoulder intermediate. Use your retail contract, not a network price assumed to be your bill. Fixed-standard clocks ignore daylight saving; local clocks follow it.\n\n**Configure → Advanced/System → Cloud checks and data age** selects Smart, Fixed 30-minute compatibility or Experimental minimum. Match the bridge App's choice. Existing installations keep their saved polling choices until you explicitly change them."
                 ),
                 rows(
-                    "Local electricity — no cloud request per sample",
+                    "Local electricity",
                     [
                         sensor("Measured PV AC output", "Usable inverter solar power"),
                         sensor("Measured house load", "Household power"),

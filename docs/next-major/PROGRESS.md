@@ -160,3 +160,13 @@ Final regression result/correction:
 - Canonical CI source bundle for5efb2ee was verified: all170 source hashes and
   manifest match local exactly (ZIP creator metadata differs across OS only).
   The test-only commit needs a freshly verified exact-head bundle/checksum.
+
+Final visual correction:
+
+- Final screenshots exposed a read-only plan-summary sensor lagging one completed
+  evaluation behind the requested-mode sensors. It now reads/subscribes directly
+  to the existing executor's completed decision; no policy, command or polling
+  logic changes. Actual HA asserts matching displayed/current plan immediately.
+- Shortened one truncated electricity card heading. Regenerated only the separate
+  homeowner dashboard; Fable's seven views remain untouched. Final-head CI and
+  refreshed artifact/checksum/screenshot inspection remain the closing steps.
