@@ -296,3 +296,98 @@ def test_actual_executor_generates_safe_peak_adoption_from_raw_ct_free_inputs(
     else:
         assert d.state == sp.OFF and d.reason == "peak_no_qualified_session"
         assert rig.commands() == ["off@62"]
+
+
+def captured(rig, key, value, when):
+    rig.t = when.timestamp()
+    rig.report(rig.sources[key], value, {"unit_of_measurement": "W"})
+    state = rig.states[rig.sources[key]]
+    rig.runtime.capture_input_report(
+        SimpleNamespace(data={"entity_id": rig.sources[key], "new_state": state}), when
+    )
+
+
+def peak_rig(tmp_path, monkeypatch, ct=False):
+    rig = Rig(
+        tmp_path,
+        monkeypatch,
+        hobart(MON, 18),
+        mode="Manual",
+        setpoint=62,
+        reading=50,
+        pv=lambda local: 4,
+    )
+    if not ct:
+        ct_free(rig)
+    else:
+        rig.entry.options["normal_storage_c"] = "62"
+        rig.runtime.apply_options(rig.entry.options, rig.sources)
+        rig.executor.configure(rig.entry.options)
+    rig.executor.controller = controller_ready(rig.now(), "Manual", 62)
+    rig.runtime.boot = rig.now() - 20 * MIN
+    rig.runtime.update(rig.now())
+    return rig
+
+
+def test_same_turn_old_ct_on_then_fresh_off_cannot_complete_solar_start(tmp_path, monkeypatch):
+    rig = peak_rig(tmp_path, monkeypatch, ct=True)
+    now = rig.now()
+    p = rig.executor.policy
+    for i in range(10):
+        p.add_meter(now - (10 - i) * MIN, -0.4, heater_kw=3)
+    rig.report(rig.sources["heater_power"], 3000, {"unit_of_measurement": "W"})
+    rig.states[rig.sources["heater_power"]].last_reported = now - timedelta(seconds=100)
+    captured(rig, "grid", 400, now)
+    assert not p.samples  # unpaired; callback cannot fabricate a3kW vote
+    captured(rig, "heater_power", 0, now + timedelta(seconds=1))
+    rig.runtime.update(rig.now())
+    drive(rig.executor.async_step(rig.now()))
+    assert "Manual:70@62" not in rig.commands()
+    assert rig.executor.last_decision.state != sp.STORAGE
+
+
+def test_impossible_ct_free_export_does_not_survive_coalesced_recovery(tmp_path, monkeypatch):
+    rig = peak_rig(tmp_path, monkeypatch)
+    now = rig.now()
+    p = rig.executor.policy
+    for i in range(10):
+        p.add_meter(now - (10 - i) * MIN, -4, heater_kw=0)
+    captured(rig, "grid", 20000, now)
+    assert not p.samples
+    captured(rig, "grid", 4000, now + timedelta(seconds=1))
+    assert not p.surplus_qualified(rig.now())
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_required_grid_loss_and_recovery_latches_protective_exit_once(
+    tmp_path, monkeypatch, pending
+):
+    rig = peak_rig(tmp_path, monkeypatch)
+    now = rig.now()
+    if pending:
+        for i in range(11):
+            rig.executor.policy.add_meter(now - (10 - i) * MIN, -3.5, heater_kw=0)
+        drive(rig.executor.async_step(now))
+        assert rig.commands() == ["Manual:70@62"]
+        assert rig.executor.controller.intent
+    else:
+        rig.executor.controller.solar_session_active = True
+    captured(rig, "grid", "unavailable", now + timedelta(seconds=1))
+    assert rig.runtime.solar_input_loss_pending
+    captured(rig, "grid", 3500, now + timedelta(seconds=2))
+    rig.runtime.update(rig.now())
+    drive(rig.executor.async_step(rig.now()))
+    assert rig.executor.last_decision.state == sp.OFF
+    assert rig.executor.controller.protective_exit
+    assert (
+        rig.store["controller"]["protective_exit"]
+        if "controller" in rig.store
+        else rig.executor._saved["protective_exit"]
+    )
+    count = len(rig.commands())
+    drive(rig.executor.async_step(rig.now()))
+    assert len(rig.commands()) == count
+    if pending:
+        assert rig.commands() == ["Manual:70@62"]  # original remains uncertain, no replay
+    else:
+        assert rig.commands() == ["off@62"]

@@ -109,6 +109,7 @@ class ShadowRuntime:
         self._event_key = None
         self.owner_events = deque(maxlen=200)
         self.owner_event_store = None
+        self.solar_input_loss_pending = False
 
     def set_native_reference(self, options):
         self.native_options = {**DEFAULT_OPTIONS, **options}
@@ -215,10 +216,12 @@ class ShadowRuntime:
         """Preserve intervening real reports even if queued evaluations coalesce.
 
         No decision, command or HTTP here. Only actual signed measurements are
-        sampled; current circuit kW can be credited only after its normal checks.
+        sampled. Raw callbacks may reset CT qualification, never grant CT credit.
         """
         entity = event.data.get("entity_id")
-        key = next((k for k in ("pv", "grid") if self.sources.get(k) == entity), None)
+        key = next(
+            (k for k in ("pv", "grid", "heater_power") if self.sources.get(k) == entity), None
+        )
         if key is None or self.executor is None:
             return
         state = event.data.get("new_state")
@@ -239,12 +242,19 @@ class ShadowRuntime:
                 pass
         if key == "pv":
             self.executor.policy.add_pv(at, kw)
-        elif kw is None or not self.settings.meter_verified:
-            self.executor.policy.samples.clear()
-        else:
-            signed = kw if self.settings.import_positive else -kw
+        elif key == "heater_power":
+            reading = (
+                Reading(
+                    state.state,
+                    at,
+                    state.attributes.get("unit_of_measurement"),
+                    bool(state.attributes.get("restored", False)),
+                )
+                if state
+                else None
+            )
             circuit = circuit_power(
-                self._reading("heater_power"),
+                reading,
                 self.sources.get("heater_power"),
                 self.native_options["heater_meter_verification"],
                 now,
@@ -252,11 +262,82 @@ class ShadowRuntime:
                 self.settings.grid_max_age_seconds,
                 nominal_kw=self.settings.element_kw,
             )
-            storage = self.executor.controller.heater in {"normal_storage", "storage"}
-            measured = (
-                circuit.watts / 1000 if storage and circuit.valid and circuit.state == "on" else 0
-            )
-            self.executor.policy.add_meter(at, signed, heater_kw=measured)
+            if not circuit.valid:
+                self._solar_input_loss()
+            else:
+                grid = self._reading("grid")
+                try:
+                    if grid is None or grid.restored or not self.settings.meter_verified:
+                        raise ValueError("unverified_grid")
+                    _fresh(grid, now, self.boot, self.settings.grid_max_age_seconds)
+                    signed = _power(grid) * (1 if self.settings.import_positive else -1)
+                    if abs((circuit.observed_at - grid.observed_at).total_seconds()) > 60:
+                        raise ValueError("unpaired_meter")
+                    storage = self.executor.controller.heater in {"normal_storage", "storage"}
+                    measured = circuit.watts / 1000 if storage and circuit.state == "on" else 0
+                    if measured - signed < self.executor.policy.s.peak_start_kw:
+                        reset = max(circuit.observed_at, grid.observed_at)
+                        self.executor.policy.surplus_reset_at = max(
+                            self.executor.policy.surplus_reset_at or reset, reset
+                        )
+                except (ValueError, TypeError, OverflowError):
+                    self._solar_input_loss()
+        elif kw is None or not self.settings.meter_verified:
+            self._solar_input_loss()
+        else:
+            signed = kw if self.settings.import_positive else -kw
+            policy = self.executor.policy
+            if signed <= policy.s.peak_import_tolerance_kw:
+                policy.import_reset_at = max(policy.import_reset_at or at, at)
+            if self.sources.get("heater_power"):
+                # Only decide() may grant positive CT votes, using its current
+                # paired evidence at min(grid_time, circuit_time). A queued
+                # newer0W CT observation must be able to defeat an older ON.
+                circuit = circuit_power(
+                    self._reading("heater_power"),
+                    self.sources.get("heater_power"),
+                    self.native_options["heater_meter_verification"],
+                    now,
+                    self.boot,
+                    self.settings.grid_max_age_seconds,
+                    nominal_kw=self.settings.element_kw,
+                )
+                if not circuit.valid or abs((circuit.observed_at - at).total_seconds()) > 60:
+                    self._solar_input_loss()
+                    return
+                storage = self.executor.controller.heater in {"normal_storage", "storage"}
+                measured = circuit.watts / 1000 if storage and circuit.state == "on" else 0
+                if measured - signed < policy.s.peak_start_kw:
+                    policy.surplus_reset_at = max(policy.surplus_reset_at or at, at)
+            else:
+                from .solar import ct_free_record
+
+                unit = state.attributes.get("unit_of_measurement")
+                record = ct_free_record(
+                    entity, unit, self.settings.import_positive, self.settings.element_kw
+                )
+                if (
+                    self.native_options["heater_meter_verification"]
+                    or not record
+                    or record != self.native_options["ct_free_solar_verification"]
+                    or -signed > self.settings.pv_ac_limit_kw * 1.10
+                ):
+                    self._solar_input_loss()
+                    return
+                policy.add_meter(at, signed, heater_kw=0)
+
+    def _solar_input_loss(self):
+        """Retain a transient loss until the sole controller records/resolves it."""
+        from .controller import OPTIONAL_REASONS
+
+        controller = self.executor.controller
+        self.executor.policy.samples.clear()
+        if controller.solar_session_active or (
+            controller.intent
+            and controller.intent.get("reason") in OPTIONAL_REASONS
+            and controller.intent.get("target") != "off"
+        ):
+            self.solar_input_loss_pending = True
 
     # ------------------------------------------------------------------ the tick
     def update(self, now):

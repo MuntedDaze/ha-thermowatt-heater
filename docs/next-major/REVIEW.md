@@ -23,8 +23,25 @@ The implementing agent accepted all seven findings. Another CI portability issue
 was also corrected: the generated owner guide no longer enumerates OS-dependent
 time-zone aliases, with a regression proving output stability.
 
-Twenty-one targeted remediation tests pass. The existing non-replay regression
+The follow-up review at66aee0d accepted the original reproductions but found
+twoP1 races in the new raw-event capture: a circuit reading more than60 seconds
+from grid could leave a false positive qualification vote, and grid loss/recovery
+within one event-loop turn could erase a required withdrawal.
+
+The next correction permits raw CT callbacks to **invalidate only**, with the
+existing60-second pairing check and failure/reset markers. Only the canonical
+executor can grant positive CT votes from its current paired observations.
+Impossible CT-free export is rejected before becoming a vote. Transient grid/CT
+loss is retained until the single controller durably records a protective exit
+or resolves the optional context; sunshine/recovery cannot erase it, including
+while START is pending. No callback sends commands. New regressions reproduce
+old ON→fresh0W, impossible export→valid, and active/pending meter loss/recovery;
+the real HA fixture also exercises coalesced outage/recovery with all commands
+blocked by absent transport/commissioning.
+
+Twenty-five targeted remediation tests pass. The existing non-replay regression
 suite also passed before the final added tests. Functional corrections are now
 being committed; affected replay artifacts, final-head CI and the reviewer's
 final corrected-diff verification are still required. Do not read this record as
-final review acceptance or as installation/physical commissioning.
+final review acceptance or as installation/physical commissioning. The raw-event
+corrections require a further independent verification on their corrected head.

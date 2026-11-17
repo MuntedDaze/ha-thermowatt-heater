@@ -1266,15 +1266,15 @@
             "password_login": 1,
             "token_refresh": 23,
             "discovery": 0,
-            "status": 165,
+            "status": 145,
             "command": 22,
             "confirmation": 22,
             "command_refresh": 1
           },
-          "http_total": 234,
+          "http_total": 214,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 4538,
+          "unknown_temperature_minutes": 5082,
           "required_planning_unknown_minutes": 12,
           "stale_command_blocked_minutes": 33,
           "persistent_owner_detection_minutes": 15.0,
@@ -1284,12 +1284,12 @@
           "evaluated_completion_samples": 0,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 267,
-            "required_temperature": 2937,
-            "quiet_before_decision": 1357,
+            "fixed_fallback": 247,
+            "required_temperature": 2243,
+            "quiet_before_decision": 1326,
             "before_decision": 335,
             "stable_off": 1599,
-            "stable_baseline": 3585
+            "stable_baseline": 4330
           },
           "days": {
             "2026-01-12": {
@@ -1839,15 +1839,15 @@
             "password_login": 1,
             "token_refresh": 23,
             "discovery": 0,
-            "status": 141,
+            "status": 119,
             "command": 22,
             "confirmation": 22,
             "command_refresh": 1
           },
-          "http_total": 210,
-          "maximum_status_age_minutes": 568.666667,
-          "maximum_healthy_status_age_minutes": 568.666667,
-          "unknown_temperature_minutes": 5535,
+          "http_total": 188,
+          "maximum_status_age_minutes": 718.666667,
+          "maximum_healthy_status_age_minutes": 718.666667,
+          "unknown_temperature_minutes": 6163,
           "required_planning_unknown_minutes": 12,
           "stale_command_blocked_minutes": 33,
           "persistent_owner_detection_minutes": 105.0,
@@ -1857,12 +1857,12 @@
           "evaluated_completion_samples": 0,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 243,
-            "required_temperature": 2850,
-            "quiet_before_decision": 3694,
+            "fixed_fallback": 221,
+            "required_temperature": 2156,
+            "quiet_before_decision": 3874,
             "before_decision": 248,
             "stable_off": 1490,
-            "stable_baseline": 1555
+            "stable_baseline": 2091
           },
           "days": {
             "2026-01-12": {
@@ -3674,15 +3674,15 @@
             "password_login": 1,
             "token_refresh": 29,
             "discovery": 0,
-            "status": 182,
+            "status": 162,
             "command": 28,
             "confirmation": 28,
             "command_refresh": 6
           },
-          "http_total": 274,
+          "http_total": 254,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 4361,
+          "unknown_temperature_minutes": 4905,
           "required_planning_unknown_minutes": 0,
           "stale_command_blocked_minutes": 40,
           "persistent_owner_detection_minutes": 15.0,
@@ -3692,12 +3692,12 @@
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 296,
-            "required_temperature": 2667,
-            "quiet_before_decision": 1479,
+            "fixed_fallback": 276,
+            "required_temperature": 1973,
+            "quiet_before_decision": 1448,
             "before_decision": 610,
             "stable_off": 1443,
-            "stable_baseline": 3585
+            "stable_baseline": 4330
           },
           "days": {
             "2026-01-12": {
@@ -4312,15 +4312,15 @@
             "password_login": 1,
             "token_refresh": 29,
             "discovery": 0,
-            "status": 158,
+            "status": 136,
             "command": 28,
             "confirmation": 28,
             "command_refresh": 9
           },
-          "http_total": 253,
-          "maximum_status_age_minutes": 568.666667,
-          "maximum_healthy_status_age_minutes": 568.666667,
-          "unknown_temperature_minutes": 5298,
+          "http_total": 231,
+          "maximum_status_age_minutes": 718.666667,
+          "maximum_healthy_status_age_minutes": 718.666667,
+          "unknown_temperature_minutes": 5926,
           "required_planning_unknown_minutes": 0,
           "stale_command_blocked_minutes": 40,
           "persistent_owner_detection_minutes": 105.0,
@@ -4330,12 +4330,12 @@
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 272,
-            "required_temperature": 2580,
-            "quiet_before_decision": 3879,
+            "fixed_fallback": 250,
+            "required_temperature": 1886,
+            "quiet_before_decision": 4059,
             "before_decision": 536,
             "stable_off": 1258,
-            "stable_baseline": 1555
+            "stable_baseline": 2091
           },
           "days": {
             "2026-01-12": {
@@ -6204,15 +6204,15 @@
             "password_login": 1,
             "token_refresh": 23,
             "discovery": 0,
-            "status": 164,
+            "status": 143,
             "command": 22,
             "confirmation": 22,
             "command_refresh": 2
           },
-          "http_total": 234,
+          "http_total": 213,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 4583,
+          "unknown_temperature_minutes": 5074,
           "required_planning_unknown_minutes": 12,
           "stale_command_blocked_minutes": 33,
           "persistent_owner_detection_minutes": 15.0,
@@ -6222,12 +6222,12 @@
           "evaluated_completion_samples": 0,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 266,
-            "required_temperature": 2938,
-            "quiet_before_decision": 1800,
+            "fixed_fallback": 245,
+            "required_temperature": 2209,
+            "quiet_before_decision": 1829,
             "before_decision": 335,
             "stable_off": 1096,
-            "stable_baseline": 3645
+            "stable_baseline": 4366
           },
           "days": {
             "2026-07-13": {
@@ -6777,15 +6777,15 @@
             "password_login": 1,
             "token_refresh": 23,
             "discovery": 0,
-            "status": 141,
+            "status": 118,
             "command": 22,
             "confirmation": 22,
             "command_refresh": 2
           },
-          "http_total": 211,
-          "maximum_status_age_minutes": 568.666667,
-          "maximum_healthy_status_age_minutes": 568.666667,
-          "unknown_temperature_minutes": 5580,
+          "http_total": 188,
+          "maximum_status_age_minutes": 575.666667,
+          "maximum_healthy_status_age_minutes": 575.666667,
+          "unknown_temperature_minutes": 6155,
           "required_planning_unknown_minutes": 12,
           "stale_command_blocked_minutes": 33,
           "persistent_owner_detection_minutes": 105.0,
@@ -6795,12 +6795,12 @@
           "evaluated_completion_samples": 0,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 243,
-            "required_temperature": 2850,
-            "quiet_before_decision": 3934,
+            "fixed_fallback": 220,
+            "required_temperature": 2121,
+            "quiet_before_decision": 4114,
             "before_decision": 248,
             "stable_off": 1190,
-            "stable_baseline": 1615
+            "stable_baseline": 2187
           },
           "days": {
             "2026-07-13": {
@@ -8666,15 +8666,15 @@
             "password_login": 1,
             "token_refresh": 32,
             "discovery": 0,
-            "status": 176,
+            "status": 155,
             "command": 31,
             "confirmation": 31,
             "command_refresh": 13
           },
-          "http_total": 284,
+          "http_total": 263,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 4547,
+          "unknown_temperature_minutes": 5038,
           "required_planning_unknown_minutes": 0,
           "stale_command_blocked_minutes": 41,
           "persistent_owner_detection_minutes": 15.0,
@@ -8684,12 +8684,12 @@
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 296,
-            "required_temperature": 2648,
-            "quiet_before_decision": 1778,
+            "fixed_fallback": 275,
+            "required_temperature": 1919,
+            "quiet_before_decision": 1807,
             "before_decision": 617,
             "stable_off": 1096,
-            "stable_baseline": 3645
+            "stable_baseline": 4366
           },
           "days": {
             "2026-07-13": {
@@ -9352,15 +9352,15 @@
             "password_login": 1,
             "token_refresh": 32,
             "discovery": 0,
-            "status": 153,
+            "status": 130,
             "command": 31,
             "confirmation": 31,
             "command_refresh": 13
           },
-          "http_total": 261,
-          "maximum_status_age_minutes": 568.666667,
-          "maximum_healthy_status_age_minutes": 568.666667,
-          "unknown_temperature_minutes": 5544,
+          "http_total": 238,
+          "maximum_status_age_minutes": 575.666667,
+          "maximum_healthy_status_age_minutes": 575.666667,
+          "unknown_temperature_minutes": 6119,
           "required_planning_unknown_minutes": 0,
           "stale_command_blocked_minutes": 41,
           "persistent_owner_detection_minutes": 105.0,
@@ -9370,12 +9370,12 @@
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 273,
-            "required_temperature": 2560,
-            "quiet_before_decision": 3924,
+            "fixed_fallback": 250,
+            "required_temperature": 1831,
+            "quiet_before_decision": 4104,
             "before_decision": 530,
             "stable_off": 1178,
-            "stable_baseline": 1615
+            "stable_baseline": 2187
           },
           "days": {
             "2026-07-13": {
@@ -11301,15 +11301,15 @@
             "password_login": 1,
             "token_refresh": 23,
             "discovery": 0,
-            "status": 154,
+            "status": 143,
             "command": 22,
             "confirmation": 22,
             "command_refresh": 1
           },
-          "http_total": 223,
+          "http_total": 212,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 4854,
+          "unknown_temperature_minutes": 5144,
           "required_planning_unknown_minutes": 12,
           "stale_command_blocked_minutes": 33,
           "persistent_owner_detection_minutes": 15.0,
@@ -11319,12 +11319,12 @@
           "evaluated_completion_samples": 0,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 628,
-            "required_temperature": 2677,
-            "quiet_before_decision": 1923,
+            "fixed_fallback": 617,
+            "required_temperature": 2244,
+            "quiet_before_decision": 2011,
             "before_decision": 335,
             "stable_off": 1096,
-            "stable_baseline": 3421
+            "stable_baseline": 3777
           },
           "days": {
             "2026-09-28": {
@@ -11882,15 +11882,15 @@
             "password_login": 1,
             "token_refresh": 23,
             "discovery": 0,
-            "status": 133,
+            "status": 120,
             "command": 22,
             "confirmation": 22,
             "command_refresh": 1
           },
-          "http_total": 202,
-          "maximum_status_age_minutes": 568.666667,
-          "maximum_healthy_status_age_minutes": 568.666667,
-          "unknown_temperature_minutes": 5760,
+          "http_total": 189,
+          "maximum_status_age_minutes": 658.666667,
+          "maximum_healthy_status_age_minutes": 658.666667,
+          "unknown_temperature_minutes": 6134,
           "required_planning_unknown_minutes": 12,
           "stale_command_blocked_minutes": 33,
           "persistent_owner_detection_minutes": 105.0,
@@ -11900,12 +11900,12 @@
           "evaluated_completion_samples": 0,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 607,
-            "required_temperature": 2589,
+            "fixed_fallback": 504,
+            "required_temperature": 2156,
             "quiet_before_decision": 3891,
             "before_decision": 248,
             "stable_off": 1190,
-            "stable_baseline": 1555
+            "stable_baseline": 2091
           },
           "days": {
             "2026-09-28": {
@@ -11984,7 +11984,7 @@
               "event": "HA_controller_and_history_restart_no_intent_replay"
             },
             {
-              "at": "2026-10-04T08:30:00+00:00",
+              "at": "2026-10-04T10:00:00+00:00",
               "event": "synthetic_refresh_401_operator_recovery_required"
             }
           ],
@@ -12429,7 +12429,7 @@
             "dropped_plan_frames": 45,
             "expired_lease_observed": true,
             "status_reads_during_plan_loss": 2,
-            "refresh_401_at": "2026-10-04T08:30:00+00:00",
+            "refresh_401_at": "2026-10-04T10:00:00+00:00",
             "http_after_refresh_rejection": 0,
             "final_auth_mode": "blocked"
           },
@@ -13770,15 +13770,15 @@
             "password_login": 1,
             "token_refresh": 29,
             "discovery": 0,
-            "status": 165,
+            "status": 155,
             "command": 29,
             "confirmation": 29,
             "command_refresh": 11
           },
-          "http_total": 264,
+          "http_total": 254,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 4824,
+          "unknown_temperature_minutes": 5072,
           "required_planning_unknown_minutes": 0,
           "stale_command_blocked_minutes": 40,
           "persistent_owner_detection_minutes": 15.0,
@@ -13788,12 +13788,12 @@
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 683,
-            "required_temperature": 2386,
-            "quiet_before_decision": 1877,
+            "fixed_fallback": 643,
+            "required_temperature": 1994,
+            "quiet_before_decision": 1965,
             "before_decision": 617,
             "stable_off": 1096,
-            "stable_baseline": 3421
+            "stable_baseline": 3765
           },
           "days": {
             "2026-09-28": {
@@ -13876,7 +13876,7 @@
               "event": "HA_controller_and_history_restart_no_intent_replay"
             },
             {
-              "at": "2026-10-04T08:00:00+00:00",
+              "at": "2026-10-04T08:30:00+00:00",
               "event": "synthetic_refresh_401_operator_recovery_required"
             }
           ],
@@ -14400,7 +14400,7 @@
             "dropped_plan_frames": 45,
             "expired_lease_observed": true,
             "status_reads_during_plan_loss": 2,
-            "refresh_401_at": "2026-10-04T08:00:00+00:00",
+            "refresh_401_at": "2026-10-04T08:30:00+00:00",
             "http_after_refresh_rejection": 0,
             "final_auth_mode": "blocked"
           },
@@ -14434,15 +14434,15 @@
             "password_login": 1,
             "token_refresh": 29,
             "discovery": 0,
-            "status": 148,
+            "status": 136,
             "command": 29,
             "confirmation": 29,
             "command_refresh": 8
           },
-          "http_total": 244,
-          "maximum_status_age_minutes": 568.666667,
-          "maximum_healthy_status_age_minutes": 568.666667,
-          "unknown_temperature_minutes": 5652,
+          "http_total": 232,
+          "maximum_status_age_minutes": 646.666667,
+          "maximum_healthy_status_age_minutes": 646.666667,
+          "unknown_temperature_minutes": 5984,
           "required_planning_unknown_minutes": 0,
           "stale_command_blocked_minutes": 40,
           "persistent_owner_detection_minutes": 105.0,
@@ -14452,12 +14452,12 @@
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 666,
-            "required_temperature": 2298,
+            "fixed_fallback": 534,
+            "required_temperature": 1906,
             "quiet_before_decision": 3884,
             "before_decision": 604,
             "stable_off": 1073,
-            "stable_baseline": 1555
+            "stable_baseline": 2079
           },
           "days": {
             "2026-09-28": {
@@ -14540,7 +14540,7 @@
               "event": "HA_controller_and_history_restart_no_intent_replay"
             },
             {
-              "at": "2026-10-04T08:00:00+00:00",
+              "at": "2026-10-04T10:00:00+00:00",
               "event": "synthetic_refresh_401_operator_recovery_required"
             }
           ],
@@ -15064,7 +15064,7 @@
             "dropped_plan_frames": 45,
             "expired_lease_observed": true,
             "status_reads_during_plan_loss": 2,
-            "refresh_401_at": "2026-10-04T08:00:00+00:00",
+            "refresh_401_at": "2026-10-04T10:00:00+00:00",
             "http_after_refresh_rejection": 0,
             "final_auth_mode": "blocked"
           },

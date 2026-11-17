@@ -1265,17 +1265,17 @@
       "command_posts": 22,
       "http_categories": {
         "password_login": 1,
-        "token_refresh": 200,
+        "token_refresh": 194,
         "discovery": 0,
-        "status": 201,
+        "status": 195,
         "command": 22,
         "confirmation": 22,
         "command_refresh": 2
       },
-      "http_total": 448,
-      "maximum_status_age_minutes": 1380.0,
+      "http_total": 436,
+      "maximum_status_age_minutes": 1378.666667,
       "maximum_healthy_status_age_minutes": 59.666667,
-      "unknown_temperature_minutes": 2719,
+      "unknown_temperature_minutes": 2810,
       "required_planning_unknown_minutes": 12,
       "stale_command_blocked_minutes": 32,
       "persistent_owner_detection_minutes": 45.0,
@@ -1285,9 +1285,9 @@
       "evaluated_completion_samples": 0,
       "shadow_would_reads": 0,
       "poll_reason_minutes": {
-        "fixed_fallback": 1667,
-        "required_temperature": 2561,
-        "stable_baseline": 3256,
+        "fixed_fallback": 1659,
+        "required_temperature": 2215,
+        "stable_baseline": 3610,
         "before_decision": 385,
         "stable_off": 2211
       },
@@ -1368,7 +1368,7 @@
           "event": "HA_controller_and_history_restart_no_intent_replay"
         },
         {
-          "at": "2026-11-21T16:00:00+00:00",
+          "at": "2026-11-21T16:01:20+00:00",
           "event": "synthetic_refresh_401_operator_recovery_required"
         }
       ],
@@ -1807,7 +1807,7 @@
         "dropped_plan_frames": 45,
         "expired_lease_observed": true,
         "status_reads_during_plan_loss": 1,
-        "refresh_401_at": "2026-11-21T16:00:00+00:00",
+        "refresh_401_at": "2026-11-21T16:01:20+00:00",
         "http_after_refresh_rejection": 0,
         "final_auth_mode": "blocked"
       },
@@ -3104,17 +3104,17 @@
       "command_posts": 28,
       "http_categories": {
         "password_login": 1,
-        "token_refresh": 200,
+        "token_refresh": 194,
         "discovery": 0,
-        "status": 201,
+        "status": 195,
         "command": 28,
         "confirmation": 28,
         "command_refresh": 10
       },
-      "http_total": 468,
-      "maximum_status_age_minutes": 1380.0,
+      "http_total": 456,
+      "maximum_status_age_minutes": 1378.666667,
       "maximum_healthy_status_age_minutes": 59.666667,
-      "unknown_temperature_minutes": 2677,
+      "unknown_temperature_minutes": 2768,
       "required_planning_unknown_minutes": 12,
       "stale_command_blocked_minutes": 32,
       "persistent_owner_detection_minutes": 45.0,
@@ -3124,9 +3124,9 @@
       "evaluated_completion_samples": 6,
       "shadow_would_reads": 0,
       "poll_reason_minutes": {
-        "fixed_fallback": 1679,
-        "required_temperature": 2554,
-        "stable_baseline": 3256,
+        "fixed_fallback": 1671,
+        "required_temperature": 2208,
+        "stable_baseline": 3610,
         "before_decision": 422,
         "stable_off": 2169
       },
@@ -3207,7 +3207,7 @@
           "event": "HA_controller_and_history_restart_no_intent_replay"
         },
         {
-          "at": "2026-11-21T16:00:00+00:00",
+          "at": "2026-11-21T16:01:20+00:00",
           "event": "synthetic_refresh_401_operator_recovery_required"
         }
       ],
@@ -3683,7 +3683,7 @@
         "dropped_plan_frames": 45,
         "expired_lease_observed": true,
         "status_reads_during_plan_loss": 1,
-        "refresh_401_at": "2026-11-21T16:00:00+00:00",
+        "refresh_401_at": "2026-11-21T16:01:20+00:00",
         "http_after_refresh_rejection": 0,
         "final_auth_mode": "blocked"
       },

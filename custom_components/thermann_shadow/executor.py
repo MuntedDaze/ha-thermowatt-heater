@@ -563,8 +563,10 @@ class Executor:
             required_export_kw=max(0, -grid) if grid is not None else None,
             forecast=tuple(forecast),
             last_command_at=last,
-            heater_meter_valid=runtime.power_budget is not None,
-            ct_free_solar_valid=ct_free_valid,
+            heater_meter_valid=runtime.power_budget is not None
+            and not runtime.solar_input_loss_pending,
+            ct_free_solar_valid=ct_free_valid and not runtime.solar_input_loss_pending,
+            optional_measurement_lost=runtime.solar_input_loss_pending,
             optional_start_quality=site_quality
             if ct_free_valid and not runtime.ct_free_solar_start_ready
             else None,
@@ -669,7 +671,17 @@ class Executor:
             want = Want(decision.state, decision.reason, decision.layer, dict(decision.plan))
             effects = self.controller.step(obs, want, self.cfg)
             self.runtime.controller_active = self.controller.enabled
-            if not await self._save():
+            state_saved = await self._save()
+            if state_saved and (
+                self.controller.protective_exit
+                or (
+                    not self.controller.solar_session_active
+                    and self.controller.intent is None
+                    and not self.controller.fault
+                )
+            ):
+                self.runtime.solar_input_loss_pending = False
+            if not state_saved:
                 # Never publish an intent that is not persisted (restart safety).
                 effects = [e for e in effects if e.kind != "publish"]
                 if self.controller.intent:

@@ -1264,17 +1264,17 @@
           "command_posts": 22,
           "http_categories": {
             "password_login": 1,
-            "token_refresh": 161,
+            "token_refresh": 141,
             "discovery": 0,
-            "status": 325,
+            "status": 285,
             "command": 22,
             "confirmation": 22,
             "command_refresh": 1
           },
-          "http_total": 532,
+          "http_total": 472,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 4538,
+          "unknown_temperature_minutes": 5082,
           "required_planning_unknown_minutes": 12,
           "stale_command_blocked_minutes": 33,
           "persistent_owner_detection_minutes": 15.0,
@@ -1284,12 +1284,12 @@
           "evaluated_completion_samples": 0,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 267,
-            "required_temperature": 2937,
-            "quiet_before_decision": 1357,
+            "fixed_fallback": 247,
+            "required_temperature": 2243,
+            "quiet_before_decision": 1326,
             "before_decision": 335,
             "stable_off": 1599,
-            "stable_baseline": 3585
+            "stable_baseline": 4330
           },
           "days": {
             "2026-01-12": {
@@ -1810,7 +1810,7 @@
             "final_auth_mode": "authorized"
           },
           "synthetic_session_hours": 0.333333,
-          "expired_status_401": 161,
+          "expired_status_401": 141,
           "common_terminal_stored_kwh": 10.73141,
           "terminal_replenishment_kwh": 0.0,
           "equal_terminal_cost_aud": 6.414938
@@ -1837,17 +1837,17 @@
           "command_posts": 22,
           "http_categories": {
             "password_login": 1,
-            "token_refresh": 137,
+            "token_refresh": 115,
             "discovery": 0,
-            "status": 277,
+            "status": 233,
             "command": 22,
             "confirmation": 22,
             "command_refresh": 1
           },
-          "http_total": 460,
-          "maximum_status_age_minutes": 568.666667,
-          "maximum_healthy_status_age_minutes": 568.666667,
-          "unknown_temperature_minutes": 5535,
+          "http_total": 394,
+          "maximum_status_age_minutes": 718.666667,
+          "maximum_healthy_status_age_minutes": 718.666667,
+          "unknown_temperature_minutes": 6163,
           "required_planning_unknown_minutes": 12,
           "stale_command_blocked_minutes": 33,
           "persistent_owner_detection_minutes": 105.0,
@@ -1857,12 +1857,12 @@
           "evaluated_completion_samples": 0,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 243,
-            "required_temperature": 2850,
-            "quiet_before_decision": 3694,
+            "fixed_fallback": 221,
+            "required_temperature": 2156,
+            "quiet_before_decision": 3874,
             "before_decision": 248,
             "stable_off": 1490,
-            "stable_baseline": 1555
+            "stable_baseline": 2091
           },
           "days": {
             "2026-01-12": {
@@ -2383,7 +2383,7 @@
             "final_auth_mode": "authorized"
           },
           "synthetic_session_hours": 0.333333,
-          "expired_status_401": 137,
+          "expired_status_401": 115,
           "common_terminal_stored_kwh": 10.73141,
           "terminal_replenishment_kwh": 0.0,
           "equal_terminal_cost_aud": 6.414938
@@ -3672,17 +3672,17 @@
           "command_posts": 28,
           "http_categories": {
             "password_login": 1,
-            "token_refresh": 165,
+            "token_refresh": 145,
             "discovery": 0,
-            "status": 343,
+            "status": 303,
             "command": 28,
             "confirmation": 28,
             "command_refresh": 6
           },
-          "http_total": 571,
+          "http_total": 511,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 4361,
+          "unknown_temperature_minutes": 4905,
           "required_planning_unknown_minutes": 0,
           "stale_command_blocked_minutes": 40,
           "persistent_owner_detection_minutes": 15.0,
@@ -3692,12 +3692,12 @@
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 296,
-            "required_temperature": 2667,
-            "quiet_before_decision": 1479,
+            "fixed_fallback": 276,
+            "required_temperature": 1973,
+            "quiet_before_decision": 1448,
             "before_decision": 610,
             "stable_off": 1443,
-            "stable_baseline": 3585
+            "stable_baseline": 4330
           },
           "days": {
             "2026-01-12": {
@@ -4283,7 +4283,7 @@
             "final_auth_mode": "authorized"
           },
           "synthetic_session_hours": 0.333333,
-          "expired_status_401": 162,
+          "expired_status_401": 142,
           "common_terminal_stored_kwh": 10.03141,
           "terminal_replenishment_kwh": 0.0,
           "equal_terminal_cost_aud": 5.902118
@@ -4310,17 +4310,17 @@
           "command_posts": 28,
           "http_categories": {
             "password_login": 1,
-            "token_refresh": 141,
+            "token_refresh": 119,
             "discovery": 0,
-            "status": 295,
+            "status": 251,
             "command": 28,
             "confirmation": 28,
             "command_refresh": 9
           },
-          "http_total": 502,
-          "maximum_status_age_minutes": 568.666667,
-          "maximum_healthy_status_age_minutes": 568.666667,
-          "unknown_temperature_minutes": 5298,
+          "http_total": 436,
+          "maximum_status_age_minutes": 718.666667,
+          "maximum_healthy_status_age_minutes": 718.666667,
+          "unknown_temperature_minutes": 5926,
           "required_planning_unknown_minutes": 0,
           "stale_command_blocked_minutes": 40,
           "persistent_owner_detection_minutes": 105.0,
@@ -4330,12 +4330,12 @@
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 272,
-            "required_temperature": 2580,
-            "quiet_before_decision": 3879,
+            "fixed_fallback": 250,
+            "required_temperature": 1886,
+            "quiet_before_decision": 4059,
             "before_decision": 536,
             "stable_off": 1258,
-            "stable_baseline": 1555
+            "stable_baseline": 2091
           },
           "days": {
             "2026-01-12": {
@@ -4921,7 +4921,7 @@
             "final_auth_mode": "authorized"
           },
           "synthetic_session_hours": 0.333333,
-          "expired_status_401": 138,
+          "expired_status_401": 116,
           "common_terminal_stored_kwh": 10.03141,
           "terminal_replenishment_kwh": 0.0,
           "equal_terminal_cost_aud": 5.902118

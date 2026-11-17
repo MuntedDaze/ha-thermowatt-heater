@@ -292,6 +292,66 @@ async def check_configuration(hass, entry):
     assert not runtime.executor.policy.pv_sustained(
         dt_util.utcnow(), timedelta(minutes=15), lambda kw: kw >= 0.5
     )
+    # Exercise real HA callbacks for a required-meter outage/recovery in one
+    # loop turn. Every command is blocked by the absent MQTT/commissioning;
+    # no fake physical qualification or service transport is provided.
+    from custom_components.thermann_shadow.controller import Controller, NORMAL_ACTIVE
+    from custom_components.thermann_shadow.targets import NORMAL
+
+    peak_options = {
+        **entry.options,
+        "tariff_profile": "custom",
+        "tariff_periods": json.dumps(
+            [
+                {
+                    "days": list(range(7)),
+                    "start": "00:00",
+                    "end": "00:00",
+                    "kind": "peak",
+                    "rate": 0.36,
+                }
+            ]
+        ),
+        "tariff_verified": True,
+    }
+    hass.config_entries.async_update_entry(entry, options=peak_options)
+    await hass.async_block_till_done()
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    bridge_sources = runtime.sources
+    now = dt_util.utcnow()
+    hass.states.async_set(
+        bridge_sources["heater"],
+        "heat",
+        {"temperature": 62, "current_temperature": 50, "unit_of_measurement": "°C"},
+    )
+    hass.states.async_set(bridge_sources["mode"], "Manual")
+    hass.states.async_set(bridge_sources["last_poll"], now.isoformat())
+    hass.states.async_set(
+        bridge_sources["cloud_health"],
+        "ok",
+        {
+            "auth_guard_mode": "authorized",
+            "commands_enabled": True,
+            "command_policy": "automation",
+            "command_confirmation_pending": False,
+            "command_transitions": ["off@62"],
+            "consecutive_failures": 0,
+        },
+    )
+    await hass.async_block_till_done()
+    original_controller = runtime.executor.controller
+    runtime.executor.controller = Controller(
+        enabled=True, state=NORMAL_ACTIVE, heater=NORMAL, solar_session_active=True
+    )
+    hass.states.async_set(sources["grid"], "unavailable", {"unit_of_measurement": "W"})
+    hass.states.async_set(sources["grid"], 3500, {"unit_of_measurement": "W"})
+    await hass.async_block_till_done()
+    assert runtime.executor.controller.protective_exit is not None
+    assert runtime.executor._saved["protective_exit"] is not None
+    assert runtime.executor.controller.intent is None
+    runtime.executor.controller = original_controller
+    runtime.solar_input_loss_pending = False
+    await runtime.executor._save()
     hass.config_entries.async_update_entry(entry, options=before)
     await hass.async_block_till_done()
 

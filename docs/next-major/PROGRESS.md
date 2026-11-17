@@ -114,3 +114,21 @@ Independent review correction checkpoint:
 - Initial corrected UI at0b374a2 passed both browser versions and was visually
   inspected (phone labels/translated states now readable, desktop2-column native
   sections). Latest final source still needs all checks and final screenshot verification.
+
+Further correction after66aee0d follow-up:
+
+- Astra accepted the original seven reproductions but identified two newP1 event
+  races. Corrected raw CT callbacks to invalidate/reset only, retaining60s pairing
+  and canonical executor-only positive CT votes. Added latched transient required
+  meter loss through single-controller durable exit/START confirmation handling;
+  impossible CT-free export cannot become a passing vote. No callback transport.
+-25 focused review regressions pass;90 selected review/existing-interface tests
+  pass. Actual HA same-loop grid outage/recovery added with commands blocked by
+  missing MQTT/commissioning. Source is to be frozen for final regressions.
+- Sessions6374/96056 completed replay regeneration from the previous correction;
+  new event-capture fields are unused in those mocked-bus replays. Full final
+  suite must reproduce all results from fresh imports; never claim mixed-source
+  long-running test results. Old20366 remains invalidated, not passing evidence.
+- Need commit corrected head, ask Astra for final readonly verification of the
+  two remainingP1 reproductions and new races, run all final-head CI, inspect any
+  failure, download/verify artifacts/screenshots and finish handoff without merge.

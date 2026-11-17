@@ -124,6 +124,7 @@ class Snapshot:
     ct_free_solar_valid: bool = False  # separately commissioned grid-only policy
     optional_start_quality: str | None = None
     optional_adoption_ready: bool = False  # genuine recent cloud state + exit guards
+    optional_measurement_lost: bool = False  # latched intervening event, not latest value
     optional_cooldown_until: datetime | None = None
     protective_exit_pending: bool = False
     optional_session_active: bool = False
@@ -151,6 +152,8 @@ class SimplePolicy:
         # (at, import_kw, available_kw, element_on); available EXCLUDES the element.
         self.samples: deque[tuple[datetime, float, float, bool]] = deque()
         self.pv_samples: deque[tuple[datetime, float]] = deque()
+        self.surplus_reset_at: datetime | None = None
+        self.import_reset_at: datetime | None = None
         self._peak_cache: tuple[datetime, datetime | None, datetime] | None = None
 
     # --- local meter ---------------------------------------------------------------
@@ -294,14 +297,22 @@ class SimplePolicy:
     def importing_continuously(self, now: datetime) -> bool:
         """Acceptable readings reset withdrawal; stale/gapped evidence cannot vote."""
         recent = self._coverage(self.samples, now, self.s.withdraw)
-        return bool(recent) and all(smp[1] > self.s.peak_import_tolerance_kw for smp in recent)
+        return (
+            bool(recent)
+            and (self.import_reset_at is None or recent[0][0] > self.import_reset_at)
+            and all(smp[1] > self.s.peak_import_tolerance_kw for smp in recent)
+        )
 
     def surplus_qualified(self, now: datetime) -> bool:
         def test(sample):
             return sample[2] >= self.s.peak_start_kw
 
         recent = self._coverage(self.samples, now, self.s.qualify)
-        return bool(recent) and all(test(sample) for sample in recent)
+        return (
+            bool(recent)
+            and (self.surplus_reset_at is None or recent[0][0] > self.surplus_reset_at)
+            and all(test(sample) for sample in recent)
+        )
 
     @staticmethod
     def optional_measurement_valid(snap):
@@ -596,6 +607,8 @@ class SimplePolicy:
             if s.peak_policy == PEAK_NEVER:
                 plan["boost_reason"] = "peak_heating_locked_out"
                 return OFF, "peak_lockout", 4, plan
+            if snap.optional_measurement_lost:
+                return OFF, "peak_meter_unavailable", 4, plan
             qualified = self.surplus_qualified(now)
             if state in (NORMAL, STORAGE):
                 if not self.meter_fresh(now):
