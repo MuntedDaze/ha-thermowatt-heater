@@ -148,3 +148,15 @@ Final code checkpoint:
   any, obtain final artifact and verify manifest/all hashes/head, inspect final
   screenshots, update PR/handoff with exact head/results/checksum. Keep PR draft,
   unmerged and undeployed; owner approval still required for merge/live operation.
+
+Final regression result/correction:
+
+- Local complete suite:1621 passed, one comparison assertion failed. The new
+  schedule caught a genuine5-minute app change at12:05 and entered owner hold;
+  the assertion wrongly required it always to be missed. Corrected the test to
+  compare disclosed detection with the recorded genuine owner-override event.
+  No controller behaviour changed. Run the targeted seasonal comparison and all
+  final-head CI; no further implementation changes are planned.
+- Canonical CI source bundle for5efb2ee was verified: all170 source hashes and
+  manifest match local exactly (ZIP creator metadata differs across OS only).
+  The test-only commit needs a freshly verified exact-head bundle/checksum.

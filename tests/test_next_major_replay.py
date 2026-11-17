@@ -1,6 +1,7 @@
 """Reproduce seasonal comparisons with real policy/controller/bridge and fake I/O."""
 
 import importlib
+from datetime import datetime
 import json
 from pathlib import Path
 import sys
@@ -62,8 +63,19 @@ def test_request_savings_do_not_hide_target_outcomes_or_owner_detection(comparis
                 assert row["persistent_owner_detection_minutes"] <= (
                     720 if strategy == "minimum" else 480
                 )
-                # Temporary5-minute app changes may be missed, explicitly disclosed.
-                assert row["transient_app_change_observed"] is False
+                # A short app change may be missed, or caught by a useful read.
+                # Validate the disclosed outcome against the actual owner hold;
+                # never require the improved schedule to miss a real change.
+                start = next(e["at"] for e in row["events"] if e["event"] == "transient_app_change")
+                end = next(e["at"] for e in row["events"] if e["event"] == "transient_app_return")
+                held = any(
+                    d["state"] == "owner_override"
+                    and datetime.fromisoformat(start)
+                    <= datetime.fromisoformat(d["at"])
+                    <= datetime.fromisoformat(end)
+                    for d in row["decisions"]
+                )
+                assert row["transient_app_change_observed"] is held
                 # Do not manufacture an exact cost-equality claim; bounded differences
                 # are reported alongside actual service outcomes, not concealed.
                 assert row["equal_terminal_cost_aud"] <= fixed["equal_terminal_cost_aud"] + 0.15
