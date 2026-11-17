@@ -10,7 +10,7 @@ ADDON = ROOT / "thermowatt-heater"
 
 def test_supervisor_options_and_release_metadata(module):
     config = yaml.safe_load((ADDON / "config.yaml").read_text())
-    assert config["version"] == "1.4.0"
+    assert config["version"] == "1.4.1"
     assert config["slug"] == "thermowatt_boiler"  # installation identity never changes
     assert config["name"] == "Thermann Hot Water"
     assert "Unofficial" in config["description"]
@@ -100,3 +100,24 @@ def test_atomic_state_permissions_on_linux(module, tmp_path):
     if module.os.name == "posix":
         assert path.stat().st_mode & 0o777 == 0o600
     assert list(tmp_path.iterdir()) == [path]
+
+
+def test_release_version_references_agree_with_manifests():
+    """Hard-coded release checks must move with the manifests (PR #43 CI miss).
+
+    The isolated HA Core harness asserts the loaded controller version against
+    its own constant; the bridge diagnostics carry a literal version. Both are
+    cross-checks, so they stay literal here and must equal the manifests.
+    """
+    import re
+
+    manifest = json.loads((ROOT / "custom_components/thermann_shadow/manifest.json").read_text())
+    harness = (ROOT / "tools/readiness/shadow_ha_checks.py").read_text()
+    (current,) = re.findall(r'^CURRENT_VERSION = "([^"]+)"$', harness, re.M)
+    assert current == manifest["version"]
+
+    config = yaml.safe_load((ADDON / "config.yaml").read_text())
+    bridge = (ADDON / "thermowatt_bridge.py").read_text()
+    assert set(re.findall(r'"bridge_version": "([^"]+)"', bridge)) == {config["version"]}
+    report = (ROOT / "custom_components/thermann_shadow/report.py").read_text()
+    assert f'"{config["version"]}"' in report  # report accepts the current bridge

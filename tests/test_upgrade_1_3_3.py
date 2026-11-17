@@ -23,7 +23,7 @@ def snapshot(version="1.3.2"):
 def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(source_version):
     old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == source_version and new["version"] == "1.4.0"
+    assert old["version"] == source_version and new["version"] == "1.4.1"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
     assert {"1.3.8", "1.3.9", "1.3.10", "1.3.11", "1.3.12", "1.3.13"} <= set(
         new["breaking_versions"]

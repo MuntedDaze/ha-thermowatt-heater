@@ -1,7 +1,12 @@
 # Thermann hot water for Home Assistant
 
-**Next development candidate: controller0.16.0 / bridge1.4.0.**
-[PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42) contains
+**Released: controller 0.16.0 / bridge 1.4.0. Maintenance candidate in draft
+[PR43](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/43): bridge 1.4.1
+(Smart plans are accepted; see the [1.4.1 audit](docs/audits/POST_RELEASE_AUDIT_1_4_1.md)
+and [1.4.1 in-place upgrade](docs/audits/UPGRADE_1_4_1.md)) / controller 0.16.1
+(diagnostic report only).**
+
+The 0.16.0 / 1.4.0 release ([PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42)) contains
 the new62°C override, solar-led weekend comfort, explicit Smart polling,
 practical experimental CT-free setup and focused homeowner interface.
 Use the reviewed commit and final successful checks, not a version string alone.

@@ -4,7 +4,7 @@ This module has no transport or command path. Unknown vendor strings are omitted
 source entities are correlated by a short digest rather than names/serials.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 import hashlib
 import json
 import math
@@ -155,6 +155,88 @@ def code(value):
     return value if isinstance(value, str) and value in CODES | INTERNAL_CODES else "unreported"
 
 
+# Bridge 1.4.1 scheduling/refresh categories: closed sets, never free text.
+POLLING_CODES = frozenset(
+    {
+        "adaptive",
+        "fixed_fallback",
+        "fixed",
+        "disabled",
+        "journal_unavailable",
+        "existing",
+        "smart",
+        "fixed_30",
+        "minimum",
+        "stable",
+        "heating",
+        "ct_free",
+        "uncertain",
+        "before_decision",
+        "near_completion",
+        "recovery",
+        "stable_baseline",
+        "stable_off",
+        "required_temperature",
+        "quiet_before_decision",
+        "schedule_inactive",
+        "no_current_observation",
+        "invalid_payload",
+        "version_unsupported",
+        "mode_mismatch",
+        "fields_invalid",
+        "plan_stale_or_future",
+        "status_identity_mismatch",
+        "plan_not_newer",
+        "owner_check_invalid",
+        "fixed_30_invalid",
+        "delay_or_reason_invalid",
+        "queued",
+        "accepted_for_read",
+        "reconnect_read_scheduled",
+    }
+    | {
+        prefix + reason
+        for prefix in ("refused_", "dropped_")
+        for reason in (
+            "invalid_payload",
+            "disabled",
+            "bridge_offline",
+            "awaiting_discovery",
+            "authentication_not_ready",
+            "accounting_incomplete",
+            "backoff_or_quota",
+            "unknown_heater",
+            "min_spacing",
+        )
+    }
+)
+
+
+def polling_code(value):
+    return value if isinstance(value, str) and value in POLLING_CODES else "unreported"
+
+
+def code_counts(value):
+    """A {category: count} map restricted to known categories."""
+    if not isinstance(value, dict):
+        return None
+    return {
+        key: count
+        for key, count in value.items()
+        if key in POLLING_CODES and type(count) is int and count >= 0
+    }
+
+
+def outcome(value, key):
+    if not isinstance(value, dict):
+        return None
+    at = numeric(value.get("at"))
+    return {
+        key: polling_code(value.get(key)),
+        "at": datetime.fromtimestamp(at, UTC).isoformat() if at is not None else None,
+    }
+
+
 def numeric(value):
     if isinstance(value, str):
         try:
@@ -232,12 +314,16 @@ def build(runtime, now, ha_version="unknown"):
         }
     counts = attrs.get("request_categories", {})
     counts = counts if isinstance(counts, dict) else {}
+    schedule = attrs.get("adaptive_polling")
+    schedule = schedule if isinstance(schedule, dict) else {}
+    refresh = attrs.get("on_demand_refresh_activity")
+    refresh = refresh if isinstance(refresh, dict) else {}
     report = {
         "schema": 1,
         "versions": {
-            "controller": "0.16.0",
+            "controller": "0.16.1",
             "bridge": attrs.get("bridge_version")
-            if attrs.get("bridge_version") in {"1.3.17", "1.4.0"}
+            if attrs.get("bridge_version") in {"1.3.17", "1.4.0", "1.4.1"}
             else "unreported",
             "home_assistant": ha_version
             if isinstance(ha_version, str)
@@ -363,6 +449,25 @@ def build(runtime, now, ha_version="unknown"):
         },
         "polling": {
             "choice": code(opts.get("polling_mode")),
+            # What the bridge is actually doing, separately from the choice:
+            # Smart selected but "fixed_fallback" means no plan is in force.
+            "bridge_preference": polling_code(attrs.get("polling_preference")),
+            "actual_mode": polling_code(attrs.get("polling_mode")),
+            "actual_reason": polling_code(attrs.get("polling_reason")),
+            "plans_accepted": numeric(schedule.get("counts", {}).get("accepted"))
+            if isinstance(schedule.get("counts"), dict)
+            else None,
+            "plans_rejected": numeric(schedule.get("counts", {}).get("rejected"))
+            if isinstance(schedule.get("counts"), dict)
+            else None,
+            "rejection_reasons_since_bridge_start": code_counts(schedule.get("rejection_reasons")),
+            "last_rejection": outcome(schedule.get("last_rejection"), "reason"),
+            "last_acceptance": outcome(schedule.get("last_acceptance"), "reason"),
+            "on_demand_refresh_enabled": attrs.get("on_demand_refresh_enabled")
+            if isinstance(attrs.get("on_demand_refresh_enabled"), bool)
+            else None,
+            "refresh_outcomes_since_bridge_start": code_counts(refresh.get("outcomes")),
+            "last_refresh": outcome(refresh.get("last"), "result"),
             "next_observation": stamp(values.get("next_cloud_poll")),
             "interval_seconds": numeric(values.get("cloud_poll_interval")),
             "note": "Quiet Smart nights can delay detecting an app change up to 8 hours (experimental minimum: 12 hours). Every command still checks its exact prior and confirms.",

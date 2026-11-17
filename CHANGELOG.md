@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.4.1] — Smart plan acceptance fix (with controller 0.16.1)
+
+- Fixes Smart polling never leaving `fixed_fallback` (production: 0 accepted,
+  38 rejected). Home Assistant stores a timestamp sensor state to the whole
+  second, so the controller echoed floor(read time); the bridge compared that
+  with its sub-second read time within 0.01 s and rejected every genuine plan.
+  A whole-second echo now identifies the current read only when it equals
+  floor(read time) and no other read of that heater fell in the same second.
+  Deadlines stay anchored to the bridge's own monotonic read and land where
+  the controller intended (never later). Exact echoes still match as before.
+- Clearing the schedule (MQTT reconnect, cloud failure) now also returns any
+  copied Smart deadline to the fixed clock-aligned bound, never earlier than a
+  cloud cooldown. Before, a discarded eight-hour quiet deadline could leave the
+  heater unavailable after an MQTT reconnect until that deadline.
+- With on-demand refresh enabled, an MQTT reconnect schedules one rediscovery
+  and status read through the ordinary worker, after the existing 300 s spacing,
+  authentication, accounting, backoff and quota gates. Flapping cannot repeat it.
+- Diagnostics: plan rejection categories, last rejection/acceptance and refresh
+  outcomes since bridge start. Closed category names only; the persisted
+  journal format is unchanged, so 1.4.0 can still read it.
+- No change to commands, authentication, token handling, budgets, the 30-minute
+  fallback or saved options/entity IDs.
+
 ## [1.4.0] — Smart polling development candidate
 
 - Explicit Smart/fixed/minimum request modes; existing upgrades retain their

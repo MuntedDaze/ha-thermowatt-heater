@@ -2,7 +2,7 @@
 
 *Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
-Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. This branch contains bridge1.4.0, based on the owner's installed1.3.17. Existing credentials, guards, IDs and enabled settings are preserved. See the [current evidence](../docs/next-major/EVIDENCE.md) and [existing-system upgrade](../docs/next-major/OWNER_UPGRADE.md). No live installation or physical behaviour is verified by development; public distribution is deferred.
+Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. This branch contains bridge 1.4.1, a maintenance update of released 1.4.0 (itself based on the owner's installed 1.3.17); see the [1.4.1 in-place upgrade](../docs/audits/UPGRADE_1_4_1.md). Existing credentials, guards, IDs and enabled settings are preserved. See the [current evidence](../docs/next-major/EVIDENCE.md) and [existing-system upgrade](../docs/next-major/OWNER_UPGRADE.md). No live installation or physical behaviour is verified by development; public distribution is deferred.
 
 **Defaults are safe:** cloud access off, commands off, polling every 30 minutes.
 

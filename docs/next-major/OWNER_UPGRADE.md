@@ -44,7 +44,8 @@ bundle is reviewable staging material; it does not update a running App itself.
 
 After the approved main merge, open **Settings → Apps → App store → ⋮ → Check
 for updates** (older HA versions call Apps Add-ons). Open the **existing Thermann
-Hot Water App** and confirm the offered1.4.0 changelog/source commit. Use its
+Hot Water App** and confirm the offered1.4.0 changelog/source commit (for the later 1.4.1 maintenance
+update, follow [the 1.4.1 procedure](../audits/UPGRADE_1_4_1.md) instead). Use its
 normal **Update** action. It builds/updates the existing App identity
 `thermowatt_boiler`; do not uninstall, recreate, add a second repository copy or
 delete `/data`. Keep MQTT identity/options, credentials, auth store, guard,
