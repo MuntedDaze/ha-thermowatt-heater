@@ -6,6 +6,33 @@ Source of truth: main `7553821dceb3bc78a67621399984bbc992567aea`, controller
 checkout is isolated from Fable's separate registered worktree. Preserve
 untracked `review-1b29be1/` and `uv.lock`; no live HA/vendor/MQTT access.
 
+## Current checkpoint: implementation and independent review complete
+
+Controller0.16.0 / bridge1.4.0 are in [draft PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42).
+The independently accepted code head is
+`0c85a0dea92838ca9056df2b2c8f31a092c026a1`; the closing increment changes only
+documentation. Astra High verified all nine remediated findings and accepted
+that head, conditional on final-head CI. No live operations or merge occurred.
+
+- Real HA2026.10.4/2026.11.1, desktop1280/phone390 frontend, nativeamd64/aarch64,
+  isolatedMQTT/lifecycle/demand and Supervisor checks passed on that code head.
+  Final phone/desktop screenshots were inspected: current plan, readable labels
+  and copyable report are confirmed. Final documentation-head checks still run.
+- Local full suite gave1621 passed/one stale comparison assertion; the corrected
+  targeted actual-worker replay passed both tests. Full1622-test CI on all three
+  Python versions is required; do not describe the earlier local run as passing.
+- The exact-head CI source archive and all170 per-file hashes were verified.
+  The documentation increment requires a new final-head archive/checksum.
+- Remaining work: wait for **all** final-head CI; inspect full-suite/static
+  outcomes; verify the new archive's SHA/manifest/all files; check PR reviews;
+  record the final SHA, checks and artifact in the PR handoff. Avoid another
+  documentation commit merely to stamp passing CI; use the final PR record.
+- Keep the full PR draft/unmerged until explicit owner merge approval. No
+  installation, authentication, automatic activation or heater operation is
+  authorised. Fable's worktree and seven-view dashboard remain unchanged.
+
+The entries below are chronological development history, not current results.
+
 Implementation order:
 
 1. Heating/compatibility: new 12-hour override targets 62, preserve active legacy
@@ -40,7 +67,7 @@ development does not deploy, authenticate or operate the installed system.
 Review/merge decisions must satisfy the standing AGENTS.md owner-approval rule
 for behaviour/authentication changes and all final-head checks.
 
-Progress (implementation incomplete):
+Historical progress (superseded by the current checkpoint above):
 
 - Override62, legacy active-target/expiry migration, weekend PV comfort latch/
   sunset bounds, confirmed cooldown10, new preferences and real-meter setup are

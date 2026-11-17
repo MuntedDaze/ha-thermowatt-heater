@@ -55,3 +55,9 @@ pending-command handling and inspected regressions without running tests or
 contacting live equipment. Final CI and explicit owner merge approval are separate.
 Subsequent changes are documentation, read-only plan presentation, test-fixture cleanup and exact-head source-artifact metadata,
 not controller behaviour. Final checks are linked from the PR's current head.
+
+The reviewer explicitly carried acceptance to
+`0c85a0dea92838ca9056df2b2c8f31a092c026a1` after examining the plan-summary sensor
+correction and immediate real-HA display assertion. No new actionable issue or
+change to heater control, authentication or polling was found. The closing
+documentation cleanup does not change code. Final-head CI remains a separate gate.

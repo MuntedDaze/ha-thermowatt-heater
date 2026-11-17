@@ -18,14 +18,13 @@ unnecessary extra heating. After separate CT-free grid-only or circuit-meter com
 use worthwhile surplus solar for extra storage. Savings depend on your demand,
 electricity contract and heater; they are not guaranteed.
 
-**Existing owner installation:** Thermann Hot Water **1.3.17** and Thermann
-Controller **0.14.0** are already installed and being tested in Shadow Mode.
-Bridge communication, GoodWe measurements and EMHASS are working as reported by
-the owner. This checkout prepares a normal **controller 0.15.1** in-place upgrade;
-the bridge remains **1.3.17** because its code is unchanged.
+**Existing owner installation:** The owner reported a working bridge, GoodWe
+readings and EMHASS while testing in Shadow Mode. Check the actual installed
+versions before updating. This candidate builds on controller **0.15.1** /
+bridge **1.3.17** and prepares an in-place update to **0.16.0 / 1.4.0**.
 
-[Current upgrade and commissioning guide](docs/completion/UPGRADE.md) ·
-[Completion checkpoint](docs/completion/IMPLEMENTATION_PROGRESS.md) ·
+[Current upgrade and commissioning guide](docs/next-major/OWNER_UPGRADE.md) ·
+[Development checkpoint](docs/next-major/PROGRESS.md) ·
 [Compatible data/control interfaces](docs/completion/INTERFACES.md).
 No development test enables owner commands, automatic control, adaptive polling
 or learned authority. Earlier draft/candidate notes are historical checkpoints.
@@ -183,7 +182,8 @@ authentication locks and private backups; do not retry by restarting repeatedly.
 - [Bridge options and authentication guards](thermowatt-heater/DOCS.md)
 
 Previous tested draft PRs remain untouched, including PR #35 at 8d2b1e4.
-This completion cycle includes reviewed code merge when all gates pass; deployment,
-live authentication, heater operation and automatic activation remain owner-controlled. This unofficial project is not affiliated
+This candidate remains a draft until final checks and separate owner merge
+approval. Installation, live authentication, heater operation and automatic
+activation also require separate owner approval. This unofficial project is not affiliated
 with Thermann, Thermowatt, Reece or Ariston. Existing redacted security findings
 remain an owner task before any future distribution.

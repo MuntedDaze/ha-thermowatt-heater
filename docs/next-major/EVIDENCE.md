@@ -2,8 +2,9 @@
 
 Candidate controller0.16.0 / bridge1.4.0, based on main
 `7553821dceb3bc78a67621399984bbc992567aea`, [draft PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42).
-Implementation/test checkpoints are in [PROGRESS](PROGRESS.md). Final-head CI,
-review findings and artifact hashes will be recorded here before completion.
+Implementation/test checkpoints are in [PROGRESS](PROGRESS.md). The PR's final
+handoff records the exact final head, CI results and verified artifact checksum;
+the review findings are in [REVIEW](REVIEW.md).
 No live HA, vendor authentication, MQTT commands or physical heater tests are used.
 
 ## Why CT-free adaptive previously cost more
@@ -80,11 +81,13 @@ be relaxed from a synthetic successful session.
 
 ## Interface and supported HA conventions
 
-Real frontend CI on HA2026.10.4/2026.11.1 at1280/390px passed at initial checkpoint
-`2fa7495c281cb3b9baf4453f241349d911174cad`; its screenshots were downloaded and
-inspected. That inspection found a truncated phone row and raw code labels;
-the next increment uses shorter labels, native enum translations and supported
-two-column sections. Final screenshots/CI must verify that corrected head.
+Real frontend CI on HA2026.10.4/2026.11.1 at1280/390px passed at
+`0c85a0dea92838ca9056df2b2c8f31a092c026a1`. The captured phone/desktop screenshots
+were downloaded and inspected. Earlier visual findings were corrected: shorter
+labels, native enum translations, supported two-column sections and a plan
+summary updated from the executor's completed decision. The home plan agrees
+with the current requested mode, the electricity heading fits and the native
+diagnostic report is selectable and readable on a phone.
 No owner installation was accessed. Service calls are denied in the isolated
 frontend fixture. Python/YAML checks alone are not called visual verification.
 
@@ -114,7 +117,8 @@ reviewed the full request, architecture, complete diff and applicable tests.
 The implementation resolved the initial seven findings and two event-capture
 races found in follow-up. [Full severity/disposition record](REVIEW.md).
 Final independent code verification accepted
-`a197c5ce48fcf858bef616b529fdc0a0a8a0c450`, conditional on passing final-head CI,
+`a197c5ce48fcf858bef616b529fdc0a0a8a0c450`, then explicitly carried acceptance to
+`0c85a0dea92838ca9056df2b2c8f31a092c026a1`, conditional on passing final-head CI,
 with no additional actionable defect. No reviewer modified files or used live I/O.
 
 Final unit/static/Python3.12/3.13/3.14, real HA, frontend, nativeamd64/aarch64,
