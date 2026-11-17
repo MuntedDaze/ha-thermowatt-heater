@@ -38,6 +38,7 @@ async def main():
     ServiceRegistry.async_call = deny_service
     CONFIG.mkdir()
     shutil.copytree(ROOT / "custom_components", CONFIG / "custom_components")
+    shutil.copyfile(ROOT / "homeowner/thermowatt.yaml", CONFIG / "thermowatt.yaml")
     sys.path.insert(0, str(CONFIG))
     storage = CONFIG / ".storage"
     storage.mkdir()
@@ -66,6 +67,16 @@ async def main():
             },
             "http": {"server_host": ["127.0.0.1"], "server_port": 8123},
             "frontend": {},
+            "lovelace": {
+                "dashboards": {
+                    "thermowatt-owner": {
+                        "mode": "yaml",
+                        "title": "Thermowatt",
+                        "show_in_sidebar": True,
+                        "filename": "thermowatt.yaml",
+                    }
+                }
+            },
         },
         hass,
     )

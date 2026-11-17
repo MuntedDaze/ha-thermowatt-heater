@@ -18,6 +18,10 @@ def build():
     text = importlib.import_module(f"{package.__name__}.configuration_text")
     original = json.loads((PACKAGE / "strings.json").read_text(encoding="utf-8"))
     original["options"] = text.flow_text()
+    presentation = importlib.import_module(f"{package.__name__}.presentation")
+    sensors = original.setdefault("entity", {}).setdefault("sensor", {})
+    for key, labels in presentation.STATE_LABELS.items():
+        sensors.setdefault(key, {})["state"] = labels
     original["selector"] = {k: {"options": v} for k, v in text.SELECT_LABELS.items()}
     original["config"]["step"]["user"] = {
         "title": "Connect existing heater and meter readings",

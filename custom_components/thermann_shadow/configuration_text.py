@@ -5,7 +5,10 @@ from .config import CLOUD_SOURCES
 
 TITLES = {
     "init": "Settings",
+    "diagnostic_report": "Copy diagnostic report",
     "hot_water": "Hot Water",
+    "heating_preferences": "Weekend and heating preferences",
+    "ct_free_setup": "Set up experimental CT-free solar",
     "electricity": "Electricity Tariffs",
     "solar_meters": "Solar & Meters",
     "advanced": "Advanced/System",
@@ -22,6 +25,9 @@ TITLES = {
 }
 DESCRIPTIONS = {
     "init": "Everyday choices are in Hot Water. Electricity Tariffs describes your bill; Solar & Meters connects optional readings. Advanced/System is for experienced users and supervised commissioning. Turn off Automatic heater control before changing protected settings. Each page saves separately; closing without saving leaves it unchanged.",
+    "diagnostic_report": "Select all text in the report below and copy it (Ctrl+A then Ctrl+C on a computer, or touch and hold then Select all and Copy on a phone). Paste it into your support conversation. This view does not save edits or operate the heater. Download detailed JSON using the integration's three-dot menu → Download diagnostics. Review the report before sharing.",
+    "heating_preferences": "Weekend normal storage deliberately allows off-peak grid assistance. Solar-only boosts still need verified local surplus. Changing preferences does not qualify hardware. {detail}",
+    "ct_free_setup": "Use genuine mapped grid evidence; no physical heater CT is certified by this process.",
     "hot_water": "Choose thermostat targets and permitted heating. Your saved temperatures are retained. The owner's agreed example is 45°C baseline / 62°C normal / 70°C optional solar, with peak OFF. It is not a universal hygiene recommendation. Follow the appliance instructions and your plumber's advice. {detail}",
     "electricity": "Use your actual retailer's usage prices and times, not a network tariff assumed to be your bill. Start with Plan, prices and clock. Flat plans need no time periods. The two-peak example and the guided custom schedule are alternative schedules for the same tariff model; the chosen plan type decides which is active.",
     "solar_meters": "Everything here is optional for basic tariff-based heating. Without a dedicated hot-water circuit meter, normal required heating uses conservative estimates; electrical ON/OFF is unverified and optional solar-only boost requires its separate CT-free commissioning record. A missing previously commissioned meter remains a fault.",
@@ -57,6 +63,12 @@ KINDS = {
     "peak": "Peak / restricted heating",
 }
 SELECT_LABELS = {
+    "polling_mode": {
+        "existing": "Keep existing polling choices",
+        "smart": "Smart — Recommended",
+        "fixed_30": "Fixed 30 minutes — Compatibility",
+        "minimum": "Experimental minimum requests",
+    },
     "tariff_profile": {
         "flat": "Flat rate — one price all day",
         "aurora_93": "Aurora-style two-peak example (verify your contract)",
@@ -69,6 +81,14 @@ SELECT_LABELS = {
     "days": {str(i): day for i, day in enumerate(DAYS)},
     "months": {str(i + 1): month for i, month in enumerate(MONTHS)},
     "period_kind": KINDS,
+    "grid_direction": {
+        "import_positive": "Positive means buying power",
+        "export_positive": "Positive means exporting power",
+    },
+    "peak_heating_policy": {
+        "Never schedule heating during peak": "Never schedule heating during peak",
+        "Verified solar-only heating": "Allow solar-powered heating during peak hours",
+    },
     "schedule_action": {
         "edit": "Edit a period",
         "add": "Add a period",
@@ -151,11 +171,41 @@ def flow_text():
             "confirm": "Leave off to keep it and return to the draft. Closing the whole flow discards all draft changes."
         },
     }
+    steps["ct_free_setup"].update(
+        {
+            "description": "Experimental grid-only operation uses your genuine mapped meter, not an imaginary heater CT. Source: {source}; units: {unit}. Automated site check: {quality}. Verify direction using a known load. This records your explicit acceptance of short grid-import exposure and delayed cloud OFF; it does not certify physical tests, enable automatic control or send a command. A configured circuit meter cannot silently downgrade. {detail}",
+            "data": {
+                "direction": "Grid power direction",
+                "confirm_direction": "I checked the direction with a known household load",
+                "accept_experimental": "I accept experimental CT-free operation",
+                "enable_boost": "Enable optional solar boost",
+                "allow_peak": "Allow solar-powered heating during peak hours",
+            },
+            "data_description": {
+                "direction": "Match the actual signed grid sensor. GoodWe often reports export as positive, but verify your installed meter; units are converted from W or kW automatically.",
+                "confirm_direction": "This is your physical check, not an automated certification. Buying electricity must be recognised as import when you turn on a known appliance.",
+                "accept_experimental": "Whole-house grid readings cannot prove the element is ON/OFF. Fresh consistent grid, inverter and house readings, sustained surplus, economics, budgets and exact-prior confirmation are still required. Short peak imports can occur before OFF is confirmed.",
+                "enable_boost": "Allows useful optional 70°C storage in permitted periods when the existing economic and measured-export checks pass. It does not activate heating merely because the switch is on.",
+                "allow_peak": "Off keeps all optional boost outside peak hours. On additionally permits peak solar heating: 3.3 kW export for 10 minutes to start; import over 200 W for 10 continuous minutes withdraws permission. Meter loss withdraws it immediately; cloud OFF is not electrical isolation.",
+            },
+        }
+    )
+    steps["diagnostic_report"].update(
+        data={"report": "Diagnostic report — select all and copy"},
+        data_description={
+            "report": "Snapshot taken when this view opens. Close and reopen for a fresh report. This is a native copyable text field; it does not automatically access your clipboard."
+        },
+        submit="Close report",
+    )
     return {
         "step": steps,
+        "abort": {"report_closed": "Report closed. No settings changed."},
         "error": {
             "invalid_settings": "Nothing saved. {detail}",
             "locked_while_active": "{detail}",
+            "meter_changed_reopen": "The mapped meter, unit or heater rating changed while this form was open. Close and reopen setup, then check the displayed source. Nothing was saved.",
+            "experimental_ack_required": "Confirm the checked direction and explicitly accept the experimental operating limitations. Nothing was saved.",
+            "meter_not_ready": "Fresh, post-startup, consistent grid/inverter/house readings and valid signed W/kW units are required. Map the actual sources; a commissioned circuit meter must use its existing path.",
             "choose_period": "Choose a period to edit/remove, or add a period (maximum 32).",
             "invalid_period": "Choose at least one day and month, valid times and a supported price. The draft was not changed.",
         },

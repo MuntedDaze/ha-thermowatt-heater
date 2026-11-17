@@ -58,12 +58,12 @@ def test_strong_sun_direct_70_and_unexpected_topup_are_economic():
         assert d.plan["boost_extra_kwh"] == pytest.approx(2.93, abs=0.01)
 
 
-def test_boost_disabled_cannot_target_70_but_owner_override_keeps_70():
+def test_boost_disabled_cannot_target_70_but_owner_override_uses_62():
     now = at(MON, 12)
     p = sp.SimplePolicy(replace(D, boost_enabled=False), TARIFFS)
     sun(p, now)
     assert p.decide(snap(now, NORMAL, reading=54, forecast=fc(now, 6, 4))).state == NORMAL
-    assert p.decide(snap(at(MON, 18), OFF, reading=40, override_12h=True)).command == "Manual:70"
+    assert p.decide(snap(at(MON, 18), OFF, reading=40, override_12h=True)).command == "Manual:62"
     assert p.decide(snap(at(MON, 18), NORMAL, owner_override=True)).state == sp.HOLD
 
 

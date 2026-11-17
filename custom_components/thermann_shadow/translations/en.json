@@ -54,8 +54,20 @@
           "hot_water": "Hot Water",
           "electricity": "Electricity Tariffs",
           "solar_meters": "Solar & Meters",
+          "diagnostic_report": "Copy diagnostic report",
           "advanced": "Advanced/System"
         }
+      },
+      "diagnostic_report": {
+        "title": "Copy diagnostic report",
+        "description": "Select all text in the report below and copy it (Ctrl+A then Ctrl+C on a computer, or touch and hold then Select all and Copy on a phone). Paste it into your support conversation. This view does not save edits or operate the heater. Download detailed JSON using the integration's three-dot menu → Download diagnostics. Review the report before sharing.",
+        "data": {
+          "report": "Diagnostic report — select all and copy"
+        },
+        "data_description": {
+          "report": "Snapshot taken when this view opens. Close and reopen for a fresh report. This is a native copyable text field; it does not automatically access your clipboard."
+        },
+        "submit": "Close report"
       },
       "hot_water": {
         "title": "Hot Water",
@@ -75,12 +87,58 @@
           "baseline_c": "Thermostat target during permitted baseline hours. Your saved household choice is retained. Only supported temperatures are offered; a setpoint does not prove whole-tank temperature or hygiene compliance. Follow appliance and plumbing requirements.",
           "normal_storage_c": "Required weekday thermostat target, for example 62°C in the owner's agreed strategy. It must be at least the baseline. This is a target, not a guarantee of hot-water quantity.",
           "solar_boost_c": "Upper target for worthwhile extra solar heating, for example 70°C. Must be at least normal storage. Equal targets avoid a separate top-up; choosing a target alone does not enable boosting.",
-          "optional_solar_boost": "Allow extra storage only with commissioned hot-water circuit measurement and all economic and safety checks. Leave off if you do not want extra heat. Required storage still works without a circuit meter; the separate 12-hour Override is unchanged.",
+          "optional_solar_boost": "Allow extra storage with either a commissioned dedicated hot-water circuit meter (CT) or the separately configured experimental CT-free GoodWe grid-meter setup. Turning this switch on alone does not start boosting: automatic control must be enabled, and measurement, solar surplus, cost, peak-policy and safety checks must all pass. Required storage still works without a CT; the separate 12-hour Override is unchanged.",
           "peak_heating_policy": "Never schedule heating takes priority even with high solar export. The solar-only choice requires a commissioned circuit meter or separately qualified CT-free grid-only operation and every command safeguard. Owner overrides and native protective cycles remain possible. Cloud OFF is not proof of zero electricity use.",
           "completion_margin_minutes": "Minutes reserved before the required finish time; 30 minutes is a useful planning starting point. Required heating may continue to the hard peak boundary. This is a planning allowance, not extra permission to heat during peak.",
           "daytime_start": "Household local time, for example 09:00. Used when the plan has no peak deadline. Must be before the ready time. Tariff peak boundaries take priority on time-of-use plans. Leave seconds at 00 if Home Assistant shows them.",
           "storage_ready_time": "Household local time, for example 16:00, when there is no peak deadline. After the window starts and before the baseline returns. A planning goal, not a temperature or hygiene guarantee. Leave seconds at 00 if Home Assistant shows them.",
           "baseline_start": "Household local time, for example 21:00, when there is no peak deadline. Must follow the ready time. The peak policy still applies. Leave seconds at 00 if Home Assistant shows them."
+        }
+      },
+      "heating_preferences": {
+        "title": "Weekend and heating preferences",
+        "description": "Weekend normal storage deliberately allows off-peak grid assistance. Solar-only boosts still need verified local surplus. Changing preferences does not qualify hardware. {detail}",
+        "data": {
+          "weekend_solar_heating": "Weekend solar-led normal storage",
+          "weekend_pv_start_kw": "Weekend daylight trigger",
+          "weekend_qualify_minutes": "Weekend daylight qualification",
+          "weekend_end_time": "Weekend latest return to baseline",
+          "weekend_sunset_kw": "Weekend late-day PV threshold",
+          "weekend_sunset_minutes": "Weekend low-PV ending delay",
+          "solar_cooldown_minutes": "Wait after confirmed solar withdrawal",
+          "pre_peak_observation_minutes": "Check hot water before peak",
+          "peak_command_lead_minutes": "Request peak OFF this much early",
+          "low_water_warning_c": "Low bottom-temperature warning"
+        },
+        "data_description": {
+          "weekend_solar_heating": "Use sustained measured PV to select normal storage on weekends. This deliberately allows off-peak grid assistance; it is not solar-only heating.",
+          "weekend_pv_start_kw": "Measured PV production in kW, sustained continuously. 0.5 kW means 500 W; household grid import may supply the remaining element demand.",
+          "weekend_qualify_minutes": "Minutes of fresh continuous PV reports required before selecting weekend normal storage. Short cloud dips restart qualification.",
+          "weekend_end_time": "Household local clock: return to baseline by this time. A sustained measured low-PV condition after noon can end the solar day earlier.",
+          "weekend_sunset_kw": "After noon, PV below this kW threshold for the full ending delay ends the daylight storage window. A momentary cloud does not.",
+          "weekend_sunset_minutes": "Continuous minutes below the late-day threshold after noon. Missing readings never vote for sunset; the hard end time still bounds the window.",
+          "solar_cooldown_minutes": "Minutes after confirmed withdrawal OFF before another optional solar start. Fresh qualification can overlap this wait. Ordinary 15-minute command spacing also applies.",
+          "pre_peak_observation_minutes": "Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.",
+          "peak_command_lead_minutes": "Minutes reserved for local evaluation, cloud command and confirmation before peak. Must be shorter than the heating completion margin in Hot Water. This is not a guaranteed electrical cutoff.",
+          "low_water_warning_c": "Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency."
+        }
+      },
+      "ct_free_setup": {
+        "title": "Set up experimental CT-free solar",
+        "description": "Experimental grid-only operation uses your genuine mapped meter, not an imaginary heater CT. Source: {source}; units: {unit}. Automated site check: {quality}. Verify direction using a known load. This records your explicit acceptance of short grid-import exposure and delayed cloud OFF; it does not certify physical tests, enable automatic control or send a command. A configured circuit meter cannot silently downgrade. {detail}",
+        "data": {
+          "direction": "Grid power direction",
+          "confirm_direction": "I checked the direction with a known household load",
+          "accept_experimental": "I accept experimental CT-free operation",
+          "enable_boost": "Enable optional solar boost",
+          "allow_peak": "Allow solar-powered heating during peak hours"
+        },
+        "data_description": {
+          "direction": "Match the actual signed grid sensor. GoodWe often reports export as positive, but verify your installed meter; units are converted from W or kW automatically.",
+          "confirm_direction": "This is your physical check, not an automated certification. Buying electricity must be recognised as import when you turn on a known appliance.",
+          "accept_experimental": "Whole-house grid readings cannot prove the element is ON/OFF. Fresh consistent grid, inverter and house readings, sustained surplus, economics, budgets and exact-prior confirmation are still required. Short peak imports can occur before OFF is confirmed.",
+          "enable_boost": "Allows useful optional 70°C storage in permitted periods when the existing economic and measured-export checks pass. It does not activate heating merely because the switch is on.",
+          "allow_peak": "Off keeps all optional boost outside peak hours. On additionally permits peak solar heating: 3.3 kW export for 10 minutes to start; import over 200 W for 10 continuous minutes withdraws permission. Meter loss withdraws it immediately; cloud OFF is not electrical isolation."
         }
       },
       "electricity": {
@@ -98,7 +156,9 @@
         "description": "Everything here is optional for basic tariff-based heating. Without a dedicated hot-water circuit meter, normal required heating uses conservative estimates; electrical ON/OFF is unverified and optional solar-only boost requires its separate CT-free commissioning record. A missing previously commissioned meter remains a fault.",
         "menu_options": {
           "solar": "Solar forecasts and grid meter",
-          "sources": "Solar and meter readings"
+          "sources": "Solar and meter readings",
+          "heating_preferences": "Weekend and heating preferences",
+          "ct_free_setup": "Set up experimental CT-free solar"
         }
       },
       "advanced": {
@@ -237,6 +297,7 @@
         "title": "Cloud checks and data age",
         "description": "Advanced: preview and actual adaptive checks are different. Longer quiet intervals reduce requests but delay noticing app changes. Default-off qualification gates and the original fixed fallback remain. A fresh command prior and confirmation are always required. {detail}",
         "data": {
+          "polling_mode": "Cloud polling mode",
           "adaptive_polling_shadow": "Preview adaptive cloud checks",
           "adaptive_polling_enabled": "Allow adaptive cloud checks",
           "event_aware_polling_enabled": "Allow longer checks during quiet periods",
@@ -247,6 +308,7 @@
           "grid_max_age_seconds": "Maximum age of local power readings"
         },
         "data_description": {
+          "polling_mode": "Keep existing preserves upgrade choices. Smart uses useful decisions and bounded quiet checks; Minimum requests accepts longer owner-change detection delays; Fixed 30 minutes retains compatibility.",
           "adaptive_polling_shadow": "Record when adaptive polling would read the cloud, without changing actual bridge requests. Safe starting mode for comparison; it does not enable adaptive polling or automatic heating.",
           "adaptive_polling_enabled": "Advanced, default off. Requires independent review, supervised validation and the bridge's separate enabled/qualified options. Sends bounded expiring polling hints; original fixed fallback, authentication, request budgets and command confirmations remain.",
           "event_aware_polling_enabled": "Advanced, default off. Requires adaptive polling and a qualified bridge. A confirmed baseline/OFF period can be checked less often, while temperatures still expire normally. App changes may be detected later, and brief changes can be missed. Command-prior checks and confirmation are unchanged.",
@@ -351,14 +413,28 @@
         }
       }
     },
+    "abort": {
+      "report_closed": "Report closed. No settings changed."
+    },
     "error": {
       "invalid_settings": "Nothing saved. {detail}",
       "locked_while_active": "{detail}",
+      "meter_changed_reopen": "The mapped meter, unit or heater rating changed while this form was open. Close and reopen setup, then check the displayed source. Nothing was saved.",
+      "experimental_ack_required": "Confirm the checked direction and explicitly accept the experimental operating limitations. Nothing was saved.",
+      "meter_not_ready": "Fresh, post-startup, consistent grid/inverter/house readings and valid signed W/kW units are required. Map the actual sources; a commissioned circuit meter must use its existing path.",
       "choose_period": "Choose a period to edit/remove, or add a period (maximum 32).",
       "invalid_period": "Choose at least one day and month, valid times and a supported price. The draft was not changed."
     }
   },
   "selector": {
+    "polling_mode": {
+      "options": {
+        "existing": "Keep existing polling choices",
+        "smart": "Smart — Recommended",
+        "fixed_30": "Fixed 30 minutes — Compatibility",
+        "minimum": "Experimental minimum requests"
+      }
+    },
     "tariff_profile": {
       "options": {
         "flat": "Flat rate — one price all day",
@@ -406,12 +482,105 @@
         "peak": "Peak / restricted heating"
       }
     },
+    "grid_direction": {
+      "options": {
+        "import_positive": "Positive means buying power",
+        "export_positive": "Positive means exporting power"
+      }
+    },
+    "peak_heating_policy": {
+      "options": {
+        "Never schedule heating during peak": "Never schedule heating during peak",
+        "Verified solar-only heating": "Allow solar-powered heating during peak hours"
+      }
+    },
     "schedule_action": {
       "options": {
         "edit": "Edit a period",
         "add": "Add a period",
         "delete": "Remove a period",
         "save": "Save and use this custom schedule"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "circuit_measurement_mode": {
+        "state": {
+          "ct_free": "No circuit meter",
+          "measured": "Circuit meter available",
+          "meter_fault": "Circuit meter unavailable"
+        }
+      },
+      "current_tariff": {
+        "state": {
+          "peak": "Peak",
+          "off_peak": "Off-peak",
+          "shoulder": "Shoulder"
+        }
+      },
+      "next_tariff_kind": {
+        "state": {
+          "peak": "Peak",
+          "off_peak": "Off-peak",
+          "shoulder": "Shoulder"
+        }
+      },
+      "heater_element_state": {
+        "state": {
+          "on": "Likely heating",
+          "off": "Likely idle",
+          "unknown": "Unverified"
+        }
+      },
+      "heater_meter_state": {
+        "state": {
+          "on": "Measured heating",
+          "off": "Measured idle",
+          "unknown": "Unverified"
+        }
+      },
+      "solar_session_status": {
+        "state": {
+          "WAITING": "Waiting",
+          "ACTIVE": "Active",
+          "STOPPING": "OFF unconfirmed",
+          "COOLDOWN": "Waiting to restart"
+        }
+      },
+      "boost_eligibility": {
+        "state": {
+          "eligible": "Available",
+          "unavailable": "Not available"
+        }
+      },
+      "morning_availability": {
+        "state": {
+          "not_due": "No check due",
+          "unverified": "Reading unavailable",
+          "low": "Bottom temperature low",
+          "latest_probe_above_warning": "Latest probe above warning level"
+        }
+      },
+      "cloud_health": {
+        "state": {
+          "ok": "Connected",
+          "disabled": "Cloud access disabled",
+          "auth_locked": "Authentication locked",
+          "quota_limited": "Request limit reached",
+          "backoff": "Waiting after a failure",
+          "unavailable": "Connection unavailable",
+          "unrecognised": "Waiting for bridge status"
+        }
+      },
+      "next_action": {
+        "state": {
+          "off": "OFF",
+          "baseline": "Baseline temperature",
+          "normal_storage": "Normal storage",
+          "storage": "Solar storage",
+          "hold": "Wait / keep owner control"
+        }
       }
     }
   }

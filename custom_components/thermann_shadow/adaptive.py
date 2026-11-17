@@ -87,3 +87,54 @@ def event_plan(
         "reason": reason,
         "owner_check_seconds": owner_limit,
     }
+
+
+def smart_plan(
+    now,
+    status_at,
+    *,
+    mode,
+    stable_state=None,
+    temperature_valid=False,
+    overnight=False,
+    decision_at=None,
+    completion_at=None,
+):
+    """v3 extends the SAME bridge scheduler; its 180 s lease never extends.
+
+    Smart overnight: bounded eight hours or an earlier useful event. Minimum:
+    twelve hours. Neither makes temperature fresh or authorises a command.
+    A dead controller loses the lease and returns to the fixed 30-minute bound.
+    """
+    if mode not in {"smart", "minimum", "fixed_30"} or status_at is None:
+        return None
+    age = (now - status_at).total_seconds()
+    maximum = 43200 if mode == "minimum" else 28800
+    if not 0 <= age <= maximum:
+        return None
+    owner = maximum if overnight else (10800 if mode == "minimum" else 5400)
+    quiet = stable_state in {"baseline", "off"}
+    next_slot = (math.floor(status_at.timestamp() / 1800) + 1) * 1800
+    delay = owner if quiet else min(1800, max(900, next_slot - status_at.timestamp()))
+    reason = "stable_" + stable_state if quiet else "required_temperature"
+    if mode == "fixed_30":
+        owner, delay, reason = 1800, 1800, "fixed_30"
+    elif not quiet and not temperature_valid:
+        delay, reason = 900, "uncertain"
+    for when in () if mode == "fixed_30" else (decision_at, completion_at):
+        if isinstance(when, datetime) and when >= now:
+            candidate = (when - status_at).total_seconds()
+            if candidate < delay:
+                delay, reason = (
+                    max(900, candidate),
+                    "quiet_before_decision" if quiet and candidate > 2400 else "before_decision",
+                )
+    return {
+        "version": 3,
+        "status_at": status_at.timestamp(),
+        "issued_at": now.timestamp(),
+        "delay_seconds": math.floor(delay),
+        "reason": reason,
+        "owner_check_seconds": owner,
+        "polling_mode": mode,
+    }

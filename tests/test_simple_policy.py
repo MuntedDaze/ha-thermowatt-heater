@@ -123,7 +123,7 @@ def test_owner_layer_then_cloud_gate_then_spacing():
     assert p.decide(snap(now, STORE, owner_override=True)).state == HOLD
     assert p.decide(snap(now, None)).reason == "heater_state_not_controlled"
     assert p.decide(snap(now, BASE, holiday=True)).command == "off"
-    assert p.decide(snap(now, OFF, override_12h=True)).command == "Manual:70"
+    assert p.decide(snap(now, OFF, override_12h=True)).command == "Manual:62"
     blocked = p.decide(snap(now, STORE, cloud_ready=False))
     assert (blocked.state, blocked.layer, blocked.plan["wanted"]) == (HOLD, 3, OFF)
     spaced = p.decide(snap(now, BASE, holiday=True, last_command_at=now - 14 * MIN))
@@ -666,7 +666,8 @@ def test_sim_patchy_weekend_withdraws_import_and_spaces_restarts():
     assert len(log["commands"]) <= 14, log["commands"]
     stops = [c for c in log["commands"] if c[1] == BASE]
     assert stops and all(
-        c[2] in {"solar_opportunity_import", "solar_opportunity_ended"} for c in stops
+        c[2] in {"solar_opportunity_import", "solar_opportunity_ended", "weekend_day_ended"}
+        for c in stops
     )
     log, _ = simulate(at(MON, 6), 14, 44, BASE, patchy)
     assert len(log["commands"]) <= 5, log["commands"]

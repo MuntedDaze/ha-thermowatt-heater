@@ -1,5 +1,18 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.16.0 — coordinated homeowner release candidate
+
+- New 12hr Override 62°C with preserved legacy active expiry/intent and stable IDs.
+- Measured-PV weekend comfort storage, optional economic 70°C boosting and
+  configurable confirmed-withdrawal cooldown; weekday tariff planning retained.
+- Explicit Smart polling and experimental CT-free setup without forged physical
+  qualification. Useful pre-peak low-water warnings replace rigid morning alerts.
+- Five-view native homeowner dashboard, friendly names/translated states, inline
+  preferences, copyable redacted report, authenticated JSON and bounded event log.
+- Published heartbeat noise reduced without slowing internal supervision; owner
+  handbook/settings index, in-place upgrade guide and seasonal HTTP/cost evidence.
+- This development candidate is not an instruction to install or activate it.
+
 ## 0.15.1 - peak solar top-up from existing normal storage
 
 - A confirmed Manual62 target may now select economical Manual70 during a

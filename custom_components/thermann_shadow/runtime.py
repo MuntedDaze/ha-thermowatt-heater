@@ -23,7 +23,7 @@ from homeassistant.util import dt as dt_util
 
 from .config import DEFAULT_OPTIONS
 from .forecast import build_forecast
-from .comfort import morning_availability
+from .comfort import pre_peak_availability
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
 from .measurement import CircuitPower, circuit_power, energy_reading, power_balance
@@ -107,6 +107,9 @@ class ShadowRuntime:
         self.completion = {}
         self.telemetry = None
         self._event_key = None
+        self.owner_events = deque(maxlen=200)
+        self.owner_event_store = None
+        self.solar_input_loss_pending = False
 
     def set_native_reference(self, options):
         self.native_options = {**DEFAULT_OPTIONS, **options}
@@ -208,6 +211,133 @@ class ShadowRuntime:
         except (ValueError, TypeError, OverflowError):
             pass
         return None
+
+    def capture_input_report(self, event, now):
+        """Preserve intervening real reports even if queued evaluations coalesce.
+
+        No decision, command or HTTP here. Only actual signed measurements are
+        sampled. Raw callbacks may reset CT qualification, never grant CT credit.
+        """
+        entity = event.data.get("entity_id")
+        key = next(
+            (k for k in ("pv", "grid", "heater_power") if self.sources.get(k) == entity), None
+        )
+        if key is None or self.executor is None:
+            return
+        state = event.data.get("new_state")
+        kw = None
+        at = state.last_reported if state else None
+        if state:
+            try:
+                reading = Reading(
+                    state.state,
+                    at,
+                    state.attributes.get("unit_of_measurement"),
+                    bool(state.attributes.get("restored", False)),
+                )
+                _fresh(reading, now, self.boot, self.settings.grid_max_age_seconds)
+                if not reading.restored:
+                    kw = _power(reading)
+            except (ValueError, TypeError, OverflowError):
+                pass
+        if key == "pv":
+            self.executor.policy.add_pv(at, kw)
+        elif key == "heater_power":
+            reading = (
+                Reading(
+                    state.state,
+                    at,
+                    state.attributes.get("unit_of_measurement"),
+                    bool(state.attributes.get("restored", False)),
+                )
+                if state
+                else None
+            )
+            circuit = circuit_power(
+                reading,
+                self.sources.get("heater_power"),
+                self.native_options["heater_meter_verification"],
+                now,
+                self.boot,
+                self.settings.grid_max_age_seconds,
+                nominal_kw=self.settings.element_kw,
+            )
+            if not circuit.valid:
+                self._solar_input_loss()
+            else:
+                grid = self._reading("grid")
+                try:
+                    if grid is None or grid.restored or not self.settings.meter_verified:
+                        raise ValueError("unverified_grid")
+                    _fresh(grid, now, self.boot, self.settings.grid_max_age_seconds)
+                    signed = _power(grid) * (1 if self.settings.import_positive else -1)
+                    if abs((circuit.observed_at - grid.observed_at).total_seconds()) > 60:
+                        raise ValueError("unpaired_meter")
+                    storage = self.executor.controller.heater in {"normal_storage", "storage"}
+                    measured = circuit.watts / 1000 if storage and circuit.state == "on" else 0
+                    if measured - signed < self.executor.policy.s.peak_start_kw:
+                        reset = max(circuit.observed_at, grid.observed_at)
+                        self.executor.policy.surplus_reset_at = max(
+                            self.executor.policy.surplus_reset_at or reset, reset
+                        )
+                except (ValueError, TypeError, OverflowError):
+                    self._solar_input_loss()
+        elif kw is None or not self.settings.meter_verified:
+            self._solar_input_loss()
+        else:
+            signed = kw if self.settings.import_positive else -kw
+            policy = self.executor.policy
+            if signed <= policy.s.peak_import_tolerance_kw:
+                policy.import_reset_at = max(policy.import_reset_at or at, at)
+            if self.sources.get("heater_power"):
+                # Only decide() may grant positive CT votes, using its current
+                # paired evidence at min(grid_time, circuit_time). A queued
+                # newer0W CT observation must be able to defeat an older ON.
+                circuit = circuit_power(
+                    self._reading("heater_power"),
+                    self.sources.get("heater_power"),
+                    self.native_options["heater_meter_verification"],
+                    now,
+                    self.boot,
+                    self.settings.grid_max_age_seconds,
+                    nominal_kw=self.settings.element_kw,
+                )
+                if not circuit.valid or abs((circuit.observed_at - at).total_seconds()) > 60:
+                    self._solar_input_loss()
+                    return
+                storage = self.executor.controller.heater in {"normal_storage", "storage"}
+                measured = circuit.watts / 1000 if storage and circuit.state == "on" else 0
+                if measured - signed < policy.s.peak_start_kw:
+                    policy.surplus_reset_at = max(policy.surplus_reset_at or at, at)
+            else:
+                from .solar import ct_free_record
+
+                unit = state.attributes.get("unit_of_measurement")
+                record = ct_free_record(
+                    entity, unit, self.settings.import_positive, self.settings.element_kw
+                )
+                if (
+                    self.native_options["heater_meter_verification"]
+                    or not record
+                    or record != self.native_options["ct_free_solar_verification"]
+                    or -signed > self.settings.pv_ac_limit_kw * 1.10
+                ):
+                    self._solar_input_loss()
+                    return
+                policy.add_meter(at, signed, heater_kw=0)
+
+    def _solar_input_loss(self):
+        """Retain a transient loss until the sole controller records/resolves it."""
+        from .controller import OPTIONAL_REASONS
+
+        controller = self.executor.controller
+        self.executor.policy.samples.clear()
+        if controller.solar_session_active or (
+            controller.intent
+            and controller.intent.get("reason") in OPTIONAL_REASONS
+            and controller.intent.get("target") != "off"
+        ):
+            self.solar_input_loss_pending = True
 
     # ------------------------------------------------------------------ the tick
     def update(self, now):
@@ -397,6 +527,31 @@ class ShadowRuntime:
         if key == self._event_key:
             return
         self._event_key = key
+        from .report import event
+
+        self.owner_events.append(
+            event(
+                {
+                    "at": now,
+                    "state": self.executor.controller.state,
+                    "reason": decision.reason,
+                    "wanted": decision.state,
+                    "cloud": obs.cloud_health,
+                    "command": last.get("status"),
+                    "boost_eligible": decision.plan.get("boost_eligible"),
+                    "boost_reason": decision.plan.get("boost_reason"),
+                    "bottom_c": obs.temperature_c,
+                    "grid_import_kw": self.grid_import_kw,
+                }
+            )
+        )
+        if self.owner_event_store:
+            try:
+                self.owner_event_store.async_delay_save(
+                    lambda: {"events": list(self.owner_events)}, 30
+                )
+            except Exception:  # noqa: BLE001 - diagnostic logging cannot block supervision
+                LOG.warning("Owner diagnostic history could not be scheduled for saving.")
         self.telemetry = {
             "schema_version": 2,
             "at": now.isoformat(),
@@ -570,12 +725,15 @@ class ShadowRuntime:
         )
         values["forecast_age_minutes"] = self.forecast.age_minutes if self.forecast else None
         values["forecast_load_quality"] = self.forecast.load_quality if self.forecast else None
-        comfort = morning_availability(
+        comfort = pre_peak_availability(
             now,
             temperature,
             self.poll_at,
-            self.settings.time_zone,
-            self.settings.status_max_age_minutes,
+            values.get("next_tariff_change") if values.get("next_tariff_kind") == "peak" else None,
+            threshold=self.native_options["low_water_warning_c"],
+            lead_minutes=self.native_options["pre_peak_observation_minutes"],
+            max_age_minutes=self.settings.status_max_age_minutes,
+            boot=self.boot,
         )
         values["morning_availability"] = comfort["state"]
         self._requests(now)

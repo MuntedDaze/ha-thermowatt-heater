@@ -26,6 +26,9 @@ async def check_configuration(hass, entry):
         path = {
             "hot_water": [],
             "sources": ["solar_meters"],
+            "heating_preferences": ["solar_meters"],
+            "ct_free_setup": ["solar_meters"],
+            "diagnostic_report": [],
             "bridge_sources": ["advanced"],
             "solar": ["solar_meters"],
             "prices": ["electricity"],
@@ -100,6 +103,21 @@ async def check_configuration(hass, entry):
     await hass.async_block_till_done()
 
     # Invalid target combination redisplays submitted values and saves nothing.
+    lead_options = {**before, "peak_command_lead_minutes": 5}
+    hass.config_entries.async_update_entry(entry, options=lead_options)
+    await hass.async_block_till_done()
+    flow = await open_page("hot_water")
+    data = {k: display_value(k, entry.options[k]) for k in PAGES["hot_water"]}
+    result = await submit(flow, {**data, "completion_margin_minutes": 5})
+    assert result["errors"] == {"base": "invalid_settings"} and dict(entry.options) == lead_options
+    assert (
+        result["data_schema"]({**data, "completion_margin_minutes": 5})["completion_margin_minutes"]
+        == 5
+    )
+    hass.config_entries.options.async_abort(result["flow_id"])
+    hass.config_entries.async_update_entry(entry, options=before)
+    await hass.async_block_till_done()
+
     flow = await open_page("hot_water")
     data = {k: display_value(k, entry.options[k]) for k in PAGES["hot_water"]}
     result = await submit(flow, {**data, "normal_storage_c": "70", "solar_boost_c": "62"})
@@ -201,6 +219,151 @@ async def check_configuration(hass, entry):
     hass.config_entries.async_update_entry(entry, options=before)
     await hass.async_block_till_done()
 
+    # Native report is read-only, including edited submitted text.
+    flow = await open_page("diagnostic_report")
+    data = flow["data_schema"]({})
+    assert "Thermowatt diagnostic report" in data["report"]
+    result = await submit(flow, {"report": "discard this edit"})
+    assert result["type"] == "abort" and dict(entry.options) == before
+    from custom_components.thermann_shadow.diagnostics import async_get_config_entry_diagnostics
+
+    assert (await async_get_config_entry_diagnostics(hass, entry))["schema"] == 1
+
+    # Genuine HA power states -> supported selectors -> compatible CT-free record.
+    sources = {
+        **before["sources"],
+        "grid": "sensor.synthetic_signed_grid",
+        "pv_ac": "sensor.synthetic_ac",
+        "house": "sensor.synthetic_house",
+        "heater_power": "",
+    }
+    hass.config_entries.async_update_entry(
+        entry, options={**before, "sources": sources, "heater_meter_verification": ""}
+    )
+    await hass.async_block_till_done()
+    for name, watts in (("grid", 4000), ("pv_ac", 5000), ("house", 1000)):
+        hass.states.async_set(sources[name], watts, {"unit_of_measurement": "W"})
+    flow = await open_page("ct_free_setup")
+    data = {
+        "direction": "export_positive",
+        "confirm_direction": False,
+        "accept_experimental": False,
+        "enable_boost": True,
+        "allow_peak": True,
+    }
+    flow = await submit(flow, data)
+    assert flow["errors"]["base"] == "experimental_ack_required", flow
+    flow = await submit(
+        flow,
+        {
+            **data,
+            "direction": "import_positive",
+            "confirm_direction": True,
+            "accept_experimental": True,
+        },
+    )
+    assert flow["errors"]["base"] == "meter_not_ready", flow
+    result = await submit(flow, {**data, "confirm_direction": True, "accept_experimental": True})
+    assert result["type"] == "create_entry", result
+    assert entry.options["ct_free_solar_verification"] == sources["grid"] + "|W|export_positive|3"
+    assert (
+        entry.options["controller_four_state_qualified"]
+        == before["controller_four_state_qualified"]
+    )
+    assert entry.options["learning_hardware_qualified"] == before["learning_hardware_qualified"]
+    assert hass.data[DOMAIN][entry.entry_id].executor.controller.enabled is False
+    # A real PV dip/recovery in the same event-loop turn must break continuous
+    # weekend evidence even though the later decision sees the recovered state.
+    from homeassistant.util import dt as dt_util
+    from datetime import timedelta
+
+    pv_source = "sensor.synthetic_pv_events"
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "sources": {**sources, "pv": pv_source}}
+    )
+    await hass.async_block_till_done()
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    now = dt_util.utcnow()
+    for minute in range(16):
+        runtime.executor.policy.add_pv(now - timedelta(minutes=15 - minute), 1)
+    hass.states.async_set(pv_source, 100, {"unit_of_measurement": "W"})
+    hass.states.async_set(pv_source, 1000, {"unit_of_measurement": "W"})
+    await hass.async_block_till_done()
+    assert not runtime.executor.policy.pv_sustained(
+        dt_util.utcnow(), timedelta(minutes=15), lambda kw: kw >= 0.5
+    )
+    # Exercise real HA callbacks for a required-meter outage/recovery in one
+    # loop turn. Every command is blocked by the absent MQTT/commissioning;
+    # no fake physical qualification or service transport is provided.
+    from custom_components.thermann_shadow.controller import Controller, NORMAL_ACTIVE
+    from custom_components.thermann_shadow.targets import NORMAL
+
+    peak_options = {
+        **entry.options,
+        "tariff_profile": "custom",
+        "tariff_periods": json.dumps(
+            [
+                {
+                    "days": list(range(7)),
+                    "start": "00:00",
+                    "end": "00:00",
+                    "kind": "peak",
+                    "rate": 0.36,
+                }
+            ]
+        ),
+        "tariff_verified": True,
+    }
+    hass.config_entries.async_update_entry(entry, options=peak_options)
+    await hass.async_block_till_done()
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    bridge_sources = runtime.sources
+    now = dt_util.utcnow()
+    hass.states.async_set(
+        bridge_sources["heater"],
+        "heat",
+        {"temperature": 62, "current_temperature": 50, "unit_of_measurement": "°C"},
+    )
+    hass.states.async_set(bridge_sources["mode"], "Manual")
+    hass.states.async_set(bridge_sources["last_poll"], now.isoformat())
+    hass.states.async_set(
+        bridge_sources["cloud_health"],
+        "ok",
+        {
+            "auth_guard_mode": "authorized",
+            "commands_enabled": True,
+            "command_policy": "automation",
+            "command_confirmation_pending": False,
+            "command_transitions": ["off@62"],
+            "consecutive_failures": 0,
+        },
+    )
+    await hass.async_block_till_done()
+    original_controller = runtime.executor.controller
+    runtime.executor.controller = Controller(
+        enabled=True, state=NORMAL_ACTIVE, heater=NORMAL, solar_session_active=True
+    )
+    hass.states.async_set(sources["grid"], "unavailable", {"unit_of_measurement": "W"})
+    hass.states.async_set(sources["grid"], 3500, {"unit_of_measurement": "W"})
+    await hass.async_block_till_done()
+    assert runtime.executor.controller.protective_exit is not None
+    assert runtime.executor._saved["protective_exit"] is not None
+    assert runtime.executor.controller.intent is None
+    runtime.executor.controller = original_controller
+    runtime.solar_input_loss_pending = False
+    await runtime.executor._save()
+    hass.config_entries.async_update_entry(entry, options=before)
+    await hass.async_block_till_done()
+
+    # Discard the scenario's old shadow decision before browser screenshots;
+    # show the restored actual options and a matching read-only evaluation.
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    runtime.update(dt_util.utcnow())
+    await runtime.executor.async_step(dt_util.utcnow())
+    assert (
+        hass.states.get("sensor.thermann_shadow_current_heating_plan").state
+        == runtime.executor.policy_values()["plan_summary"]
+    )
     assert ids == {e.unique_id: e.entity_id for e in er.async_get(hass).entities.values()}
     assert dict(entry.options) == original
     assert ShadowOptionsFlow(entry)._entry.unique_id == entry.unique_id

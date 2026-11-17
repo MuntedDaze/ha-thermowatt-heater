@@ -1390,10 +1390,10 @@
           "reason": "solar_opportunity"
         },
         {
-          "at_aest": "2026-11-21T16:10:00+10:00",
+          "at_aest": "2026-11-21T17:00:00+10:00",
           "state": "baseline",
           "target_c": 45,
-          "reason": "solar_opportunity_ended"
+          "reason": "weekend_day_ended"
         }
       ],
       "command_count": 2,

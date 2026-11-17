@@ -2,7 +2,7 @@
 
 *Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
-Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Bridge 1.3.17 is an unmerged, uninstalled development candidate; four-state hardware behaviour still requires supervised qualification. See the [focused handoff](../docs/audit-remediation/HANDOFF.md) and [owner installation guide](../docs/pre-review/OWNER_INSTALLATION.md). Public distribution is deferred.
+Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. This branch contains bridge1.4.0, based on the owner's installed1.3.17. Existing credentials, guards, IDs and enabled settings are preserved. See the [current evidence](../docs/next-major/EVIDENCE.md) and [existing-system upgrade](../docs/next-major/OWNER_UPGRADE.md). No live installation or physical behaviour is verified by development; public distribution is deferred.
 
 **Defaults are safe:** cloud access off, commands off, polling every 30 minutes.
 
@@ -127,3 +127,19 @@ Logs never contain credentials, tokens or response bodies.
 - **Roll back an update:** restore the partial backup of this add-on taken before updating. That is the only way back to an older version.
 
 Older detailed notes (per-version upgrade guides, diagnostic reviews, deployment evidence) are in [docs/history](https://github.com/MuntedDaze/ha-thermowatt-heater/tree/main/docs/history).
+# New explicit polling choices (bridge1.4)
+
+The new `polling_mode` defaults to `existing`, preserving earlier options,
+credentials, guard/generation, quotas and command journal. `smart` and `minimum`
+accept bounded v3 plans through the same scheduler with the unchanged180-second
+lease and30-minute crash fallback. Select the matching controller mode explicitly.
+Quiet healthy owner-change detection may take8h/12h; outages can take longer.
+`fixed_30` uses the familiar30-minute background schedule. Legacy numeric options
+and qualification flags remain stored; choosing a new mode does not rewrite them.
+
+Smart ordinary GETs reuse the session with the existing bounded401 refresh/retry.
+Discovery, command preparation/POST and confirmation retain proactive authentication
+guards. No vendor TTL is asserted, uncertain POSTs are not retried and authentication
+locks require deliberate operator recovery. [Evidence](../docs/next-major/EVIDENCE.md)
+and [in-place owner upgrade](../docs/next-major/OWNER_UPGRADE.md).
+

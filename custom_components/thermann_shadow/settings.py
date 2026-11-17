@@ -396,7 +396,7 @@ CATALOG = {
     "controller_max_commands_per_day": Setting(
         "Maximum commands per day",
         "System",
-        "Rolling 24 h limit for OPTIONAL solar starts (a peak-solar start, a weekend solar start): none is sent once this many commands have gone out. Essential commands (the weekday 70 °C heat, Manual 45 °C, the 12hr Override) may go 6 beyond it, so optional solar activity can never block them; that higher cap still stops a fault that loops. A switch to OFF is never held back. A typical weekday needs 4 commands in all.",
+        "Rolling 24 h limit for OPTIONAL solar starts: none is sent once this many commands have gone out. Essential commands (normal storage, baseline maintenance and the 12hr Override 62°C) may go 6 beyond it, so optional solar activity cannot consume their reserved capacity; that higher cap still stops a fault that loops. A switch to OFF is never held back. A typical weekday needs about 4 commands.",
         4,
         10,
     ),
@@ -521,7 +521,7 @@ CATALOG.update(
         "optional_solar_boost": Setting(
             "Enable optional solar boost",
             "Everyday",
-            "Optional heat requires a verified circuit meter or a separately commissioned CT-free grid record, and useful monetary benefit. Independent of the peak policy. 12-hour Override stays 70.",
+            "Allow extra storage with either a commissioned dedicated hot-water circuit meter (CT) or the separately configured experimental CT-free GoodWe grid-meter setup. Turning this switch on alone does not start boosting: automatic control must be enabled, and measurement, solar surplus, cost, peak-policy and safety checks must all pass. Required storage still works without a CT; the separate 12-hour Override is unchanged.",
             kind="switch",
         ),
         "peak_heating_policy": Setting(
@@ -660,6 +660,120 @@ CATALOG["ct_free_solar_verification"] = Setting(
     kind="text",
 )
 _DUAL_PROTECTED = _DUAL_PROTECTED | {"ct_free_solar_verification"}
+
+CATALOG["weekend_solar_heating"] = Setting(
+    "Weekend solar-led normal storage",
+    "Advanced",
+    "Use sustained measured PV to select normal storage on weekends. This deliberately allows off-peak grid assistance; it is not solar-only heating.",
+    0,
+    1,
+    None,
+    kind="switch",
+)
+CATALOG["weekend_pv_start_kw"] = Setting(
+    "Weekend daylight trigger",
+    "Advanced",
+    "Measured PV production in kW, sustained continuously. 0.5 kW means 500 W; household grid import may supply the remaining element demand.",
+    0.1,
+    3.6,
+    "kW",
+    kind="number",
+)
+CATALOG["weekend_qualify_minutes"] = Setting(
+    "Weekend daylight qualification",
+    "Advanced",
+    "Minutes of fresh continuous PV reports required before selecting weekend normal storage. Short cloud dips restart qualification.",
+    5,
+    60,
+    "min",
+    kind="number",
+)
+CATALOG["weekend_end_time"] = Setting(
+    "Weekend latest return to baseline",
+    "Advanced",
+    "Household local clock: return to baseline by this time. A sustained measured low-PV condition after noon can end the solar day earlier.",
+    0,
+    1,
+    None,
+    kind="time",
+)
+CATALOG["weekend_sunset_kw"] = Setting(
+    "Weekend late-day PV threshold",
+    "Advanced",
+    "After noon, PV below this kW threshold for the full ending delay ends the daylight storage window. A momentary cloud does not.",
+    0,
+    1,
+    "kW",
+    kind="number",
+)
+CATALOG["weekend_sunset_minutes"] = Setting(
+    "Weekend low-PV ending delay",
+    "Advanced",
+    "Continuous minutes below the late-day threshold after noon. Missing readings never vote for sunset; the hard end time still bounds the window.",
+    10,
+    120,
+    "min",
+    kind="number",
+)
+CATALOG["solar_cooldown_minutes"] = Setting(
+    "Wait after confirmed solar withdrawal",
+    "Advanced",
+    "Minutes after confirmed withdrawal OFF before another optional solar start. Fresh qualification can overlap this wait. Ordinary 15-minute command spacing also applies.",
+    10,
+    60,
+    "min",
+    kind="number",
+)
+CATALOG["pre_peak_observation_minutes"] = Setting(
+    "Check hot water before peak",
+    "Advanced",
+    "Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.",
+    5,
+    60,
+    "min",
+    kind="number",
+)
+CATALOG["peak_command_lead_minutes"] = Setting(
+    "Request peak OFF this much early",
+    "Advanced",
+    "Minutes reserved for local evaluation, cloud command and confirmation before peak. This is not a guaranteed electrical cutoff.",
+    1,
+    10,
+    "min",
+    kind="number",
+)
+CATALOG["low_water_warning_c"] = Setting(
+    "Low bottom-temperature warning",
+    "Advanced",
+    "Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency.",
+    20,
+    45,
+    "°C",
+    kind="number",
+)
+CATALOG["polling_mode"] = Setting(
+    "Cloud polling mode",
+    "Advanced",
+    "Keep existing preserves upgrade choices. Smart uses useful decisions and bounded quiet checks; Minimum requests accepts longer owner-change detection delays; Fixed 30 minutes retains compatibility.",
+    0,
+    1,
+    None,
+    kind="select",
+    choices=("existing", "smart", "fixed_30", "minimum"),
+)
+_DUAL_PROTECTED = _DUAL_PROTECTED | {
+    "low_water_warning_c",
+    "weekend_qualify_minutes",
+    "pre_peak_observation_minutes",
+    "polling_mode",
+    "weekend_sunset_minutes",
+    "weekend_solar_heating",
+    "peak_command_lead_minutes",
+    "weekend_pv_start_kw",
+    "solar_cooldown_minutes",
+    "weekend_end_time",
+    "weekend_sunset_kw",
+}
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
 # 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety

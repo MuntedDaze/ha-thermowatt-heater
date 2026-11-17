@@ -21,6 +21,7 @@ OLD_ENTRY_TITLES = frozenset({"Thermann Shadow"})
 
 # Display name now -> the name the entity ID was first derived from.
 LEGACY_NAMES = {
+    "12hr Override 62°C": "Start guest mode (12 h)",
     "Start 12hr Override": "Start guest mode (12 h)",
     "Cancel 12hr Override": "Cancel guest mode",
     "12hr Override ends": "Guest mode ends",

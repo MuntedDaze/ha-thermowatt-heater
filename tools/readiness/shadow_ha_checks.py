@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.15.1"
+CURRENT_VERSION = "0.16.0"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -167,9 +167,13 @@ async def options_page(hass, entry, page, data):
     """Use the real topical options-flow menus, one page per save."""
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     assert flow["type"] == "menu", flow
-    assert set(flow["menu_options"]) == {"hot_water", "electricity", "solar_meters", "advanced"}, (
-        flow
-    )
+    assert set(flow["menu_options"]) == {
+        "hot_water",
+        "electricity",
+        "solar_meters",
+        "diagnostic_report",
+        "advanced",
+    }, flow
     parent = (
         "solar_meters"
         if page in {"sources", "solar"}
@@ -946,7 +950,7 @@ async def _upgrade_from_0_6(folder, version):
         assert "Unofficial" in device.manufacturer, device.manufacturer
         if version == "0.7.0":
             override = hass.states.get("button.thermann_shadow_start_guest_mode_12_h")
-            assert override.attributes["friendly_name"] == "Thermann Controller Start 12hr Override"
+            assert override.attributes["friendly_name"] == "Thermann Controller 12hr Override 62°C"
             ends = hass.states.get("sensor.thermann_shadow_guest_mode_ends")
             assert ends.attributes["friendly_name"] == "Thermann Controller 12hr Override ends"
         after = {
@@ -1144,6 +1148,18 @@ ADDED_IN_0_9_0 = {
 # Backend-only additions on the separate smart-controller development branch.
 # Existing registry IDs must still be preserved; enumerate additions explicitly.
 ADDED_IN_SMART_DEVELOPMENT = {
+    "plan_summary",
+    "setting_polling_mode",
+    "setting_weekend_solar_heating",
+    "setting_weekend_pv_start_kw",
+    "setting_weekend_qualify_minutes",
+    "setting_weekend_end_time",
+    "setting_weekend_sunset_kw",
+    "setting_weekend_sunset_minutes",
+    "setting_solar_cooldown_minutes",
+    "setting_pre_peak_observation_minutes",
+    "setting_peak_command_lead_minutes",
+    "setting_low_water_warning_c",
     "forecast_load_quality",
     "morning_availability",
     "solar_session_status",

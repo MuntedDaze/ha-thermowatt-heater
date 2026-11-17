@@ -13,7 +13,7 @@ from .settings import CATALOG
 
 
 MENUS = {
-    "init": ("hot_water", "electricity", "solar_meters", "advanced"),
+    "init": ("hot_water", "electricity", "solar_meters", "diagnostic_report", "advanced"),
     "electricity": ("prices", "peak_times", "schedule", "tariff_json"),
     "solar_meters": ("solar", "sources"),
     "advanced": ("equipment", "polling", "commissioning", "bridge_sources"),
@@ -29,6 +29,18 @@ PAGES = {
         "daytime_start",
         "storage_ready_time",
         "baseline_start",
+    ),
+    "heating_preferences": (
+        "weekend_solar_heating",
+        "weekend_pv_start_kw",
+        "weekend_qualify_minutes",
+        "weekend_end_time",
+        "weekend_sunset_kw",
+        "weekend_sunset_minutes",
+        "solar_cooldown_minutes",
+        "pre_peak_observation_minutes",
+        "peak_command_lead_minutes",
+        "low_water_warning_c",
     ),
     "prices": (
         "tariff_profile",
@@ -66,6 +78,7 @@ PAGES = {
         "pause_min_saving_aud",
     ),
     "polling": (
+        "polling_mode",
         "adaptive_polling_shadow",
         "adaptive_polling_enabled",
         "event_aware_polling_enabled",
@@ -90,6 +103,8 @@ PAGES = {
     ),
 }
 
+MENUS["solar_meters"] = (*MENUS["solar_meters"], "heating_preferences", "ct_free_setup")
+
 # Labels/help belong to the forms, not CATALOG names (which derive native entity
 # IDs). Renaming a form must never rename an existing entity or change its unit.
 FIELDS = {
@@ -107,7 +122,7 @@ FIELDS = {
     ),
     "optional_solar_boost": (
         "Enable optional solar boost",
-        "Allow extra storage only with commissioned hot-water circuit measurement and all economic and safety checks. Leave off if you do not want extra heat. Required storage still works without a circuit meter; the separate 12-hour Override is unchanged.",
+        "Allow extra storage with either a commissioned dedicated hot-water circuit meter (CT) or the separately configured experimental CT-free GoodWe grid-meter setup. Turning this switch on alone does not start boosting: automatic control must be enabled, and measurement, solar surplus, cost, peak-policy and safety checks must all pass. Required storage still works without a CT; the separate 12-hour Override is unchanged.",
     ),
     "peak_heating_policy": (
         "Heating during peak periods",
@@ -469,6 +484,51 @@ def schedule_changes(values, rows):
     parse_options({**values, **changes})
     return changes
 
+
+FIELDS["weekend_solar_heating"] = (
+    "Weekend solar-led normal storage",
+    "Use sustained measured PV to select normal storage on weekends. This deliberately allows off-peak grid assistance; it is not solar-only heating.",
+)
+FIELDS["weekend_pv_start_kw"] = (
+    "Weekend daylight trigger",
+    "Measured PV production in kW, sustained continuously. 0.5 kW means 500 W; household grid import may supply the remaining element demand.",
+)
+FIELDS["weekend_qualify_minutes"] = (
+    "Weekend daylight qualification",
+    "Minutes of fresh continuous PV reports required before selecting weekend normal storage. Short cloud dips restart qualification.",
+)
+FIELDS["weekend_end_time"] = (
+    "Weekend latest return to baseline",
+    "Household local clock: return to baseline by this time. A sustained measured low-PV condition after noon can end the solar day earlier.",
+)
+FIELDS["weekend_sunset_kw"] = (
+    "Weekend late-day PV threshold",
+    "After noon, PV below this kW threshold for the full ending delay ends the daylight storage window. A momentary cloud does not.",
+)
+FIELDS["weekend_sunset_minutes"] = (
+    "Weekend low-PV ending delay",
+    "Continuous minutes below the late-day threshold after noon. Missing readings never vote for sunset; the hard end time still bounds the window.",
+)
+FIELDS["solar_cooldown_minutes"] = (
+    "Wait after confirmed solar withdrawal",
+    "Minutes after confirmed withdrawal OFF before another optional solar start. Fresh qualification can overlap this wait. Ordinary 15-minute command spacing also applies.",
+)
+FIELDS["pre_peak_observation_minutes"] = (
+    "Check hot water before peak",
+    "Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.",
+)
+FIELDS["peak_command_lead_minutes"] = (
+    "Request peak OFF this much early",
+    "Minutes reserved for local evaluation, cloud command and confirmation before peak. Must be shorter than the heating completion margin in Hot Water. This is not a guaranteed electrical cutoff.",
+)
+FIELDS["low_water_warning_c"] = (
+    "Low bottom-temperature warning",
+    "Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency.",
+)
+FIELDS["polling_mode"] = (
+    "Cloud polling mode",
+    "Keep existing preserves upgrade choices. Smart uses useful decisions and bounded quiet checks; Minimum requests accepts longer owner-change detection delays; Fixed 30 minutes retains compatibility.",
+)
 
 assert set(FIELDS) == {k for k, v in CATALOG.items() if v.group != "Retired"}
 assert len([k for keys in PAGES.values() for k in keys]) == len(FIELDS)

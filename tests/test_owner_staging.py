@@ -49,6 +49,8 @@ def source(tmp_path):
         "shadow_controller/FORECAST_SETUP.md": "# Synthetic forecast guide\n",
         "energy_monitoring/generated/packages/thermann_energy.yaml": "template: []\n",
         "energy_monitoring/entity_map.yaml": "version: 1\n",
+        "homeowner/thermowatt.yaml": "title: Synthetic Thermowatt\nviews: []\n",
+        "docs/next-major/OWNER_UPGRADE.md": "# Synthetic current owner upgrade\n",
         "docs/pre-review/OWNER_INSTALLATION.md": "# Synthetic owner guide\n",
     }.items():
         target = repo / path

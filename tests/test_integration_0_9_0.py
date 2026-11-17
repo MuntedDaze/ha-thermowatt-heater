@@ -456,7 +456,7 @@ def test_holiday_keeps_the_heater_off_and_12hr_override_heats(rig):
     controller.cancel_holiday(rig.now())
     assert controller.start_guest(rig.now())
     rig.run(hobart(MON, 14, 30))
-    assert rig.commands() == ["Manual:70@off"]
+    assert rig.commands() == ["Manual:62@off"]
 
 
 def test_dashboard_values_are_json_safe_and_complete(rig):

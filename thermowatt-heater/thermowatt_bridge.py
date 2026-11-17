@@ -425,14 +425,19 @@ class MyThermowattBridge:
         self.read_this_tick = set()  # serials whose status was read in this tick
         self.poll_hints = {}
         self.poll_schedule = AdaptiveSchedule(
-            self.options.get("adaptive_polling_enabled", False)
-            and self.options.get("adaptive_polling_qualified", False)
-            and self.poll_interval >= 900,
+            (
+                self.options.get("adaptive_polling_enabled", False)
+                and self.options.get("adaptive_polling_qualified", False)
+                and self.poll_interval >= 900
+                and self.options.get("polling_mode", "existing") != "fixed_30"
+            )
+            or self.options.get("polling_mode") in {"smart", "minimum"},
             self.clock,
             self.monotonic,
             self.data_dir / "poll_state.json",
             atomic_json,
             extended_qualified=self.options.get("event_aware_polling_qualified", False),
+            smart_mode=self.options.get("polling_mode", "existing"),
         )
         self.failures = self.usage.failures
         if self.usage.cooldown_until > self.clock():
@@ -628,7 +633,18 @@ class MyThermowattBridge:
             raise CloudError("authentication_not_ready")
         if self.clock() < self.next_cloud:
             raise CloudError("cloud_backoff")
-        if not _refresh_prepared and self._token_due_for_refresh():
+        # New explicit modes reuse the token for ordinary status GETs. A 401
+        # follows the existing one-refresh/one-GET retry and five-minute guard.
+        # Command pre-reads, confirmations, discovery and POSTs retain proactive
+        # preparation; a POST is never retried on an unknown outcome.
+        ordinary_smart_get = (
+            self.options.get("polling_mode") in {"smart", "minimum"}
+            and method == "GET"
+            and endpoint == "/status"
+            and self.discovered
+            and self.read_category == "status"
+        )
+        if not _refresh_prepared and not ordinary_smart_get and self._token_due_for_refresh():
             operation = self.operation
             self.refresh_session()
             self.operation = operation
@@ -819,6 +835,7 @@ class MyThermowattBridge:
             timestamp = self.last_success.get(serial)
             schedule = self.poll_schedule.summary(serial)
             payload = {
+                "bridge_version": "1.4.0",
                 "last_successful_poll": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
                 if timestamp is not None
                 else None,
@@ -838,7 +855,13 @@ class MyThermowattBridge:
                 "poll_interval_seconds": self.poll_interval,
                 "consecutive_failures": self.failures,
                 "on_demand_refresh_enabled": self.options.get("on_demand_refresh_enabled", False),
-                "adaptive_plan_versions": [1, 2] if self.poll_schedule.extended_qualified else [1],
+                "adaptive_plan_versions": [1]
+                + ([2] if self.poll_schedule.extended_qualified else [])
+                + ([3] if self.poll_schedule.smart_mode in {"smart", "minimum"} else []),
+                "polling_preference": self.options.get("polling_mode", "existing"),
+                "ordinary_get_authentication": "bounded_reactive_refresh"
+                if self.options.get("polling_mode") in {"smart", "minimum"}
+                else "legacy_20_minute_heuristic",
                 "commands_enabled": bool(self.options.get("commands_enabled", False)),
                 "command_policy": self.options.get("command_policy", "automation"),
                 "last_command": dict(self.last_command) if self.last_command else None,
@@ -1758,6 +1781,8 @@ def load_options(path):
     generation = options.get("auth_retry_generation", 0)
     if type(generation) is not int or generation < 0:
         raise ValueError
+    if options.get("polling_mode", "existing") not in {"existing", "smart", "fixed_30", "minimum"}:
+        raise ValueError("polling_mode_invalid")
     poll_seconds(options)
     for key, default, maximum in (("min_cloud_retry_minutes", 60, 1440),):
         interval = options.get(key, default)

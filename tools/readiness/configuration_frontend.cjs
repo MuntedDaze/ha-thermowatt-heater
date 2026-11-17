@@ -33,6 +33,7 @@ async function main() {
     tariff_json: ["electricity"], schedule: ["electricity"], solar: ["solar_meters"],
     sources: ["solar_meters"], equipment: ["advanced"], polling: ["advanced"],
     commissioning: ["advanced"], bridge_sources: ["advanced"], period: ["electricity", "schedule"],
+    heating_preferences: ["solar_meters"], ct_free_setup: ["solar_meters"], diagnostic_report: [],
   };
   try {
     for (const width of [1280, 390]) {
@@ -91,7 +92,15 @@ async function main() {
           await page.locator("ha-form").last().evaluate(form => form.scrollIntoView({ block: "end", behavior: "instant" }));
           await page.screenshot({ animations: "disabled", path: `${output}/${id}-bottom-${width}.png` });
         }
-        if (!["schedule", "period"].includes(id)) {
+        if (id === "diagnostic_report") {
+          const report = page.locator("textarea").last();
+          await expect(report).toHaveValue(/Thermowatt diagnostic report/);
+          const before = await snapshot();
+          await report.selectText();
+          await page.getByRole("button", { name: "Close report", exact: true }).click();
+          expect(await snapshot()).toEqual(before);
+        }
+        if (!["schedule", "period", "ct_free_setup", "diagnostic_report"].includes(id)) {
           const before = await snapshot();
           const saved = page.waitForResponse(response => response.url().includes("/options/flow/") && response.request().method() === "POST");
           await page.getByRole("button", { name: "Submit", exact: true }).click();
@@ -100,6 +109,13 @@ async function main() {
         }
         reports.push({ page: id, width, labels: Object.keys(steps[id].data || {}).length, inline_help: true, overflow: false });
         console.log(`Rendered ${id} at ${width}px with inline help`);
+      }
+      for (const [path, title] of Object.entries({home: "Thermowatt", controls: "Everyday controls", heating: "Heating preferences", electricity: "Electricity and optimisation", diagnostics: "Copy diagnostic report"})) {
+        await page.goto(`http://127.0.0.1:8123/thermowatt-owner/${path}`);
+        await expect(page.getByRole("heading", {name: title, exact: true}).first()).toBeVisible();
+        await expect(page.locator("hui-error-card")).toHaveCount(0);
+        await page.screenshot({animations: "disabled", fullPage: true, path: `${output}/dashboard-${path}-${width}.png`});
+        reports.push({dashboard: path, width, real_lovelace: true});
       }
     }
     fs.writeFileSync(`${output}/frontend-results.json`, JSON.stringify({ real_home_assistant: true, reports }, null, 2));

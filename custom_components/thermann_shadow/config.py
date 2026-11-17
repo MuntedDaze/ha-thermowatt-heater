@@ -35,6 +35,17 @@ DEFAULT_PV_AC = "sensor.goodwe_inverter_total_power"
 # the owner, so the 0.4.0 entry migration moves it to the new 42 °C requirement.
 LEGACY_MORNING_THRESHOLD_C = 40.0
 DEFAULT_OPTIONS = {
+    "weekend_solar_heating": True,
+    "weekend_pv_start_kw": 0.5,
+    "weekend_qualify_minutes": 15.0,
+    "weekend_end_time": "18:00",
+    "weekend_sunset_kw": 0.2,
+    "weekend_sunset_minutes": 30.0,
+    "solar_cooldown_minutes": 10.0,
+    "pre_peak_observation_minutes": 30.0,
+    "peak_command_lead_minutes": 2.0,
+    "low_water_warning_c": 35.0,
+    "polling_mode": "existing",
     "paused": False,
     "meter_verified": False,
     "tariff_verified": False,
@@ -153,6 +164,7 @@ REJECTION_MESSAGES = {
     "unsupported_target_roles": "Use only supported 45/62/70 targets, with baseline no higher than normal and normal no higher than solar boost.",
     "dual_storage_settings_invalid": "Check tank capacity (50–500 L), nominal element (2–3.6 kW), completion margin (5–120 minutes), useful-heat fraction (0–1) and the peak policy.",
     "settings_invalid": "A value is outside its allowed range.",
+    "completion_margin_not_after_peak_lead": "The heating completion margin must be longer than the minutes reserved for the peak OFF command. Increase the completion margin or shorten the peak command lead; nothing was saved.",
     "morning_preferred_below_minimum": "The morning preferred reserve cannot be below the morning minimum.",
     "morning_times_order": "Morning times must be before noon, with the preferred time not after the hard deadline.",
     "afternoon_time_invalid": "The weekend afternoon ready time must be after noon.",
@@ -173,6 +185,17 @@ def rejection_message(error: Exception) -> str:
     code = error.args[0] if error.args and isinstance(error.args[0], str) else ""
     return REJECTION_MESSAGES.get(code, "The settings are not valid together.")
 
+
+NEXT_RANGES = (
+    ("weekend_pv_start_kw", 0.1, 3.6),
+    ("weekend_qualify_minutes", 5, 60),
+    ("weekend_sunset_kw", 0, 1),
+    ("weekend_sunset_minutes", 10, 120),
+    ("solar_cooldown_minutes", 10, 60),
+    ("pre_peak_observation_minutes", 5, 60),
+    ("peak_command_lead_minutes", 1, 10),
+    ("low_water_warning_c", 20, 45),
+)
 
 CONTROLLER_BOUNDS = {
     "controller_min_heating_minutes": (30, 180),
@@ -311,6 +334,20 @@ def parse_options(options):
     notify = values["controller_notify_service"].strip()
     if notify and not NOTIFY_SERVICE_PATTERN.match(notify):
         raise ValueError("notify_service_invalid")  # F4: was silently ignored
+    for key, low, high in NEXT_RANGES:
+        if type(values[key]) is bool or not low <= number(values[key]) <= high:
+            raise ValueError("settings_invalid")
+    if number(values["completion_margin_minutes"]) <= number(values["peak_command_lead_minutes"]):
+        raise ValueError("completion_margin_not_after_peak_lead")
+    if type(values["weekend_solar_heating"]) is not bool or values["polling_mode"] not in {
+        "existing",
+        "smart",
+        "fixed_30",
+        "minimum",
+    }:
+        raise ValueError("settings_invalid")
+    if not 12 * 60 <= _minute(values["weekend_end_time"]) <= 23 * 60:
+        raise ValueError("tariff_time_invalid")
     for key in WHOLE_NUMBER_OPTIONS:
         if number(values[key]) != int(number(values[key])):
             raise ValueError("whole_number_required")  # F10
