@@ -104,7 +104,8 @@ activation refresh is served, the read can capture the stale state and pause
 control in owner override (fail-safe: no commands, but no heating until the
 next Resume). A safe fix is a settle window: ignore reads taken less than
 about 90 s after a re-inspection began. That changes control logic, needs
-owner approval, and is recommended as a separate change.
+owner approval, and is recommended as a separate change. Design and test requirements:
+[settle-window follow-up](FOLLOW_UP_CLOUD_SETTLE_WINDOW.md).
 
 ## 4. Event matrix: refresh after intentional changes
 
@@ -173,7 +174,8 @@ fallback in force" is invisible. Recommended for a separate dashboard change:
 **Urgent:** none. The heater is safe on the fixed 30-minute fallback, and every
 command still checks its exact prior and confirms.
 
-**When convenient (after review and approval):** install bridge 1.4.1. Smart
+**When convenient (after review and approval):** install bridge 1.4.1
+using the [in-place upgrade procedure](UPGRADE_1_4_1.md). Smart
 plans start being accepted at the next read; no settings change is needed.
 Controller 0.16.1 is optional (report clarity only).
 
