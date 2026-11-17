@@ -1,7 +1,7 @@
 # Thermann hot water for Home Assistant
 
 **Next development candidate: controller0.16.0 / bridge1.4.0.**
-[Draft PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42) contains
+[PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42) contains
 the new62°C override, solar-led weekend comfort, explicit Smart polling,
 practical experimental CT-free setup and focused homeowner interface.
 Use the reviewed commit and final successful checks, not a version string alone.
@@ -186,7 +186,7 @@ authentication locks and private backups; do not retry by restarting repeatedly.
 - [Bridge options and authentication guards](thermowatt-heater/DOCS.md)
 
 Previous tested draft PRs remain untouched, including PR #35 at 8d2b1e4.
-This candidate remains a draft until final checks and separate owner merge
+This candidate requires passing final checks and separate owner merge
 approval. Installation, live authentication, heater operation and automatic
 activation also require separate owner approval. This unofficial project is not affiliated
 with Thermann, Thermowatt, Reece or Ariston. Existing redacted security findings

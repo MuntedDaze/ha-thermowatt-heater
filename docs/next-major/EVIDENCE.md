@@ -1,7 +1,7 @@
 # Engineering evidence and independent-review handoff
 
 Candidate controller0.16.0 / bridge1.4.0, based on main
-`7553821dceb3bc78a67621399984bbc992567aea`, [draft PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42).
+`7553821dceb3bc78a67621399984bbc992567aea`, [PR42](https://github.com/MuntedDaze/ha-thermowatt-heater/pull/42).
 Implementation/test checkpoints are in [PROGRESS](PROGRESS.md). The PR's final
 handoff records the exact final head, CI results and verified artifact checksum;
 the review findings are in [REVIEW](REVIEW.md).
