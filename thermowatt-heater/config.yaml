@@ -1,6 +1,6 @@
 name: "Thermann Hot Water"
 description: "Unofficial community app (not a Thermann product): connects a Thermann smart electric water heater to Home Assistant through the Thermowatt cloud."
-version: "1.4.0"
+version: "1.4.1"
 slug: "thermowatt_boiler"
 arch:
   - aarch64

@@ -1,5 +1,14 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.16.1 — diagnostics companion to bridge 1.4.1
+
+- The copyable report separates the polling choice from what the bridge is
+  actually doing: actual mode/reason, accepted/rejected plans, rejection
+  categories and refresh outcomes (closed category lists only). It also
+  recognises bridge 1.4.1.
+- Read-only. No change to policy, temperatures, commands, polling plans,
+  refresh requests, safety gates or saved settings.
+
 ## 0.16.0 — coordinated homeowner release candidate
 
 - New 12hr Override 62°C with preserved legacy active expiry/intent and stable IDs.

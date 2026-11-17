@@ -18,6 +18,32 @@ REASONS = frozenset(
 )
 QUIET_REASONS = {"stable_baseline", "stable_off"}
 EVENT_REASONS = QUIET_REASONS | {"required_temperature", "before_decision", "uncertain"}
+# Home Assistant renders a timestamp sensor's state with whole-second precision
+# (``isoformat(timespec="seconds")``), so a controller reading the bridge's
+# "Last successful poll" entity echoes floor(observation time). The bridge keeps
+# the sub-second wall time of its own read; both forms identify the same read.
+EXACT_IDENTITY_TOLERANCE = 0.01
+# Safe, enumerable rejection categories (no payload content is ever retained).
+REJECTION_CODES = (
+    "schedule_inactive",
+    "no_current_observation",
+    "invalid_payload",
+    "version_unsupported",
+    "mode_mismatch",
+    "fields_invalid",
+    "plan_stale_or_future",
+    "status_identity_mismatch",
+    "plan_not_newer",
+    "owner_check_invalid",
+    "fixed_30_invalid",
+    "delay_or_reason_invalid",
+)
+
+
+class Rejected(ValueError):
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
 
 
 def finite(value):
@@ -43,6 +69,11 @@ class AdaptiveSchedule:
         self.healthy = True
         self.records = {}
         self.counts = {"accepted": 0, "rejected": 0, "ordinary_reads": 0, "reused_reads": 0}
+        # Diagnostics since this bridge start only; never persisted, so the
+        # version-1 journal (and a rollback to 1.4.0) is unchanged.
+        self.rejections = {}
+        self.last_rejection = None
+        self.last_acceptance = None
         if path is not None and path.exists():
             try:
                 if path.stat().st_size > 4096:
@@ -72,7 +103,12 @@ class AdaptiveSchedule:
                 self.healthy = False
 
     def observed(self, serial, timestamp, fixed_seconds):
+        previous = self.records.get(serial)
+        # Two reads inside one wall-clock second cannot be told apart by a
+        # second-precision echo; then only an exact echo identifies the newer.
+        ambiguous = previous is not None and math.floor(previous["wall"]) == math.floor(timestamp)
         self.records[serial] = {
+            "second_ambiguous": ambiguous,
             "wall": timestamp,
             "mono": self.monotonic(),
             "fixed": fixed_seconds,
@@ -87,45 +123,79 @@ class AdaptiveSchedule:
     def clear(self):
         self.records.clear()
 
+    def identity_offset(self, record, status_at):
+        """Seconds by which ``status_at`` precedes this record's read, or None
+        when the plan was made for a different observation.
+
+        Exact (sub-second) echoes match as before. A whole-second echo matches
+        only floor(read time), and only when no other read of this heater fell
+        in the same second. This is identity only: freshness and deadlines stay
+        anchored to the bridge's own monotonic read time.
+        """
+        offset = record["wall"] - status_at
+        if abs(offset) <= EXACT_IDENTITY_TOLERANCE:
+            return 0.0
+        if (
+            not record.get("second_ambiguous")
+            and float(status_at).is_integer()
+            and status_at == math.floor(record["wall"])
+        ):
+            return offset  # 0.01 < offset < 1
+        return None
+
+    def _reject(self, code):
+        self.counts["rejected"] += 1
+        self.rejections[code] = self.rejections.get(code, 0) + 1
+        self.last_rejection = {"reason": code, "at": int(self.clock())}
+        return False
+
     def accept(self, serial, payload):
         record = self.records.get(serial)
         try:
-            plan = json.loads(payload)
-            if not self.active or record is None or not isinstance(plan, dict):
-                raise ValueError
+            if not self.active:
+                raise Rejected("schedule_inactive")
+            if record is None:
+                raise Rejected("no_current_observation")
+            try:
+                plan = json.loads(payload)
+            except (ValueError, UnicodeError):
+                raise Rejected("invalid_payload") from None
+            if not isinstance(plan, dict):
+                raise Rejected("invalid_payload")
             version = plan.get("version")
             keys = {"version", "status_at", "issued_at", "delay_seconds", "reason"}
             if type(version) is not int or version not in (1, 2, 3):
-                raise ValueError
+                raise Rejected("version_unsupported")
             if version == 2:
                 if not self.extended_qualified:
-                    raise ValueError
+                    raise Rejected("version_unsupported")
                 keys.add("owner_check_seconds")
             if version == 3:
                 if self.smart_mode not in {"smart", "minimum"}:
-                    raise ValueError
+                    raise Rejected("version_unsupported")
                 mode = plan.get("polling_mode")
                 if mode not in {"smart", "fixed_30", "minimum"} or (
                     mode == "minimum" and self.smart_mode != "minimum"
                 ):
-                    raise ValueError
+                    raise Rejected("mode_mismatch")
                 keys |= {"owner_check_seconds", "polling_mode"}
             if set(plan) != keys:
-                raise ValueError
+                raise Rejected("fields_invalid")
             if not all(finite(plan[k]) for k in ("status_at", "issued_at", "delay_seconds")):
-                raise ValueError
+                raise Rejected("fields_invalid")
             if not 0 <= self.clock() - plan["issued_at"] <= 30:
-                raise ValueError
-            if abs(plan["status_at"] - record["wall"]) > 0.01:
-                raise ValueError
+                raise Rejected("plan_stale_or_future")
+            offset = self.identity_offset(record, plan["status_at"])
+            if offset is None:
+                raise Rejected("status_identity_mismatch")
             if record["issued"] is not None and plan["issued_at"] <= record["issued"]:
-                raise ValueError
+                raise Rejected("plan_not_newer")
             limit = MAX_INTERVAL
             owner_limit = None
             if version == 2:
                 owner_limit = plan["owner_check_seconds"]
                 if type(owner_limit) is not int or not 1800 <= owner_limit <= MAX_QUIET_INTERVAL:
-                    raise ValueError
+                    raise Rejected("owner_check_invalid")
                 if plan["reason"] in QUIET_REASONS:
                     limit = MAX_QUIET_INTERVAL
                 limit = min(limit, owner_limit)
@@ -133,7 +203,7 @@ class AdaptiveSchedule:
                 owner_limit = plan["owner_check_seconds"]
                 maximum = 43200 if mode == "minimum" else 28800
                 if type(owner_limit) is not int or not 1800 <= owner_limit <= maximum:
-                    raise ValueError
+                    raise Rejected("owner_check_invalid")
                 limit = (
                     owner_limit
                     if plan["reason"] in (QUIET_REASONS | {"quiet_before_decision"})
@@ -144,7 +214,7 @@ class AdaptiveSchedule:
                     or plan["delay_seconds"] != 1800
                     or owner_limit != 1800
                 ):
-                    raise ValueError
+                    raise Rejected("fixed_30_invalid")
             if not MIN_INTERVAL <= plan["delay_seconds"] <= limit or plan["reason"] not in (
                 REASONS
                 if version == 1
@@ -152,8 +222,11 @@ class AdaptiveSchedule:
                 if version == 2
                 else EVENT_REASONS | {"fixed_30", "quiet_before_decision"}
             ):
-                raise ValueError
-            due = record["mono"] + plan["delay_seconds"]
+                raise Rejected("delay_or_reason_invalid")
+            # The controller measured its delay from status_at. For a whole-
+            # second echo that is up to one second before the bridge's read, so
+            # the deadline lands where the controller intended: never later.
+            due = record["mono"] - offset + plan["delay_seconds"]
             # The first lease may replace the fixed slot. Later callbacks can
             # advance, never slide a consequential deadline later.
             record["due"] = min(record["due"], due) if record["due"] is not None else due
@@ -165,10 +238,12 @@ class AdaptiveSchedule:
                 owner_limit=owner_limit,
             )
             self.counts["accepted"] += 1
+            self.last_acceptance = {"reason": plan["reason"], "at": int(self.clock())}
             return True
-        except (ValueError, TypeError, KeyError, UnicodeError):
-            self.counts["rejected"] += 1
-            return False
+        except Rejected as error:
+            return self._reject(error.code)
+        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError):
+            return self._reject("invalid_payload")
 
     def deadline(self, serial):
         r = self.records.get(serial)
@@ -198,4 +273,8 @@ class AdaptiveSchedule:
             "plan_version": r["version"] if leased else None,
             "owner_check_seconds": r["owner_limit"] if leased else None,
             "counts": dict(self.counts),
+            # Since this bridge start: safe category -> count, and latest outcomes.
+            "rejection_reasons": dict(self.rejections),
+            "last_rejection": dict(self.last_rejection) if self.last_rejection else None,
+            "last_acceptance": dict(self.last_acceptance) if self.last_acceptance else None,
         }

@@ -422,6 +422,8 @@ class MyThermowattBridge:
         self.last_status_attempt = {}
         self.refresh_requested = set()
         self.refresh_lock = threading.Lock()
+        self.refresh_activity = {"outcomes": {}, "last": None}  # since bridge start
+        self.reconnect_refresh = False
         self.read_this_tick = set()  # serials whose status was read in this tick
         self.poll_hints = {}
         self.poll_schedule = AdaptiveSchedule(
@@ -712,6 +714,7 @@ class MyThermowattBridge:
     def _offline(self):
         self.confirmed.clear()
         self.poll_schedule.clear()
+        self._restore_fixed_bound()
         with self.refresh_lock:
             self.refresh_requested.clear()
             self.poll_hints.clear()
@@ -835,7 +838,7 @@ class MyThermowattBridge:
             timestamp = self.last_success.get(serial)
             schedule = self.poll_schedule.summary(serial)
             payload = {
-                "bridge_version": "1.4.0",
+                "bridge_version": "1.4.1",
                 "last_successful_poll": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
                 if timestamp is not None
                 else None,
@@ -855,6 +858,13 @@ class MyThermowattBridge:
                 "poll_interval_seconds": self.poll_interval,
                 "consecutive_failures": self.failures,
                 "on_demand_refresh_enabled": self.options.get("on_demand_refresh_enabled", False),
+                # 1.4.1: what happened to refresh requests since bridge start.
+                "on_demand_refresh_activity": {
+                    "outcomes": dict(self.refresh_activity["outcomes"]),
+                    "last": dict(self.refresh_activity["last"])
+                    if self.refresh_activity["last"]
+                    else None,
+                },
                 "adaptive_plan_versions": [1]
                 + ([2] if self.poll_schedule.extended_qualified else [])
                 + ([3] if self.poll_schedule.smart_mode in {"smart", "minimum"} else []),
@@ -936,15 +946,25 @@ class MyThermowattBridge:
             return
         if len(parts) == 3 and parts[0] == "P" and parts[2] == "refresh":
             serial = parts[1]
-            if (
-                msg.payload == b"refresh"
-                and self._demand_allowed()
-                and serial in self.active_devices
-                and self.monotonic() - self.last_status_attempt.get(serial, float("-inf"))
-                >= self.DEMAND_MIN_SPACING
+            if msg.payload != b"refresh":
+                outcome = "refused_invalid_payload"
+            elif not self._demand_allowed():
+                outcome = "refused_" + self._demand_refusal()
+            elif serial not in self.active_devices:
+                outcome = "refused_unknown_heater"
+            elif (
+                self.monotonic() - self.last_status_attempt.get(serial, float("-inf"))
+                < self.DEMAND_MIN_SPACING
             ):
-                with self.refresh_lock:
+                # Not queued: the existing schedule (or an accepted plan)
+                # supplies the next read; this keeps the no-retry contract.
+                outcome = "refused_min_spacing"
+            else:
+                outcome = "queued"
+            with self.refresh_lock:
+                if outcome == "queued":
                     self.refresh_requested.add(serial)
+                self._record_refresh(outcome)
             return
         if not self.options.get("commands_enabled", False):
             return
@@ -974,6 +994,52 @@ class MyThermowattBridge:
             and self.usage.complete
             and self.clock() >= self.usage.cooldown_until
             and self.cloud_health not in {"backoff", "quota_limited"}
+        )
+
+    def _demand_refusal(self):
+        """The first unmet _demand_allowed condition, as a safe category."""
+        if not self.options.get("on_demand_refresh_enabled", False):
+            return "disabled"
+        if not self.options.get("cloud_enabled", False) or not self.mqtt_connected.is_set():
+            return "bridge_offline"
+        if not self.discovered:
+            return "awaiting_discovery"
+        if self.guard.state["mode"] != "authorized" or self.guard.failed_storage:
+            return "authentication_not_ready"
+        if not self.usage.complete:
+            return "accounting_incomplete"
+        return "backoff_or_quota"
+
+    def _record_refresh(self, outcome):
+        """Diagnostic only (since bridge start); callers hold refresh_lock."""
+        counts = self.refresh_activity["outcomes"]
+        counts[outcome] = counts.get(outcome, 0) + 1
+        self.refresh_activity["last"] = {"result": outcome, "at": int(self.clock())}
+
+    def _restore_fixed_bound(self):
+        """When leases are discarded, no copied adaptive deadline may outlive
+        them: every heater returns to the fixed clock-aligned bound at most."""
+        # Never earlier than a backoff/quota cooldown (next_cloud also holds it).
+        slot = max(self._next_slot(), self.usage.cooldown_until)
+        for serial in tuple(self.next_background):
+            self.next_background[serial] = min(self.next_background[serial], slot)
+        self.next_poll = min(self.next_poll, slot)
+
+    def _reconnect_read_ready(self):
+        """One guarded post-reconnect status read (opt-in with on-demand
+        refresh): same authentication, accounting, backoff and spacing gates."""
+        last = max(self.last_status_attempt.values(), default=float("-inf"))
+        return (
+            self.options.get("on_demand_refresh_enabled", False)
+            and self.options.get("cloud_enabled", False)
+            and self.mqtt_connected.is_set()
+            and self.guard.state["mode"] == "authorized"
+            and not self.guard.failed_storage
+            and self.usage.complete
+            and not self.failures
+            and self.clock() >= self.usage.cooldown_until
+            and self.cloud_health not in {"backoff", "quota_limited"}
+            and self.monotonic() - last >= self.DEMAND_MIN_SPACING
         )
 
     def _adaptive_sync(self):
@@ -1012,14 +1078,24 @@ class MyThermowattBridge:
         with self.refresh_lock:
             pending = self.refresh_requested & self.active_devices
             self.refresh_requested.clear()
-        if not self._demand_allowed():
+        if not pending:
             return set()
-        return {
+        if not self._demand_allowed():
+            with self.refresh_lock:
+                self._record_refresh("dropped_" + self._demand_refusal())
+            return set()
+        served = {
             serial
             for serial in pending
             if self.monotonic() - self.last_status_attempt.get(serial, float("-inf"))
             >= self.DEMAND_MIN_SPACING
         }
+        with self.refresh_lock:
+            for _ in served:
+                self._record_refresh("accepted_for_read")
+            for _ in pending - served:
+                self._record_refresh("dropped_min_spacing")
+        return served
 
     def discover_devices(self):
         self.operation = "device_discovery"
@@ -1595,6 +1671,7 @@ class MyThermowattBridge:
             self.mqtt_reconnected.clear()
             self._offline()
             self.discovered = False
+            self.reconnect_refresh = bool(self.options.get("on_demand_refresh_enabled", False))
         if not self.options.get("cloud_enabled", False) or not self.mqtt_connected.is_set():
             self._offline()
             return
@@ -1604,6 +1681,21 @@ class MyThermowattBridge:
             self._adaptive_sync()
             self.operation = "authentication_guard"
             self.guard.check()
+            if self.reconnect_refresh:
+                if self.discovered:
+                    self.reconnect_refresh = False  # an ordinary read already recovered
+                elif self._reconnect_read_ready():
+                    # One rediscovery + status read on the ordinary worker path,
+                    # deferred until the demand spacing allows; never repeated.
+                    self.reconnect_refresh = False
+                    now = self.clock()
+                    self.next_poll = min(self.next_poll, now)
+                    for serial in self.config["devices"]:
+                        self.next_background[serial] = min(
+                            self.next_background.get(serial, now), now
+                        )
+                    with self.refresh_lock:
+                        self._record_refresh("reconnect_read_scheduled")
             if self.clock() < self.next_cloud:
                 return
             self.login()
