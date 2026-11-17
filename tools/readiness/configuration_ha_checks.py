@@ -355,6 +355,11 @@ async def check_configuration(hass, entry):
     hass.config_entries.async_update_entry(entry, options=before)
     await hass.async_block_till_done()
 
+    # Discard the scenario's old shadow decision before browser screenshots;
+    # show the restored actual options and a matching read-only evaluation.
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    runtime.update(dt_util.utcnow())
+    await runtime.executor.async_step(dt_util.utcnow())
     assert ids == {e.unique_id: e.entity_id for e in er.async_get(hass).entities.values()}
     assert dict(entry.options) == original
     assert ShadowOptionsFlow(entry)._entry.unique_id == entry.unique_id

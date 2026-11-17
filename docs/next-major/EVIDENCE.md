@@ -109,15 +109,23 @@ widening; forms, explanatory attributes and the focused dashboard provide help.
 ## Independent review and final verification
 
 Owner authorised a strictly read-only independent review after implementation,
-preferably Claude Fable5.2 High. Claude is unavailable in this environment;
-GPT-6 Astra High will receive the full master request, architecture, complete diff
-from the base above and applicable tests. Review targets command/exact-prior
-safety, authentication, polling, CT-free authority, weekends, tariffs/DST,
-persistence/failure recovery and upgrades. Findings will be severity-labelled
-with code references; legitimate findings must be corrected and verified.
+preferably Claude Fable5.2 High. Claude was unavailable; **GPT-6 Astra High**
+reviewed the full request, architecture, complete diff and applicable tests.
+The implementation resolved the initial seven findings and two event-capture
+races found in follow-up. [Full severity/disposition record](REVIEW.md).
+Final independent code verification accepted
+`a197c5ce48fcf858bef616b529fdc0a0a8a0c450`, conditional on passing final-head CI,
+with no additional actionable defect. No reviewer modified files or used live I/O.
 
 Final unit/static/Python3.12/3.13/3.14, real HA, frontend, nativeamd64/aarch64,
 isolatedMQTT/lifecycle/demand and Supervisor results remain required on the final
 commit. The initial checkpoint's outdated upgrade-name/saved-replay expectations
 were corrected; it is not the final passing head. No merge or live-installation
 approval is inferred from a draft PR or modelled result.
+
+Actual HA2026.10.4/2026.11.1 core/combined monitoring, both desktop/mobile
+frontends, nativeamd64/aarch64 and Supervisor checks passed on the accepted
+code head. The complete local/CI unit suites were running when this checkpoint
+was written; use the final commit's actual check results linked in PR42.
+Source artifacts now explicitly use the reviewed PR head, rather than GitHub's
+synthetic merge-test commit, with per-file hashes and outer SHA256SUMS.

@@ -40,8 +40,18 @@ the real HA fixture also exercises coalesced outage/recovery with all commands
 blocked by absent transport/commissioning.
 
 Twenty-five targeted remediation tests pass. The existing non-replay regression
-suite also passed before the final added tests. Functional corrections are now
-being committed; affected replay artifacts, final-head CI and the reviewer's
-final corrected-diff verification are still required. Do not read this record as
-final review acceptance or as installation/physical commissioning. The raw-event
-corrections require a further independent verification on their corrected head.
+suite also passed before the final added tests. Functional corrections and replay
+artifacts are committed; final independent acceptance follows below. Use the
+PR's final-head CI results for completion evidence. This is not physical
+commissioning or installation approval.
+
+## Final independent code verification
+
+Astra High accepted the corrected code at
+`a197c5ce48fcf858bef616b529fdc0a0a8a0c450`, conditional on passing final-head CI.
+Both remainingP1 reproductions were resolved; no further actionable code defect
+was reported. The reviewer traced owner Hold, override, restart, failed save and
+pending-command handling and inspected regressions without running tests or
+contacting live equipment. Final CI and explicit owner merge approval are separate.
+Subsequent changes are documentation, test-fixture cleanup and exact-head source-artifact metadata,
+not controller behaviour. Final checks are linked from the PR's current head.

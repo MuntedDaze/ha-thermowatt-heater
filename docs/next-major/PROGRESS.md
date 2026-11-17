@@ -132,3 +132,19 @@ Further correction after66aee0d follow-up:
 - Need commit corrected head, ask Astra for final readonly verification of the
   two remainingP1 reproductions and new races, run all final-head CI, inspect any
   failure, download/verify artifacts/screenshots and finish handoff without merge.
+
+Final code checkpoint:
+
+- Astra High independently accepted a197c5ce48fcf858bef616b529fdc0a0a8a0c450
+  after verifying all nine findings; no further actionable defect. Read-only,
+  no tests/live I/O by reviewer. Review acceptance remains conditional on final CI.
+- Accepted head actual HA/core/combined monitoring, nativeamd64/aarch64,
+  Supervisor and both desktop/mobile frontend workflows pass. Local full1622-test
+  run is session43905 (.test-deps/next-major-verified-pytest.txt). No source edits
+  are permitted during that run; subsequent work is documentation/artifact metadata.
+- Final metadata increment fixes the CI source bundle to use the exact reviewed
+  PR head, not GitHub's synthetic merge-test SHA. All final-head checks must pass.
+- Remaining routine work: inspect full unit outcome/CI; correct real failures if
+  any, obtain final artifact and verify manifest/all hashes/head, inspect final
+  screenshots, update PR/handoff with exact head/results/checksum. Keep PR draft,
+  unmerged and undeployed; owner approval still required for merge/live operation.
