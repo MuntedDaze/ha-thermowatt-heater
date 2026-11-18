@@ -272,6 +272,8 @@ def event(value):
         **{k: code(value.get(k)) for k in ("state", "reason", "wanted", "cloud", "command")},
         "bottom_c": numeric(value.get("bottom_c")),
         "grid_import_kw": numeric(value.get("grid_import_kw")),
+        "gate": code(value.get("gate")) if value.get("gate") is not None else None,
+        "commands_24h": numeric(value.get("commands_24h")),
         "boost_eligible": value.get("boost_eligible")
         if type(value.get("boost_eligible")) is bool
         else None,
@@ -321,7 +323,7 @@ def build(runtime, now, ha_version="unknown"):
     report = {
         "schema": 1,
         "versions": {
-            "controller": "0.16.1",
+            "controller": "0.16.2",
             "bridge": attrs.get("bridge_version")
             if attrs.get("bridge_version") in {"1.3.17", "1.4.0", "1.4.1"}
             else "unreported",

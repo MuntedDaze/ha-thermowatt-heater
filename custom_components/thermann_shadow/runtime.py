@@ -88,6 +88,7 @@ class ShadowRuntime:
         self.forecast = None
         self.grid_import_kw = None  # signed: import positive; None when stale/unverified
         self.grid_observed_at = None
+        self.grid_value_missing = False
         self.circuit = CircuitPower()
         self.circuit_energy_kwh = None
         self.power_budget = None
@@ -282,8 +283,14 @@ class ShadowRuntime:
                         )
                 except (ValueError, TypeError, OverflowError):
                     self._solar_input_loss()
-        elif kw is None or not self.settings.meter_verified:
+        elif not self.settings.meter_verified:
             self._solar_input_loss()
+        elif kw is None:
+            # 1.4.2/0.16.2: a valueless report is a gap. Before any optional
+            # session it no longer erases genuine qualification votes; during
+            # one it keeps the existing latched protective loss.
+            if self._optional_active():
+                self._solar_input_loss()
         else:
             signed = kw if self.settings.import_positive else -kw
             policy = self.executor.policy
@@ -328,16 +335,23 @@ class ShadowRuntime:
 
     def _solar_input_loss(self):
         """Retain a transient loss until the sole controller records/resolves it."""
+        self.executor.policy.samples.clear()
+        if self._optional_active():
+            self.solar_input_loss_pending = True
+
+    def _optional_active(self):
+        """An optional solar session, or an unresolved optional start, exists."""
         from .controller import OPTIONAL_REASONS
 
         controller = self.executor.controller
-        self.executor.policy.samples.clear()
-        if controller.solar_session_active or (
-            controller.intent
-            and controller.intent.get("reason") in OPTIONAL_REASONS
-            and controller.intent.get("target") != "off"
-        ):
-            self.solar_input_loss_pending = True
+        return bool(
+            controller.solar_session_active
+            or (
+                controller.intent
+                and controller.intent.get("reason") in OPTIONAL_REASONS
+                and controller.intent.get("target") != "off"
+            )
+        )
 
     # ------------------------------------------------------------------ the tick
     def update(self, now):
@@ -380,6 +394,20 @@ class ShadowRuntime:
         grid_reading = self._reading("grid")
         self.grid_observed_at = (
             grid_reading.observed_at if self.grid_import_kw is not None else None
+        )
+        # A current report that carries no value (GoodWe "unavailable"/"unknown")
+        # is a missing measurement, not a below-threshold one. It never votes;
+        # the policy's existing gap and freshness limits still expire evidence.
+        raw = self.hass.states.get(self.sources.get("grid") or "")
+        reported = getattr(raw, "last_reported", None)
+        self.grid_value_missing = bool(
+            grid is None
+            and settings.meter_verified
+            and raw is not None
+            and not raw.attributes.get("restored", False)
+            and isinstance(reported, datetime)
+            and self.boot <= reported <= now
+            and (now - reported).total_seconds() <= settings.grid_max_age_seconds
         )
         if not settings.meter_verified:
             self.warnings.append("meter_direction_not_verified_no_measured_solar_used")
@@ -522,6 +550,9 @@ class ShadowRuntime:
             last.get("id"),
             last.get("status"),
             self.executor.controller.state,
+            self.executor.controller.reason
+            if self.executor.controller.state == "change_requested"
+            else None,
             self.executor.poll_shadow.last_would_poll,
         )
         if key == self._event_key:
@@ -542,6 +573,12 @@ class ShadowRuntime:
                     "boost_reason": decision.plan.get("boost_reason"),
                     "bottom_c": obs.temperature_c,
                     "grid_import_kw": self.grid_import_kw,
+                    # 0.16.2: which command gate held a wanted change, and the
+                    # rolling count that optional starts are measured against.
+                    "gate": self.executor.controller.reason
+                    if self.executor.controller.state == "change_requested"
+                    else None,
+                    "commands_24h": self.executor.controller.commands_in_window(now),
                 }
             )
         )
