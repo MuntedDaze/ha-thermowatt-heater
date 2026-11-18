@@ -442,12 +442,6 @@ class Controller:
         start, back = _dt(self.holiday_start), _dt(self.holiday_return)
         return start is not None and back is not None and start <= now < back
 
-    def holiday_window(self, now: datetime) -> tuple[datetime, datetime] | None:
-        start, back = _dt(self.holiday_start), _dt(self.holiday_return)
-        if start is None or back is None or now >= back:
-            return None
-        return start, back
-
     def operating_mode(self, now: datetime) -> str:
         if not self.enabled:
             return "disabled"

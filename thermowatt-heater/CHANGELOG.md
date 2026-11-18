@@ -1,5 +1,11 @@
 # Changelog
 
+## Controller 0.17.1 companion release (bridge 1.4.1 unchanged)
+
+- Configuration cleanup: Back navigation, one Smart polling choice, a separate
+  Legacy page and safe preference edits while Automatic is on. Behaviour
+  unchanged. See `docs/cleanup/AUDIT.md`.
+
 ## Controller 0.17.0 companion release (bridge 1.4.1 unchanged)
 
 - Weekend comfort window: first fresh 500 W PV report opens it until 18:00;

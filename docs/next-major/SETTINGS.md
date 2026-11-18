@@ -22,6 +22,7 @@ cents/kWh here, percentages are0–100; native entity units/IDs remain compatibl
 - [Solar forecasts and grid meter](#solar)
 - [Equipment and savings](#equipment)
 - [Cloud checks and data age](#polling)
+- [Legacy and developer settings](#legacy)
 - [Commissioning and safeguards](#commissioning)
 - [Sensor mappings](#sensor-mappings)
 - [Retired settings](#retired-settings)
@@ -102,29 +103,11 @@ Stored key: `weekend_pv_start_kw`. Default: `0.5`. Allowed: 0.1–3.6. Units: kW
 
 Measured PV production in kW. The first fresh report at or above this opens the weekend window until the end time; 0.5 kW means 500 W.
 
-### Weekend daylight qualification
-
-Stored key: `weekend_qualify_minutes`. Default: `15.0`. Allowed: 5–60. Units: min. Turn Automatic off before changing.
-
-Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.
-
 ### Weekend latest return to baseline
 
 Stored key: `weekend_end_time`. Default: `18:00`. Allowed: 24-hour local/tariff time as described. Units: none. Turn Automatic off before changing.
 
 Household local clock: the weekend window ends and the thermostat target returns to baseline at this time. This does not cool stored water.
-
-### Weekend late-day PV threshold
-
-Stored key: `weekend_sunset_kw`. Default: `0.2`. Allowed: 0–1. Units: kW. Turn Automatic off before changing.
-
-Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.
-
-### Weekend low-PV ending delay
-
-Stored key: `weekend_sunset_minutes`. Default: `30.0`. Allowed: 10–120. Units: min. Turn Automatic off before changing.
-
-Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.
 
 ### Wait after confirmed solar withdrawal
 
@@ -134,7 +117,7 @@ Minutes after confirmed withdrawal OFF before another optional solar start. Fres
 
 ### Check hot water before peak
 
-Stored key: `pre_peak_observation_minutes`. Default: `30.0`. Allowed: 5–60. Units: min. Turn Automatic off before changing.
+Stored key: `pre_peak_observation_minutes`. Default: `30.0`. Allowed: 5–60. Units: min. Existing active-control guard applies where relevant.
 
 Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.
 
@@ -146,7 +129,7 @@ Minutes reserved for local evaluation, cloud command and confirmation before pea
 
 ### Low bottom-temperature warning
 
-Stored key: `low_water_warning_c`. Default: `35.0`. Allowed: 20–45. Units: °C. Turn Automatic off before changing.
+Stored key: `low_water_warning_c`. Default: `35.0`. Allowed: 20–45. Units: °C. Existing active-control guard applies where relevant.
 
 Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency.
 
@@ -340,49 +323,13 @@ Australian dollars a later window must save, for example $0.30. Heating must sti
 <a id="polling"></a>
 ## Cloud checks and data age
 
-Advanced: preview and actual adaptive checks are different. Longer quiet intervals reduce requests but delay noticing app changes. Default-off qualification gates and the original fixed fallback remain. A fresh command prior and confirmation are always required.
+One choice: Cloud polling mode (Smart recommended). Select the same mode in the Thermann Hot Water app options; the app owns every cloud request. A fresh command prior and confirmation are always required.
 
 ### Cloud polling mode
 
 Stored key: `polling_mode`. Default: `existing`. Allowed: existing / smart / fixed_30 / minimum. Units: none. Turn Automatic off before changing.
 
-Keep existing preserves upgrade choices. Smart uses useful decisions and bounded quiet checks; Minimum requests accepts longer owner-change detection delays; Fixed 30 minutes retains compatibility.
-
-### Preview adaptive cloud checks
-
-Stored key: `adaptive_polling_shadow`. Default: `False`. Allowed: On / Off. Units: none. Existing active-control guard applies where relevant.
-
-Record when adaptive polling would read the cloud, without changing actual bridge requests. Safe starting mode for comparison; it does not enable adaptive polling or automatic heating.
-
-### Allow adaptive cloud checks
-
-Stored key: `adaptive_polling_enabled`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
-
-Advanced, default off. Requires independent review, supervised validation and the bridge's separate enabled/qualified options. Sends bounded expiring polling hints; original fixed fallback, authentication, request budgets and command confirmations remain.
-
-### Allow longer checks during quiet periods
-
-Stored key: `event_aware_polling_enabled`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
-
-Advanced, default off. Requires adaptive polling and a qualified bridge. A confirmed baseline/OFF period can be checked less often, while temperatures still expire normally. App changes may be detected later, and brief changes can be missed. Command-prior checks and confirmation are unchanged.
-
-### Longest quiet-period check interval
-
-Stored key: `owner_change_check_minutes`. Default: `60.0`. Allowed: 30–90. Units: min. Turn Automatic off before changing.
-
-Minutes between ordinary observations with healthy cloud, 30–90. Start with 60 only after qualification. Longer saves requests but delays detecting app changes; outages delay them further. Only used when longer quiet checks are enabled.
-
-### Preview: longest check interval while heating
-
-Stored key: `adaptive_poll_heating_minutes`. Default: `60.0`. Allowed: 15–60. Units: min. Existing active-control guard applies where relevant.
-
-Minutes, up to 60, used by the advisory polling model. This preview setting alone does not change actual cloud reads. Use the reviewed bridge and actual polling telemetry to assess real requests.
-
-### Preview: longest check interval while stable
-
-Stored key: `adaptive_poll_stable_minutes`. Default: `90.0`. Allowed: 30–90. Units: min. Existing active-control guard applies where relevant.
-
-Minutes, up to 90, used by the advisory polling model. This alone does not change actual cloud reads; vendor inactivity expiry remains unverified.
+Smart is the recommended choice: reads are arranged for useful decisions with bounded quiet checks. Minimum makes fewer requests but notices app changes later. Fixed 30 minutes and Keep existing (legacy adaptive switches on the Legacy page) retain compatibility. Choose the same mode in the Thermann Hot Water app options.
 
 ### Maximum age of temperature used for planning
 
@@ -396,6 +343,71 @@ Stored key: `grid_max_age_seconds`. Default: `120.0`. Allowed: 30–300. Units: 
 
 Seconds before local grid observations are considered stale; 120 is an example. Missing or stale data resets economic holds and cannot authorise solar-only heating. Changing this does not trigger cloud requests.
 
+<a id="legacy"></a>
+## Legacy and developer settings
+
+Settings kept only so existing saved options, entities and a rollback are unchanged. None of them is needed in the recommended configuration, and each description says when it still has an effect. Changing them never qualifies hardware or authorises heater operation.
+
+### Allow adaptive cloud checks
+
+Stored key: `adaptive_polling_enabled`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
+
+Pre-Smart adaptive hints, default off. Requires the bridge's separate enabled/qualified options. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.
+
+### Allow longer checks during quiet periods
+
+Stored key: `event_aware_polling_enabled`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
+
+Pre-Smart quiet-period hints, default off. Requires adaptive hints and a qualified bridge. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.
+
+### Longest quiet-period check interval
+
+Stored key: `owner_change_check_minutes`. Default: `60.0`. Allowed: 30–90. Units: min. Turn Automatic off before changing.
+
+Minutes, 30–90, for pre-Smart quiet-period hints. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes. Smart uses its own bounded quiet intervals.
+
+### Preview adaptive cloud checks
+
+Stored key: `adaptive_polling_shadow`. Default: `False`. Allowed: On / Off. Units: none. Existing active-control guard applies where relevant.
+
+Developer comparison only: record when the old adaptive model would read the cloud. Never changes actual bridge requests, polling or heating.
+
+### Preview: longest check interval while heating
+
+Stored key: `adaptive_poll_heating_minutes`. Default: `60.0`. Allowed: 15–60. Units: min. Existing active-control guard applies where relevant.
+
+Developer comparison only: minutes, up to 60, for the old advisory model. Never changes actual cloud reads.
+
+### Preview: longest check interval while stable
+
+Stored key: `adaptive_poll_stable_minutes`. Default: `90.0`. Allowed: 30–90. Units: min. Existing active-control guard applies where relevant.
+
+Developer comparison only: minutes, up to 90, for the old advisory model. Never changes actual cloud reads.
+
+### Legacy OFF / 45 / 70 command tests completed
+
+Stored key: `controller_three_state_qualified`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
+
+Legacy record kept for existing installations. Has no effect: commands require the four-state (OFF/45/62/70) qualification. Changing it never authorises heater operation.
+
+### Weekend daylight qualification
+
+Stored key: `weekend_qualify_minutes`. Default: `15.0`. Allowed: 5–60. Units: min. Existing active-control guard applies where relevant.
+
+Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.
+
+### Weekend late-day PV threshold
+
+Stored key: `weekend_sunset_kw`. Default: `0.2`. Allowed: 0–1. Units: kW. Existing active-control guard applies where relevant.
+
+Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.
+
+### Weekend low-PV ending delay
+
+Stored key: `weekend_sunset_minutes`. Default: `30.0`. Allowed: 10–120. Units: min. Existing active-control guard applies where relevant.
+
+Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.
+
 <a id="commissioning"></a>
 ## Commissioning and safeguards
 
@@ -405,19 +417,13 @@ Advanced; do not tick qualifications to bypass a warning. Follow separately appr
 
 Stored key: `ct_free_solar_verification`. Default: ``. Allowed: as described. Units: none. Turn Automatic off before changing.
 
-Leave blank in Shadow Mode. Follow the upgrade guide after supervised checks. Join four values with | and no spaces: grid entity, W or kW, direction, and rated kW. Use import_positive or export_positive for direction. The record must match this installation. Grid-only decisions do not prove element operation; a configured CT fault cannot fall back to this record.
+Written for you by Solar & Meters → Set up experimental CT-free solar; use that page rather than typing here. Clear this field to withdraw CT-free solar. Format, for reference: grid entity|W or kW|import_positive or export_positive|rated kW, matching this installation. Grid-only decisions do not prove element operation; a configured CT fault cannot fall back to this record.
 
 ### Bridge command address (MQTT topic)
 
 Stored key: `controller_command_topic`. Default: ``. Allowed: as described. Units: none. Turn Automatic off before changing.
 
 Commissioning only. Copy the exact mode-command topic announced by your existing bridge. Blank prevents controller commands. Do not guess it or point at another appliance; keep automatic control off while changing it.
-
-### Legacy OFF / 45 / 70 command tests completed
-
-Stored key: `controller_three_state_qualified`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
-
-Historical commissioning record retained for existing installations. Set only after separately approved supervised tests, including owner-change refusal. It does not replace four-state qualification or authorise heater operation.
 
 ### OFF / 45 / 62 / 70 command tests completed
 

@@ -395,6 +395,9 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
     async def async_step_commissioning(self, user_input=None):
         return await self._settings_page("commissioning", user_input)
 
+    async def async_step_legacy(self, user_input=None):
+        return await self._settings_page("legacy", user_input)
+
     async def _settings_page(self, step_id, user_input):
         values = saved_options(self._entry.options)
         errors = {}

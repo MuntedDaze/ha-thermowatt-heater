@@ -1,5 +1,18 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.17.1 — simpler configuration, behaviour unchanged (bridge unchanged)
+
+- Every configuration submenu ends with **Back to main menu**.
+- The polling page offers one choice, Cloud polling mode (Smart recommended),
+  plus the two data-age limits. Pre-Smart adaptive switches, advisory preview
+  settings, the no-effect three-state record and the no-effect weekend keys
+  move to Advanced → Legacy and developer settings, with exact descriptions.
+  Stored keys, defaults, entities and validation are unchanged.
+- The low-water warning, pre-peak observation minutes and the no-effect
+  weekend keys can be edited while Automatic is on (still validated).
+- Removes two definitions unreferenced since 0.9.0.
+- Audit: `docs/cleanup/AUDIT.md`. No heating, command or polling behaviour change.
+
 ## 0.17.0 — owner's weekend comfort window (bridge unchanged)
 
 - The first fresh measured PV report of at least 0.5 kW opens the weekend

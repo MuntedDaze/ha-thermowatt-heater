@@ -223,11 +223,6 @@ def _fresh(reading: Reading, now: datetime, boot: datetime, seconds: float) -> N
         raise ValueError("input_stale_or_restored")
 
 
-def _present(reading: Reading) -> None:
-    if reading.restored or not aware(reading.observed_at):
-        raise ValueError("input_stale_or_restored")
-
-
 def _power(reading: Reading) -> float:
     if reading.unit not in {"W", "kW"}:
         raise ValueError("grid_power_unit_invalid")
