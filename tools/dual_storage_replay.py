@@ -72,6 +72,7 @@ def replay(case, strategy):
     reading, poll_at = temperature, start
     element = False
     solar_session = False
+    latched = ended = None  # the executor's persisted weekend dates (local)
     commands, peak_observations = [], []
     buckets = {"peak_import": 0.0, "off_peak_import": 0.0, "solar": 0.0}
     costs = {"grid": 0.0, "feed_in_foregone": 0.0}
@@ -129,8 +130,15 @@ def replay(case, strategy):
                 optional_allowed=len(commands)
                 < int(c.DEFAULT_OPTIONS["controller_max_commands_per_day"]),
                 cloud_ready=pending is None,
+                # 0.17.0: the executor persists the weekend window per local day.
+                weekend_latched=latched == now.astimezone(m.HOBART).date(),
+                weekend_ended=ended == now.astimezone(m.HOBART).date(),
             )
         )
+        if decision.plan.get("weekend_day_latched"):
+            latched = now.astimezone(m.HOBART).date()
+        if decision.plan.get("weekend_day_ended"):
+            ended = now.astimezone(m.HOBART).date()
         if decision.command:
             # Synthetic success: POST now, exactly one confirmation a minute
             # later. No retry/401/lockout is assumed in this economic replay.

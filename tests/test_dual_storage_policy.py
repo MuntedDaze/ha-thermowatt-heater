@@ -94,12 +94,16 @@ def test_idle_inside_boost_hysteresis_is_not_an_energisation_promise():
     assert d.plan["boost_reason"] == "inside_native_hysteresis_no_verified_heat"
 
 
-def test_weekend_has_no_required_62_and_night_returns_baseline():
+def test_weekend_62_waits_for_pv_or_the_deadline_and_night_returns_baseline():
+    # 0.17.0: without PV the weekend stays at baseline until the latest start
+    # that still meets the 16:00 storage-ready deadline (owner's weekend policy).
     p = sp.SimplePolicy(D, TARIFFS)
     assert (
-        p.decide(snap(at(SAT, 14), OFF, reading=40, heater_meter_valid=False)).command
-        == "Manual:45"
+        p.decide(snap(at(SAT, 9), OFF, reading=40, heater_meter_valid=False)).command == "Manual:45"
     )
+    late = p.decide(snap(at(SAT, 14), OFF, reading=40, heater_meter_valid=False))
+    assert late.command == "Manual:62"
+    assert late.plan["weekend_window_opened_by"] == "deadline_fallback"
     assert (
         p.decide(snap(at(MON, 22, 5), OFF, reading=40, heater_meter_valid=False)).command
         == "Manual:45"

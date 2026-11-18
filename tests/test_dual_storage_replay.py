@@ -62,7 +62,11 @@ def test_cloudy_ct_free_disabled_and_weekend_remain_supported(report):
         if r["strategy"] == "required_62":
             assert all(c["target_c"] != 70 for c in r["commands"])
         if r["scenario"].startswith("weekend"):
-            assert all(c["target_c"] != 62 for c in r["commands"])
+            # 0.17.0: the weekend window ends at 18:00 AEDT and returns to 45.
+            assert r["commands"][-1]["target_c"] == 45
+            assert r["commands"][-1]["reason"] == "weekend_day_ended"
+    cloudy = row(report, "weekend_cloud", "dual_62_optional_70")
+    assert [c["target_c"] for c in cloudy["commands"]] == [62, 45]  # deadline fallback
     late = row(report, "late_cold_start_before_peak", "dual_62_optional_70")
     assert late["required_probe_target_reached_by_peak"] is False
     assert late["storage_shortfall_at_peak_kwh"] > 5

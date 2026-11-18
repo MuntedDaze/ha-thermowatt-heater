@@ -1,5 +1,11 @@
 # Changelog
 
+## Controller 0.17.0 companion release (bridge 1.4.1 unchanged)
+
+- Weekend comfort window: first fresh 500 W PV report opens it until 18:00;
+  62 scheduled to the 16:00 deadline with forecasts; 70 unchanged. See
+  `docs/weekend/WEEKEND_STRATEGY.md`.
+
 ## Controller 0.16.2 companion patch (bridge 1.4.1 unchanged)
 
 - Removes two avoidable morning solar-boost delays found by synthetic replay:
