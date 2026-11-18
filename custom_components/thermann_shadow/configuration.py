@@ -487,27 +487,27 @@ def schedule_changes(values, rows):
 
 FIELDS["weekend_solar_heating"] = (
     "Weekend solar-led normal storage",
-    "Use sustained measured PV to select normal storage on weekends. This deliberately allows off-peak grid assistance; it is not solar-only heating.",
+    "Use measured PV to open a weekend comfort window. 62 normal storage is planned to the storage-ready time with off-peak grid assistance allowed; it is not solar-only heating.",
 )
 FIELDS["weekend_pv_start_kw"] = (
     "Weekend daylight trigger",
-    "Measured PV production in kW, sustained continuously. 0.5 kW means 500 W; household grid import may supply the remaining element demand.",
+    "Measured PV production in kW. The first fresh report at or above this opens the weekend window until the end time; 0.5 kW means 500 W.",
 )
 FIELDS["weekend_qualify_minutes"] = (
     "Weekend daylight qualification",
-    "Minutes of fresh continuous PV reports required before selecting weekend normal storage. Short cloud dips restart qualification.",
+    "Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.",
 )
 FIELDS["weekend_end_time"] = (
     "Weekend latest return to baseline",
-    "Household local clock: return to baseline by this time. A sustained measured low-PV condition after noon can end the solar day earlier.",
+    "Household local clock: the weekend window ends and the thermostat target returns to baseline at this time. This does not cool stored water.",
 )
 FIELDS["weekend_sunset_kw"] = (
     "Weekend late-day PV threshold",
-    "After noon, PV below this kW threshold for the full ending delay ends the daylight storage window. A momentary cloud does not.",
+    "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
 )
 FIELDS["weekend_sunset_minutes"] = (
     "Weekend low-PV ending delay",
-    "Continuous minutes below the late-day threshold after noon. Missing readings never vote for sunset; the hard end time still bounds the window.",
+    "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
 )
 FIELDS["solar_cooldown_minutes"] = (
     "Wait after confirmed solar withdrawal",

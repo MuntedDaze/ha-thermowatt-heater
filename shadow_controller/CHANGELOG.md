@@ -1,5 +1,23 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.17.0 — owner's weekend comfort window (bridge unchanged)
+
+- The first fresh measured PV report of at least 0.5 kW opens the weekend
+  window: no 15-minute qualification and no 09:00 start restriction. It stays
+  latched until 18:00; clouds or low late-day PV no longer end it early.
+- Inside the window, 62 normal storage is planned to the storage-ready time
+  (16:00 less the completion margin) with the EMHASS PV and household-load
+  forecast, off-peak grid assistance permitted, and is not paused once
+  selected. No usable forecast: start at once. PV never opens the window and
+  the tank needs heat: the latest start still meets the deadline.
+- 70 keeps the unchanged optional-boost test. 18:00 returns the thermostat
+  target to 45 (stored water is not cooled by this).
+- `weekend_qualify_minutes`, `weekend_sunset_kw` and `weekend_sunset_minutes`
+  no longer affect control; kept for saved settings and rollback.
+- Weekday tariff treatment and DST conversion are unchanged.
+- Evidence: `tools/weekend_replay.py`, `docs/weekend/WEEKEND_STRATEGY.md`.
+  Automatic heating behaviour: owner approval required before merge.
+
 ## 0.16.2 — avoidable morning solar-boost delays (bridge unchanged)
 
 - Optional starts are measured against the rolling command count at the

@@ -78,13 +78,18 @@ checked independently. Missing or near-zero load uses a conservative household
 floor rather than pretending all forecast PV is spare; no second forecasting
 engine or double-counted appliance load is introduced.
 
-On weekends, baseline45 continues until daytime PV is at least500W for15
-continuous minutes (editable). A day latch then opens62 comfort storage with
-deliberate off-peak grid assistance during clouds. This is not solar-only heating.
-Duplicate/stale PV reports cannot fill that qualification window. The latch
-survives restart for that day. Default ending is18:00 household time, or30
-minutes below200W after midday once latched; configured peak restrictions still
-take precedence. Ending returns to baseline without cloud-by-cloud toggling.
+On weekends (0.17.0), baseline 45 continues until the first fresh measured PV
+report of at least 500 W (editable). There is no qualification delay and no
+09:00 restriction. The window then stays latched until 18:00 household time:
+passing clouds or a later fall below 500 W do not end it. Inside the window,
+62 normal storage is planned with the EMHASS PV and household-load forecast to
+be ready by the storage-ready time (16:00, with the 30-minute completion
+margin); off-peak grid assistance is deliberately allowed. With no usable
+forecast it starts at once. If PV never opens the window and the tank needs
+heat, the latest start still meets the deadline. At 18:00 the thermostat target
+returns to 45; that does not cool water already stored. The latch survives a
+restart for that day; configured peak restrictions still take precedence. See
+[the weekend strategy](../weekend/WEEKEND_STRATEGY.md).
 
 Optional70 has separate stronger checks: enabled boost, useful heat, economic
 benefit, measured surplus, available budgets and no unresolved protective exit.
@@ -187,9 +192,9 @@ not whole-tank observations. [Reproducible comparisons and limits](EVIDENCE.md).
   Smart arranges a later useful check. App changes can remain unseen for hours.
 - Cloudy weekday, no CT: conservative estimates choose required62 in a permitted
   cheap window. Peak OFF still applies if the target was missed; no unsafe catch-up.
-- Sunny weekend:15 minutes above500W opens comfort62, with grid assistance
-  off-peak. Stronger actual surplus/economics may justify direct70; sunset/end
-  returns45. A passing cloud does not reset the whole comfort day.
+- Sunny weekend: the first fresh 500 W PV report opens the window; 62 is
+  scheduled for the cheapest time before 16:00 and stronger measured surplus
+  may justify 70. A passing cloud does not end the window; 18:00 returns 45.
 - Peak kettle:400W import for3 minutes then export resets withdrawal. Continuous
   import for10 minutes requests OFF. Meter loss withdraws immediately, but cloud
   failure can leave restoration/OFF unconfirmed.

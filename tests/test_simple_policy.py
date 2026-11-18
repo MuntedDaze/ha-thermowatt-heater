@@ -375,12 +375,17 @@ def test_committed_heating_pauses_only_for_a_clearly_cheaper_window_with_time_to
 # --- weekends ------------------------------------------------------------------------------
 
 
-def test_weekend_baseline_without_solar_and_no_forced_storage():
+def test_weekend_baseline_without_solar_until_the_deadline_fallback():
+    # 0.17.0: no PV window yet -> baseline, but the storage-ready deadline is
+    # firm: at the latest start the window opens with grid assistance.
     p = sp.SimplePolicy(S, TARIFFS)
-    now = feed(p, at(SAT, 14), 30, 0.3)
+    now = feed(p, at(SAT, 10), 30, 0.3)
     d = p.decide(snap(now, BASE, reading=44, forecast=fc(now, 6, 0.2)))
     assert (d.state, d.reason) == (BASE, "baseline")
-    assert p.decide(snap(at(SUN, 15, 30), BASE, reading=40)).state == BASE  # no deadline
+    late = p.decide(snap(at(SUN, 15, 30), BASE, reading=40))
+    assert late.state == STORE and late.plan["weekend_window_opened_by"] == "deadline_fallback"
+    warm = p.decide(snap(at(SUN, 15, 30), BASE, reading=66))
+    assert warm.state == BASE  # no heat needed: the fallback never opens
 
 
 def test_weekend_requires_full_cover_and_waits_for_a_better_forecast():
@@ -491,6 +496,7 @@ def simulate(
     forecast_pv = forecast_pv or pv
     draws, loads = draws or {}, loads or {}
     seen, last_cmd, forecast, times, reasons = (reading, start), None, (), [], []
+    latched = ended = None  # the executor's persisted weekend dates
     log = {"commands": [], "peak_grid_kwh": 0.0, "grid_heat_kwh": 0.0, "at": {}, "reasons": set()}
     log["baseline_peak_minutes"] = 0
     for i in range(hours * 60):
@@ -522,8 +528,14 @@ def simulate(
                 last_cmd,
                 heater_meter_valid=True,
                 optional_session_active=solar_session,
+                weekend_latched=latched == loc.date(),
+                weekend_ended=ended == loc.date(),
             )
         )
+        if d.plan.get("weekend_day_latched"):
+            latched = loc.date()
+        if d.plan.get("weekend_day_ended"):
+            ended = loc.date()
         log["reasons"].add(d.reason)
         if d.command:
             log["commands"].append((loc.strftime("%a %H:%M"), d.state, d.reason))
@@ -640,10 +652,16 @@ def test_sim_friday_to_monday_weekend_then_weekday():
     assert monday[0][1] == OFF and monday[0][0] == "Mon 07:58"  # parked for the 08:00 peak
 
 
-def test_sim_cloudy_weekend_stays_on_baseline():
+def test_sim_cloudy_weekend_still_meets_the_evening_deadline():
+    # 0.17.0: with no PV evidence the deadline fallback opens the window at the
+    # latest start, normal storage is in place before 16:00 and the target
+    # returns to baseline at 18:00. Sunday's tank is still warm: no heat needed.
     log, _ = simulate(at(SAT, 0), 48, 50, BASE, cloudy)
-    assert log["commands"] == []
-    assert log["at"][(SUN, "20:00")] >= 37
+    assert log["commands"] == [
+        ("Sat 12:42", STORE, "storage_latest_start"),
+        ("Sat 18:00", BASE, "weekend_day_ended"),
+    ]
+    assert log["at"][(SAT, "16:00")] >= 62 and log["at"][(SUN, "16:00")] >= 62
 
 
 def test_sim_weekend_solar_session_is_not_interrupted_by_a_passing_cloud():

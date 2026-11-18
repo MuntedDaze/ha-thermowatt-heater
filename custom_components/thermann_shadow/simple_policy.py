@@ -10,7 +10,8 @@ peak heating is parked unless the user selects verified solar-only operation.
 The single weekday planner meets the normal target before peak; a shared solar
 qualification may select optional storage directly or as a later top-up when
 useful heat exceeds its opportunity cost, standby allowance and switching margin.
-Weekends retain baseline until measured PV opens latched comfort storage. Small forecast
+Weekends retain baseline until one fresh measured PV report opens a comfort window
+latched until 18:00, in which 62 is planned to a deadline. Small forecast
 changes do not toggle an already qualified boost; measured loss/import withdraws
 it. All sends still pass the separate executor and bridge guards.
 
@@ -199,31 +200,78 @@ class SimplePolicy:
                 return list(reversed(recent))
         return []
 
+    def pv_window_open(self, now) -> bool:
+        """The latest PV report is fresh, genuine and at least the weekend start.
+
+        One report is enough (0.17.0): no qualification period. Restored,
+        invalid or stale reports never open the window.
+        """
+        if not self.pv_samples:
+            return False
+        at, kw = self.pv_samples[-1]
+        return timedelta(0) <= now - at <= self.s.meter_max_age and kw >= self.s.weekend_pv_kw
+
     def _weekend(self, snap, reading, fresh, rate, plan, local, baseline, normal, boost):
-        s, now = self.s, snap.now
+        """Weekend comfort window (0.17.0).
+
+        45 baseline until the first fresh measured PV report of at least the
+        start power opens the window; it then stays latched until the end time
+        (18:00), whatever the PV does. Inside it, 62 normal storage is planned
+        economically against the storage-ready deadline using the published
+        PV/household forecast, with off-peak grid assistance permitted. With no
+        usable forecast it starts at once. If PV never opens the window and the
+        tank needs heat, the latest start still meets the deadline. 70 uses the
+        unchanged optional-boost test. At the end time the thermostat target
+        returns to 45; that does not cool the stored water.
+        """
+        s, now, state = self.s, snap.now, snap.heater_state
+        zone = ZoneInfo(s.time_zone)
         clock = local.time().replace(tzinfo=None)
-        ended = (
-            snap.weekend_ended
-            or clock >= s.weekend_end
-            or (
-                snap.weekend_latched
-                and clock >= time(12)
-                and self.pv_sustained(now, s.sunset_delay, lambda kw: kw < s.sunset_kw)
-            )
-        )
-        if ended:
+        if snap.weekend_ended or clock >= s.weekend_end:
             plan.update(weekend_day_ended=True, mode=OPPORTUNITY)
             return baseline, "weekend_day_ended", 5, plan
-        if clock < s.daytime_start:
-            return baseline, "baseline", 5, plan
-        qualified = self.pv_sustained(now, s.weekend_qualify, lambda kw: kw >= s.weekend_pv_kw)
-        day_active = snap.weekend_latched or qualified
+        end = datetime.combine(local.date(), s.weekend_end, zone)
+        service_at = datetime.combine(local.date(), s.storage_ready, zone)
+        peak = plan.get("next_peak")
+        if peak is not None:
+            end = min(end, peak - s.soft_target_margin)
+            service_at = min(service_at, peak)
+        soft = service_at - s.soft_target_margin
+        normal_rate = self._target_rate(snap, s.normal_c)
+        would_heat = reading <= s.normal_c - s.hysteresis_c
+        hours = (
+            max(0, s.normal_c - reading) / normal_rate
+            if would_heat or snap.measured_element_kw is not None
+            else 0
+        )
+        latest = soft - timedelta(hours=hours)
+        opened_by = (
+            "latched"
+            if snap.weekend_latched
+            else "measured_pv"
+            if self.pv_window_open(now)
+            else "deadline_fallback"
+            if would_heat and now >= latest
+            else None
+        )
+        day_active = opened_by is not None
+        plan.update(
+            mode=OPPORTUNITY,
+            next_baseline=datetime.combine(local.date(), s.weekend_end, zone),
+            soft_target=soft,
+            latest_start=latest,
+            heating_hours=round(hours, 2),
+        )
         if day_active:
-            plan.update(weekend_day_latched=True, weekend_grid_assistance_permitted=True)
+            plan.update(
+                weekend_day_latched=True,
+                weekend_grid_assistance_permitted=True,
+                weekend_window_opened_by=opened_by,
+            )
         # An authorised 70 session does not need the original 3.3 kW export to
         # persist after the element starts consuming it. Withdrawal uses actual
         # import and meter liveness; return to underlying comfort, not OFF.
-        if snap.heater_state == boost and boost != baseline:
+        if state == boost and boost != baseline:
             if self.importing_continuously(now):
                 return (normal if day_active else baseline), "solar_opportunity_import", 5, plan
             if (
@@ -234,19 +282,47 @@ class SimplePolicy:
             ):
                 return boost, "solar_opportunity_continues", 5, plan
             return (normal if day_active else baseline), "solar_opportunity_ended", 5, plan
-        end = datetime.combine(local.date(), s.weekend_end, ZoneInfo(s.time_zone))
-        peak = plan.get("next_peak")
-        if peak is not None:
-            end = min(end, peak - s.soft_target_margin)
         eligible, info = self._boost(
             snap, reading, fresh, rate, end, s.normal_c if day_active else s.baseline_c
         )
-        plan.update(info, mode=OPPORTUNITY, next_baseline=end)
+        plan.update(info)
         if eligible:
             return boost, "solar_opportunity", 5, plan
-        if day_active:
+        if not day_active:
+            return baseline, "baseline", 5, plan
+        # A selected 62 target is never paused: no command churn on weekends.
+        if state == normal or (not would_heat and snap.measured_element_kw is None):
+            # A thermostat request, not a claim the probe reached 62 or that
+            # the element will energise.
             return normal, "weekend_daytime_storage", 5, plan
-        return baseline, "baseline", 5, plan
+        if now >= latest:
+            late = now + timedelta(hours=hours) > soft + SLOT
+            return (
+                normal,
+                "storage_target_may_be_missed" if late else "storage_latest_start",
+                5,
+                plan,
+            )
+        if not snap.forecast:
+            plan["waiting_for"] = "no_forecast_start_now"
+            return normal, "weekend_storage_no_forecast", 5, plan
+        measured = self.typical_available(now)
+        profile = self.surplus_profile(
+            now, soft, snap.forecast, measured if measured is not None else snap.required_export_kw
+        )
+        need = max(1, math.ceil(hours * 60 / 5))
+        costs = self._windows(profile, self._prices(now, len(profile)), need)
+        best = self._cheapest(costs)
+        if best is None:
+            return normal, "storage_latest_start", 5, plan
+        plan.update(
+            best_start=now + best * SLOT,
+            cost_now=round(costs[0], 4),
+            cost_best=round(costs[best], 4),
+        )
+        if best == 0:
+            return normal, "storage_cheapest_now", 5, plan
+        return baseline, "storage_waiting_for_cheaper_window", 5, plan
 
     def add_meter(
         self, at: datetime, grid_kw: float, element_on: bool | None = None, *, heater_kw=None

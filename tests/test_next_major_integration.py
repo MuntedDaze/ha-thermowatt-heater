@@ -43,7 +43,9 @@ def test_quiet_night_uses_few_reads_but_detects_owner_change_before_a_command(
     assert rig.now() - changed < timedelta(hours=8)
 
 
-def test_weekend_day_latch_persists_and_sunset_is_not_undone_by_restart(tmp_path, monkeypatch):
+def test_weekend_day_latch_persists_and_the_18_00_end_is_not_undone_by_restart(
+    tmp_path, monkeypatch
+):
     rig = Rig(
         tmp_path,
         monkeypatch,
@@ -67,14 +69,16 @@ def test_weekend_day_latch_persists_and_sunset_is_not_undone_by_restart(tmp_path
     assert restored.weekend_heat_date == saved["weekend_heat_date"]
     rig.executor.controller = restored
     rig.pv = lambda local: 0
-    rig.run(hobart(14, 13, 35))
+    rig.run(hobart(14, 17, 55))
+    assert rig.tank.setpoint == 62  # 0.17.0: no PV no longer ends the window early
+    rig.run(hobart(14, 18, 5))
     assert rig.tank.setpoint == 45
     saved = rig.executor.controller.to_dict()
     assert saved["weekend_end_date"] == "2026-11-14"
     rig.executor.controller = ctl.Controller.from_dict(saved)
     rig.executor.controller.restored(rig.now())
     rig.pv = lambda local: 5
-    rig.run(hobart(14, 14, 5))
+    rig.run(hobart(14, 18, 40))
     assert rig.tank.setpoint == 45
     assert sum(payload.startswith("Manual:62") for payload in rig.commands()) == 1
 
