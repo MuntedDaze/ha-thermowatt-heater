@@ -2415,9 +2415,9 @@
             "status": 327,
             "command": 28,
             "confirmation": 28,
-            "command_refresh": 15
+            "command_refresh": 13
           },
-          "http_total": 734,
+          "http_total": 732,
           "maximum_status_age_minutes": 89.0,
           "maximum_healthy_status_age_minutes": 29.666667,
           "unknown_temperature_minutes": 44,
@@ -2426,7 +2426,7 @@
           "persistent_owner_detection_minutes": 15.0,
           "transient_app_change_observed": false,
           "forecast_mae_kw": 0.677542,
-          "conditional_latest_completion_mae_minutes": 109.474729,
+          "conditional_latest_completion_mae_minutes": 110.474729,
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
@@ -2449,8 +2449,8 @@
             },
             "2026-01-14": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -2681,13 +2681,13 @@
               "target_c": 55
             },
             {
-              "at": "2026-01-14T04:02:00+00:00",
+              "at": "2026-01-14T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-01-14T04:04:00+00:00",
+              "at": "2026-01-14T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -2777,7 +2777,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-01-15T02:03:00+00:00",
+              "at": "2026-01-15T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -2789,13 +2789,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-01-15T04:04:00+00:00",
+              "at": "2026-01-15T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-01-15T04:06:00+00:00",
+              "at": "2026-01-15T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -3014,18 +3014,18 @@
             "status": 160,
             "command": 26,
             "confirmation": 26,
-            "command_refresh": 16
+            "command_refresh": 15
           },
-          "http_total": 401,
+          "http_total": 400,
           "maximum_status_age_minutes": 118.0,
           "maximum_healthy_status_age_minutes": 60.666667,
-          "unknown_temperature_minutes": 2305,
-          "required_planning_unknown_minutes": 349,
+          "unknown_temperature_minutes": 2307,
+          "required_planning_unknown_minutes": 351,
           "stale_command_blocked_minutes": 0,
           "persistent_owner_detection_minutes": 45.0,
           "transient_app_change_observed": false,
           "forecast_mae_kw": 0.677542,
-          "conditional_latest_completion_mae_minutes": 101.564889,
+          "conditional_latest_completion_mae_minutes": 112.975319,
           "evaluated_completion_samples": 9,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
@@ -3429,24 +3429,12 @@
             },
             {
               "at": "2026-01-15T03:00:00+00:00",
-              "reason": "storage_target_reached",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-01-15T03:01:00+00:00",
-              "reason": "storage_until_peak",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-01-15T03:02:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-01-15T03:04:00+00:00",
+              "at": "2026-01-15T03:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -3674,12 +3662,12 @@
             "password_login": 1,
             "token_refresh": 29,
             "discovery": 0,
-            "status": 162,
+            "status": 161,
             "command": 28,
             "confirmation": 28,
-            "command_refresh": 6
+            "command_refresh": 5
           },
-          "http_total": 254,
+          "http_total": 252,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
           "unknown_temperature_minutes": 4905,
@@ -3688,14 +3676,14 @@
           "persistent_owner_detection_minutes": 15.0,
           "transient_app_change_observed": true,
           "forecast_mae_kw": 0.677542,
-          "conditional_latest_completion_mae_minutes": 110.796792,
+          "conditional_latest_completion_mae_minutes": 111.796792,
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 276,
-            "required_temperature": 1973,
+            "fixed_fallback": 275,
+            "required_temperature": 1980,
             "quiet_before_decision": 1448,
-            "before_decision": 610,
+            "before_decision": 604,
             "stable_off": 1443,
             "stable_baseline": 4330
           },
@@ -3716,8 +3704,8 @@
             },
             "2026-01-14": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -3976,13 +3964,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-01-14T04:02:00+00:00",
+              "at": "2026-01-14T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-01-14T04:04:00+00:00",
+              "at": "2026-01-14T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -4072,7 +4060,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-01-15T02:03:00+00:00",
+              "at": "2026-01-15T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -4084,13 +4072,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-01-15T04:04:00+00:00",
+              "at": "2026-01-15T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-01-15T04:06:00+00:00",
+              "at": "2026-01-15T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -4312,12 +4300,12 @@
             "password_login": 1,
             "token_refresh": 29,
             "discovery": 0,
-            "status": 136,
+            "status": 135,
             "command": 28,
             "confirmation": 28,
-            "command_refresh": 9
+            "command_refresh": 8
           },
-          "http_total": 231,
+          "http_total": 229,
           "maximum_status_age_minutes": 718.666667,
           "maximum_healthy_status_age_minutes": 718.666667,
           "unknown_temperature_minutes": 5926,
@@ -4326,14 +4314,14 @@
           "persistent_owner_detection_minutes": 105.0,
           "transient_app_change_observed": true,
           "forecast_mae_kw": 0.677542,
-          "conditional_latest_completion_mae_minutes": 110.796792,
+          "conditional_latest_completion_mae_minutes": 111.796792,
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 250,
-            "required_temperature": 1886,
+            "fixed_fallback": 249,
+            "required_temperature": 1893,
             "quiet_before_decision": 4059,
-            "before_decision": 536,
+            "before_decision": 530,
             "stable_off": 1258,
             "stable_baseline": 2091
           },
@@ -4354,8 +4342,8 @@
             },
             "2026-01-14": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -4614,13 +4602,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-01-14T04:02:00+00:00",
+              "at": "2026-01-14T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-01-14T04:04:00+00:00",
+              "at": "2026-01-14T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -4710,7 +4698,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-01-15T02:03:00+00:00",
+              "at": "2026-01-15T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -4722,13 +4710,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-01-15T04:04:00+00:00",
+              "at": "2026-01-15T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-01-15T04:06:00+00:00",
+              "at": "2026-01-15T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -7331,31 +7319,31 @@
           "ct": true,
           "energy_kwh": {
             "peak": 1.205927,
-            "off_peak": 8.329755,
-            "solar": 46.814318,
+            "off_peak": 8.254555,
+            "solar": 46.989518,
             "served_draw": 45.0,
             "unserved_draw": 0.0,
             "loss": 12.30684,
             "peak_owner": 0.0,
             "peak_unverified_lockout": 1.205927
           },
-          "grid_cost_aud": 1.854123,
-          "solar_opportunity_aud": 4.342496,
-          "net_heater_cost_aud": 6.196619,
-          "end_temperature_c": 42.387646,
-          "end_stored_above_15_kwh": 10.03141,
-          "command_intents": 31,
-          "command_posts": 31,
+          "grid_cost_aud": 1.841324,
+          "solar_opportunity_aud": 4.358748,
+          "net_heater_cost_aud": 6.200071,
+          "end_temperature_c": 42.660665,
+          "end_stored_above_15_kwh": 10.13141,
+          "command_intents": 30,
+          "command_posts": 30,
           "http_categories": {
             "password_login": 1,
             "token_refresh": 335,
             "discovery": 0,
             "status": 326,
-            "command": 31,
-            "confirmation": 31,
-            "command_refresh": 19
+            "command": 30,
+            "confirmation": 30,
+            "command_refresh": 16
           },
-          "http_total": 743,
+          "http_total": 738,
           "maximum_status_age_minutes": 89.0,
           "maximum_healthy_status_age_minutes": 29.666667,
           "unknown_temperature_minutes": 44,
@@ -7364,7 +7352,7 @@
           "persistent_owner_detection_minutes": 15.0,
           "transient_app_change_observed": false,
           "forecast_mae_kw": 0.689553,
-          "conditional_latest_completion_mae_minutes": 116.576725,
+          "conditional_latest_completion_mae_minutes": 128.85205,
           "evaluated_completion_samples": 5,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
@@ -7387,8 +7375,8 @@
             },
             "2026-07-15": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -7401,22 +7389,22 @@
             },
             "2026-07-17": {
               "required_c": 62,
-              "max_daytime_c": 67.871453,
-              "at_peak_c": 56.727363,
+              "max_daytime_c": 62.092175,
+              "at_peak_c": 50.311419,
               "required_target_reached": true,
-              "at_peak_storage_shortfall_kwh": 1.931235
+              "at_peak_storage_shortfall_kwh": 4.281235
             },
             "2026-07-18": {
               "required_c": null,
-              "max_daytime_c": 70.007397,
-              "at_peak_c": 69.264064,
+              "max_daytime_c": 70.117083,
+              "at_peak_c": 69.537083,
               "required_target_reached": null,
               "at_peak_storage_shortfall_kwh": null
             },
             "2026-07-19": {
               "required_c": null,
-              "max_daytime_c": 52.213119,
-              "at_peak_c": 50.813119,
+              "max_daytime_c": 52.486137,
+              "at_peak_c": 51.086137,
               "required_target_reached": null,
               "at_peak_storage_shortfall_kwh": null
             }
@@ -7619,13 +7607,13 @@
               "target_c": 55
             },
             {
-              "at": "2026-07-15T04:02:00+00:00",
+              "at": "2026-07-15T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-15T04:04:00+00:00",
+              "at": "2026-07-15T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -7715,7 +7703,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-16T02:03:00+00:00",
+              "at": "2026-07-16T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -7727,13 +7715,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-16T04:04:00+00:00",
+              "at": "2026-07-16T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-16T04:06:00+00:00",
+              "at": "2026-07-16T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -7788,18 +7776,24 @@
             },
             {
               "at": "2026-07-17T00:00:00+00:00",
-              "reason": "confirming_normal_storage",
+              "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 45
             },
             {
               "at": "2026-07-17T00:02:00+00:00",
-              "reason": "storage_until_peak",
-              "state": "normal_storage_62",
-              "target_c": 62
+              "reason": "weekday_solar_boost_continues",
+              "state": "storage_70",
+              "target_c": 70
             },
             {
-              "at": "2026-07-17T01:22:00+00:00",
+              "at": "2026-07-17T01:21:00+00:00",
+              "reason": "confirming_normal_storage",
+              "state": "confirming",
+              "target_c": 70
+            },
+            {
+              "at": "2026-07-17T01:23:00+00:00",
               "reason": "storage_within_thermostat_band",
               "state": "normal_storage_62",
               "target_c": 62
@@ -7811,26 +7805,8 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-17T04:06:00+00:00",
-              "reason": "confirming_storage",
-              "state": "confirming",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T04:08:00+00:00",
-              "reason": "weekday_solar_boost_continues",
-              "state": "storage_70",
-              "target_c": 70
-            },
-            {
-              "at": "2026-07-17T04:53:00+00:00",
-              "reason": "confirming_normal_storage",
-              "state": "confirming",
-              "target_c": 70
-            },
-            {
-              "at": "2026-07-17T04:55:00+00:00",
-              "reason": "storage_target_reached",
+              "at": "2026-07-17T05:00:00+00:00",
+              "reason": "storage_within_thermostat_band",
               "state": "normal_storage_62",
               "target_c": 62
             },
@@ -7895,13 +7871,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-18T00:02:00+00:00",
+              "at": "2026-07-17T23:55:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-18T00:04:00+00:00",
+              "at": "2026-07-17T23:57:00+00:00",
               "reason": "solar_opportunity_continues",
               "state": "storage_70",
               "target_c": 70
@@ -7969,49 +7945,49 @@
           },
           "synthetic_session_hours": 24,
           "expired_status_401": 0,
-          "common_terminal_stored_kwh": 10.03141,
+          "common_terminal_stored_kwh": 10.13141,
           "terminal_replenishment_kwh": 0.0,
-          "equal_terminal_cost_aud": 6.196619
+          "equal_terminal_cost_aud": 6.200071
         },
         {
           "strategy": "fixed_60",
           "ct": true,
           "energy_kwh": {
-            "peak": 3.932664,
-            "off_peak": 13.379577,
-            "solar": 38.787759,
+            "peak": 4.082664,
+            "off_peak": 13.727184,
+            "solar": 38.490151,
             "served_draw": 45.0,
             "unserved_draw": 0.0,
             "loss": 12.30684,
             "peak_owner": 0.0,
-            "peak_unverified_lockout": 3.932664
+            "peak_unverified_lockout": 4.082664
           },
-          "grid_cost_aud": 3.700349,
-          "solar_opportunity_aud": 3.597953,
-          "net_heater_cost_aud": 7.298301,
-          "end_temperature_c": 41.705099,
-          "end_stored_above_15_kwh": 9.78141,
-          "command_intents": 27,
-          "command_posts": 26,
+          "grid_cost_aud": 3.813793,
+          "solar_opportunity_aud": 3.570346,
+          "net_heater_cost_aud": 7.38414,
+          "end_temperature_c": 42.251136,
+          "end_stored_above_15_kwh": 9.98141,
+          "command_intents": 29,
+          "command_posts": 28,
           "http_categories": {
             "password_login": 1,
             "token_refresh": 173,
             "discovery": 0,
-            "status": 160,
-            "command": 26,
-            "confirmation": 26,
+            "status": 159,
+            "command": 28,
+            "confirmation": 28,
             "command_refresh": 18
           },
-          "http_total": 404,
-          "maximum_status_age_minutes": 91.0,
-          "maximum_healthy_status_age_minutes": 59.666667,
-          "unknown_temperature_minutes": 2280,
-          "required_planning_unknown_minutes": 340,
+          "http_total": 407,
+          "maximum_status_age_minutes": 118.0,
+          "maximum_healthy_status_age_minutes": 60.666667,
+          "unknown_temperature_minutes": 2288,
+          "required_planning_unknown_minutes": 345,
           "stale_command_blocked_minutes": 0,
           "persistent_owner_detection_minutes": 45.0,
           "transient_app_change_observed": false,
           "forecast_mae_kw": 0.689553,
-          "conditional_latest_completion_mae_minutes": 106.369266,
+          "conditional_latest_completion_mae_minutes": 108.411937,
           "evaluated_completion_samples": 8,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
@@ -8048,22 +8024,22 @@
             },
             "2026-07-17": {
               "required_c": 62,
-              "max_daytime_c": 70.075761,
-              "at_peak_c": 58.775005,
+              "max_daytime_c": 62.092175,
+              "at_peak_c": 50.311419,
               "required_target_reached": true,
-              "at_peak_storage_shortfall_kwh": 1.181235
+              "at_peak_storage_shortfall_kwh": 4.281235
             },
             "2026-07-18": {
               "required_c": null,
-              "max_daytime_c": 69.981517,
-              "at_peak_c": 68.581517,
+              "max_daytime_c": 70.067554,
+              "at_peak_c": 69.127554,
               "required_target_reached": null,
               "at_peak_storage_shortfall_kwh": null
             },
             "2026-07-19": {
               "required_c": null,
-              "max_daytime_c": 51.530571,
-              "at_peak_c": 50.130571,
+              "max_daytime_c": 52.076609,
+              "at_peak_c": 50.676609,
               "required_target_reached": null,
               "at_peak_storage_shortfall_kwh": null
             }
@@ -8415,24 +8391,12 @@
             },
             {
               "at": "2026-07-16T03:00:00+00:00",
-              "reason": "storage_target_reached",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-16T03:01:00+00:00",
-              "reason": "storage_until_peak",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-16T03:02:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-16T03:04:00+00:00",
+              "at": "2026-07-16T03:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -8493,25 +8457,25 @@
             },
             {
               "at": "2026-07-17T00:00:00+00:00",
-              "reason": "confirming_normal_storage",
+              "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 45
             },
             {
               "at": "2026-07-17T00:02:00+00:00",
-              "reason": "storage_until_peak",
-              "state": "normal_storage_62",
-              "target_c": 62
+              "reason": "weekday_solar_boost_continues",
+              "state": "storage_70",
+              "target_c": 70
             },
             {
-              "at": "2026-07-17T01:22:00+00:00",
+              "at": "2026-07-17T01:21:00+00:00",
+              "reason": "confirming_normal_storage",
+              "state": "confirming",
+              "target_c": 70
+            },
+            {
+              "at": "2026-07-17T01:23:00+00:00",
               "reason": "storage_within_thermostat_band",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T01:46:00+00:00",
-              "reason": "storage_until_peak",
               "state": "normal_storage_62",
               "target_c": 62
             },
@@ -8534,43 +8498,73 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-17T03:04:00+00:00",
-              "reason": "confirming_storage",
+              "at": "2026-07-17T03:46:00+00:00",
+              "reason": "storage_until_peak",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T04:00:00+00:00",
+              "reason": "storage_target_reached",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T04:46:00+00:00",
+              "reason": "storage_until_peak",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T05:00:00+00:00",
+              "reason": "storage_within_thermostat_band",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T05:21:00+00:00",
+              "reason": "storage_until_peak",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T05:58:00+00:00",
+              "reason": "confirming_off",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-17T03:06:00+00:00",
-              "reason": "weekday_solar_boost_continues",
-              "state": "storage_70",
-              "target_c": 70
-            },
-            {
-              "at": "2026-07-17T05:31:00+00:00",
-              "reason": "confirming_normal_storage",
-              "state": "confirming",
-              "target_c": 70
-            },
-            {
-              "at": "2026-07-17T05:32:00+00:00",
+              "at": "2026-07-17T05:59:00+00:00",
               "reason": "bridge_refused_or_dropped",
               "state": "fault_locked",
-              "target_c": 70
+              "target_c": 62
             },
             {
               "at": "2026-07-17T23:00:00+00:00",
               "reason": "waiting_for_new_heater_status",
               "state": "observing",
-              "target_c": 70
+              "target_c": 62
             },
             {
               "at": "2026-07-18T00:00:00+00:00",
-              "reason": "heater_state_not_controlled",
-              "state": "storage_70",
-              "target_c": 70
+              "reason": "confirming_off",
+              "state": "confirming",
+              "target_c": 62
             },
             {
-              "at": "2026-07-18T00:01:00+00:00",
+              "at": "2026-07-18T00:02:00+00:00",
+              "reason": "command_spacing",
+              "state": "parked",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-18T00:15:00+00:00",
+              "reason": "confirming_storage",
+              "state": "confirming",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-18T00:17:00+00:00",
               "reason": "solar_opportunity_continues",
               "state": "storage_70",
               "target_c": 70
@@ -8638,56 +8632,56 @@
           },
           "synthetic_session_hours": 24,
           "expired_status_401": 0,
-          "common_terminal_stored_kwh": 10.03141,
-          "terminal_replenishment_kwh": 0.25,
-          "equal_terminal_cost_aud": 7.340851
+          "common_terminal_stored_kwh": 10.13141,
+          "terminal_replenishment_kwh": 0.15,
+          "equal_terminal_cost_aud": 7.40967
         },
         {
           "strategy": "smart",
           "ct": true,
           "energy_kwh": {
             "peak": 1.682664,
-            "off_peak": 8.320756,
-            "solar": 46.34658,
+            "off_peak": 8.245556,
+            "solar": 46.47178,
             "served_draw": 45.0,
             "unserved_draw": 0.0,
             "loss": 12.30684,
             "peak_owner": 0.0,
             "peak_unverified_lockout": 1.682664
           },
-          "grid_cost_aud": 2.025112,
-          "solar_opportunity_aud": 4.299109,
-          "net_heater_cost_aud": 6.324221,
-          "end_temperature_c": 42.387646,
-          "end_stored_above_15_kwh": 10.03141,
-          "command_intents": 31,
-          "command_posts": 31,
+          "grid_cost_aud": 2.012313,
+          "solar_opportunity_aud": 4.310722,
+          "net_heater_cost_aud": 6.323035,
+          "end_temperature_c": 42.524155,
+          "end_stored_above_15_kwh": 10.08141,
+          "command_intents": 30,
+          "command_posts": 30,
           "http_categories": {
             "password_login": 1,
-            "token_refresh": 32,
+            "token_refresh": 31,
             "discovery": 0,
-            "status": 155,
-            "command": 31,
-            "confirmation": 31,
-            "command_refresh": 13
+            "status": 151,
+            "command": 30,
+            "confirmation": 30,
+            "command_refresh": 11
           },
-          "http_total": 263,
+          "http_total": 254,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
-          "unknown_temperature_minutes": 5038,
+          "unknown_temperature_minutes": 5037,
           "required_planning_unknown_minutes": 0,
-          "stale_command_blocked_minutes": 41,
+          "stale_command_blocked_minutes": 40,
           "persistent_owner_detection_minutes": 15.0,
           "transient_app_change_observed": true,
           "forecast_mae_kw": 0.689553,
-          "conditional_latest_completion_mae_minutes": 112.136,
-          "evaluated_completion_samples": 6,
+          "conditional_latest_completion_mae_minutes": 131.238525,
+          "evaluated_completion_samples": 5,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 275,
-            "required_temperature": 1919,
+            "fixed_fallback": 269,
+            "required_temperature": 1986,
             "quiet_before_decision": 1807,
-            "before_decision": 617,
+            "before_decision": 556,
             "stable_off": 1096,
             "stable_baseline": 4366
           },
@@ -8708,8 +8702,8 @@
             },
             "2026-07-15": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -8722,22 +8716,22 @@
             },
             "2026-07-17": {
               "required_c": 62,
-              "max_daytime_c": 67.871453,
-              "at_peak_c": 56.727363,
+              "max_daytime_c": 62.092175,
+              "at_peak_c": 50.311419,
               "required_target_reached": true,
-              "at_peak_storage_shortfall_kwh": 1.931235
+              "at_peak_storage_shortfall_kwh": 4.281235
             },
             "2026-07-18": {
               "required_c": null,
-              "max_daytime_c": 70.037397,
-              "at_peak_c": 69.264064,
+              "max_daytime_c": 70.013907,
+              "at_peak_c": 69.400573,
               "required_target_reached": null,
               "at_peak_storage_shortfall_kwh": null
             },
             "2026-07-19": {
               "required_c": null,
-              "max_daytime_c": 52.213119,
-              "at_peak_c": 50.813119,
+              "max_daytime_c": 52.349628,
+              "at_peak_c": 50.949628,
               "required_target_reached": null,
               "at_peak_storage_shortfall_kwh": null
             }
@@ -8968,13 +8962,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-15T04:02:00+00:00",
+              "at": "2026-07-15T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-15T04:04:00+00:00",
+              "at": "2026-07-15T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -9064,7 +9058,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-16T02:03:00+00:00",
+              "at": "2026-07-16T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -9076,13 +9070,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-16T04:04:00+00:00",
+              "at": "2026-07-16T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-16T04:06:00+00:00",
+              "at": "2026-07-16T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -9137,49 +9131,37 @@
             },
             {
               "at": "2026-07-17T00:00:00+00:00",
-              "reason": "confirming_normal_storage",
+              "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 45
             },
             {
               "at": "2026-07-17T00:02:00+00:00",
-              "reason": "storage_until_peak",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T01:22:00+00:00",
-              "reason": "storage_within_thermostat_band",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T01:39:00+00:00",
-              "reason": "storage_target_reached",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T04:06:00+00:00",
-              "reason": "confirming_storage",
-              "state": "confirming",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T04:08:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
             },
             {
-              "at": "2026-07-17T04:53:00+00:00",
+              "at": "2026-07-17T01:21:00+00:00",
               "reason": "confirming_normal_storage",
               "state": "confirming",
               "target_c": 70
             },
             {
-              "at": "2026-07-17T04:55:00+00:00",
+              "at": "2026-07-17T01:23:00+00:00",
+              "reason": "storage_within_thermostat_band",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T02:00:00+00:00",
               "reason": "storage_target_reached",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T05:00:00+00:00",
+              "reason": "storage_within_thermostat_band",
               "state": "normal_storage_62",
               "target_c": 62
             },
@@ -9250,13 +9232,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-18T00:02:00+00:00",
+              "at": "2026-07-17T23:55:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-18T00:04:00+00:00",
+              "at": "2026-07-17T23:57:00+00:00",
               "reason": "solar_opportunity_continues",
               "state": "storage_70",
               "target_c": 70
@@ -9324,56 +9306,56 @@
           },
           "synthetic_session_hours": 24,
           "expired_status_401": 1,
-          "common_terminal_stored_kwh": 10.03141,
-          "terminal_replenishment_kwh": 0.0,
-          "equal_terminal_cost_aud": 6.324221
+          "common_terminal_stored_kwh": 10.13141,
+          "terminal_replenishment_kwh": 0.05,
+          "equal_terminal_cost_aud": 6.331545
         },
         {
           "strategy": "minimum",
           "ct": true,
           "energy_kwh": {
             "peak": 1.682664,
-            "off_peak": 8.320756,
-            "solar": 46.34658,
+            "off_peak": 8.245556,
+            "solar": 46.47178,
             "served_draw": 45.0,
             "unserved_draw": 0.0,
             "loss": 12.30684,
             "peak_owner": 0.0,
             "peak_unverified_lockout": 1.682664
           },
-          "grid_cost_aud": 2.025112,
-          "solar_opportunity_aud": 4.299109,
-          "net_heater_cost_aud": 6.324221,
-          "end_temperature_c": 42.387646,
-          "end_stored_above_15_kwh": 10.03141,
-          "command_intents": 31,
-          "command_posts": 31,
+          "grid_cost_aud": 2.012313,
+          "solar_opportunity_aud": 4.310722,
+          "net_heater_cost_aud": 6.323035,
+          "end_temperature_c": 42.524155,
+          "end_stored_above_15_kwh": 10.08141,
+          "command_intents": 30,
+          "command_posts": 30,
           "http_categories": {
             "password_login": 1,
-            "token_refresh": 32,
+            "token_refresh": 31,
             "discovery": 0,
-            "status": 130,
-            "command": 31,
-            "confirmation": 31,
-            "command_refresh": 13
+            "status": 126,
+            "command": 30,
+            "confirmation": 30,
+            "command_refresh": 11
           },
-          "http_total": 238,
+          "http_total": 229,
           "maximum_status_age_minutes": 575.666667,
           "maximum_healthy_status_age_minutes": 575.666667,
-          "unknown_temperature_minutes": 6119,
+          "unknown_temperature_minutes": 6118,
           "required_planning_unknown_minutes": 0,
-          "stale_command_blocked_minutes": 41,
+          "stale_command_blocked_minutes": 40,
           "persistent_owner_detection_minutes": 105.0,
           "transient_app_change_observed": true,
           "forecast_mae_kw": 0.689553,
-          "conditional_latest_completion_mae_minutes": 112.136,
-          "evaluated_completion_samples": 6,
+          "conditional_latest_completion_mae_minutes": 131.238525,
+          "evaluated_completion_samples": 5,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 250,
-            "required_temperature": 1831,
+            "fixed_fallback": 244,
+            "required_temperature": 1898,
             "quiet_before_decision": 4104,
-            "before_decision": 530,
+            "before_decision": 469,
             "stable_off": 1178,
             "stable_baseline": 2187
           },
@@ -9394,8 +9376,8 @@
             },
             "2026-07-15": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -9408,22 +9390,22 @@
             },
             "2026-07-17": {
               "required_c": 62,
-              "max_daytime_c": 67.871453,
-              "at_peak_c": 56.727363,
+              "max_daytime_c": 62.092175,
+              "at_peak_c": 50.311419,
               "required_target_reached": true,
-              "at_peak_storage_shortfall_kwh": 1.931235
+              "at_peak_storage_shortfall_kwh": 4.281235
             },
             "2026-07-18": {
               "required_c": null,
-              "max_daytime_c": 70.037397,
-              "at_peak_c": 69.264064,
+              "max_daytime_c": 70.013907,
+              "at_peak_c": 69.400573,
               "required_target_reached": null,
               "at_peak_storage_shortfall_kwh": null
             },
             "2026-07-19": {
               "required_c": null,
-              "max_daytime_c": 52.213119,
-              "at_peak_c": 50.813119,
+              "max_daytime_c": 52.349628,
+              "at_peak_c": 50.949628,
               "required_target_reached": null,
               "at_peak_storage_shortfall_kwh": null
             }
@@ -9654,13 +9636,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-15T04:02:00+00:00",
+              "at": "2026-07-15T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-15T04:04:00+00:00",
+              "at": "2026-07-15T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -9750,7 +9732,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-16T02:03:00+00:00",
+              "at": "2026-07-16T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -9762,13 +9744,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-16T04:04:00+00:00",
+              "at": "2026-07-16T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-16T04:06:00+00:00",
+              "at": "2026-07-16T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -9823,49 +9805,37 @@
             },
             {
               "at": "2026-07-17T00:00:00+00:00",
-              "reason": "confirming_normal_storage",
+              "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 45
             },
             {
               "at": "2026-07-17T00:02:00+00:00",
-              "reason": "storage_until_peak",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T01:22:00+00:00",
-              "reason": "storage_within_thermostat_band",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T01:39:00+00:00",
-              "reason": "storage_target_reached",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T04:06:00+00:00",
-              "reason": "confirming_storage",
-              "state": "confirming",
-              "target_c": 62
-            },
-            {
-              "at": "2026-07-17T04:08:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
             },
             {
-              "at": "2026-07-17T04:53:00+00:00",
+              "at": "2026-07-17T01:21:00+00:00",
               "reason": "confirming_normal_storage",
               "state": "confirming",
               "target_c": 70
             },
             {
-              "at": "2026-07-17T04:55:00+00:00",
+              "at": "2026-07-17T01:23:00+00:00",
+              "reason": "storage_within_thermostat_band",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T02:00:00+00:00",
               "reason": "storage_target_reached",
+              "state": "normal_storage_62",
+              "target_c": 62
+            },
+            {
+              "at": "2026-07-17T05:00:00+00:00",
+              "reason": "storage_within_thermostat_band",
               "state": "normal_storage_62",
               "target_c": 62
             },
@@ -9936,13 +9906,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-07-18T00:02:00+00:00",
+              "at": "2026-07-17T23:55:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-07-18T00:04:00+00:00",
+              "at": "2026-07-17T23:57:00+00:00",
               "reason": "solar_opportunity_continues",
               "state": "storage_70",
               "target_c": 70
@@ -10010,9 +9980,9 @@
           },
           "synthetic_session_hours": 24,
           "expired_status_401": 1,
-          "common_terminal_stored_kwh": 10.03141,
-          "terminal_replenishment_kwh": 0.0,
-          "equal_terminal_cost_aud": 6.324221
+          "common_terminal_stored_kwh": 10.13141,
+          "terminal_replenishment_kwh": 0.05,
+          "equal_terminal_cost_aud": 6.331545
         }
       ],
       "assumptions": {
@@ -12466,9 +12436,9 @@
             "status": 280,
             "command": 29,
             "confirmation": 29,
-            "command_refresh": 17
+            "command_refresh": 15
           },
-          "http_total": 647,
+          "http_total": 645,
           "maximum_status_age_minutes": 1350.0,
           "maximum_healthy_status_age_minutes": 29.666667,
           "unknown_temperature_minutes": 1349,
@@ -12477,7 +12447,7 @@
           "persistent_owner_detection_minutes": 15.0,
           "transient_app_change_observed": false,
           "forecast_mae_kw": 0.509104,
-          "conditional_latest_completion_mae_minutes": 117.543375,
+          "conditional_latest_completion_mae_minutes": 118.543375,
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
@@ -12500,8 +12470,8 @@
             },
             "2026-09-30": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -12736,13 +12706,13 @@
               "target_c": 55
             },
             {
-              "at": "2026-09-30T04:02:00+00:00",
+              "at": "2026-09-30T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-09-30T04:04:00+00:00",
+              "at": "2026-09-30T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -12832,7 +12802,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-10-01T02:03:00+00:00",
+              "at": "2026-10-01T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -12844,13 +12814,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-10-01T04:04:00+00:00",
+              "at": "2026-10-01T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-10-01T04:06:00+00:00",
+              "at": "2026-10-01T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -13087,18 +13057,18 @@
             "status": 136,
             "command": 27,
             "confirmation": 27,
-            "command_refresh": 18
+            "command_refresh": 17
           },
-          "http_total": 359,
+          "http_total": 358,
           "maximum_status_age_minutes": 1380.0,
           "maximum_healthy_status_age_minutes": 60.666667,
-          "unknown_temperature_minutes": 3304,
-          "required_planning_unknown_minutes": 349,
+          "unknown_temperature_minutes": 3306,
+          "required_planning_unknown_minutes": 351,
           "stale_command_blocked_minutes": 0,
           "persistent_owner_detection_minutes": 45.0,
           "transient_app_change_observed": false,
           "forecast_mae_kw": 0.509104,
-          "conditional_latest_completion_mae_minutes": 101.564889,
+          "conditional_latest_completion_mae_minutes": 112.975319,
           "evaluated_completion_samples": 9,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
@@ -13506,24 +13476,12 @@
             },
             {
               "at": "2026-10-01T03:00:00+00:00",
-              "reason": "storage_target_reached",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-10-01T03:01:00+00:00",
-              "reason": "storage_until_peak",
-              "state": "normal_storage_62",
-              "target_c": 62
-            },
-            {
-              "at": "2026-10-01T03:02:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-10-01T03:04:00+00:00",
+              "at": "2026-10-01T03:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -13770,12 +13728,12 @@
             "password_login": 1,
             "token_refresh": 29,
             "discovery": 0,
-            "status": 155,
+            "status": 154,
             "command": 29,
             "confirmation": 29,
-            "command_refresh": 11
+            "command_refresh": 10
           },
-          "http_total": 254,
+          "http_total": 252,
           "maximum_status_age_minutes": 479.666667,
           "maximum_healthy_status_age_minutes": 479.666667,
           "unknown_temperature_minutes": 5072,
@@ -13784,14 +13742,14 @@
           "persistent_owner_detection_minutes": 15.0,
           "transient_app_change_observed": true,
           "forecast_mae_kw": 0.509104,
-          "conditional_latest_completion_mae_minutes": 118.865437,
+          "conditional_latest_completion_mae_minutes": 119.865437,
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 643,
-            "required_temperature": 1994,
+            "fixed_fallback": 642,
+            "required_temperature": 2001,
             "quiet_before_decision": 1965,
-            "before_decision": 617,
+            "before_decision": 611,
             "stable_off": 1096,
             "stable_baseline": 3765
           },
@@ -13812,8 +13770,8 @@
             },
             "2026-09-30": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -14080,13 +14038,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-09-30T04:02:00+00:00",
+              "at": "2026-09-30T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-09-30T04:04:00+00:00",
+              "at": "2026-09-30T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -14176,7 +14134,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-10-01T02:03:00+00:00",
+              "at": "2026-10-01T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -14188,13 +14146,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-10-01T04:04:00+00:00",
+              "at": "2026-10-01T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-10-01T04:06:00+00:00",
+              "at": "2026-10-01T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -14434,12 +14392,12 @@
             "password_login": 1,
             "token_refresh": 29,
             "discovery": 0,
-            "status": 136,
+            "status": 135,
             "command": 29,
             "confirmation": 29,
-            "command_refresh": 8
+            "command_refresh": 7
           },
-          "http_total": 232,
+          "http_total": 230,
           "maximum_status_age_minutes": 646.666667,
           "maximum_healthy_status_age_minutes": 646.666667,
           "unknown_temperature_minutes": 5984,
@@ -14448,14 +14406,14 @@
           "persistent_owner_detection_minutes": 105.0,
           "transient_app_change_observed": true,
           "forecast_mae_kw": 0.509104,
-          "conditional_latest_completion_mae_minutes": 118.865437,
+          "conditional_latest_completion_mae_minutes": 119.865437,
           "evaluated_completion_samples": 6,
           "shadow_would_reads": 0,
           "poll_reason_minutes": {
-            "fixed_fallback": 534,
-            "required_temperature": 1906,
+            "fixed_fallback": 533,
+            "required_temperature": 1913,
             "quiet_before_decision": 3884,
-            "before_decision": 604,
+            "before_decision": 598,
             "stable_off": 1073,
             "stable_baseline": 2079
           },
@@ -14476,8 +14434,8 @@
             },
             "2026-09-30": {
               "required_c": 62,
-              "max_daytime_c": 63.377803,
-              "at_peak_c": 63.051136,
+              "max_daytime_c": 63.650822,
+              "at_peak_c": 63.324155,
               "required_target_reached": true,
               "at_peak_storage_shortfall_kwh": 0.0
             },
@@ -14744,13 +14702,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-09-30T04:02:00+00:00",
+              "at": "2026-09-30T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-09-30T04:04:00+00:00",
+              "at": "2026-09-30T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70
@@ -14840,7 +14798,7 @@
               "target_c": 62
             },
             {
-              "at": "2026-10-01T02:03:00+00:00",
+              "at": "2026-10-01T02:01:00+00:00",
               "reason": "storage_target_reached",
               "state": "normal_storage_62",
               "target_c": 62
@@ -14852,13 +14810,13 @@
               "target_c": 62
             },
             {
-              "at": "2026-10-01T04:04:00+00:00",
+              "at": "2026-10-01T04:00:00+00:00",
               "reason": "confirming_storage",
               "state": "confirming",
               "target_c": 62
             },
             {
-              "at": "2026-10-01T04:06:00+00:00",
+              "at": "2026-10-01T04:02:00+00:00",
               "reason": "weekday_solar_boost_continues",
               "state": "storage_70",
               "target_c": 70

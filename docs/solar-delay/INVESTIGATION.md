@@ -93,6 +93,18 @@ What this shows (synthetic, not live evidence):
 Classification: changes automatic heating behaviour and the command-limit
 boundary → **owner approval required** before merge.
 
+## Effect on the existing week and seasonal evidence
+
+The four committed replay result files were regenerated. All non-CT runs are
+identical. CT runs differ by one or two status reads (fewer in most). One run
+changes materially: winter, fixed 60-minute polling, dedicated CT. With
+0.16.2 the Thursday post-peak start goes straight to 70 instead of 62 first,
+so on Friday the heater is at 62 rather than 70 when the replay's deliberate
+synthetic cloud outage refuses the pre-peak OFF. Both versions fault-lock
+exactly as designed and the heater stays in its last state through that peak
+(peak import 3.93 → 4.08 kWh, two more commands across the week, +$0.09).
+This is the existing designed outage scenario, not a new hazard.
+
 ## Proposals (not implemented)
 
 - **P1 — peak policy.** If morning peak solar matters, *Verified solar-only
@@ -107,6 +119,12 @@ boundary → **owner approval required** before merge.
   an off-peak 70 °C session could hold rather than withdraw (peak latch
   unchanged). Saves two commands per blip. Not implemented: it relaxes a
   measured-export protection and needs an explicit decision.
+
+## Settings questions
+
+See `SETTINGS_REVIEW.md`: keep the six-command cap with 0.16.2 (eight only
+masks the boundary-count error on 0.16.1), and do not map the EMHASS
+household forecast until it excludes the heater.
 
 ## Live exports needed to explain 19 November (read-only)
 

@@ -1842,9 +1842,9 @@
         "status": 281,
         "command": 28,
         "confirmation": 28,
-        "command_refresh": 15
+        "command_refresh": 13
       },
-      "http_total": 644,
+      "http_total": 642,
       "maximum_status_age_minutes": 1350.0,
       "maximum_healthy_status_age_minutes": 29.666667,
       "unknown_temperature_minutes": 1349,
@@ -1853,7 +1853,7 @@
       "persistent_owner_detection_minutes": 15.0,
       "transient_app_change_observed": false,
       "forecast_mae_kw": 0.509104,
-      "conditional_latest_completion_mae_minutes": 102.986479,
+      "conditional_latest_completion_mae_minutes": 103.986479,
       "evaluated_completion_samples": 6,
       "shadow_would_reads": 0,
       "poll_reason_minutes": {
@@ -1876,8 +1876,8 @@
         },
         "2026-11-18": {
           "required_c": 62,
-          "max_daytime_c": 63.377803,
-          "at_peak_c": 63.051136,
+          "max_daytime_c": 63.650822,
+          "at_peak_c": 63.324155,
           "required_target_reached": true,
           "at_peak_storage_shortfall_kwh": 0.0
         },
@@ -2112,13 +2112,13 @@
           "target_c": 55
         },
         {
-          "at": "2026-11-18T04:02:00+00:00",
+          "at": "2026-11-18T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-18T04:04:00+00:00",
+          "at": "2026-11-18T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -2208,7 +2208,7 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T02:03:00+00:00",
+          "at": "2026-11-19T02:01:00+00:00",
           "reason": "storage_target_reached",
           "state": "normal_storage_62",
           "target_c": 62
@@ -2220,13 +2220,13 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:04:00+00:00",
+          "at": "2026-11-19T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:06:00+00:00",
+          "at": "2026-11-19T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -2443,18 +2443,18 @@
         "status": 137,
         "command": 26,
         "confirmation": 26,
-        "command_refresh": 16
+        "command_refresh": 15
       },
-      "http_total": 356,
+      "http_total": 355,
       "maximum_status_age_minutes": 1380.0,
       "maximum_healthy_status_age_minutes": 60.666667,
-      "unknown_temperature_minutes": 3318,
-      "required_planning_unknown_minutes": 349,
+      "unknown_temperature_minutes": 3320,
+      "required_planning_unknown_minutes": 351,
       "stale_command_blocked_minutes": 0,
       "persistent_owner_detection_minutes": 45.0,
       "transient_app_change_observed": false,
       "forecast_mae_kw": 0.509104,
-      "conditional_latest_completion_mae_minutes": 101.564889,
+      "conditional_latest_completion_mae_minutes": 112.975319,
       "evaluated_completion_samples": 9,
       "shadow_would_reads": 0,
       "poll_reason_minutes": {
@@ -2862,24 +2862,12 @@
         },
         {
           "at": "2026-11-19T03:00:00+00:00",
-          "reason": "storage_target_reached",
-          "state": "normal_storage_62",
-          "target_c": 62
-        },
-        {
-          "at": "2026-11-19T03:01:00+00:00",
-          "reason": "storage_until_peak",
-          "state": "normal_storage_62",
-          "target_c": 62
-        },
-        {
-          "at": "2026-11-19T03:02:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-19T03:04:00+00:00",
+          "at": "2026-11-19T03:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -3109,9 +3097,9 @@
         "status": 195,
         "command": 28,
         "confirmation": 28,
-        "command_refresh": 10
+        "command_refresh": 8
       },
-      "http_total": 456,
+      "http_total": 454,
       "maximum_status_age_minutes": 1378.666667,
       "maximum_healthy_status_age_minutes": 59.666667,
       "unknown_temperature_minutes": 2768,
@@ -3120,7 +3108,7 @@
       "persistent_owner_detection_minutes": 45.0,
       "transient_app_change_observed": false,
       "forecast_mae_kw": 0.509104,
-      "conditional_latest_completion_mae_minutes": 102.986479,
+      "conditional_latest_completion_mae_minutes": 103.986479,
       "evaluated_completion_samples": 6,
       "shadow_would_reads": 0,
       "poll_reason_minutes": {
@@ -3147,8 +3135,8 @@
         },
         "2026-11-18": {
           "required_c": 62,
-          "max_daytime_c": 63.377803,
-          "at_peak_c": 63.051136,
+          "max_daytime_c": 63.650822,
+          "at_peak_c": 63.324155,
           "required_target_reached": true,
           "at_peak_storage_shortfall_kwh": 0.0
         },
@@ -3387,13 +3375,13 @@
           "target_c": 55
         },
         {
-          "at": "2026-11-18T04:02:00+00:00",
+          "at": "2026-11-18T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-18T04:04:00+00:00",
+          "at": "2026-11-18T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -3483,7 +3471,7 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T02:03:00+00:00",
+          "at": "2026-11-19T02:01:00+00:00",
           "reason": "storage_target_reached",
           "state": "normal_storage_62",
           "target_c": 62
@@ -3495,13 +3483,13 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:04:00+00:00",
+          "at": "2026-11-19T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:06:00+00:00",
+          "at": "2026-11-19T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70

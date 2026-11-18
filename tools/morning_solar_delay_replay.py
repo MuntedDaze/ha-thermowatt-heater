@@ -14,6 +14,7 @@ in docs/solar-delay/INVESTIGATION.md.
 
 import argparse
 from collections import Counter
+from datetime import datetime, timedelta
 import json
 import math
 from pathlib import Path
@@ -81,10 +82,24 @@ class MorningRun(SmartWeek):
             self.states.pop("sensor.emhass_load", None)
             return
         for row in self.states["sensor.emhass_load"].attributes["forecasts"]:
-            row["p_load_forecast"] = load
+            if load == "naive_yesterday":
+                # EMHASS "naive": yesterday's whole-house load for the same half
+                # hour. CT-free, so it includes yesterday's heater element.
+                start = datetime.fromisoformat(row["date"]) - timedelta(days=1)
+                minutes = [
+                    self.house_log.get(int((start + timedelta(minutes=i)).timestamp()) // 60)
+                    for i in range(30)
+                ]
+                known = [kw for kw in minutes if kw is not None]
+                row["p_load_forecast"] = round(sum(known) / len(known), 3) if known else 0.5
+            else:
+                row["p_load_forecast"] = load
 
     def _meter(self):
         super()._meter()
+        if not hasattr(self, "house_log"):
+            self.house_log = {}
+        self.house_log[int(self.t) // 60] = 0.5 + (3.0 if self.tank.element else 0.0)
         local = self.now().astimezone(m.HOBART)
         every = self.scenario.get("goodwe_unavailable_every")
         start, stop = self.scenario.get("goodwe_unavailable_hours", (6, 12))
@@ -259,6 +274,17 @@ SCENARIOS = [
         "description": "Solar-only peak; patchy Wednesday, clear Thursday.",
         "patchy_wednesday": True,
         "peak_policy": "Verified solar-only heating",
+    },
+    {
+        "name": "naive_yesterday_household_forecast",
+        "description": "Peak Never; household forecast is yesterday's whole-house load (heater included).",
+        "load_forecast_kw": "naive_yesterday",
+    },
+    {
+        "name": "patchy_wednesday_cap_8",
+        "description": "Peak Never; patchy Wednesday, clear Thursday, rolling command cap 8.",
+        "patchy_wednesday": True,
+        "max_commands": 8,
     },
     {
         "name": "command_cap_8",
