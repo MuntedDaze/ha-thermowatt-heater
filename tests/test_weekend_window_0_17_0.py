@@ -1,6 +1,7 @@
 """Controller 0.17.0: the owner's weekend comfort window (synthetic evidence)."""
 
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 import sys
 
@@ -120,3 +121,89 @@ def test_replay_deadline_end_time_and_command_count(name):
 def test_replay_cloudy_weekend_uses_the_deadline_fallback():
     days = _weekend("spring_cloudy")
     assert {d["opened_by"] for d in days.values()} == {"deadline_fallback"}
+
+
+# --- the deadline fallback: owner-confirmed, never unnecessary or repeated ---------------
+
+
+FALLBACK_AT = at(SAT, 14)  # past the latest start for a 40 C tank, no PV
+
+
+@pytest.mark.parametrize(
+    "extra,state,reason",
+    [
+        ({"owner_override": True}, sp.HOLD, "owner_override"),
+        ({"holiday": True}, sp.OFF, "holiday"),
+        ({"override_12h": True}, NORMAL, "12hr_override"),
+        ({"cloud_ready": False}, sp.HOLD, "cloud_or_freshness_gate"),
+        (
+            {"last_command_at": FALLBACK_AT - timedelta(minutes=5)},
+            sp.HOLD,
+            "command_spacing",
+        ),
+    ],
+)
+def test_fallback_respects_owner_holiday_cloud_and_spacing_safeguards(extra, state, reason):
+    d = policy().decide(snap(FALLBACK_AT, BASE, reading=40, heater_meter_valid=False, **extra))
+    assert (d.state, d.reason) == (state, reason)
+    if state == sp.HOLD:
+        assert d.command is None
+
+
+def test_fallback_is_off_when_weekend_heating_is_disabled():
+    p = policy(replace(S62, weekend_enabled=False))
+    d = p.decide(snap(FALLBACK_AT, BASE, reading=40, heater_meter_valid=False))
+    assert d.state == BASE and "weekend_window_opened_by" not in d.plan
+
+
+def test_a_configured_weekend_peak_still_takes_precedence():
+    from test_shadow_model import c
+
+    _, peak_tariffs = c.parse_options({"tariff_clock": "standard", "weekend_peak": True})
+    p = sp.SimplePolicy(S62, peak_tariffs)
+    # Aurora-style weekend peak 17:00-22:00 AEDT: OFF at the peak lead, never 62
+    # (no verified solar meter here, so the protective peak OFF applies).
+    d = p.decide(snap(at(SAT, 16, 59), NORMAL, reading=40, heater_meter_valid=False))
+    assert d.state == sp.OFF and d.reason.startswith("peak_") and d.layer == 4
+    # Between the weekend peaks the 16:00 storage-ready deadline (before the
+    # 17:00 peak) still applies; the morning peak itself never heats.
+    midday = p.decide(snap(at(SAT, 12), BASE, reading=40, heater_meter_valid=False))
+    assert midday.plan["soft_target"] == at(SAT, 16) - timedelta(minutes=30)
+    morning = p.decide(snap(at(SAT, 9), BASE, reading=40, heater_meter_valid=False))
+    assert morning.state == sp.OFF and morning.plan["mode"] == "peak"
+
+
+def test_fallback_heat_is_essential_not_an_optional_solar_start():
+    from test_shadow_model import m
+    import importlib
+
+    ctl = importlib.import_module(f"{m.__package__}.controller")
+    d = policy().decide(snap(FALLBACK_AT, BASE, reading=40, heater_meter_valid=False))
+    assert d.command == "Manual:62" and d.reason not in ctl.OPTIONAL_REASONS
+    assert d.plan["heating_role"] == "weekend_comfort"
+
+
+@pytest.mark.parametrize("reading,expected", [(40, ["Manual:62", "Manual:45"]), (60, [])])
+def test_real_controller_cloudy_saturday_sends_each_command_once(
+    tmp_path, monkeypatch, reading, expected
+):
+    from test_integration_0_9_0 import Rig, hobart
+
+    rig = Rig(
+        tmp_path,
+        monkeypatch,
+        hobart(14, 9),
+        mode="Manual",
+        setpoint=45,
+        reading=reading,
+        pv=lambda local: 0.0,
+    )
+    rig.entry.options.update(normal_storage_c="62")
+    rig.runtime.apply_options(rig.entry.options, rig.sources)
+    rig.executor.configure(rig.entry.options)
+    rig.enable()
+    rig.run(hobart(14, 18, 30))
+    sent = [payload.split("@")[0] for payload in rig.commands()]
+    assert sent == expected, rig.commands()
+    if expected:
+        assert rig.tank.t >= 61 or rig.tank.setpoint == 45
