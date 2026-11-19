@@ -36,7 +36,11 @@ explain 19 November.
   qualification. Now a gap pauses the timer: it never counts as export, only
   measured time counts, and no optional start is ever made on a tick whose
   latest meter report has no value. CT sites keep the 0.16.1 reset. Sessions
-  keep the latched protective loss.
+  keep the latched protective loss. **Independent review fix:** the first
+  pause used a fixed four-pass window estimate that could miss gaps (valid
+  reports at minutes 4, 6, 8, 9, 11–19 with gaps at 5, 7, 10 qualified at
+  minute 19 with only 9 measured minutes). It is now an exact walk-back over
+  the merged unmeasured intervals with no iteration limit, failing closed.
 - **Plausible under solar-only, not proven:** GoodWe gaps *during* a peak
   solar session force protective OFFs and restarts. In replay this produced
   OFF/70/OFF churn, and the six-command budget then blocked boosts for about
@@ -63,11 +67,18 @@ selected; with no forecast heating starts now; 70 °C uses the existing
 genuine-surplus test; at 18:00 the target returns to 45 °C.
 
 **Deadline fallback, confirmed by the owner (19 Nov).** 500 W PV is the
-preferred trigger, not an absolute requirement. If PV never opens the window
-and the tank needs heat, 62 °C starts at the latest start (about 12:46 on
-cloudy replays) using weekend off-peak electricity. Tests prove it:
-- opens only when the tank needs heat, never on a status older than 35 min;
-- sends each command once (62 then 45, or nothing for a warm tank);
+preferred trigger, not an absolute requirement. If PV never opens the window,
+it opens at the latest start that still meets the deadline (about 12:46 for
+a cold tank on cloudy replays; 15:30 for a warm 55–61 °C tank) using weekend
+off-peak electricity. For a warm tank 62 °C is a thermostat request: no heat
+unless an afternoon draw takes the probe to about 54 °C, which is then
+reheated before 18:00 without waiting for a cloud poll (independent review:
+the first rule left a warm tank at 45 °C and depended on polling timing).
+Tests prove it:
+- never acts on a status older than 35 min, and heats a warm tank only after
+  a draw (real controller: no heating without a draw; 49.6 → 61.6 °C after a
+  16:30 draw);
+- sends each command once (62 then 45);
 - yields to owner hold, holiday, the 12-hour Override, the cloud gate,
   command spacing, a configured weekend peak and the weekend switch;
 - is essential heat, so it never uses the optional solar budget.
