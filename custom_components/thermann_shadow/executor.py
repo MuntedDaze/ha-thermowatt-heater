@@ -509,6 +509,15 @@ class Executor:
             runtime.settings.import_positive,
             runtime.settings.element_kw,
         )
+        # An "unavailable" report has no Reading; its retained unit attribute
+        # still identifies the same commissioned meter. It never grants a vote.
+        raw_grid = self.hass.states.get(runtime.sources.get("grid") or "")
+        gap_record = ct_free_record(
+            runtime.sources.get("grid"),
+            raw_grid.attributes.get("unit_of_measurement") if raw_grid else None,
+            runtime.settings.import_positive,
+            runtime.settings.element_kw,
+        )
         site_quality = grid_sanity(
             grid,
             runtime._kw("pv_ac", now),
@@ -516,13 +525,27 @@ class Executor:
             runtime.settings.pv_ac_limit_kw,
         )
         runtime.ct_free_site_quality = site_quality
-        ct_free_valid = bool(
-            grid is not None
-            and expected_record
-            and runtime.native_options["ct_free_solar_verification"] == expected_record
+        ct_free_commissioned = bool(
+            (expected_record or gap_record)
+            and runtime.native_options["ct_free_solar_verification"]
+            == (expected_record or gap_record)
             and not runtime.sources.get("heater_power")
             and not runtime.native_options["heater_meter_verification"]
+        )
+        ct_free_valid = bool(
+            grid is not None
+            and ct_free_commissioned
             and -grid <= runtime.settings.pv_ac_limit_kw * 1.10
+        )
+        # A current valueless meter report is a gap, not evidence. Before any
+        # optional session it keeps earlier genuine votes (the policy's gap and
+        # freshness limits still expire them); a session keeps the loss reset.
+        missing_gap = bool(
+            grid is None
+            and getattr(runtime, "grid_value_missing", False)
+            and not runtime.solar_input_loss_pending
+            and not runtime._optional_active()
+            and (runtime.power_budget is not None or ct_free_commissioned)
         )
         runtime.ct_free_solar_valid = ct_free_valid
         runtime.ct_free_solar_start_ready = (
@@ -542,9 +565,11 @@ class Executor:
                 at = min(at, runtime.circuit.observed_at)
             if at is not None:
                 self.policy.add_meter(at, grid, heater_kw=watts / 1000)
+        elif missing_gap:
+            self.policy.note_missing()  # unmeasured: pauses qualification, never votes
         else:
             self.policy.samples.clear()  # a loss breaks qualification continuity
-        if runtime.power_budget is None and not ct_free_valid:
+        if runtime.power_budget is None and not ct_free_valid and not missing_gap:
             self.policy.samples.clear()
         pv = runtime._kw("pv", now)
         pv_reading = runtime._reading("pv")
@@ -567,7 +592,11 @@ class Executor:
             and not runtime.solar_input_loss_pending,
             ct_free_solar_valid=ct_free_valid and not runtime.solar_input_loss_pending,
             optional_measurement_lost=runtime.solar_input_loss_pending,
-            optional_start_quality=site_quality
+            # No optional start is ever made on a tick whose latest meter
+            # report has no value, CT or CT-free, whatever earlier votes say.
+            optional_start_quality="grid_measurement_missing"
+            if missing_gap
+            else site_quality
             if ct_free_valid and not runtime.ct_free_solar_start_ready
             else None,
             optional_adoption_ready=controller.solar_adoption_ready(obs, self.cfg),
@@ -582,7 +611,7 @@ class Executor:
             optional_allowed=(
                 not controller.enabled
                 or (
-                    len(controller.commands) < self.cfg.max_commands_per_day
+                    controller.commands_in_window(now) < self.cfg.max_commands_per_day
                     and controller.requests_last_24h(now) is not None
                     and controller.requests_last_24h(now) + OPTIONAL_EXIT_REQUEST_RESERVE
                     <= self.cfg.max_requests_per_day

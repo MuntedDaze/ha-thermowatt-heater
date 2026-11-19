@@ -1,5 +1,13 @@
 # Changelog
 
+## Controller 0.16.2 companion patch (bridge 1.4.1 unchanged)
+
+- Removes two avoidable morning solar-boost delays found by synthetic replay:
+  a stale rolling command count at recurring boundary times, and GoodWe
+  `unavailable` reports erasing qualification before a session (gaps now
+  pause qualification and never count as export or permit a start). See
+  `shadow_controller/CHANGELOG.md` and `docs/solar-delay/INVESTIGATION.md`.
+
 ## [1.4.1] — Smart plan acceptance fix (with controller 0.16.1)
 
 - Fixes Smart polling never leaving `fixed_fallback` (production: 0 accepted,

@@ -94,6 +94,7 @@ OPTIONAL_REASONS = frozenset(
     }
 )
 ESSENTIAL_EXTRA_COMMANDS = 6
+COMMAND_WINDOW = timedelta(hours=24)
 # Reserve pre-read/POST/two confirmations/possible refresh for two essential
 # transitions. This local estimate never grants additional vendor quota.
 OPTIONAL_EXIT_REQUEST_RESERVE = 10
@@ -555,6 +556,15 @@ class Controller:
     def last_command_at(self) -> datetime | None:
         return _dt(self.commands[-1]) if self.commands else None
 
+    def commands_in_window(self, now: datetime) -> int:
+        """Commands in the rolling half-open window (now - 24 h, now].
+
+        Peak boundaries recur at the same clock time daily, so yesterday's
+        boundary command must expire at today's boundary decision rather than
+        one tick later (0.16.2). The policy and the gate use this same count.
+        """
+        return sum(1 for item in self.commands if now - _dt(item) < COMMAND_WINDOW)
+
     def step(self, obs: Observation, want: Want, cfg: ControllerConfig) -> list[Effect]:
         now = obs.now
         effects: list[Effect] = []
@@ -571,7 +581,7 @@ class Controller:
             "latest_start": _iso(want.plan.get("latest_start")),
             "soft_target": _iso(want.plan.get("soft_target")),
         }
-        self.commands = [item for item in self.commands if now - _dt(item) <= timedelta(hours=24)]
+        self.commands = [item for item in self.commands if now - _dt(item) < COMMAND_WINDOW]
         self.active_alerts = []
         self._expire_modes(now)
 

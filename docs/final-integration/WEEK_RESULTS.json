@@ -2363,9 +2363,9 @@
         "status": 326,
         "command": 28,
         "confirmation": 28,
-        "command_refresh": 15
+        "command_refresh": 13
       },
-      "http_total": 733,
+      "http_total": 731,
       "maximum_status_age_minutes": 89.0,
       "maximum_healthy_status_age_minutes": 29.666667,
       "unknown_temperature_minutes": 44,
@@ -2374,7 +2374,7 @@
       "persistent_owner_detection_minutes": 15.0,
       "transient_app_change_observed": false,
       "forecast_mae_kw": 0.509104,
-      "conditional_latest_completion_mae_minutes": 102.986479,
+      "conditional_latest_completion_mae_minutes": 103.986479,
       "evaluated_completion_samples": 6,
       "shadow_would_reads": 0,
       "poll_reason_minutes": {
@@ -2397,8 +2397,8 @@
         },
         "2026-11-18": {
           "required_c": 62,
-          "max_daytime_c": 63.377803,
-          "at_peak_c": 63.051136,
+          "max_daytime_c": 63.650822,
+          "at_peak_c": 63.324155,
           "required_target_reached": true,
           "at_peak_storage_shortfall_kwh": 0.0
         },
@@ -2629,13 +2629,13 @@
           "target_c": 55
         },
         {
-          "at": "2026-11-18T04:02:00+00:00",
+          "at": "2026-11-18T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-18T04:04:00+00:00",
+          "at": "2026-11-18T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -2725,7 +2725,7 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T02:03:00+00:00",
+          "at": "2026-11-19T02:01:00+00:00",
           "reason": "storage_target_reached",
           "state": "normal_storage_62",
           "target_c": 62
@@ -2737,13 +2737,13 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:04:00+00:00",
+          "at": "2026-11-19T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:06:00+00:00",
+          "at": "2026-11-19T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -2952,18 +2952,18 @@
         "status": 160,
         "command": 26,
         "confirmation": 26,
-        "command_refresh": 16
+        "command_refresh": 15
       },
-      "http_total": 401,
+      "http_total": 400,
       "maximum_status_age_minutes": 118.0,
       "maximum_healthy_status_age_minutes": 60.666667,
-      "unknown_temperature_minutes": 2305,
-      "required_planning_unknown_minutes": 349,
+      "unknown_temperature_minutes": 2307,
+      "required_planning_unknown_minutes": 351,
       "stale_command_blocked_minutes": 0,
       "persistent_owner_detection_minutes": 45.0,
       "transient_app_change_observed": false,
       "forecast_mae_kw": 0.509104,
-      "conditional_latest_completion_mae_minutes": 101.564889,
+      "conditional_latest_completion_mae_minutes": 112.975319,
       "evaluated_completion_samples": 9,
       "shadow_would_reads": 0,
       "poll_reason_minutes": {
@@ -3367,24 +3367,12 @@
         },
         {
           "at": "2026-11-19T03:00:00+00:00",
-          "reason": "storage_target_reached",
-          "state": "normal_storage_62",
-          "target_c": 62
-        },
-        {
-          "at": "2026-11-19T03:01:00+00:00",
-          "reason": "storage_until_peak",
-          "state": "normal_storage_62",
-          "target_c": 62
-        },
-        {
-          "at": "2026-11-19T03:02:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-19T03:04:00+00:00",
+          "at": "2026-11-19T03:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -3605,9 +3593,9 @@
         "status": 326,
         "command": 28,
         "confirmation": 28,
-        "command_refresh": 15
+        "command_refresh": 13
       },
-      "http_total": 733,
+      "http_total": 731,
       "maximum_status_age_minutes": 89.0,
       "maximum_healthy_status_age_minutes": 29.666667,
       "unknown_temperature_minutes": 44,
@@ -3616,7 +3604,7 @@
       "persistent_owner_detection_minutes": 15.0,
       "transient_app_change_observed": false,
       "forecast_mae_kw": 0.509104,
-      "conditional_latest_completion_mae_minutes": 102.986479,
+      "conditional_latest_completion_mae_minutes": 103.986479,
       "evaluated_completion_samples": 6,
       "shadow_would_reads": 39,
       "poll_reason_minutes": {
@@ -3639,8 +3627,8 @@
         },
         "2026-11-18": {
           "required_c": 62,
-          "max_daytime_c": 63.377803,
-          "at_peak_c": 63.051136,
+          "max_daytime_c": 63.650822,
+          "at_peak_c": 63.324155,
           "required_target_reached": true,
           "at_peak_storage_shortfall_kwh": 0.0
         },
@@ -3871,13 +3859,13 @@
           "target_c": 55
         },
         {
-          "at": "2026-11-18T04:02:00+00:00",
+          "at": "2026-11-18T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-18T04:04:00+00:00",
+          "at": "2026-11-18T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -3967,7 +3955,7 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T02:03:00+00:00",
+          "at": "2026-11-19T02:01:00+00:00",
           "reason": "storage_target_reached",
           "state": "normal_storage_62",
           "target_c": 62
@@ -3979,13 +3967,13 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:04:00+00:00",
+          "at": "2026-11-19T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:06:00+00:00",
+          "at": "2026-11-19T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -4189,14 +4177,14 @@
       "command_posts": 28,
       "http_categories": {
         "password_login": 1,
-        "token_refresh": 258,
+        "token_refresh": 259,
         "discovery": 0,
         "status": 275,
         "command": 28,
         "confirmation": 28,
-        "command_refresh": 26
+        "command_refresh": 27
       },
-      "http_total": 616,
+      "http_total": 618,
       "maximum_status_age_minutes": 87.666667,
       "maximum_healthy_status_age_minutes": 39.666667,
       "unknown_temperature_minutes": 43,
@@ -4205,15 +4193,15 @@
       "persistent_owner_detection_minutes": 5.0,
       "transient_app_change_observed": false,
       "forecast_mae_kw": 0.509104,
-      "conditional_latest_completion_mae_minutes": 105.410646,
+      "conditional_latest_completion_mae_minutes": 104.496917,
       "evaluated_completion_samples": 6,
       "shadow_would_reads": 0,
       "poll_reason_minutes": {
         "fixed_fallback": 390,
         "stable": 8086,
-        "before_decision": 565,
+        "before_decision": 564,
         "heating": 450,
-        "near_completion": 533,
+        "near_completion": 534,
         "ct_free": 56
       },
       "days": {
@@ -4233,8 +4221,8 @@
         },
         "2026-11-18": {
           "required_c": 62,
-          "max_daytime_c": 63.377803,
-          "at_peak_c": 63.051136,
+          "max_daytime_c": 63.650822,
+          "at_peak_c": 63.324155,
           "required_target_reached": true,
           "at_peak_storage_shortfall_kwh": 0.0
         },
@@ -4459,13 +4447,13 @@
           "target_c": 55
         },
         {
-          "at": "2026-11-18T04:02:00+00:00",
+          "at": "2026-11-18T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-18T04:04:00+00:00",
+          "at": "2026-11-18T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
@@ -4555,7 +4543,7 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T02:03:00+00:00",
+          "at": "2026-11-19T02:01:00+00:00",
           "reason": "storage_target_reached",
           "state": "normal_storage_62",
           "target_c": 62
@@ -4567,13 +4555,13 @@
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:09:00+00:00",
+          "at": "2026-11-19T04:00:00+00:00",
           "reason": "confirming_storage",
           "state": "confirming",
           "target_c": 62
         },
         {
-          "at": "2026-11-19T04:11:00+00:00",
+          "at": "2026-11-19T04:02:00+00:00",
           "reason": "weekday_solar_boost_continues",
           "state": "storage_70",
           "target_c": 70
