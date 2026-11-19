@@ -85,8 +85,9 @@ passing clouds or a later fall below 500 W do not end it. Inside the window,
 62 normal storage is planned with the EMHASS PV and household-load forecast to
 be ready by the storage-ready time (16:00, with the 30-minute completion
 margin); off-peak grid assistance is deliberately allowed. With no usable
-forecast it starts at once. If PV never opens the window and the tank needs
-heat, the latest start still meets the deadline. At 18:00 the thermostat target
+forecast it starts at once. If PV never opens the window, it opens at the
+latest start that still meets the deadline (15:30 for an already-warm tank,
+where 62 only lets the thermostat reheat an afternoon draw). At 18:00 the thermostat target
 returns to 45; that does not cool water already stored. The latch survives a
 restart for that day; configured peak restrictions still take precedence. See
 [the weekend strategy](../weekend/WEEKEND_STRATEGY.md).

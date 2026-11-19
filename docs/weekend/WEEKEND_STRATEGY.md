@@ -12,7 +12,7 @@ daylight-saving time exactly as before.
 | First fresh measured PV report ≥ 0.5 kW | window opens | One report is enough: no 15-minute qualification and no 09:00 start restriction. The report must be current (≤ 3 min), genuine (not restored) and numeric. |
 | Window open | Manual 62, scheduled | Planned to be ready by `storage_ready_time` (16:00) less the 30-minute completion margin, using the EMHASS PV and household-load forecast to choose the cheapest start. Off-peak grid assistance is permitted. Once 62 is selected it is not paused. |
 | Window open, no usable forecast | Manual 62 now | Conservative fallback: start immediately rather than wait blind. |
-| PV never opens the window and the tank needs heat | Manual 62 at the latest start | Firm deadline fallback, so evening hot water is not left to the weather. A warm tank (reading above 62 − 8 °C) is left at 45. **Confirmed by the owner on 19 November 2026**: 500 W PV is the preferred trigger, not an absolute requirement. |
+| PV never opens the window | Manual 62 at the latest start | Firm deadline fallback, so evening hot water is not left to the weather. A cold tank (or an unknown reading) opens early enough to reach 62 by the soft target; a warm 55–61 °C tank opens at the soft target (15:30). **Confirmed by the owner on 19 November 2026**: 500 W PV is the preferred trigger, not an absolute requirement. |
 | Genuine surplus qualifies | Manual 70 | Unchanged optional-boost test: 10 minutes of ≥ 3.3 kW measured export, economics, budgets, cooldown and withdrawal guards. |
 | Clouds, PV below 0.5 kW after opening | unchanged | The window stays latched until the end time. (The previous low-PV "sunset" early end is no longer used.) |
 | 18:00 (`weekend_end_time`) | Manual 45 | The thermostat target returns to baseline. This does **not** cool water already stored; the tank cools by use and standing loss. |
@@ -24,14 +24,14 @@ configured weekend peak, if any, still takes precedence.
 
 Tested in `tests/test_weekend_window_0_17_0.py`:
 
-- **No unnecessary heating.** It opens only if the tank needs heat (reading
-  at or below 62 − 8 °C, or unknown). A command is never sent on an old
-  status: the controller gate requires a status no older than the fixed poll
-  interval plus 5 minutes (35 minutes by default), otherwise the wanted
-  command first triggers a fresh read and the decision is re-made, so a warm
-  tank then sends nothing. The app also re-reads the heater's exact mode
-  immediately before any command. On the real controller, a cloudy
-  Saturday with a 60 °C tank sent no command at all.
+- **No unnecessary heating.** Manual 62 is a thermostat request: the native
+  thermostat heats only when the bottom probe is about 8 °C below it (≤ 54 °C).
+  A command is never sent on an old status: the controller gate requires a
+  status no older than the fixed poll interval plus 5 minutes (35 minutes by
+  default), otherwise the wanted command first triggers a fresh read. The app
+  also re-reads the heater's exact mode immediately before any command. On
+  the real controller, a cloudy Saturday with a 60 °C tank sent 62 at 15:30
+  and 45 at 18:00 and the element never ran.
 - **No repeated commands.** Once 62 is selected it is held and never paused;
   the window latch survives restarts; 18:00 ends the day and the end latch
   prevents reopening. A cloudy Saturday with a 40 °C tank sent exactly
@@ -44,6 +44,32 @@ Tested in `tests/test_weekend_window_0_17_0.py`:
   so it never consumes the optional solar budget. All controller gates
   (commissioning, essential command cap, request budget, exact-prior
   confirmation) apply unchanged.
+
+## Warm tank (55–61 °C bottom probe) on a day without PV
+
+Independent review, 19 November 2026. A 55–61 °C reading is inside the native
+8 °C hysteresis of a 62 target, so neither 45 nor 62 adds heat at that moment,
+and the controller cannot raise it to 62 without selecting 70 (which is
+reserved for qualified solar surplus). The difference is what happens next:
+
+- **Kept at 45** (the first 0.17.0 rule): the native thermostat would not
+  reheat until about 37 °C. An afternoon draw would be noticed only at the
+  next cloud reading, and Smart polling checks a quiet baseline as rarely as
+  every 90 minutes, so evening water could be well below normal storage.
+- **Selected 62 at the soft target** (the intended rule): the thermostat
+  itself reheats any draw that takes the probe to 54 °C or below, before
+  18:00, with no poll needed. No heat is added otherwise; the cost is the same
+  two commands (62, then 45 at 18:00) as any weekend day.
+
+The review also found that the first rule depended on polling timing: a
+reading that aged past 45 minutes at the deadline was treated as unknown, the
+window latched, and 62 was requested anyway. The intended rule removes that
+dependence: the window always opens by the latest start, and the reading only
+decides how early. Replay with a 58 °C tank and a 3 kWh draw at 16:30: the
+probe fell to 49.6 °C and was reheated to 61.6 °C by 18:00.
+
+The bottom probe is not a whole-tank temperature. "62 available" means the
+thermostat is maintaining a 62 target, not that every litre is at 62 °C.
 
 ## Retained settings
 

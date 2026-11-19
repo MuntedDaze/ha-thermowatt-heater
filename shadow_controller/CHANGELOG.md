@@ -8,8 +8,10 @@
 - Inside the window, 62 normal storage is planned to the storage-ready time
   (16:00 less the completion margin) with the EMHASS PV and household-load
   forecast, off-peak grid assistance permitted, and is not paused once
-  selected. No usable forecast: start at once. PV never opens the window and
-  the tank needs heat: the latest start still meets the deadline.
+  selected. No usable forecast: start at once. PV never opens the window:
+  it opens at the latest start (15:30 for a warm 55-61 C tank, where 62 is a
+  thermostat request that reheats an afternoon draw and adds no heat
+  otherwise).
 - 70 keeps the unchanged optional-boost test. 18:00 returns the thermostat
   target to 45 (stored water is not cooled by this).
 - `weekend_qualify_minutes`, `weekend_sunset_kw` and `weekend_sunset_minutes`

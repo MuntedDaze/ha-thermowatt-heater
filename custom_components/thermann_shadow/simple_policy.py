@@ -219,8 +219,13 @@ class SimplePolicy:
         (18:00), whatever the PV does. Inside it, 62 normal storage is planned
         economically against the storage-ready deadline using the published
         PV/household forecast, with off-peak grid assistance permitted. With no
-        usable forecast it starts at once. If PV never opens the window and the
-        tank needs heat, the latest start still meets the deadline. 70 uses the
+        usable forecast it starts at once. If PV never opens the window, the
+        deadline fallback opens it at the latest start: earlier when the tank
+        needs heat (or its reading is unknown), at the soft target when it is
+        already warm. Selecting 62 on a warm tank is a thermostat request: the
+        native thermostat heats only if the tank falls about 8 C below it, so an
+        afternoon draw is reheated before evening without waiting for a cloud
+        poll and no heat is added otherwise. 70 uses the
         unchanged optional-boost test. At the end time the thermostat target
         returns to 45; that does not cool the stored water.
         """
@@ -251,7 +256,7 @@ class SimplePolicy:
             else "measured_pv"
             if self.pv_window_open(now)
             else "deadline_fallback"
-            if would_heat and now >= latest
+            if now >= latest  # independent of the reading: warm -> latest == soft
             else None
         )
         day_active = opened_by is not None

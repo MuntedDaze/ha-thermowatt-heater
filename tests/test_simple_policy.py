@@ -384,8 +384,10 @@ def test_weekend_baseline_without_solar_until_the_deadline_fallback():
     assert (d.state, d.reason) == (BASE, "baseline")
     late = p.decide(snap(at(SUN, 15, 30), BASE, reading=40))
     assert late.state == STORE and late.plan["weekend_window_opened_by"] == "deadline_fallback"
+    # A warm tank opens at the soft target (15:30) as a thermostat request only.
+    assert p.decide(snap(at(SUN, 15, 29), BASE, reading=66)).state == BASE
     warm = p.decide(snap(at(SUN, 15, 30), BASE, reading=66))
-    assert warm.state == BASE  # no heat needed: the fallback never opens
+    assert warm.state == STORE and warm.reason == "weekend_daytime_storage"
 
 
 def test_weekend_requires_full_cover_and_waits_for_a_better_forecast():
@@ -655,11 +657,14 @@ def test_sim_friday_to_monday_weekend_then_weekday():
 def test_sim_cloudy_weekend_still_meets_the_evening_deadline():
     # 0.17.0: with no PV evidence the deadline fallback opens the window at the
     # latest start, normal storage is in place before 16:00 and the target
-    # returns to baseline at 18:00. Sunday's tank is still warm: no heat needed.
+    # returns to baseline at 18:00. Sunday's tank is still warm: the window
+    # opens at the soft target as a thermostat request (no heat is added).
     log, _ = simulate(at(SAT, 0), 48, 50, BASE, cloudy)
     assert log["commands"] == [
         ("Sat 12:42", STORE, "storage_latest_start"),
         ("Sat 18:00", BASE, "weekend_day_ended"),
+        ("Sun 15:30", STORE, "weekend_daytime_storage"),
+        ("Sun 18:00", BASE, "weekend_day_ended"),
     ]
     assert log["at"][(SAT, "16:00")] >= 62 and log["at"][(SUN, "16:00")] >= 62
 
@@ -669,7 +674,10 @@ def test_sim_weekend_solar_session_is_not_interrupted_by_a_passing_cloud():
         return cloudy(loc) if loc.hour == 12 and loc.minute < 15 else sunny_summer(loc)
 
     log, _ = simulate(at(SAT, 6), 14, 44, BASE, cloud_at_noon, forecast_pv=sunny_summer)
-    assert [c[1] for c in log["commands"]] == [STORE, BASE], log["commands"]
+    # This pure simulation feeds no PV reports, so only the 15:30 deadline
+    # fallback (re)opens the evening window after the noon import withdrawal.
+    assert [c[1] for c in log["commands"]] == [STORE, BASE, STORE, BASE], log["commands"]
+    assert log["commands"][2][2] == "weekend_daytime_storage"
     assert log["at"][(SAT, "16:00")] >= 62  # in the Manual 70 band
 
 

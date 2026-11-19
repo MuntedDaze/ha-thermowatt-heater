@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import sys
 
@@ -79,12 +80,26 @@ def test_selected_62_is_never_paused_inside_the_window():
     assert (d.state, d.command) == (NORMAL, None)
 
 
-@pytest.mark.parametrize("reading,opens", [(40, True), (55, False)])
-def test_deadline_fallback_only_when_the_tank_needs_heat(reading, opens):
+@pytest.mark.parametrize("reading", [40, 50, 54])
+def test_deadline_fallback_opens_early_enough_to_heat_a_cold_tank(reading):
+    d = policy().decide(snap(at(SAT, 15), BASE, reading=reading, heater_meter_valid=False))
+    assert d.plan.get("weekend_window_opened_by") == "deadline_fallback"
+    assert d.command == "Manual:62" and d.plan["heating_hours"] > 0
+
+
+@pytest.mark.parametrize("reading", [55, 56, 58, 60, 61])
+def test_warm_55_to_61_tank_gets_62_at_the_soft_target_as_a_thermostat_request(reading):
+    """Owner review, 19 Nov: a 55-61 C bottom probe is inside the native 8 C
+    hysteresis of 62, so selecting 62 adds no heat now. Keeping 45 instead
+    would leave an afternoon draw unreheated until a cloud poll noticed it.
+    The window therefore opens at the soft target and selects 62."""
     p = policy()
-    d = p.decide(snap(at(SAT, 15), BASE, reading=reading, heater_meter_valid=False))
-    assert (d.plan.get("weekend_window_opened_by") == "deadline_fallback") is opens
-    assert (d.state == NORMAL) is opens
+    early = p.decide(snap(at(SAT, 15, 29), BASE, reading=reading, heater_meter_valid=False))
+    assert early.state == BASE and "weekend_window_opened_by" not in early.plan
+    d = p.decide(snap(at(SAT, 15, 30), BASE, reading=reading, heater_meter_valid=False))
+    assert d.plan["weekend_window_opened_by"] == "deadline_fallback"
+    assert (d.command, d.reason) == ("Manual:62", "weekend_daytime_storage")
+    assert d.plan["heating_hours"] == 0  # no heat is planned or expected
 
 
 def test_unknown_temperature_plans_conservatively_and_still_meets_the_deadline():
@@ -183,10 +198,16 @@ def test_fallback_heat_is_essential_not_an_optional_solar_start():
     assert d.plan["heating_role"] == "weekend_comfort"
 
 
-@pytest.mark.parametrize("reading,expected", [(40, ["Manual:62", "Manual:45"]), (60, [])])
-def test_real_controller_cloudy_saturday_sends_each_command_once(
-    tmp_path, monkeypatch, reading, expected
+@pytest.mark.parametrize(
+    "reading,draw_kwh,heats",
+    [(40, 0.0, True), (60, 0.0, False), (58, 3.0, True)],
+)
+def test_real_controller_cloudy_saturday_sends_62_then_45_once(
+    tmp_path, monkeypatch, reading, draw_kwh, heats
 ):
+    """Cold tank: heated by the deadline. Warm tank: 62 is a thermostat request
+    with no heating. Warm tank plus a 16:30 draw: reheated before 18:00 by the
+    native thermostat, without waiting for a cloud poll."""
     from test_integration_0_9_0 import Rig, hobart
 
     rig = Rig(
@@ -202,8 +223,17 @@ def test_real_controller_cloudy_saturday_sends_each_command_once(
     rig.runtime.apply_options(rig.entry.options, rig.sources)
     rig.executor.configure(rig.entry.options)
     rig.enable()
-    rig.run(hobart(14, 18, 30))
+    heated = []
+
+    def minute(r):
+        local = r.now().astimezone(ZoneInfo("Australia/Hobart"))
+        if draw_kwh and (local.hour, local.minute) == (16, 30):
+            r.tank.t -= draw_kwh / (315 * 4.186 / 3600)
+        heated.append(r.tank.element)
+
+    rig.run(hobart(14, 18, 30), minute)
     sent = [payload.split("@")[0] for payload in rig.commands()]
-    assert sent == expected, rig.commands()
-    if expected:
-        assert rig.tank.t >= 61 or rig.tank.setpoint == 45
+    assert sent == ["Manual:62", "Manual:45"], rig.commands()
+    assert any(heated) is heats
+    if draw_kwh:
+        assert rig.tank.t >= 59  # reheated before the evening
