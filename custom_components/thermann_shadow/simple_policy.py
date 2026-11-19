@@ -287,11 +287,24 @@ class SimplePolicy:
             self._gap_start = self.samples[-1][0]
 
     def _unmeasured_within(self, start: datetime, end: datetime) -> timedelta:
-        total = timedelta(0)
-        for a, b in self.unmeasured:
-            overlap = min(b, end) - max(a, start)
-            if overlap > timedelta(0):
-                total += overlap
+        """Exact length of the UNION of unmeasured intervals inside [start, end].
+
+        Overlapping or adjacent intervals are merged first, so no unmeasured
+        time is counted twice and none is missed.
+        """
+        clipped = sorted(
+            (max(a, start), min(b, end)) for a, b in self.unmeasured if min(b, end) > max(a, start)
+        )
+        total, run_start, run_end = timedelta(0), None, None
+        for a, b in clipped:
+            if run_end is None or a > run_end:
+                if run_end is not None:
+                    total += run_end - run_start
+                run_start, run_end = a, b
+            else:
+                run_end = max(run_end, b)
+        if run_end is not None:
+            total += run_end - run_start
         return total
 
     def _window(self, now: datetime, window: timedelta):
@@ -331,21 +344,35 @@ class SimplePolicy:
         )
 
     def surplus_qualified(self, now: datetime) -> bool:
-        def test(sample):
-            return sample[2] >= self.s.peak_start_kw
+        """At least ``qualify`` of MEASURED time with every report passing.
 
-        # Measured time only: an unmeasured gap pauses the 10-minute timer.
-        need = self.s.qualify
-        if self.unmeasured and self.samples:
-            latest = self.samples[-1][0]
-            for _ in range(4):  # gaps are short and bounded; converges quickly
-                need = self.s.qualify + self._unmeasured_within(latest - need, latest)
-        recent = self._coverage(self.samples, now, need)
-        return (
-            bool(recent)
-            and (self.surplus_reset_at is None or recent[0][0] > self.surplus_reset_at)
-            and all(test(sample) for sample in recent)
-        )
+        Walk back from the latest report. Every report on the way must be
+        genuine (no report gap over the meter age), after the last reset and
+        at or above the start threshold. The window qualifies at the first
+        report where elapsed time minus the exact union of unmeasured time
+        reaches ``qualify``. There is no iteration limit: the walk is bounded
+        by the retained reports, and running out of reports fails closed.
+        """
+        if (
+            not self.samples
+            or not timedelta(0) <= now - self.samples[-1][0] <= self.s.meter_max_age
+        ):
+            return False
+        if self._gap_start is not None:
+            return False  # a gap is still open: adequate evidence not established
+        latest, newer = self.samples[-1][0], None
+        for at, _import_kw, available, _element_on in reversed(self.samples):
+            if newer is not None and newer - at > self.s.meter_max_age:
+                return False
+            if self.surplus_reset_at is not None and at <= self.surplus_reset_at:
+                return False
+            if available < self.s.peak_start_kw:
+                return False
+            measured = (latest - at) - self._unmeasured_within(at, latest)
+            if measured >= self.s.qualify:
+                return True
+            newer = at
+        return False
 
     @staticmethod
     def optional_measurement_valid(snap):

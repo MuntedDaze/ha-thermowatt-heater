@@ -137,6 +137,8 @@ or permit a command using stale meter data.
 |---|---|---|
 | A valueless report adds a vote | Never: no sample is added on either the event or the decision path | `test_unavailable_report_before_a_session_pauses_but_never_satisfies` |
 | Gap time counts toward the 10 minutes | Never: the interval from the last measured report to the next one is excluded, and qualification needs 10 measured minutes | `test_gap_time_never_counts_as_confirmed_export` |
+| Measured time is computed exactly | Walk back from the latest report; qualify at the first report where elapsed time minus the **union** of unmeasured intervals reaches 10 minutes. No iteration limit; overlapping/adjacent gaps merged; running out of reports, an open gap, a stale latest report or a report hole over 3 min fails closed | `test_reviewer_case_three_two_minute_gaps_needs_ten_measured_minutes`, `test_overlapping_or_adjacent_intervals_are_merged_exactly`, `test_consecutive_missing_reports_form_one_interval_not_double_counted`, `test_repeated_short_gaps_accrue_only_measured_time`, `test_irregular_report_spacing_without_gaps_qualifies_exactly_at_ten_minutes`, `test_report_spacing_over_the_meter_age_never_qualifies`, `test_stale_latest_report_or_open_gap_fails_closed`, `test_report_timestamps_cannot_be_duplicated_or_reordered_into_votes`, `test_measured_below_threshold_report_still_resets_after_gaps`, `test_reset_marker_is_still_honoured` |
+| Withdrawal unaffected | Import withdrawal keeps its elapsed-time rule; gaps never extend or shorten it | `test_unmeasured_intervals_never_change_import_withdrawal` |
 | A start on a tick whose latest report has no value | Never: `optional_start_quality = grid_measurement_missing` rejects every optional start (CT-free); a CT site additionally loses its paired power budget, so the 0.16.1 reset still applies there | `test_no_optional_start_on_a_tick_whose_meter_report_has_no_value[ct]` |
 | A start on old samples | Never: latest measured report ≤ 3 min old and fresh within the 120 s grid age on the start tick; a gap > 3 min breaks coverage | `test_an_outage_longer_than_the_meter_age_still_breaks_qualification` |
 | Required (non-optional) heat uses the gap | No: required planning uses `required_export_kw`, which is `None` without a current value | code: `Snapshot.required_export_kw` |
@@ -145,9 +147,17 @@ or permit a command using stale meter data.
 
 The review found that the first version (before this revision) let gap time
 count toward the 10 minutes and relied on the CT-free validity check alone to
-block a start on the gap tick. Both are corrected: gaps now pause, and an
+block a start on the gap tick. Both were corrected: gaps pause, and an
 explicit `grid_measurement_missing` reason blocks starts on every
 installation type.
+
+An independent review then found that the pause used a fixed four-pass
+estimate of the window length, which could stop before counting every gap.
+Reproduced: valid reports at minutes 4, 6, 8, 9, 11–19 with missing reports at
+5, 7 and 10 give unmeasured intervals [4,6], [6,8], [9,11]; at minute 19 only
+9 of 15 elapsed minutes were measured, but the four-pass estimate returned
+qualified. Replaced by the exact calculation above: minute 19 is now not
+qualified and minute 20 (10 measured minutes) is.
 
 ## Effect on the existing week and seasonal evidence
 

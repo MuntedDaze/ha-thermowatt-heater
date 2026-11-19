@@ -184,3 +184,128 @@ def test_replay_peak_lockout_remains_the_designed_morning_restriction():
     row = _run("clear_peak_never")
     assert row["thursday_posts"] == [["07:58", "off"], ["11:00", 70]]
     assert row["qualified_minutes_blocked_by"] == {"peak_heating_locked_out | peak_lockout": 120}
+
+
+# --- exact measured-duration qualification (independent review, 19 Nov) ---------------
+
+
+def _policy():
+    from test_simple_policy import S, TARIFFS, sp
+
+    return sp.SimplePolicy(S, TARIFFS)
+
+
+def _t(minute):
+    from test_simple_policy import at, MON
+
+    return at(MON, 12) + timedelta(minutes=minute)
+
+
+def _feed(p, valid, missing=(), kw=-4.0, upto=None):
+    """Replay reports in time order; returns {minute: qualified}."""
+    out = {}
+    events = sorted([(m, "ok") for m in valid] + [(m, "gap") for m in missing])
+    for minute, kind in events:
+        if kind == "gap":
+            p.note_missing()
+        else:
+            p.add_meter(_t(minute), kw(minute) if callable(kw) else kw, heater_kw=0)
+            out[minute] = p.surplus_qualified(_t(minute))
+    return out
+
+
+def test_reviewer_case_three_two_minute_gaps_needs_ten_measured_minutes():
+    p = _policy()
+    valid = [4, 6, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    result = _feed(p, valid, missing=[5, 7, 10])
+    assert [
+        (round((a - _t(0)).total_seconds() / 60), round((b - _t(0)).total_seconds() / 60))
+        for a, b in p.unmeasured
+    ] == [(4, 6), (6, 8), (9, 11)]
+    # Minute 19: 15 elapsed, 6 unmeasured, 9 measured -> NOT qualified.
+    assert result[19] is False
+    assert result[20] is True  # 16 elapsed - 6 unmeasured = 10 measured
+
+
+def test_consecutive_missing_reports_form_one_interval_not_double_counted():
+    p = _policy()
+    result = _feed(p, [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12], missing=[4, 4.5])
+    assert len(p.unmeasured) == 1  # [3, 5]
+    assert result[11] is False and result[12] is True
+
+
+def test_overlapping_or_adjacent_intervals_are_merged_exactly():
+    p = _policy()
+    p.unmeasured.extend([(_t(2), _t(5)), (_t(4), _t(6)), (_t(6), _t(7)), (_t(9), _t(10))])
+    assert p._unmeasured_within(_t(0), _t(20)) == timedelta(minutes=6)  # [2,7] + [9,10]
+    assert p._unmeasured_within(_t(3), _t(9.5)) == timedelta(minutes=4.5)
+
+
+def test_irregular_report_spacing_without_gaps_qualifies_exactly_at_ten_minutes():
+    p = _policy()
+    result = _feed(p, [0, 2.5, 3.0, 5.75, 8.0, 9.9, 10.0])
+    assert result[9.9] is False and result[10.0] is True
+
+
+def test_report_spacing_over_the_meter_age_never_qualifies():
+    p = _policy()
+    result = _feed(p, [0, 2, 5.5, 8, 10, 12, 14])  # 2 -> 5.5 exceeds 3 minutes
+    assert result[12] is False  # the window cannot reach back across the hole
+    assert result[14] is False  # 5.5 -> 14 is only 8.5 minutes
+
+
+def test_repeated_short_gaps_accrue_only_measured_time():
+    p = _policy()
+    valid = [m for m in range(0, 30, 2)]  # a report every 2 min
+    missing = [m + 1 for m in range(0, 28, 2)]  # each followed by a valueless one
+    result = _feed(p, valid, missing=missing)
+    # Every 2-minute interval is unmeasured: measured time never accumulates.
+    assert not any(result.values())
+
+
+def test_stale_latest_report_or_open_gap_fails_closed():
+    p = _policy()
+    _feed(p, list(range(0, 12)))
+    assert p.surplus_qualified(_t(11))
+    assert not p.surplus_qualified(_t(11) + timedelta(minutes=3, seconds=1))  # stale
+    p.note_missing()  # a gap is open now
+    assert not p.surplus_qualified(_t(11) + timedelta(seconds=30))
+
+
+def test_report_timestamps_cannot_be_duplicated_or_reordered_into_votes():
+    p = _policy()
+    for _ in range(20):
+        p.add_meter(_t(0), -4, heater_kw=0)  # the same report repeated
+    p.add_meter(_t(5), -4, heater_kw=0)
+    p.add_meter(_t(3), -4, heater_kw=0)  # older than the latest: ignored
+    assert len(p.samples) == 2 and not p.surplus_qualified(_t(5))
+
+
+def test_measured_below_threshold_report_still_resets_after_gaps():
+    p = _policy()
+    result = _feed(
+        p,
+        list(range(0, 4)) + list(range(6, 30)),
+        missing=[5],
+        kw=lambda m: -1.0 if m == 12 else -4.0,
+    )
+    assert result[13] is False and result[22] is False
+    assert result[23] is True  # ten measured minutes from the first passing report (13)
+
+
+def test_reset_marker_is_still_honoured():
+    p = _policy()
+    _feed(p, list(range(0, 12)))
+    p.surplus_reset_at = _t(5)
+    assert not p.surplus_qualified(_t(11))
+
+
+def test_unmeasured_intervals_never_change_import_withdrawal():
+    p = _policy()
+    for minute in range(0, 4):
+        p.add_meter(_t(minute), 0.5, heater_kw=0)
+    p.note_missing()
+    for minute in range(5, 12):
+        p.add_meter(_t(minute), 0.5, heater_kw=0)
+    # Withdrawal keeps its original elapsed-time rule (no extension by gaps).
+    assert p.importing_continuously(_t(11))
