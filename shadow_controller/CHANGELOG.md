@@ -8,12 +8,14 @@
   today's 11:00 optional budget (it used the count from the previous tick and
   an inclusive boundary). The six-command cap, the essential allowance, the
   request reserve and OFF exemptions are unchanged.
-- A current GoodWe report with no value (`unavailable`/`unknown`) is a gap, not
-  a below-threshold vote. Before any optional session it no longer erases
-  earlier genuine 3.3 kW export votes; the existing 3-minute gap and freshness
-  limits still expire evidence, no start is made on the tick without a value,
-  and an active session keeps the latched protective loss exactly as before.
-  Implausible, unverified or uncommissioned meter reports still reset.
+- A current GoodWe report with no value (`unavailable`/`unknown`) is
+  unmeasured time, never a vote. Before any optional session it pauses the
+  10-minute export qualification (only measured >= 3.3 kW time counts)
+  instead of erasing earlier genuine votes. No optional start is made on a
+  tick whose latest report has no value (`grid_measurement_missing`); the
+  3-minute gap and freshness limits still apply; an active session keeps the
+  latched protective loss exactly as before. Implausible, unverified or
+  uncommissioned reports, and any measured report below 3.3 kW, still reset.
 - Owner events record the command gate that held a wanted change and the
   rolling command count, so a future delay can be attributed from timestamps.
 - Synthetic mechanism replay: `tools/morning_solar_delay_replay.py`; findings

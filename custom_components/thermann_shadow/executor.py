@@ -565,7 +565,9 @@ class Executor:
                 at = min(at, runtime.circuit.observed_at)
             if at is not None:
                 self.policy.add_meter(at, grid, heater_kw=watts / 1000)
-        elif not missing_gap:
+        elif missing_gap:
+            self.policy.note_missing()  # unmeasured: pauses qualification, never votes
+        else:
             self.policy.samples.clear()  # a loss breaks qualification continuity
         if runtime.power_budget is None and not ct_free_valid and not missing_gap:
             self.policy.samples.clear()
@@ -590,7 +592,11 @@ class Executor:
             and not runtime.solar_input_loss_pending,
             ct_free_solar_valid=ct_free_valid and not runtime.solar_input_loss_pending,
             optional_measurement_lost=runtime.solar_input_loss_pending,
-            optional_start_quality=site_quality
+            # No optional start is ever made on a tick whose latest meter
+            # report has no value, CT or CT-free, whatever earlier votes say.
+            optional_start_quality="grid_measurement_missing"
+            if missing_gap
+            else site_quality
             if ct_free_valid and not runtime.ct_free_solar_start_ready
             else None,
             optional_adoption_ready=controller.solar_adoption_ready(obs, self.cfg),

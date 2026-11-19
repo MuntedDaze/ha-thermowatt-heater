@@ -63,7 +63,9 @@ class MorningRun(SmartWeek):
         sunrise, sunset = 5.7, 20.6
         if not sunrise <= hour <= sunset:
             return 0.0
-        clear = 6.2 * math.sin(math.pi * (hour - sunrise) / (sunset - sunrise))
+        clear = self.scenario.get("pv_peak_kw", 6.2) * math.sin(
+            math.pi * (hour - sunrise) / (sunset - sunrise)
+        )
         dip = self.scenario.get("cloud_dips")
         if dip and local.day == THURSDAY and 7 <= local.hour < 12 and local.minute % dip == 0:
             clear *= 0.45  # one minute of passing cloud
@@ -112,6 +114,12 @@ class MorningRun(SmartWeek):
             # One evaluated report where the GoodWe integration is unavailable.
             self.report(EXPORT_W, "unavailable", {"unit_of_measurement": "W"})
             self.blips += 1
+        bias = self.scenario.get("house_bias_kw")
+        if bias and local.day == THURSDAY and 6 <= local.hour < 12 and local.minute % 3 == 0:
+            # GoodWe house-consumption sensor out of step with grid/PV on one
+            # report in three (timing skew): whole-site balance inconsistent.
+            house = 0.5 + (3.0 if self.tank.element else 0.0) + bias
+            self.report(base.c.DEFAULT_SOURCES["house"], house * 1000, {"unit_of_measurement": "W"})
 
     def actions(self, local):
         return None
@@ -119,6 +127,8 @@ class MorningRun(SmartWeek):
     def demand(self, local):
         """Showers 07:00 and 19:00, plus a larger Wednesday evening draw."""
         kwh = 2.5 if (local.hour, local.minute) in ((7, 0), (19, 0)) else 0.0
+        if self.scenario.get("light_use") and local.day in (18, THURSDAY):
+            kwh *= 0.2  # little hot-water use: the tank is still warm on Thursday
         if local.day == 18 and (local.hour, local.minute) == (20, 0):
             kwh += self.scenario.get("wednesday_extra_kwh", 2.0)
         return kwh
@@ -285,6 +295,30 @@ SCENARIOS = [
         "description": "Peak Never; patchy Wednesday, clear Thursday, rolling command cap 8.",
         "patchy_wednesday": True,
         "max_commands": 8,
+    },
+    {
+        "name": "solar_only_early_strong_pv",
+        "description": "Solar-only peak; large DC array clipped at 5 kW AC: 3.3 kW export from about 07:10.",
+        "peak_policy": "Verified solar-only heating",
+        "pv_peak_kw": 14.0,
+    },
+    {
+        "name": "solar_only_warm_tank",
+        "description": "Solar-only peak; light hot-water use, tank still warm Thursday morning.",
+        "peak_policy": "Verified solar-only heating",
+        "light_use": True,
+    },
+    {
+        "name": "solar_only_goodwe_house_skew",
+        "description": "Solar-only peak; GoodWe house reading out of step on one report in three.",
+        "peak_policy": "Verified solar-only heating",
+        "house_bias_kw": 1.0,
+    },
+    {
+        "name": "solar_only_goodwe_unavailable",
+        "description": "Solar-only peak; one 'unavailable' GoodWe report every 7 min, 06:00-12:00.",
+        "peak_policy": "Verified solar-only heating",
+        "goodwe_unavailable_every": 7,
     },
     {
         "name": "command_cap_8",

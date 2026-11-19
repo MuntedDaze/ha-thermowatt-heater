@@ -286,11 +286,13 @@ class ShadowRuntime:
         elif not self.settings.meter_verified:
             self._solar_input_loss()
         elif kw is None:
-            # 1.4.2/0.16.2: a valueless report is a gap. Before any optional
-            # session it no longer erases genuine qualification votes; during
-            # one it keeps the existing latched protective loss.
+            # 0.16.2: a valueless report is unmeasured time. Before any optional
+            # session it pauses (never satisfies) qualification instead of
+            # erasing genuine votes; during one it keeps the latched loss.
             if self._optional_active():
                 self._solar_input_loss()
+            else:
+                self.executor.policy.note_missing()
         else:
             signed = kw if self.settings.import_positive else -kw
             policy = self.executor.policy

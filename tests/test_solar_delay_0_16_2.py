@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from test_integration_0_9_0 import Rig, hobart, c
+from test_integration_0_9_0 import Rig, hobart, drive, c
 from test_existing_installation_upgrade import ct_free
 from test_audit_regressions_0_9_1 import controller_ready
 
@@ -50,7 +50,7 @@ def ct_free_rig(tmp_path, monkeypatch):
     return rig
 
 
-def test_unavailable_report_before_a_session_is_a_gap_not_a_reset(tmp_path, monkeypatch):
+def test_unavailable_report_before_a_session_pauses_but_never_satisfies(tmp_path, monkeypatch):
     rig = ct_free_rig(tmp_path, monkeypatch)
     p, now = rig.executor.policy, rig.now()
     for i in range(10):
@@ -58,7 +58,27 @@ def test_unavailable_report_before_a_session_is_a_gap_not_a_reset(tmp_path, monk
     captured(rig, "unavailable", now - timedelta(seconds=30))
     assert len(p.samples) == 10 and not rig.runtime.solar_input_loss_pending
     captured(rig, 4000, now)
-    assert p.surplus_qualified(now)
+    # The minute around the gap is unmeasured: 10 elapsed minutes contain
+    # only 9 measured ones, so qualification is NOT yet satisfied.
+    assert not p.surplus_qualified(now)
+    captured(rig, 4000, now + MIN)
+    assert p.surplus_qualified(now + MIN)
+
+
+def test_gap_time_never_counts_as_confirmed_export():
+    from test_simple_policy import S, TARIFFS, sp, at, MON
+
+    p = sp.SimplePolicy(S, TARIFFS)
+    t0 = at(MON, 12)
+    for minute in range(5):
+        p.add_meter(t0 + minute * MIN, -4, heater_kw=0)
+    p.note_missing()  # minutes 4 -> 7 are unmeasured
+    for minute in range(7, 14):
+        p.add_meter(t0 + minute * MIN, -4, heater_kw=0)
+        assert p.surplus_qualified(t0 + minute * MIN) is (minute >= 13), minute
+    # A failing measured report after the gap still resets as before.
+    p.add_meter(t0 + 14 * MIN, -1, heater_kw=0)
+    assert not p.surplus_qualified(t0 + 14 * MIN)
 
 
 def test_an_outage_longer_than_the_meter_age_still_breaks_qualification(tmp_path, monkeypatch):
@@ -93,18 +113,49 @@ def test_implausible_or_unverified_reports_still_reset(tmp_path, monkeypatch):
     assert not p.samples
 
 
-def test_decision_tick_during_a_gap_keeps_votes_but_never_starts(tmp_path, monkeypatch):
-    rig = ct_free_rig(tmp_path, monkeypatch)
+@pytest.mark.parametrize("ct", [False, True])
+def test_no_optional_start_on_a_tick_whose_meter_report_has_no_value(tmp_path, monkeypatch, ct):
+    rig = Rig(
+        tmp_path,
+        monkeypatch,
+        hobart(19, 11, 30),
+        mode="Manual",
+        setpoint=45,
+        reading=45,
+        pv=lambda local: 6.5,
+    )
+    if not ct:
+        ct_free(rig)
+    rig.entry.options.update(normal_storage_c="62")
+    rig.runtime.apply_options(rig.entry.options, rig.sources)
+    rig.executor.configure(rig.entry.options)
+    rig.pv = lambda local: 0.0
     rig.enable()
-    rig.run(rig.now() + 12 * MIN)
+    rig.run(rig.now() + 35 * MIN)  # a confirmed status after enabling, no export yet
+    assert rig.executor.controller.state != "observing"
+    rig.pv = lambda local: 6.5
+    rig.run(rig.now() + 9 * MIN)  # nine minutes of strong export: not yet qualified
     p = rig.executor.policy
-    votes = len(p.samples)
+    rig.t += 60
+    rig.tank.minute(rig.t)
+    rig._meter()
+    rig.report("sensor.synthetic_heater_w", 0, {"unit_of_measurement": "W"})
+    # Ten minutes have elapsed, but the latest grid report has no value.
     rig.report(c.DEFAULT_SOURCES["grid"], "unavailable", {"unit_of_measurement": "W"})
+    before = list(rig.commands())
     rig.runtime.update(rig.now())
-    decision, _ = rig.executor.decide(rig.now(), rig.executor.observe(rig.now()))
-    assert len(p.samples) == votes  # a gap: nothing erased, nothing added
-    assert decision.plan.get("boost_reason") != "useful_solar_value_exceeds_margin"
-    assert not decision.command or not decision.command.startswith("Manual:70")
+    drive(rig.executor.async_step(rig.now()))
+    plan = rig.executor.last_decision.plan
+    assert rig.commands() == before  # nothing sent on stale meter data
+    assert not p.surplus_qualified(rig.now())  # and the gap counted for nothing
+    if ct:
+        # A CT installation needs a paired fresh grid report for its power
+        # budget, so the gap still resets qualification exactly as in 0.16.1.
+        assert plan["boost_reason"] == "verified_circuit_and_grid_required"
+        assert not p.samples
+    else:
+        assert plan["boost_reason"] == "grid_measurement_missing"
+        assert len(p.samples) >= 9  # earlier genuine votes kept (a pause, not a reset)
 
 
 def _run(name):
@@ -125,7 +176,7 @@ def test_replay_patchy_day_does_not_reserve_the_next_boundary_boost():
 
 def test_replay_isolated_goodwe_gaps_no_longer_force_normal_first():
     row = _run("goodwe_unavailable_every_7_min")
-    assert row["first_qualified_export"] == "09:00"
+    assert row["first_qualified_export"] == "09:06"  # gap minutes paused, not counted
     assert row["thursday_posts"][1] == ["11:00", 70]
 
 

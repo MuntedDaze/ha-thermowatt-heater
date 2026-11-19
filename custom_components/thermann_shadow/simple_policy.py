@@ -154,6 +154,11 @@ class SimplePolicy:
         self.pv_samples: deque[tuple[datetime, float]] = deque()
         self.surplus_reset_at: datetime | None = None
         self.import_reset_at: datetime | None = None
+        # 0.16.2: unmeasured intervals (last measured report -> next measured
+        # report) around a valueless meter report. They never vote; they pause
+        # the export-qualification timer instead of resetting it.
+        self.unmeasured: deque[tuple[datetime, datetime]] = deque()
+        self._gap_start: datetime | None = None
         self._peak_cache: tuple[datetime, datetime | None, datetime] | None = None
 
     # --- local meter ---------------------------------------------------------------
@@ -256,6 +261,11 @@ class SimplePolicy:
             return
         if self.samples and at <= self.samples[-1][0]:
             return  # the same HA report cannot become extra qualification votes
+        if not self.samples:
+            self._gap_start = None  # nothing measured before it to bridge
+        elif self._gap_start is not None:
+            self.unmeasured.append((self._gap_start, at))
+            self._gap_start = None
         # Boolean input is retained for synthetic pure-policy tank simulations.
         # The runtime always supplies actual CT kW explicitly.
         measured = heater_kw if heater_kw is not None else self.s.element_kw if element_on else 0.0
@@ -266,6 +276,23 @@ class SimplePolicy:
         cutoff = at - 2 * max(self.s.qualify, self.s.withdraw)
         while self.samples and self.samples[0][0] < cutoff:
             self.samples.popleft()
+        while self.unmeasured and self.unmeasured[0][1] < cutoff:
+            self.unmeasured.popleft()
+
+    def note_missing(self) -> None:
+        """A current meter report carried no value. It is never a vote: the
+        time from the last measured report until the next one is unmeasured
+        and does not count toward sustained export."""
+        if self.samples and self._gap_start is None:
+            self._gap_start = self.samples[-1][0]
+
+    def _unmeasured_within(self, start: datetime, end: datetime) -> timedelta:
+        total = timedelta(0)
+        for a, b in self.unmeasured:
+            overlap = min(b, end) - max(a, start)
+            if overlap > timedelta(0):
+                total += overlap
+        return total
 
     def _window(self, now: datetime, window: timedelta):
         return [smp for smp in self.samples if now - window <= smp[0] <= now]
@@ -307,7 +334,13 @@ class SimplePolicy:
         def test(sample):
             return sample[2] >= self.s.peak_start_kw
 
-        recent = self._coverage(self.samples, now, self.s.qualify)
+        # Measured time only: an unmeasured gap pauses the 10-minute timer.
+        need = self.s.qualify
+        if self.unmeasured and self.samples:
+            latest = self.samples[-1][0]
+            for _ in range(4):  # gaps are short and bounded; converges quickly
+                need = self.s.qualify + self._unmeasured_within(latest - need, latest)
+        recent = self._coverage(self.samples, now, need)
         return (
             bool(recent)
             and (self.surplus_reset_at is None or recent[0][0] > self.surplus_reset_at)

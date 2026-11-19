@@ -58,7 +58,7 @@ polling, production forecast haircut and margin, 315 L / 3 kW tank, showers
 | Clear, peak Never | 09:00 | OFF 07:58, **70 at 11:00** | unchanged |
 | Clear, peak solar-only | 09:00 | OFF 07:58, **70 at 09:00** | unchanged |
 | Patchy Wednesday, clear Thursday | 09:00 | OFF, **62 at 11:00, 70 at 13:41** (`optional_budget_reserved_for_essential_heat`) | OFF, **70 at 11:00** |
-| One GoodWe `unavailable` every 7 min (06:00–12:00) | 13:07 (0.16.1) / 09:00 (0.16.2) | OFF, **62 at 11:00, 70 at 13:07** | OFF, **70 at 11:00**, in-session gap withdraws at 11:17, 70 again 13:07 |
+| One GoodWe `unavailable` every 7 min (06:00–12:00) | 13:07 (0.16.1) / 09:06 (0.16.2, gap minutes paused) | OFF, **62 at 11:00, 70 at 13:07** | OFF, **70 at 11:00**, in-session gap withdraws at 11:17, 70 again 13:07 |
 | Passing cloud (45 % PV for 1 min every 9 min) | 13:31 | OFF, 62 at 11:23, 70 at 13:31 | unchanged (genuine measured shortfall) |
 | Household forecast flat 1.2 kW | 09:00 | OFF, 62 at 11:00, 70 at 13:06 (`boost_value_below_switching_margin`) | unchanged |
 | PV forecast 60 % of actual | 09:00 | OFF, 62 at 11:00, 70 at 13:06 | unchanged |
@@ -67,7 +67,8 @@ polling, production forecast haircut and margin, 315 L / 3 kW tank, showers
 What this shows (synthetic, not live evidence):
 
 - With peak policy *Never*, a clear weekday always waits for 11:00 AEDT.
-  This is the single largest delay and it is an owner setting, not a defect.
+  **The owner's live configuration is *Verified solar-only heating*, so this
+  is not the explanation for 19 November** (see the next section).
 - After a day with boost/withdraw churn, the recurring-boundary count made
   the optional budget appear full at exactly 11:00; the required 62 °C start
   then ran first and 70 °C waited about 2¾ h. Fixed.
@@ -76,22 +77,77 @@ What this shows (synthetic, not live evidence):
 - Forecast quality decides whether 11:00 goes straight to 70 °C or to 62 °C
   first. Raising the command cap does not change any of these mornings.
 
+## Under the owner's live setting: verified solar-only peak heating
+
+Same harness, peak policy *Verified solar-only heating*. Thursday times AEDT.
+
+| Scenario | Export first qualified | Thursday commands | What held the boost |
+|---|---|---|---|
+| Clear (5 kW-class array) | 09:00 | OFF 07:58, **70 at 09:00** | nothing |
+| Large DC array clipped at 5 kW: export from about 07:10 | 07:11 | **70 at 07:58** | 46 min `boost_cannot_finish_before_peak` before the peak; 07:43–07:58 command reservation |
+| GoodWe house reading out of step on 1 report in 3 | 09:00 | 70 at 09:01 | 1 min `grid_sign_or_whole_house_balance_inconsistent` |
+| Still-warm tank (light use) | 09:00 | 70 at 09:00 | nothing (tank had cooled below 62) |
+| **GoodWe `unavailable` every 7 min** | 09:06 | 70 09:06, **OFF 09:10**, 70 09:25, **OFF 09:31**, 62 at 11:00 | in-session gaps force protective peak OFF; the budget is then full: 197 min `optional_budget_reserved_for_essential_heat` |
+
+Mechanisms that remain plausible for 19 November under solar-only (none is
+proven without the live exports):
+
+1. **Meter gaps during a peak solar session** cause a protective OFF, a
+   cooldown and a restart. Each costs two commands, and after a few the
+   six-command budget blocks further boosts for hours. This is the closest
+   synthetic match to "surplus visible, no boost". The protection is
+   deliberate and unchanged (proposal P3).
+2. **Surplus before 07:43**: the pre-peak opportunity test requires a boost
+   to finish before the peak, even though solar-only would let it continue
+   under the measured peak rules; then 07:43–07:58 is reserved for the peak
+   transition (proposal P1).
+3. GoodWe whole-site balance inconsistency (blocks the affected ticks), a
+   single sub-3.3 kW report (restarts the 10 minutes), a warm tank (no 70 °C
+   request above 62 °C without a CT), withdrawal cooldown and command
+   spacing after the 07:58 OFF.
+
+The owner event log (`boost_reason`, `gate`, `commands_24h` in 0.16.2) and the
+GoodWe history distinguish these minute by minute.
+
 ## Changes in 0.16.2
 
 1. `Controller.commands_in_window(now)` counts commands in `(now − 24 h, now]`.
    The policy's `optional_allowed` and the controller gate both use the
    decision time. Cap 6, essential allowance (+6), request reserve and the OFF
    exemption are unchanged.
-2. A current GoodWe report with no value is a gap. Before any optional
-   session or unresolved optional intent it neither votes nor erases earlier
-   votes. Unchanged: no start on that tick, 3-minute gap and freshness
-   limits, reset on implausible/unverified/uncommissioned reports, and the
-   latched protective loss during a session (peak withdrawal included).
+2. A current GoodWe report with no value is **unmeasured time**. Before any
+   optional session or unresolved optional intent it neither votes nor
+   erases earlier votes; it pauses the 10-minute qualification, so only
+   measured ≥ 3.3 kW time counts. Unchanged: 3-minute gap and freshness
+   limits, reset on implausible/unverified/uncommissioned reports or any
+   measured report below 3.3 kW, and the latched protective loss during a
+   session (peak withdrawal included).
 3. Owner events add `gate` (the command gate holding a wanted change) and
    `commands_24h`.
 
 Classification: changes automatic heating behaviour and the command-limit
 boundary → **owner approval required** before merge.
+
+## Safety review of the GoodWe-gap change (owner requirement)
+
+Requirement: missing measurements must never count as confirmed solar export
+or permit a command using stale meter data.
+
+| Check | Result | Evidence |
+|---|---|---|
+| A valueless report adds a vote | Never: no sample is added on either the event or the decision path | `test_unavailable_report_before_a_session_pauses_but_never_satisfies` |
+| Gap time counts toward the 10 minutes | Never: the interval from the last measured report to the next one is excluded, and qualification needs 10 measured minutes | `test_gap_time_never_counts_as_confirmed_export` |
+| A start on a tick whose latest report has no value | Never: `optional_start_quality = grid_measurement_missing` rejects every optional start (CT-free); a CT site additionally loses its paired power budget, so the 0.16.1 reset still applies there | `test_no_optional_start_on_a_tick_whose_meter_report_has_no_value[ct]` |
+| A start on old samples | Never: latest measured report ≤ 3 min old and fresh within the 120 s grid age on the start tick; a gap > 3 min breaks coverage | `test_an_outage_longer_than_the_meter_age_still_breaks_qualification` |
+| Required (non-optional) heat uses the gap | No: required planning uses `required_export_kw`, which is `None` without a current value | code: `Snapshot.required_export_kw` |
+| Behaviour during a session | Unchanged: latched loss, protective peak OFF / off-peak withdrawal | `test_session_keeps_the_latched_protective_loss`, existing latch tests |
+| Implausible / unverified / uncommissioned meter | Unchanged: full reset | `test_implausible_or_unverified_reports_still_reset` |
+
+The review found that the first version (before this revision) let gap time
+count toward the 10 minutes and relied on the CT-free validity check alone to
+block a start on the gap tick. Both are corrected: gaps now pause, and an
+explicit `grid_measurement_missing` reason blocks starts on every
+installation type.
 
 ## Effect on the existing week and seasonal evidence
 
@@ -107,18 +163,22 @@ This is the existing designed outage scenario, not a new hazard.
 
 ## Proposals (not implemented)
 
-- **P1 — peak policy.** If morning peak solar matters, *Verified solar-only
-  heating* removed the 08:00–11:00 delay in replay (70 °C at 09:00). It keeps
-  measured-import withdrawal and the exact-prior protocol. Owner decision.
+- **P1 — pre-peak start under solar-only.** With *Verified solar-only
+  heating*, let a qualified pre-peak boost start without finishing before the
+  peak; the existing peak rules (carried-session check, measured-import
+  withdrawal, meter-loss OFF) then govern it. Replay: 07:58 → about 07:11 on
+  an early-export site. Not implemented: it changes heating near a peak.
 - **P2 — avoid "62 °C first" at 11:00.** When export is qualified but the boost
   is judged marginal, the required 62 °C start blocks a later 70 °C on CT-free
   sites until 62 °C is reached. A design option is to defer the required start
   while measured export is qualified and the latest start is hours away. Not
   implemented: it changes required-heat timing.
-- **P3 — in-session gap tolerance off-peak.** A ≤ 3-minute valueless gap during
-  an off-peak 70 °C session could hold rather than withdraw (peak latch
-  unchanged). Saves two commands per blip. Not implemented: it relaxes a
-  measured-export protection and needs an explicit decision.
+- **P3 — in-session gap handling.** A valueless report during a session
+  withdraws at once (peak: protective OFF). With frequent GoodWe blips this
+  produced OFF/restart churn and a full command budget in replay. Options
+  needing an explicit safety decision: hold for one ≤ 3-minute gap off-peak
+  only, or keep the protection and first fix the GoodWe polling reliability
+  (likely the better first step). Not implemented.
 
 ## Settings questions
 
