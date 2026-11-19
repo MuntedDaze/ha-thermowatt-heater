@@ -664,7 +664,7 @@ _DUAL_PROTECTED = _DUAL_PROTECTED | {"ct_free_solar_verification"}
 CATALOG["weekend_solar_heating"] = Setting(
     "Weekend solar-led normal storage",
     "Advanced",
-    "Use sustained measured PV to select normal storage on weekends. This deliberately allows off-peak grid assistance; it is not solar-only heating.",
+    "Use measured PV to open a weekend comfort window. 62 normal storage is planned to the storage-ready time with off-peak grid assistance allowed; it is not solar-only heating.",
     0,
     1,
     None,
@@ -673,7 +673,7 @@ CATALOG["weekend_solar_heating"] = Setting(
 CATALOG["weekend_pv_start_kw"] = Setting(
     "Weekend daylight trigger",
     "Advanced",
-    "Measured PV production in kW, sustained continuously. 0.5 kW means 500 W; household grid import may supply the remaining element demand.",
+    "Measured PV production in kW. The first fresh report at or above this opens the weekend window until the end time; 0.5 kW means 500 W.",
     0.1,
     3.6,
     "kW",
@@ -682,7 +682,7 @@ CATALOG["weekend_pv_start_kw"] = Setting(
 CATALOG["weekend_qualify_minutes"] = Setting(
     "Weekend daylight qualification",
     "Advanced",
-    "Minutes of fresh continuous PV reports required before selecting weekend normal storage. Short cloud dips restart qualification.",
+    "Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.",
     5,
     60,
     "min",
@@ -691,7 +691,7 @@ CATALOG["weekend_qualify_minutes"] = Setting(
 CATALOG["weekend_end_time"] = Setting(
     "Weekend latest return to baseline",
     "Advanced",
-    "Household local clock: return to baseline by this time. A sustained measured low-PV condition after noon can end the solar day earlier.",
+    "Household local clock: the weekend window ends and the thermostat target returns to baseline at this time. This does not cool stored water.",
     0,
     1,
     None,
@@ -700,7 +700,7 @@ CATALOG["weekend_end_time"] = Setting(
 CATALOG["weekend_sunset_kw"] = Setting(
     "Weekend late-day PV threshold",
     "Advanced",
-    "After noon, PV below this kW threshold for the full ending delay ends the daylight storage window. A momentary cloud does not.",
+    "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
     0,
     1,
     "kW",
@@ -709,7 +709,7 @@ CATALOG["weekend_sunset_kw"] = Setting(
 CATALOG["weekend_sunset_minutes"] = Setting(
     "Weekend low-PV ending delay",
     "Advanced",
-    "Continuous minutes below the late-day threshold after noon. Missing readings never vote for sunset; the hard end time still bounds the window.",
+    "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
     10,
     120,
     "min",

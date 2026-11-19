@@ -61,10 +61,12 @@ def test_legacy_active_override_and_pending_intent_survive_without_replay():
 
 
 @pytest.mark.parametrize(
-    "minutes,kw,expected", [(14, 0.5, BASE), (15, 0.499, BASE), (15, 0.5, sp.NORMAL)]
+    "minutes,kw,expected", [(0, 0.499, BASE), (15, 0.499, BASE), (0, 0.5, sp.NORMAL)]
 )
 def test_weekend_real_pv_trigger_allows_grid_assisted_comfort(minutes, kw, expected):
-    now = at(SAT, 11)
+    # 0.17.0: one fresh report of at least 0.5 kW opens the window (no
+    # qualification delay, no 09:00 restriction).
+    now = at(SAT, 7)
     p = sp.SimplePolicy(replace(S, boost_enabled=False), TARIFFS)
     pv(p, now, minutes, kw)
     d = p.decide(snap(now, BASE, reading=40, heater_meter_valid=False))
@@ -72,28 +74,30 @@ def test_weekend_real_pv_trigger_allows_grid_assisted_comfort(minutes, kw, expec
     assert (d.plan.get("weekend_grid_assistance_permitted") is True) == (expected == sp.NORMAL)
 
 
-def test_repeated_reports_or_a_gap_do_not_qualify_weekend():
+def test_stale_or_invalid_pv_never_opens_the_weekend_window():
     now = at(SAT, 11)
     p = sp.SimplePolicy(S, TARIFFS)
-    for _ in range(30):
-        p.add_pv(now, 0.7)
+    p.add_pv(now - 4 * MIN, 0.7)  # older than the 3-minute meter age
     assert p.decide(snap(now, BASE)).state == BASE
     pv(p, now + 20 * MIN, 15, 0.7)
-    p.add_pv(None, None)
+    p.add_pv(None, None)  # an invalid report clears PV evidence
     assert p.decide(snap(now + 20 * MIN, BASE)).state == BASE
+    p.add_pv(now + 21 * MIN, 0.7)
+    assert p.decide(snap(now + 21 * MIN, BASE)).state == sp.NORMAL
 
 
-def test_weekend_latch_ignores_short_cloud_and_ends_on_continuous_sunset():
+def test_weekend_latch_holds_until_18_whatever_the_pv_does():
+    # 0.17.0: clouds or low late-day PV no longer end the window early.
     now = at(SAT, 13)
     p = sp.SimplePolicy(replace(S, boost_enabled=False), TARIFFS)
     pv(p, now, 15, 0.1)
     assert p.decide(snap(now, sp.NORMAL, weekend_latched=True)).state == sp.NORMAL
-    pv(p, now + 31 * MIN, 30, 0.1)
-    d = p.decide(snap(now + 31 * MIN, sp.NORMAL, weekend_latched=True))
-    assert d.state == BASE and d.plan["weekend_day_ended"]
-    pv(p, now + 50 * MIN, 15, 2)
-    assert p.decide(snap(now + 50 * MIN, BASE, weekend_ended=True)).state == BASE
-    assert p.decide(snap(at(SAT, 18), sp.NORMAL, weekend_latched=True)).state == BASE
+    pv(p, now + 4 * 60 * MIN, 60, 0.0)
+    d = p.decide(snap(now + 4 * 60 * MIN, sp.NORMAL, weekend_latched=True))
+    assert d.state == sp.NORMAL and not d.plan.get("weekend_day_ended")
+    d = p.decide(snap(at(SAT, 18), sp.NORMAL, weekend_latched=True))
+    assert d.state == BASE and d.plan["weekend_day_ended"] and d.command == "Manual:45"
+    assert p.decide(snap(at(SAT, 18, 30), BASE, weekend_ended=True)).state == BASE
 
 
 def test_weekend_direct_45_to_70_requires_stronger_evidence_and_useful_heat():

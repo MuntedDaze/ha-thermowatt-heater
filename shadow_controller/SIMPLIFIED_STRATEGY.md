@@ -266,6 +266,9 @@ finished by 15:30 or 16:30 continues until the peak boundary.
 
 ### 4.4 Weekends and weekday nights
 
+> Superseded for weekends by controller 0.17.0: see
+> `docs/weekend/WEEKEND_STRATEGY.md`. Weekday nights are unchanged.
+
 **Manual 45 °C** is the baseline. It switches to Manual 70 °C when all of
 these hold:
 

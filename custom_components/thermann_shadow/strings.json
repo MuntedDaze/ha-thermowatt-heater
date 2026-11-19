@@ -111,12 +111,12 @@
           "low_water_warning_c": "Low bottom-temperature warning"
         },
         "data_description": {
-          "weekend_solar_heating": "Use sustained measured PV to select normal storage on weekends. This deliberately allows off-peak grid assistance; it is not solar-only heating.",
-          "weekend_pv_start_kw": "Measured PV production in kW, sustained continuously. 0.5 kW means 500 W; household grid import may supply the remaining element demand.",
-          "weekend_qualify_minutes": "Minutes of fresh continuous PV reports required before selecting weekend normal storage. Short cloud dips restart qualification.",
-          "weekend_end_time": "Household local clock: return to baseline by this time. A sustained measured low-PV condition after noon can end the solar day earlier.",
-          "weekend_sunset_kw": "After noon, PV below this kW threshold for the full ending delay ends the daylight storage window. A momentary cloud does not.",
-          "weekend_sunset_minutes": "Continuous minutes below the late-day threshold after noon. Missing readings never vote for sunset; the hard end time still bounds the window.",
+          "weekend_solar_heating": "Use measured PV to open a weekend comfort window. 62 normal storage is planned to the storage-ready time with off-peak grid assistance allowed; it is not solar-only heating.",
+          "weekend_pv_start_kw": "Measured PV production in kW. The first fresh report at or above this opens the weekend window until the end time; 0.5 kW means 500 W.",
+          "weekend_qualify_minutes": "Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.",
+          "weekend_end_time": "Household local clock: the weekend window ends and the thermostat target returns to baseline at this time. This does not cool stored water.",
+          "weekend_sunset_kw": "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
+          "weekend_sunset_minutes": "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
           "solar_cooldown_minutes": "Minutes after confirmed withdrawal OFF before another optional solar start. Fresh qualification can overlap this wait. Ordinary 15-minute command spacing also applies.",
           "pre_peak_observation_minutes": "Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.",
           "peak_command_lead_minutes": "Minutes reserved for local evaluation, cloud command and confirmation before peak. Must be shorter than the heating completion margin in Hot Water. This is not a guaranteed electrical cutoff.",

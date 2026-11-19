@@ -19,8 +19,9 @@ WHY = {
     "peak_park": "Heating is parked for the configured peak electricity period.",
     "peak_lockout": "The selected policy prevents scheduled peak heating.",
     "weekday_storage": "Heat for normal weekday storage before peak.",
-    "weekend_daytime_storage": "Sustained daytime solar opened weekend comfort heating; grid assistance is allowed off-peak.",
-    "weekend_waiting_for_solar": "Keep the baseline while waiting for sustained daytime solar.",
+    "weekend_daytime_storage": "Measured PV opened the weekend comfort window; normal storage is selected and off-peak grid assistance is allowed.",
+    "weekend_storage_no_forecast": "Weekend comfort window is open and no usable forecast is available, so normal storage starts now.",
+    "weekend_waiting_for_solar": "Keep the baseline until measured PV opens the weekend window.",
     "weekend_day_ended": "Weekend daytime heating has ended; return to the baseline.",
     "solar_opportunity": "Useful optional solar storage is qualified.",
     "peak_solar_qualified": "Experimental solar heating during peak is qualified by local measurements.",
@@ -323,7 +324,7 @@ def build(runtime, now, ha_version="unknown"):
     report = {
         "schema": 1,
         "versions": {
-            "controller": "0.16.2",
+            "controller": "0.17.0",
             "bridge": attrs.get("bridge_version")
             if attrs.get("bridge_version") in {"1.3.17", "1.4.0", "1.4.1"}
             else "unreported",

@@ -48,8 +48,10 @@ is "within the thermostat band", not "70 reached".
      the element (also while the element is off).
 5. **Weekday before the evening peak:** reach 70 °C by the **soft target**
    (peak − 30 min) in the cheapest window, then keep heating until the peak.
-   On weekday nights and weekends: Manual 45, plus solar STORAGE when it is
-   worth it.
+   On weekday nights: Manual 45, plus solar STORAGE when it is worth it.
+   Weekends (0.17.0): Manual 45 until the first fresh 500 W PV report opens a
+   window latched until 18:00; 62 is then scheduled to be ready by 16:00 and
+   70 is added when solar qualifies. See `docs/weekend/WEEKEND_STRATEGY.md`.
 6. **Forecast economics:**
    - wait for a cheaper window, as long as it is feasible;
    - pause committed heating only for a later window that saves at least
