@@ -21,31 +21,36 @@ The bridge (app) stays 1.4.1 in all three; only the controller changes.
 **Not established:** the cause of the 19 November delay. That needs
 timestamped live data (see "Live exports").
 
-**Verified in code and synthetic replay:**
+**Verified in code and synthetic replay.** The owner's live peak policy is
+*Verified solar-only heating*, so the "Never during peak" lockout does not
+explain 19 November.
 
-- With peak policy *Never schedule heating during peak*, a clear weekday
-  cannot boost between 08:00 and 11:00 AEDT (07:00–10:00 AEST peak). Export
-  qualified at 09:00, 70 °C started at 11:00. This is the largest delay and it
-  is a setting, not a defect. With *Verified solar-only heating* the replay
-  started 70 °C at 09:00.
+- With solar-only peak heating, a clear weekday boosted the minute export
+  qualified (09:00).
 - **Fixed — recurring-boundary command count.** After a day with
   boost/withdraw churn, yesterday's 11:00 command still counted at today's
   11:00 decision. The optional budget looked full, 62 °C ran first, and 70 °C
   waited until 13:41. With 0.16.2 it starts at 11:00.
-- **Fixed — GoodWe `unavailable` reports.** Before 0.16.2, one valueless
-  report erased the 10-minute 3.3 kW qualification. With a blip every 7
-  minutes, qualification only completed at 13:07. With 0.16.2 the boost starts
-  at 11:00. A blip *during* a 70 °C session still withdraws (protection kept).
+- **Fixed, then tightened after safety review — GoodWe `unavailable`
+  reports.** Before 0.16.2, one valueless report erased the 10-minute 3.3 kW
+  qualification. Now a gap pauses the timer: it never counts as export, only
+  measured time counts, and no optional start is ever made on a tick whose
+  latest meter report has no value. CT sites keep the 0.16.1 reset. Sessions
+  keep the latched protective loss.
+- **Plausible under solar-only, not proven:** GoodWe gaps *during* a peak
+  solar session force protective OFFs and restarts. In replay this produced
+  OFF/70/OFF churn, and the six-command budget then blocked boosts for about
+  3 h. Also, export before 07:43 cannot start a boost that would not finish
+  before the peak (07:11 → 07:58 in an early-export replay). Smaller holds:
+  GoodWe balance inconsistency, one report below 3.3 kW, a warm tank,
+  cooldown and spacing.
 - Smart polling, the 8-hour quiet interval and pre-peak observations: no
-  avoidable delay found. A qualified surplus or a wanted command schedules a
-  read; the boundary reads land on time.
-- Forecast quality matters. A pessimistic PV forecast, or a household
-  forecast containing heater load, makes the 11:00 boost look uneconomic, so
-  62 °C runs first and 70 °C follows at about 12:00–13:00.
+  avoidable delay found.
 
-**Proposals (not implemented):** P1 consider the solar-only peak policy;
-P2 avoid "62 first" when export is qualified; P3 tolerate ≤ 3-minute meter
-gaps during off-peak sessions.
+**Proposals (not implemented):** P1 allow a qualified pre-peak start under
+solar-only and let the peak rules govern it; P2 avoid "62 first" when export
+is qualified; P3 decide in-session gap handling, and fix GoodWe polling
+reliability first if gaps are frequent.
 
 ## 2. Weekend strategy (0.17.0)
 
@@ -57,9 +62,15 @@ margin), with off-peak grid assistance allowed; there is no pause once
 selected; with no forecast heating starts now; 70 °C uses the existing
 genuine-surplus test; at 18:00 the target returns to 45 °C.
 
-**Owner decision needed:** a firm-deadline fallback. If PV never opens the
-window and the tank needs heat, 62 °C starts at the latest start. On cloudy
-replays that is about 12:46.
+**Deadline fallback, confirmed by the owner (19 Nov).** 500 W PV is the
+preferred trigger, not an absolute requirement. If PV never opens the window
+and the tank needs heat, 62 °C starts at the latest start (about 12:46 on
+cloudy replays) using weekend off-peak electricity. Tests prove it:
+- opens only when the tank needs heat, never on a status older than 35 min;
+- sends each command once (62 then 45, or nothing for a warm tank);
+- yields to owner hold, holiday, the 12-hour Override, the cloud gate,
+  command spacing, a configured weekend peak and the weekend switch;
+- is essential heat, so it never uses the optional solar budget.
 
 Replays: spring, summer and winter clear; cloudy; partly cloudy; missing
 forecast; restart; stale PV meter; pessimistic forecast. 62 °C was reached
@@ -83,8 +94,8 @@ Details: `docs/cleanup/AUDIT.md`.
 
 | Proposal | Recommendation | Evidence |
 |---|---|---|
-| Commands cap 6 → 8 | **Keep 6 with 0.16.2.** 8 is an acceptable interim only while still on 0.16.1 | Replays: 8 changes nothing on 0.16.2; on 0.16.1 it only masks the count error |
-| Household forecast → `sensor.hot_water_load_forecast_input` | **Not yet.** The recorded EMHASS config forecasts yesterday's whole-house load, which includes the heater (no deferrable loads, no CT) | Replay: boost 11:00 → 12:08. Read-only checks to make first are in `SETTINGS_REVIEW.md` |
+| Commands cap 6 → 8 | **Keep 6** (owner agreed 19 Nov). 8 would be an interim only while still on 0.16.1 | Replays: 8 changes nothing on 0.16.2; on 0.16.1 it only masks the count error |
+| Household forecast → `sensor.hot_water_load_forecast_input` | **Keep the existing mapping** (owner agreed 19 Nov). **Not yet.** The recorded EMHASS config forecasts yesterday's whole-house load, which includes the heater (no deferrable loads, no CT) | Replay: boost 11:00 → 12:08. Read-only checks to make first are in `SETTINGS_REVIEW.md` |
 
 Reducing transitions (in-session gap withdrawals, patchy-day churn) is a
 better lever than raising the cap.
