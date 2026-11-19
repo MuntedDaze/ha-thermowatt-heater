@@ -1028,6 +1028,21 @@ LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
 }
 
 
+# 0.17.1: preferences that never choose a command, a target, a meter meaning or
+# a price may be edited while automatic control is on. Each takes effect at the
+# next evaluation through the same validation. They stay preserved on Restore.
+SAFE_WHILE_ACTIVE = frozenset(
+    {
+        "low_water_warning_c",  # a warning threshold only
+        "pre_peak_observation_minutes",  # when a status read is arranged; no authority
+        "weekend_qualify_minutes",  # no effect since 0.17.0
+        "weekend_sunset_kw",  # no effect since 0.17.0
+        "weekend_sunset_minutes",  # no effect since 0.17.0
+    }
+)
+LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE - SAFE_WHILE_ACTIVE
+assert SAFE_WHILE_ACTIVE <= PRESERVE_ON_RESTORE
+
 # Finalise only after every extension above: early snapshots silently included
 # newly protected time/learning/poll choices in Restore/Undo's cached tuple.
 RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)

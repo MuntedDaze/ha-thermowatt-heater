@@ -324,7 +324,7 @@ def build(runtime, now, ha_version="unknown"):
     report = {
         "schema": 1,
         "versions": {
-            "controller": "0.17.0",
+            "controller": "0.17.1",
             "bridge": attrs.get("bridge_version")
             if attrs.get("bridge_version") in {"1.3.17", "1.4.0", "1.4.1"}
             else "unreported",

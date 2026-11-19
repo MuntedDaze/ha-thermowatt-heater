@@ -16,7 +16,7 @@ MENUS = {
     "init": ("hot_water", "electricity", "solar_meters", "diagnostic_report", "advanced"),
     "electricity": ("prices", "peak_times", "schedule", "tariff_json"),
     "solar_meters": ("solar", "sources"),
-    "advanced": ("equipment", "polling", "commissioning", "bridge_sources"),
+    "advanced": ("equipment", "polling", "commissioning", "bridge_sources", "legacy"),
 }
 PAGES = {
     "hot_water": (
@@ -33,10 +33,7 @@ PAGES = {
     "heating_preferences": (
         "weekend_solar_heating",
         "weekend_pv_start_kw",
-        "weekend_qualify_minutes",
         "weekend_end_time",
-        "weekend_sunset_kw",
-        "weekend_sunset_minutes",
         "solar_cooldown_minutes",
         "pre_peak_observation_minutes",
         "peak_command_lead_minutes",
@@ -79,19 +76,26 @@ PAGES = {
     ),
     "polling": (
         "polling_mode",
-        "adaptive_polling_shadow",
+        "status_max_age_minutes",
+        "grid_max_age_seconds",
+    ),
+    # 0.17.1: settings with no effect in the recommended configuration, kept so
+    # saved options, entities and rollback are unchanged. Not homeowner choices.
+    "legacy": (
         "adaptive_polling_enabled",
         "event_aware_polling_enabled",
         "owner_change_check_minutes",
+        "adaptive_polling_shadow",
         "adaptive_poll_heating_minutes",
         "adaptive_poll_stable_minutes",
-        "status_max_age_minutes",
-        "grid_max_age_seconds",
+        "controller_three_state_qualified",
+        "weekend_qualify_minutes",
+        "weekend_sunset_kw",
+        "weekend_sunset_minutes",
     ),
     "commissioning": (
         "ct_free_solar_verification",
         "controller_command_topic",
-        "controller_three_state_qualified",
         "controller_four_state_qualified",
         "heater_meter_verification",
         "learned_planning_enabled",
@@ -104,6 +108,10 @@ PAGES = {
 }
 
 MENUS["solar_meters"] = (*MENUS["solar_meters"], "heating_preferences", "ct_free_setup")
+# 0.17.1: every submenu ends with Back to the main menu (HA menus have no back
+# button of their own). "init" is the existing main menu step.
+for _menu in ("electricity", "solar_meters", "advanced"):
+    MENUS[_menu] = (*MENUS[_menu], "init")
 
 # Labels/help belong to the forms, not CATALOG names (which derive native entity
 # IDs). Renaming a form must never rename an existing entity or change its unit.
@@ -238,27 +246,27 @@ FIELDS = {
     ),
     "adaptive_polling_shadow": (
         "Preview adaptive cloud checks",
-        "Record when adaptive polling would read the cloud, without changing actual bridge requests. Safe starting mode for comparison; it does not enable adaptive polling or automatic heating.",
+        "Developer comparison only: record when the old adaptive model would read the cloud. Never changes actual bridge requests, polling or heating.",
     ),
     "adaptive_polling_enabled": (
         "Allow adaptive cloud checks",
-        "Advanced, default off. Requires independent review, supervised validation and the bridge's separate enabled/qualified options. Sends bounded expiring polling hints; original fixed fallback, authentication, request budgets and command confirmations remain.",
+        "Pre-Smart adaptive hints, default off. Requires the bridge's separate enabled/qualified options. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.",
     ),
     "event_aware_polling_enabled": (
         "Allow longer checks during quiet periods",
-        "Advanced, default off. Requires adaptive polling and a qualified bridge. A confirmed baseline/OFF period can be checked less often, while temperatures still expire normally. App changes may be detected later, and brief changes can be missed. Command-prior checks and confirmation are unchanged.",
+        "Pre-Smart quiet-period hints, default off. Requires adaptive hints and a qualified bridge. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.",
     ),
     "owner_change_check_minutes": (
         "Longest quiet-period check interval",
-        "Minutes between ordinary observations with healthy cloud, 30–90. Start with 60 only after qualification. Longer saves requests but delays detecting app changes; outages delay them further. Only used when longer quiet checks are enabled.",
+        "Minutes, 30–90, for pre-Smart quiet-period hints. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes. Smart uses its own bounded quiet intervals.",
     ),
     "adaptive_poll_heating_minutes": (
         "Preview: longest check interval while heating",
-        "Minutes, up to 60, used by the advisory polling model. This preview setting alone does not change actual cloud reads. Use the reviewed bridge and actual polling telemetry to assess real requests.",
+        "Developer comparison only: minutes, up to 60, for the old advisory model. Never changes actual cloud reads.",
     ),
     "adaptive_poll_stable_minutes": (
         "Preview: longest check interval while stable",
-        "Minutes, up to 90, used by the advisory polling model. This alone does not change actual cloud reads; vendor inactivity expiry remains unverified.",
+        "Developer comparison only: minutes, up to 90, for the old advisory model. Never changes actual cloud reads.",
     ),
     "status_max_age_minutes": (
         "Maximum age of temperature used for planning",
@@ -274,7 +282,7 @@ FIELDS = {
     ),
     "controller_three_state_qualified": (
         "Legacy OFF / 45 / 70 command tests completed",
-        "Historical commissioning record retained for existing installations. Set only after separately approved supervised tests, including owner-change refusal. It does not replace four-state qualification or authorise heater operation.",
+        "Legacy record kept for existing installations. Has no effect: commands require the four-state (OFF/45/62/70) qualification. Changing it never authorises heater operation.",
     ),
     "controller_four_state_qualified": (
         "OFF / 45 / 62 / 70 command tests completed",
@@ -286,7 +294,7 @@ FIELDS = {
     ),
     "ct_free_solar_verification": (
         "CT-free solar commissioning record",
-        "Leave blank in Shadow Mode. Follow the upgrade guide after supervised checks. Join four values with | and no spaces: grid entity, W or kW, direction, and rated kW. Use import_positive or export_positive for direction. The record must match this installation. Grid-only decisions do not prove element operation; a configured CT fault cannot fall back to this record.",
+        "Written for you by Solar & Meters → Set up experimental CT-free solar; use that page rather than typing here. Clear this field to withdraw CT-free solar. Format, for reference: grid entity|W or kW|import_positive or export_positive|rated kW, matching this installation. Grid-only decisions do not prove element operation; a configured CT fault cannot fall back to this record.",
     ),
     "learned_planning_enabled": (
         "Use qualified heating-performance learning",
@@ -527,7 +535,7 @@ FIELDS["low_water_warning_c"] = (
 )
 FIELDS["polling_mode"] = (
     "Cloud polling mode",
-    "Keep existing preserves upgrade choices. Smart uses useful decisions and bounded quiet checks; Minimum requests accepts longer owner-change detection delays; Fixed 30 minutes retains compatibility.",
+    "Smart is the recommended choice: reads are arranged for useful decisions with bounded quiet checks. Minimum makes fewer requests but notices app changes later. Fixed 30 minutes and Keep existing (legacy adaptive switches on the Legacy page) retain compatibility. Choose the same mode in the Thermann Hot Water app options.",
 )
 
 assert set(FIELDS) == {k for k, v in CATALOG.items() if v.group != "Retired"}

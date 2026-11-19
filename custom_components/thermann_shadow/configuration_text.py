@@ -22,7 +22,9 @@ TITLES = {
     "polling": "Cloud checks and data age",
     "commissioning": "Commissioning and safeguards",
     "bridge_sources": "Bridge status readings",
+    "legacy": "Legacy and developer settings",
 }
+BACK = "Back to main menu"
 DESCRIPTIONS = {
     "init": "Everyday choices are in Hot Water. Electricity Tariffs describes your bill; Solar & Meters connects optional readings. Advanced/System is for experienced users and supervised commissioning. Turn off Automatic heater control before changing protected settings. Each page saves separately; closing without saving leaves it unchanged.",
     "diagnostic_report": "Select all text in the report below and copy it (Ctrl+A then Ctrl+C on a computer, or touch and hold then Select all and Copy on a phone). Paste it into your support conversation. This view does not save edits or operate the heater. Download detailed JSON using the integration's three-dot menu → Download diagnostics. Review the report before sharing.",
@@ -39,7 +41,8 @@ DESCRIPTIONS = {
     "sources": "Select existing Home Assistant readings, not device names. Leave optional fields blank when equipment is absent. This page only reads local states. Changing the hot-water power mapping clears its commissioning/learning qualification. Bridge status mappings are in Advanced/System.",
     "bridge_sources": "Required readings from the existing Thermann bridge. Selecting entities reads their states; it neither contacts the vendor nor sends heater commands. Change mappings only with automatic control off.",
     "equipment": "Advanced planning assumptions, not new heater qualifications. Use appliance-label ratings; estimates do not prove actual element operation or whole-tank temperature. Do not adjust assumptions just to make a prediction look better. {detail}",
-    "polling": "Advanced: preview and actual adaptive checks are different. Longer quiet intervals reduce requests but delay noticing app changes. Default-off qualification gates and the original fixed fallback remain. A fresh command prior and confirmation are always required. {detail}",
+    "polling": "One choice: Cloud polling mode (Smart recommended). Select the same mode in the Thermann Hot Water app options; the app owns every cloud request. A fresh command prior and confirmation are always required. {detail}",
+    "legacy": "Settings kept only so existing saved options, entities and a rollback are unchanged. None of them is needed in the recommended configuration, and each description says when it still has an effect. Changing them never qualifies hardware or authorises heater operation. {detail}",
     "commissioning": "Advanced; do not tick qualifications to bypass a warning. Follow separately approved supervised commissioning. Saving this form neither authorises physical tests nor turns on automatic control. Leave command address/CT record blank if not commissioned. {detail}",
 }
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -130,7 +133,9 @@ def flow_text():
             data_description={k: SOURCES[k][1] for k in keys},
         )
     for menu, children in MENUS.items():
-        steps[menu]["menu_options"] = {k: TITLES[k] for k in children}
+        steps[menu]["menu_options"] = {
+            k: BACK if k == "init" and menu != "init" else TITLES[k] for k in children
+        }
     steps["schedule"] = {
         "title": TITLES["schedule"],
         "description": "Edits stay in this draft until you choose Save and use. Closing cancels the draft. Save selects Custom but never verifies your contract. Cover every minute of all weekdays and months exactly once, up to 32 periods. Midnight to midnight means all day; an end earlier than the start crosses midnight. Month selection follows the current tariff-clock date, including overnight tails.\n\n{periods}\n\n{detail}",

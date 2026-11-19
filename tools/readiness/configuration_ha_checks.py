@@ -44,6 +44,20 @@ async def check_configuration(hass, entry):
         assert flow["step_id"] == page, flow
         return flow
 
+    # 0.17.1: every submenu offers Back to the main menu and changes nothing.
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    for menu in ("electricity", "solar_meters", "advanced"):
+        flow = await hass.config_entries.options.async_configure(
+            flow["flow_id"], {"next_step_id": menu}
+        )
+        assert flow["menu_options"][-1] == "init", flow
+        flow = await hass.config_entries.options.async_configure(
+            flow["flow_id"], {"next_step_id": "init"}
+        )
+        assert flow["step_id"] == "init", flow
+    hass.config_entries.options.async_abort(flow["flow_id"])
+    assert dict(entry.options) == original
+
     async def submit(flow, data):
         result = await hass.config_entries.options.async_configure(flow["flow_id"], data)
         await hass.async_block_till_done()
