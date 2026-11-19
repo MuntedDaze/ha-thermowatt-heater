@@ -143,7 +143,7 @@
           "peak_times": "Two-peak example hours",
           "schedule": "Guided electricity schedule",
           "tariff_json": "Advanced schedule data",
-          "init": "← Back to main menu"
+          "init": "Back to main menu"
         }
       },
       "solar_meters": {
@@ -154,7 +154,7 @@
           "sources": "Solar and meter readings",
           "heating_preferences": "Weekend and heating preferences",
           "ct_free_setup": "Set up experimental CT-free solar",
-          "init": "← Back to main menu"
+          "init": "Back to main menu"
         }
       },
       "advanced": {
@@ -166,7 +166,7 @@
           "commissioning": "Commissioning and safeguards",
           "bridge_sources": "Bridge status readings",
           "legacy": "Legacy and developer settings",
-          "init": "← Back to main menu"
+          "init": "Back to main menu"
         }
       },
       "prices": {

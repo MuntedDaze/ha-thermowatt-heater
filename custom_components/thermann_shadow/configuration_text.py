@@ -24,7 +24,7 @@ TITLES = {
     "bridge_sources": "Bridge status readings",
     "legacy": "Legacy and developer settings",
 }
-BACK = "← Back to main menu"
+BACK = "Back to main menu"
 DESCRIPTIONS = {
     "init": "Everyday choices are in Hot Water. Electricity Tariffs describes your bill; Solar & Meters connects optional readings. Advanced/System is for experienced users and supervised commissioning. Turn off Automatic heater control before changing protected settings. Each page saves separately; closing without saving leaves it unchanged.",
     "diagnostic_report": "Select all text in the report below and copy it (Ctrl+A then Ctrl+C on a computer, or touch and hold then Select all and Copy on a phone). Paste it into your support conversation. This view does not save edits or operate the heater. Download detailed JSON using the integration's three-dot menu → Download diagnostics. Review the report before sharing.",

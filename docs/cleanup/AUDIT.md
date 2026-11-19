@@ -12,7 +12,7 @@ configuration), **Developer** (diagnostic, comparison or test only),
 
 | Item | Before | After | Why it is safe |
 |---|---|---|---|
-| Back navigation | Submenus (Electricity Tariffs, Solar & Meters, Advanced/System) had no way back | Each ends with **← Back to main menu** | Menu step only; nothing is saved |
+| Back navigation | Submenus (Electricity Tariffs, Solar & Meters, Advanced/System) had no way back | Each ends with **Back to main menu** | Menu step only; nothing is saved |
 | Polling page | 9 fields: mode + 6 overlapping adaptive/preview switches + 2 data ages | **Cloud polling mode** (Smart recommended) + the 2 data ages | Fields moved, not removed; stored keys unchanged |
 | Legacy page (Advanced → Legacy and developer settings) | Legacy items mixed with active ones | 6 pre-Smart polling settings, the three-state record and the 3 no-effect weekend settings | Same keys, same entities, same validation; descriptions state exactly when each still has an effect |
 | Harmless preferences locked while Automatic is on | Low-water warning, pre-peak observation minutes and the no-effect weekend keys needed Automatic OFF | Editable while on (`SAFE_WHILE_ACTIVE`), still fully validated and preserved on Restore | None chooses a command, target, meter meaning or price |
