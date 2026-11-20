@@ -194,6 +194,15 @@ async def async_migrate_entry(hass, entry):
             len(moved),
             ", ".join(moved),
         )
+    retired = options.get("retired_options", {})
+    if "polling_mode" in moved:
+        # Decision D2: the controller no longer has its own polling choice.
+        log.warning(
+            "0.18.0: the controller's own polling choice '%s' is retired; the controller "
+            "now follows the Thermann Hot Water app's polling option (Smart plans only "
+            "when the app reports Smart, otherwise the app's fixed schedule).",
+            retired.get("polling_mode"),
+        )
     if kept is not None:
         log.warning(
             "0.18.0: the stored solar start headroom is %s kW, not the agreed 0.3 kW. It is "
