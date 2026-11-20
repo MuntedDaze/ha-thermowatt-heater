@@ -1,6 +1,27 @@
 # History
 
-Earlier reviews, reports and upgrade notes, kept unchanged for reference: why things are the way they are, and what was tested. Current instructions are in the main [README](../../README.md), the add-on [DOCS.md](../../thermowatt-heater/DOCS.md) and the controller [guide](../../shadow_controller/README.md).
+Earlier reviews, reports, plans, upgrade notes and evidence, kept unchanged for reference: why things are the way they are, and what was tested. **Nothing here is a current requirement.** Requirements are in [OPERATING_POLICY.md](../OPERATING_POLICY.md); a value, target or deadline found only here (for example the cancelled 45 °C-by-06:00 / 42 °C-by-07:00 morning reserve) must not be treated as current. Current owner instructions are in the main [README](../../README.md), the add-on [DOCS.md](../../thermowatt-heater/DOCS.md) and [docs/owner/](../owner/).
+
+## Development phases (moved here on 20 November 2026)
+
+Each folder was a development checkpoint; its replay evidence (`*.json`) is still checked by the tests that reproduce it.
+
+| Folder | About |
+| --- | --- |
+| `audit-remediation/` | Independent-audit remediation (1.3.17), operations and parked-OFF review |
+| `audits/` | Post-release audit and upgrade notes for bridge 1.4.1 |
+| `cleanup/` | 0.17.1 settings cleanup audit |
+| `completion/` | Controller 0.15 completion, interfaces and upgrade |
+| `configuration/` | Configuration-form redesign and screenshots |
+| `dual-storage/` | 45/62/70 dual-storage design (0.12–0.13) and simulations |
+| `final-integration/` | Adaptive polling, learning, tariffs and week replays |
+| `next-major/` | 0.16 / 1.4 evidence, polling comparisons and progress |
+| `owner-report/` | Owner report of 19 November 2026 |
+| `pre-review/` | Pre-review installation, polling and failure replays |
+| `smart-controller/` | CT commissioning, economic comparisons and simulations |
+| `solar-delay/` | 0.16.2 morning solar delay investigation and settings review |
+| `weekend/` | 0.17.0 weekend comfort window design |
+| `controller/` | Also holds the superseded 0.6–0.9 strategy, commissioning, settings audit, dashboard contract and thermal-model notes |
 
 ## Bridge (`bridge/`)
 

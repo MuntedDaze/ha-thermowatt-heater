@@ -1,6 +1,6 @@
 # Every Thermowatt setting
 
-[Handbook](OWNER_HANDBOOK.md) · [Screens/report](INTERFACE.md)
+[Handbook](owner/HANDBOOK.md) · [Screens/report](owner/INTERFACE.md)
 
 Generated from the same catalogue and form-unit conversion used by the integration.
 Current saved values always take precedence. Defaults below are schema fallbacks for

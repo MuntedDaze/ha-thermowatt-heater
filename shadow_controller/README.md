@@ -1,27 +1,15 @@
 # Thermann Controller
 
-The owner already runs **0.14.0** in Shadow Mode with bridge **1.3.17**, GoodWe
-and EMHASS. This release prepares controller **0.15.1** in the same installation.
-The bridge code/version and existing integration identities remain unchanged.
+The requirements are in [docs/OPERATING_POLICY.md](../docs/OPERATING_POLICY.md);
+every setting is described in [docs/SETTINGS.md](../docs/SETTINGS.md).
 
-Use the [current in-place upgrade and commissioning guide](../docs/completion/UPGRADE.md),
-[compatible interfaces](../docs/completion/INTERFACES.md),
-[beginner settings walkthrough](../docs/configuration/SETTINGS.md) and
-[controller changelog](CHANGELOG.md). Earlier draft guides are historical references.
+One policy (`custom_components/thermann_shadow/simple_policy.py`) chooses OFF,
+Manual 45 baseline, required Manual 62 storage or optional Manual 70 solar
+storage. One guarded command arbiter (`controller.py`) decides whether a change
+may be sent and supervises its confirmation; nothing else publishes heater
+commands. With automatic control off the same policy runs read-only.
 
-One policy chooses OFF / Manual45 baseline / required weekday Manual62 / optional
-Manual70. Peak lockout and optional boost are independent owner choices. A
-separately commissioned CT-free grid-only path supports peak and off-peak solar;
-a verified exclusive circuit meter adds physical element/energy evidence.
-Without it, electrical ON/OFF remains unknown. No missing reading becomes zero.
-
-One guarded command arbiter persists intent before the bridge receives it.
-Protective OFF requirements survive a pending start, restart and returning sun;
-unknown outcomes are never replayed or authentication safeguards bypassed.
-The same policy remains read-only in Shadow Mode. An upgrade grants no new
-live command, automatic-control, adaptive-polling or learned-planning permission.
-
-The existing seven-view dashboard reads these entities; it is not a second
-controller. EMHASS remains the external forecast/optimisation source. Future
-whole-house and bathroom projects use the documented interfaces without adding
-another heater command path. [Forecast setup](FORECAST_SETUP.md) remains compatible.
+Files here: [changelog](CHANGELOG.md), [forecast setup](FORECAST_SETUP.md),
+[how it decides](HOW_IT_DECIDES.md), [commissioning](COMMISSIONING_SIMPLIFIED.md)
+and the Thermowatt dashboard source (`dashboard.yaml`). Older controller
+documents are in [docs/history/controller](../docs/history/controller/).

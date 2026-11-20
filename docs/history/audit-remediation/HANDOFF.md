@@ -88,4 +88,4 @@ independent sessions, held-out validation and its separate existing qualificatio
 No release, licence, speculative packaging or public distribution is prepared.
 
 [Owner guide](../pre-review/OWNER_INSTALLATION.md) · [Operations/inactivity](OPERATIONS.md)
-· [Progress checkpoint](PROGRESS.md) · [Beginner README](../../README.md)
+· [Progress checkpoint](PROGRESS.md) · [Beginner README](../../../README.md)

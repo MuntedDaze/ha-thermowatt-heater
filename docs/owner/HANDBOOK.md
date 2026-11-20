@@ -1,7 +1,7 @@
 # Thermowatt owner handbook
 
-[Start page](../../README.md) · [Upgrade](OWNER_UPGRADE.md) · [Every setting](SETTINGS.md) ·
-[Dashboard/report](INTERFACE.md) · [Evidence](EVIDENCE.md) · [Local telemetry](LOCAL_TELEMETRY.md)
+[Start page](../../README.md) · [Upgrade](UPGRADE.md) · [Every setting](../SETTINGS.md) ·
+[Dashboard/report](INTERFACE.md) · [Evidence](../history/next-major/EVIDENCE.md) · [Local telemetry](../history/next-major/LOCAL_TELEMETRY.md)
 
 ## Contents
 
@@ -90,7 +90,7 @@ latest start that still meets the deadline (15:30 for an already-warm tank,
 where 62 only lets the thermostat reheat an afternoon draw). At 18:00 the thermostat target
 returns to 45; that does not cool water already stored. The latch survives a
 restart for that day; configured peak restrictions still take precedence. See
-[the weekend strategy](../weekend/WEEKEND_STRATEGY.md).
+[the weekend strategy](../history/weekend/WEEKEND_STRATEGY.md).
 
 Optional70 has separate stronger checks: enabled boost, useful heat, economic
 benefit, measured surplus, available budgets and no unresolved protective exit.
@@ -152,7 +152,7 @@ Choose an IANA household zone (normally HA's configured zone), separately from
 the tariff clock. Local follows daylight saving; fixed standard does not.
 Jacob's Aurora example uses fixed AEST:07:00 tariff time is08:00 on a Hobart
 summer wall clock. Verify the actual retail contract; Tasmania/Aurora is not a
-universal default. [Every field and its units](SETTINGS.md) is indexed.
+universal default. [Every field and its units](../SETTINGS.md) is indexed.
 
 ## Cloud checks and learning
 
@@ -185,7 +185,7 @@ Learning uses clean dedicated-meter cycles only. Interruption, draw, changed
 targets, gaps or sensor remapping reject/reset evidence. CT-free predictions stay
 nominal. Learned planning retains its separate default-off gate and hardware
 qualification; upgrade never turns it on. Thermal-state displays are estimates,
-not whole-tank observations. [Reproducible comparisons and limits](EVIDENCE.md).
+not whole-tank observations. [Reproducible comparisons and limits](../history/next-major/EVIDENCE.md).
 
 ## Worked examples
 
@@ -242,5 +242,5 @@ remains separate. A diagnostic-save fault cannot authorise or interrupt commands
 | Flat/TOU/shoulder/seasonal/midday windows | One supported model; owner verifies actual contract |
 | Block/tier/demand/controlled-load/dynamic feed-in | Future extension requiring history/metering/eligibility; not accurate billing now |
 | Arbitrary setpoints or local commands | Unsupported; guarded45/62/70 roles only |
-| Local read-only temperature | No supported interface established; [feasibility](LOCAL_TELEMETRY.md) |
+| Local read-only temperature | No supported interface established; [feasibility](../history/next-major/LOCAL_TELEMETRY.md) |
 | Public distribution and live deployment | Deferred / not performed by development |

@@ -50,7 +50,7 @@ The topic *can* be revisited if:
 
 When a trigger occurs, describe **what is new**, distinguish measured facts from
 assumptions, and keep the response proportional. Retain the technical reference
-in [operations](../audit-remediation/OPERATIONS.md#storage-temperature-requirements-and-the-owners-strategy)
+in [operations](../history/audit-remediation/OPERATIONS.md#storage-temperature-requirements-and-the-owners-strategy)
 for any deliberate formal audit; do not turn that reference into a boilerplate
 warning in every conversation.
 

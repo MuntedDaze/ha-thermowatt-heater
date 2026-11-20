@@ -20,7 +20,7 @@ def build():
     lines = [
         "# Every Thermowatt setting",
         "",
-        "[Handbook](OWNER_HANDBOOK.md) · [Screens/report](INTERFACE.md)",
+        "[Handbook](owner/HANDBOOK.md) · [Screens/report](owner/INTERFACE.md)",
         "",
         "Generated from the same catalogue and form-unit conversion used by the integration.",
         "Current saved values always take precedence. Defaults below are schema fallbacks for",
@@ -122,7 +122,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    target = ROOT / "docs/next-major/SETTINGS.md"
+    target = ROOT / "docs/SETTINGS.md"
     content = build()
     if args.check:
         assert target.read_text(encoding="utf-8") == content

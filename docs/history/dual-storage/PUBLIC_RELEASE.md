@@ -28,7 +28,7 @@ private HA address or copied commissioning logs. The pre-existing untracked
 | Historical root README / `.history` / shell secret-pattern matches | Existing application-key or variable-reference candidates, not new candidate additions; do not treat deletion as revocation |
 
 The historic key exposure was already documented in
-[the earlier security review](../history/bridge/SECURITY_REVIEW.md). Its current
+[the earlier security review](../bridge/SECURITY_REVIEW.md). Its current
 permissions/revocation remain unknown; the issuer/owner should assess revocation
 and replacement through official channels before claiming the old identity is
 safe. The application API key's provenance and vendor terms also need owner/vendor

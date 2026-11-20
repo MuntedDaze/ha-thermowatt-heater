@@ -39,7 +39,7 @@ mappings, forecasts, weekend preferences and experimental CT-free setup.
 Advanced/System retains equipment, cloud timing, qualifications and quotas.
 Every configurable field has inline help, examples, units and consequences.
 Protected changes require Automatic OFF; invalid changes save nothing.
-[The complete setting index](SETTINGS.md) matches these screens.
+[The complete setting index](../SETTINGS.md) matches these screens.
 
 ## Copy diagnostic report
 
@@ -89,6 +89,6 @@ and390px phone widths, isolated from external networking and with all service
 commands denied. It opens actual Configure menus/fields/help, verifies unchanged
 save values/IDs, exercises native report selection/close and renders all five
 Lovelace views. Generated YAML alone is not called visual verification. Final
-screenshots and their inspected commit are recorded in [evidence](EVIDENCE.md).
+screenshots and their inspected commit are recorded in [evidence](../history/next-major/EVIDENCE.md).
 Actual owner theme/renamed entities, phone clipboard gestures, keyboard focus and
 accessibility still merit a quick owner check after installation.

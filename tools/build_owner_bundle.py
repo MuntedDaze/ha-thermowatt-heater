@@ -68,7 +68,7 @@ def build(repo, commit, output):
     required = (
         "thermowatt-heater/config.yaml",
         "custom_components/thermann_shadow/manifest.json",
-        "docs/next-major/OWNER_UPGRADE.md",
+        "docs/owner/UPGRADE.md",
         "homeowner/thermowatt.yaml",
     )
     if not all(path in contents for path in required):

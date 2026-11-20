@@ -22,7 +22,7 @@ def report():
 
 def test_week_replay_is_current_and_service_energy_requests_are_accounted_for(report):
     saved = json.loads(
-        (ROOT / "docs/final-integration/WEEK_RESULTS.json").read_text(encoding="utf-8")
+        (ROOT / "docs/history/final-integration/WEEK_RESULTS.json").read_text(encoding="utf-8")
     )
     assert report == saved
     assert len(report["runs"]) == 8

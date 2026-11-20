@@ -54,7 +54,7 @@ def test_request_ledger_accounts_for_all_calls_and_detection_tradeoff():
 
 
 def test_checked_in_replay_results_match_the_current_code():
-    saved = json.loads((ROOT / "docs/smart-controller/SIMULATION_RESULTS.json").read_text())
+    saved = json.loads((ROOT / "docs/history/smart-controller/SIMULATION_RESULTS.json").read_text())
     assert saved == replay.report()
 
 

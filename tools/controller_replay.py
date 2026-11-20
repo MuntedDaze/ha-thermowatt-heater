@@ -1,6 +1,6 @@
 """Reproducible offline cost/request comparisons, with explicit model limits.
 
-Run: python tools/controller_replay.py --output docs/smart-controller/SIMULATION_RESULTS.json
+Run: python tools/controller_replay.py --output docs/history/smart-controller/SIMULATION_RESULTS.json
 No HA installation, network, credentials, MQTT or device access.
 """
 

@@ -20,7 +20,7 @@ enable has been performed for this candidate.
 3. Configure **Thermann Hot Water** using private add-on options/secrets. Keep
    `cloud_enabled: false`, `commands_enabled: false`, `command_policy: automation`
    and `auth_retry_generation: 0` until the owner deliberately authorises cloud
-   access. One bridge per account. See [bridge options](../../thermowatt-heater/DOCS.md).
+   access. One bridge per account. See [bridge options](../../../thermowatt-heater/DOCS.md).
 4. When separately authorised for read-only cloud access, verify the account
    with the vendor, deliberately enable cloud access and permit one authentication
    generation. Confirm status/health and the actual device serial. Failed login
@@ -77,7 +77,7 @@ and weekends. The tariff verification switch alone cannot check your bill.
 Existing forecast-assisted-control commissioning requires **Use published
 forecasts** enabled before automatic activation. This is a retained feature
 gate, not permission to trust unavailable forecasts. Valid PV and household-load
-forecasts need generation timestamps; see [FORECAST_SETUP](../../shadow_controller/FORECAST_SETUP.md).
+forecasts need generation timestamps; see [FORECAST_SETUP](../../../shadow_controller/FORECAST_SETUP.md).
 If actual forecasts are missing or expire, required weekday heat conservatively
 waits until the latest start, with a persistent-outage alert; optional decisions
 still require measured solar and their economics. CT-free operation does not

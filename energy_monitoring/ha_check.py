@@ -52,7 +52,8 @@ def write(out: Path, meters: int, minimal: bool = False) -> None:
     # Validate the optional NOTIFICATION-only owner example in real HA too.
     # This throwaway config is checked, never run against a live installation.
     example = (
-        Path(__file__).resolve().parents[1] / "docs/audit-remediation/OWNER_WATCHDOG.yaml.example"
+        Path(__file__).resolve().parents[1]
+        / "docs/history/audit-remediation/OWNER_WATCHDOG.yaml.example"
     )
     (out / "packages/thermann_owner_watchdog.yaml").write_text(
         dump({"automation": yaml.safe_load(example.read_text(encoding="utf-8"))}),

@@ -1,10 +1,10 @@
 # How the controller decides (0.9.0)
 
 > Versioned 0.9.x / bridge 1.3.13 recovery reference. For the unmerged four-state
-> 0.10.0 / 1.3.14 candidate, see [the current guide](../docs/dual-storage/README.md). The old PR #33 commit remains unchanged.
+> 0.10.0 / 1.3.14 candidate, see [the current guide](../docs/history/dual-storage/README.md). The old PR #33 commit remains unchanged.
 
 Technical reference for the current behaviour. The design and its reasoning
-are in [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md); the user guide is
+are in [SIMPLIFIED_STRATEGY.md](../docs/history/controller/SIMPLIFIED_STRATEGY.md); the user guide is
 [README.md](README.md). Earlier references are under `docs/history/controller/`.
 
 ## One policy, three heater states
@@ -51,7 +51,7 @@ is "within the thermostat band", not "70 reached".
    On weekday nights: Manual 45, plus solar STORAGE when it is worth it.
    Weekends (0.17.0): Manual 45 until the first fresh 500 W PV report opens a
    window latched until 18:00; 62 is then scheduled to be ready by 16:00 and
-   70 is added when solar qualifies. See `docs/weekend/WEEKEND_STRATEGY.md`.
+   70 is added when solar qualifies. See `docs/history/weekend/WEEKEND_STRATEGY.md`.
 6. **Forecast economics:**
    - wait for a cheaper window, as long as it is feasible;
    - pause committed heating only for a later window that saves at least
