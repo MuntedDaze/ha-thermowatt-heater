@@ -35,22 +35,15 @@ def forecast_solar_state(now, **attrs):
     )
 
 
-def test_forecast_solar_overnight_gap_is_zero_solar_not_an_invalid_series():
+def test_retired_forecast_solar_shape_assumes_no_solar():
+    """0.18.1: only the EMHASS forecasts series is a forecast; anything else
+    means no future solar is assumed (required heating continues unchanged)."""
     now = local(hour=11)
-    settings, _ = c.parse_options(
-        {"forecast_enabled": True, "forecast_uncertainty": 0, "forecast_house_margin_kw": 0}
-    )
+    settings, _ = c.parse_options({"forecast_enabled": True})
     result = forecast.build_forecast(
         now, now - timedelta(minutes=1), settings, forecast_solar_state(now), series(now, "load", 1)
     )
-    assert result.source == "published_pv_and_house_load", result.warnings
-    assert result.slots[0].export_kw == pytest.approx(3.5)
-    overnight = [
-        slot
-        for slot in result.slots
-        if slot.start.astimezone(m.HOBART).hour >= 20 or slot.start.astimezone(m.HOBART).hour < 6
-    ]
-    assert not overnight  # a gap never becomes free (or held) solar
+    assert result.source == "unavailable" and not result.slots
 
 
 def test_emhass_string_values_and_custom_entity_keys_are_read():
@@ -111,7 +104,9 @@ def test_measured_pv_correction_fades_and_is_bounded():
     assert max(item[2] for item in up.pv_series) <= settings.pv_ac_limit_kw
 
 
-def test_flat_statistics_household_baseline_and_its_freshness():
+def test_non_emhass_household_load_uses_only_the_conservative_floor():
+    """0.18.1: the flat Statistics-helper baseline is retired; there is no second
+    household-load model, only the documented floor (or the current house load)."""
     now = local(hour=11)
     settings, _ = c.parse_options(
         {"forecast_enabled": True, "forecast_uncertainty": 0.25, "forecast_house_margin_kw": 0.3}
@@ -128,12 +123,9 @@ def test_flat_statistics_household_baseline_and_its_freshness():
     result = forecast.build_forecast(
         now, now - timedelta(minutes=1), settings, series(now), baseline
     )
-    assert result.load_basis == "flat_measured_household_baseline"
-    assert result.slots[0].export_kw == pytest.approx(4 * 0.75 - 0.8 * 1.25 - 0.3)
-    assert "household_load_is_flat_baseline_not_daily_profile" in result.warnings
-    baseline.last_reported = now - timedelta(hours=3)
-    stale = forecast.build_forecast(now, now - timedelta(hours=4), settings, series(now), baseline)
-    assert stale.slots and stale.load_quality == "provisional_not_daily_history"
+    assert result.load_basis == "conservative_assumed_household_floor"
+    assert result.load_floor_kw == forecast.FALLBACK_LOAD_KW == 1.0
+    assert result.slots[0].export_kw == pytest.approx(4 * 0.75 - 1.0 * 1.25 - 0.3)
 
 
 # --- Restore, undo and truthful defaults -------------------------------------------

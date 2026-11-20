@@ -204,7 +204,7 @@ def build():
                         sensor("Learned heating rate", "Measured heating performance"),
                     ],
                 ),
-                configure("Configure electricity and polling"),
+                configure("Configure electricity"),
                 note(
                     "**CT-free:** normal tariff heating needs no dedicated circuit meter or solar forecast. Experimental optional solar heating requires real, fresh, signed grid evidence and explicit setup. Estimated watts never verify physical heating. Learning needs clean dedicated-meter cycles; nominal predictions are deliberately conservative.\n\n**Smart polling:** quiet confirmed overnight targets can be left to the native thermostat for hours, with observations arranged before useful decisions. This delays detecting app changes (up to 8 hours). Every command still requires its exact current prior and confirmation. Original fixed fallback remains if the controller lease expires."
                 ),

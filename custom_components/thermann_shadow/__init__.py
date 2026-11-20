@@ -1,4 +1,4 @@
-"""Thermann Controller 0.18.0: one coordinated policy (simple_policy.py) and the
+"""Thermann Controller 0.18.1: one coordinated policy (simple_policy.py) and the
 production controller. The controller (executor.py/controller.py) is the only
 component that may publish a Thermann mode command, and it cannot do so until
 the owner completes commissioning and enables automatic control. With control

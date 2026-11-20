@@ -218,7 +218,7 @@ not whole-tank observations. [Reproducible comparisons and limits](../history/ne
 | Steady0W expires | Meter must actually republish; `last_reported` must advance. Fix reporting or leave physical authority unavailable; do not manufacture fresh template timestamps |
 | No70 near62 | Hysteresis/useful heat and economic/window checks intentionally reject pointless switching |
 | Forecast tiny load | Verify original EMHASS generation/series. Conservative floor prevents imaginary surplus |
-| Polling choice not applied | Match both choices; inspect accepted plan/lease. Unsupported/mismatched choices fall back conservatively |
+| Smart polling not applied | Polling is set only in the app (`cloud_polling: smart`); the controller follows it. Inspect the accepted plan/lease in diagnostics. Without a valid plan the app reads every 30 minutes |
 | Frequent activity | Heartbeat now publishes at15-minute cadence or supervision changes. Internal checks stay fast; exact last completion is in diagnostics. Keep watchdogs |
 | Technical code unclear | Read the focused Home plan and copy the diagnostic report; raw codes remain for compatible automations |
 

@@ -463,7 +463,10 @@ class SimplePolicy:
         cached = self._peak_cache  # (computed at, result, valid until)
         if cached and cached[0] <= now < cached[2]:
             return cached[1]
-        at, found = now, None
+        # Tariffs change on whole minutes: scan from the minute so a boundary is
+        # exactly 08:00:00, not 08:00:45 when evaluated at 07:57:45 (audit L2),
+        # which kept the full peak_lead for the protective OFF.
+        at, found = now.replace(second=0, microsecond=0), None
         while at - now < SCAN_HORIZON:
             at += SCAN_STEP
             if self._kind(at) == "peak":
@@ -665,7 +668,16 @@ class SimplePolicy:
         if end is not None and now + timedelta(hours=hours) > end:
             return reject("boost_cannot_finish_before_peak")
         horizon = now + timedelta(hours=max(hours, SLOT.total_seconds() / 3600))
-        profile = self.surplus_profile(now, horizon, snap.forecast, self.typical_available(now))
+        measured = self.typical_available(now)
+        if snap.forecast:
+            # A usable forecast refines the measured surplus after its first 30 min.
+            profile = self.surplus_profile(now, horizon, snap.forecast, measured)
+        else:
+            # 0.18.1 (forecast independence): without a usable forecast the boost
+            # is priced on the qualified measured surplus alone. Solar boosting
+            # must not depend on EMHASS; if the sun fades, the measured-import
+            # withdrawal (WITHDRAW) ends it, so the assumption is bounded.
+            profile = [measured or 0.0] * max(1, math.ceil((horizon - now) / SLOT))
         later = min((t.rate for t in self.tariffs if t.kind != "peak"), default=0)
         price = tariff_at(now, self.tariffs, s.tariff_clock, s.time_zone).rate
         cost = sum(

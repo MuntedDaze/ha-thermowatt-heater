@@ -1,5 +1,45 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.18.1 — final release: forecast independence and cleanup (app 1.5.0 unchanged)
+
+Final owner instruction of 20 November 2026 (`docs/OPERATING_POLICY.md` §1.11).
+
+- **Solar boosting no longer depends on forecasts.** Without a usable EMHASS
+  forecast, a 70 °C boost was priced as zero solar after its first 30 minutes,
+  so a seven-day replay with forecasts unavailable made no boost at all despite
+  strong measured export. A boost is now priced on the qualified measured
+  surplus when no forecast is available. Qualification is unchanged (10 minutes
+  of at least 3.3 kW measured export); forecasts still never authorise a boost
+  and measured import still withdraws it.
+- **Retired forecast experiments.** Only the EMHASS `forecasts` series is read.
+  The Forecast.Solar `watts` shape and the flat Statistics-helper household
+  baseline are removed; an unusable household load uses the single
+  conservative 1 kW floor (or the current house load). The owner's mapping
+  (EMHASS `p_load_forecast` template) is unaffected.
+- **Recovery guidance** returns the owner to the agreed policy (Manual 45
+  overnight/weekends, Manual 62 weekday daytime, OFF in peaks, then Resume)
+  instead of native Schedule.
+- The diagnostic report now names the running controller version (it still
+  said 0.17.1 in 0.18.0); a packaging test ties it to the manifest.
+- Evidence: `tests/test_forecast_independence_week.py` (same mixed week with
+  and without forecasts), `tests/test_final_release_0_18_1.py`,
+  `docs/evidence/SCENARIO_COVERAGE.md`.
+- Independent release audit (20 Nov 2026), all findings fixed:
+  - **M1:** starting the 12hr Override now clears a pending solar protective
+    exit. It previously stayed latched for 12 hours: a false "protective OFF
+    unconfirmed" alert, phantom exposure, and an OFF instead of the policy's
+    state when the Override expired. A peak after the Override re-latches it.
+  - **L1:** the diagnostic report shows `solar_start_headroom_kw` and its basis,
+    as the upgrade guide says.
+  - **L2:** the next peak is computed on the whole minute, so the protective
+    OFF keeps its full 2-minute lead (it could be up to 59 s late).
+  - **L3/L4:** app docs no longer link to an old feature branch or say solar
+    needs a CT (CT-free commissioning is supported); retired polling wording
+    removed from the report note, handbook and executor docstring.
+- No settings, entities, stored options or migrations change (entry stays at
+  minor version 6). Changes automatic solar heating without forecasts: owner
+  approval required before merge.
+
 ## 0.18.0 — one operating policy, one configuration (works with app 1.4.1 or 1.5.0)
 
 Implements the owner's decisions of 20 November 2026 recorded in

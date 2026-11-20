@@ -4,7 +4,7 @@ container with --network none. Never import this on the owner's Home Assistant.
 - every native settings entity, driven through the REAL HA service layer;
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
-- forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
+- forecast-present, retired-shape fallback and invalid/stale paths;
 - genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0, 0.6.1, 0.6.2 and 0.7.0 -> current upgrades over persisted HA
   storage, including the 0.18.0 move of retired settings into retired_options;
 - unchanged MQTT payloads (no state write) stay fresh while polls succeed.
@@ -30,7 +30,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.18.0"
+CURRENT_VERSION = "0.18.1"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -589,7 +589,8 @@ async def check_forecasts(hass, entry, entity_for):
     assert float(hass.states.get("sensor.thermann_shadow_forecast_age").state) < 5
     results["emhass"] = runtime.values.get("decision")
     validate_dashboard(hass, "forecast_present")
-    # Forecast.Solar trigger-template buffer shape plus a Statistics-style baseline.
+    # 0.18.1: the retired Forecast.Solar shape is not a forecast (no future
+    # solar is assumed), and a non-EMHASS household load uses the floor only.
     start = dt_util.as_local(dt_util.utcnow()).replace(minute=0, second=0, microsecond=0)
     watts = {(start + timedelta(hours=h)).isoformat(): 3800 for h in range(12)}
     hass.states.async_set(
@@ -598,6 +599,9 @@ async def check_forecasts(hass, entry, entity_for):
         {"unit_of_measurement": "W", "watts": watts, "forecast_generated_at": generated},
         force_update=True,
     )
+    runtime.update(dt_util.utcnow())
+    assert runtime.forecast.source == "unavailable", runtime.forecast.warnings
+    emhass_state(hass, pv_id, "p_pv_forecast", 4500, generated)
     hass.states.async_set(
         load_id,
         "700",
@@ -606,9 +610,8 @@ async def check_forecasts(hass, entry, entity_for):
     )
     runtime.update(dt_util.utcnow())
     assert runtime.forecast.source == "published_pv_and_house_load", runtime.forecast.warnings
-    assert runtime.forecast.load_basis == "flat_measured_household_baseline"
-    assert runtime.forecast.load_quality == "provisional_covered_window_not_daily_history"
-    results["forecast_solar_flat_load"] = runtime.values.get("decision")
+    assert runtime.forecast.load_basis == "conservative_assumed_household_floor"
+    results["retired_shapes_fall_back"] = runtime.values.get("decision")
     # Stale generation, invalid units and missing entities fall back safely.
     stale = (dt_util.utcnow() - timedelta(hours=3)).isoformat()
     for label, change in (

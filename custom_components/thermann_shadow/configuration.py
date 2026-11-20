@@ -336,11 +336,11 @@ SOURCES = {
     ),
     "forecast_pv": (
         "Forecast solar production",
-        "Optional EMHASS solar-forecast series, or supported buffered Forecast.Solar watts, with its original forecast_generated_at timestamp. Predicts future production, not guaranteed spare power. Leave unmapped when forecasts are off.",
+        "Optional EMHASS solar-forecast series with its original forecast_generated_at timestamp. Only optimises when required heating starts and the economics of a measured solar boost; it never authorises a boost, and heating continues without it. Leave unmapped when forecasts are off.",
     ),
     "forecast_load": (
         "Forecast household electricity use",
-        "Optional timestamped EMHASS household-load forecast or supported measured baseline. Used with solar forecasts; neither forecast is required for basic tariff heating. Stale forecasts are ignored.",
+        "Optional timestamped EMHASS household-load forecast. Without a usable one, a conservative 1 kW floor (or the current household load, if higher) is assumed. Neither forecast is required for heating. Stale forecasts are ignored.",
     ),
     "pv_ac": (
         "Inverter's usable AC output",

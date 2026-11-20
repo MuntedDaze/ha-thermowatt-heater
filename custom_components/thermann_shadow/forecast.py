@@ -1,4 +1,16 @@
-"""Bounded read-only adapters for published HA forecast attributes, never HTTP."""
+"""Optional EMHASS forecast adapter: read-only HA attributes, never HTTP.
+
+Forecasts are an optimisation input only (docs/OPERATING_POLICY.md §1.11). They
+may choose WHEN required 62 °C heating starts and refine the economics of a
+solar boost, but they never authorise a boost (only fresh measured export can
+qualify surplus) and their loss never stops required heating: weekday and
+weekend deadlines and the tariff rules continue unchanged.
+
+0.18.1: only the EMHASS published ``forecasts`` series is accepted for PV and
+household load. The alternative Forecast.Solar ``watts`` shape and the flat
+Statistics-helper household baseline are retired; an unusable household load
+uses the single conservative floor below, never a second load model.
+"""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -69,10 +81,6 @@ def _series(state, kind: str, now: datetime, boot: datetime, settings: Settings)
         raise ValueError("forecast_unit_invalid")
     raw = state.attributes.get("forecasts")
     key = "p_pv_forecast" if kind == "pv" else "p_load_forecast"
-    if kind == "pv" and isinstance(state.attributes.get("watts"), Mapping):
-        # forecast_solar.get_forecast response: watts keyed by period START.
-        raw = [{"date": at, key: value} for at, value in state.attributes["watts"].items()]
-        unit = "W"  # official Forecast.Solar watts mapping, never Wh/kWh
     if not isinstance(raw, (list, tuple)) or not 2 <= len(raw) <= 577:
         raise ValueError("forecast_series_invalid")
     points = []
@@ -98,33 +106,6 @@ def _series(state, kind: str, now: datetime, boot: datetime, settings: Settings)
     return points, age
 
 
-def _flat_load(state, now: datetime, boot: datetime, settings: Settings) -> float:
-    """A measured household baseline, e.g. a Statistics helper mean of house load.
-
-    It is not a forecast, so it has no forecast_generated_at; freshness is the
-    helper's own report time. It applies flat across the horizon (no daily shape).
-    """
-    _available(state)
-    reported = state.last_reported
-    if (
-        reported is None
-        or reported < boot
-        or not 0 <= (now - reported).total_seconds() / 60 <= settings.forecast_max_age_minutes
-    ):
-        raise ValueError("forecast_stale_or_pre_restart")
-    unit = state.attributes.get("unit_of_measurement")
-    if unit not in {"W", "kW"}:
-        raise ValueError("forecast_unit_invalid")
-    value = number(state.state) / (1000 if unit == "W" else 1)
-    if not MIN_LOAD_KW <= value <= 30:
-        raise ValueError("forecast_series_invalid")
-    # A newly created mean with a few minutes of samples is not a daily baseline.
-    coverage = number(state.attributes.get("age_coverage_ratio", 0))
-    if not 0.75 <= coverage <= 1 or state.attributes.get("source_value_valid") is not True:
-        raise ValueError("household_baseline_insufficient_coverage")
-    return value
-
-
 def _value_at(points, at):
     """Step-held value over [a, b); None in a gap or outside the series."""
     for a, b in zip(points, points[1:], strict=False):
@@ -142,17 +123,9 @@ def build_forecast(
     try:
         pv, pv_age = _series(pv_state, "pv", now, boot, settings)
         try:
-            if load_state is not None and "forecasts" not in load_state.attributes:
-                flat = _flat_load(load_state, now, boot, settings)
-                load = [(now + timedelta(hours=hour), flat) for hour in range(49)]
-                load_age = (now - load_state.last_reported).total_seconds() / 60
-                result.load_basis = "flat_measured_household_baseline"
-                result.load_quality = "provisional_covered_window_not_daily_history"
-                result.warnings.append("household_baseline_window_unverified_not_daily_history")
-            else:
-                load, load_age = _series(load_state, "load", now, boot, settings)
-                result.load_basis = "published_household_load_forecast"
-                result.load_quality = "published_uncertain"
+            load, load_age = _series(load_state, "load", now, boot, settings)
+            result.load_basis = "published_household_load_forecast"
+            result.load_quality = "published_uncertain"
             if any(value < MIN_LOAD_KW for _, value in load):
                 raise ValueError("household_forecast_zero_or_insufficient")
         except (ValueError, TypeError, AttributeError, KeyError, OverflowError):
@@ -223,8 +196,6 @@ def build_forecast(
         if len(slots) > 576:
             raise ValueError("forecast_series_invalid")
         result.warnings.append("forecast_is_uncertain_net_surplus_not_guaranteed_energy")
-        if result.load_basis == "flat_measured_household_baseline":
-            result.warnings.append("household_load_is_flat_baseline_not_daily_profile")
     except (ValueError, TypeError, KeyError, OverflowError, AttributeError) as error:
         allowed = {
             "forecast_missing",

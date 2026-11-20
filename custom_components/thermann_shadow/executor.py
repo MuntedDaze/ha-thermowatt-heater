@@ -1,4 +1,4 @@
-"""Home Assistant side of the production executor (0.9.0).
+"""Home Assistant side of the production executor.
 
 Every minute (and on each new bridge status):
 
@@ -8,14 +8,15 @@ Every minute (and on each new bridge status):
 * runs the pure ``Controller`` state machine on the policy's wanted state;
 * persists controller state BEFORE publishing; a failed save sends nothing;
 * publishes at most the single MQTT message the controller returns, through
-  the bridge's guarded three-state topic. Never retried by this module.
+  the app's guarded exact-prior OFF/45/62/70 command topic. Never retried here;
+* sends the expiring Smart polling plan only when the app reports Smart.
 
 Shadow observation: while automatic control is OFF (the default) the same
 policy runs on the observed heater state and records the command it WOULD send
 (respecting the same 15-minute spacing). Nothing is published.
 
 A fresh installation cannot command anything: automatic control is OFF, no
-command topic is configured and the three-state qualification is false.
+command topic is configured and the four-state qualification is false.
 """
 
 from __future__ import annotations
