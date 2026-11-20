@@ -1,7 +1,7 @@
 # Existing Thermowatt installation: controller 0.15.1 upgrade
 
 Historical0.15.1 handoff. For the installed0.15.1/1.3.17 system's next update,
-use [the0.16.0/1.4.0 existing-system guide](../next-major/OWNER_UPGRADE.md).
+use [the0.16.0/1.4.0 existing-system guide](../../owner/UPGRADE.md).
 Do not apply this older read-only installation assumption to an already enabled system.
 
 Jacob already has **bridge 1.3.17** and **controller 0.14.0** installed. The owner

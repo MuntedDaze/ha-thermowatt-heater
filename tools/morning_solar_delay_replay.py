@@ -9,7 +9,7 @@ the controller gate and the command that eventually starts 70 C.
 
 This measures MECHANISMS. It does not reproduce, and cannot prove the cause
 of, the owner's 19 November observation; that needs the live exports listed
-in docs/solar-delay/INVESTIGATION.md.
+in docs/history/solar-delay/INVESTIGATION.md.
 """
 
 import argparse

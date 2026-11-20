@@ -25,7 +25,7 @@ def row(report, case, strategy):
 
 
 def test_saved_comparison_is_current_and_all_energy_is_accounted_for(report):
-    saved = json.loads((ROOT / "docs/dual-storage/SIMULATION_RESULTS.json").read_text())
+    saved = json.loads((ROOT / "docs/history/dual-storage/SIMULATION_RESULTS.json").read_text())
     assert report == saved
     assert report["cases"] >= 10 and len(report["rows"]) == report["cases"] * 3
     kwh_per_c = 315 * 4.186 / 3600

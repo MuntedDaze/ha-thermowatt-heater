@@ -22,7 +22,7 @@ def report():
 
 def test_failure_comparisons_are_reproducible_and_auth_locks_do_not_hammer_http(report):
     assert report == json.loads(
-        (ROOT / "docs/pre-review/FAILURE_RESULTS.json").read_text(encoding="utf-8")
+        (ROOT / "docs/history/pre-review/FAILURE_RESULTS.json").read_text(encoding="utf-8")
     )
     assert len(report["runs"]) == 6
     for row in report["runs"]:

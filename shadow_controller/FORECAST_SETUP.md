@@ -1,6 +1,6 @@
 > Current owner baseline: EMHASS and GoodWe already work. Preserve their existing
 > helpers, generation timestamps and entity mappings. Controller0.15.0 adds a
-> provisional nonzero load fallback; see [current interface notes](../docs/completion/INTERFACES.md).
+> provisional nonzero load fallback; see [current interface notes](../docs/history/completion/INTERFACES.md).
 > No new load-forecasting engine or duplicate optimisation automation is required.
 
 # Forecast setup
@@ -26,7 +26,7 @@ Controller → Configure → Solar & Meters → Solar and meter readings**:
 | **Optional household load forecast or measured baseline** | EMHASS-style `forecasts` list *or* a plain numeric sensor (flat baseline) | list: `unit_of_measurement`, `forecast_generated_at`; numeric: `unit_of_measurement` only |
 
 Then choose **Solar forecasts and grid meter → Use solar and household forecasts**.
-Every field explains its units and limitations. [Settings walkthrough](../docs/configuration/SETTINGS.md).
+Every field explains its units and limitations. [Settings walkthrough](../docs/history/configuration/SETTINGS.md).
 
 `forecast_generated_at` must be an offset-aware ISO timestamp of when the forecast
 was actually **calculated** — not when it was last republished. After an HA

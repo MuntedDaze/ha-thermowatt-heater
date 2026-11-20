@@ -140,7 +140,7 @@ gate or automatic post-holiday command has been added for F8.
 
 ### Owner decision and reporting convention (16 November 2026)
 
-See [the standing owner decision](../decisions/HOT_WATER_TEMPERATURE.md).
+See [the standing owner decision](../../decisions/HOT_WATER_TEMPERATURE.md).
 The owner reiterates that the 45°C target is intended only for shorter periods,
 followed by planned heating above 60°C, and reports plumber advice about this
 specific operation. The strategy is an agreed design requirement rather than

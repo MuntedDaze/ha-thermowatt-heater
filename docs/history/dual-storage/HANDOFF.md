@@ -10,7 +10,7 @@ Fable's separate worktree and dashboard files have not been modified.
 
 - Bridge **1.3.14** and controller **0.10.0**, unreleased candidates. Closed
   physical states OFF / Manual45 / Manual62 / Manual70. Every directed
-  transition has an exact-prior guard; see [the twelve payloads](../../thermowatt-heater/DOCS.md#commands-when-enabled).
+  transition has an exact-prior guard; see [the twelve payloads](../../../thermowatt-heater/DOCS.md#commands-when-enabled).
   The old unqualified `Manual:70` from OFF and `off` from Manual70 retain their
   narrower meanings. No arbitrary setpoint, auth/retry change or native-protection
   change was introduced.

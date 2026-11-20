@@ -1,6 +1,6 @@
 # Commissioning
 
-> **Superseded for 0.9.0** by [COMMISSIONING_SIMPLIFIED.md](COMMISSIONING_SIMPLIFIED.md) (app 1.3.13, three-state commands). This page records the 0.6–0.7 stages and the Stage C history.
+> **Superseded for 0.9.0** by [COMMISSIONING_SIMPLIFIED.md](../../../shadow_controller/COMMISSIONING_SIMPLIFIED.md) (app 1.3.13, three-state commands). This page records the 0.6–0.7 stages and the Stage C history.
 
 Automatic control is switched on in stages, each with your approval. At any stage, recovery is the same:
 - **Thermann app:** Manual at 70 °C for hot water now, OFF to park, or Schedule for your normal programme.
@@ -22,7 +22,7 @@ Automatic control is switched on in stages, each with your approval. At any stag
 | T3b | 1.3.10 | The one read before the command worked, and the heater went OFF, but the bridge reported "not observed": its only read came 2 s after the command, before the cloud updated. Fixed in 1.3.11 |
 | T3c | 1.3.11 | `off` and `Manual:70` each confirmed at the 60 s follow-up read; a repeat while awaiting was refused with no request; a repeat when already OFF sent nothing. 4 cloud requests per command |
 
-Measured: the cloud reports a change between about 2 s and 63 s after the command. The detailed procedures are in [docs/history/bridge/UPGRADING_1_3_11.md](../docs/history/bridge/UPGRADING_1_3_11.md).
+Measured: the cloud reports a change between about 2 s and 63 s after the command. The detailed procedures are in [docs/history/bridge/UPGRADING_1_3_11.md](../bridge/UPGRADING_1_3_11.md).
 
 ## Stage C preflight (12 Nov 2026, read-only)
 
@@ -79,4 +79,4 @@ Nothing was changed and no command was sent. Automatic control stayed off.
 
 Leave control on with notifications, keep the default settings, and review weekly for the first month.
 
-The full 0.6 runbook is kept in [docs/history/controller/COMMISSIONING_0_6.md](../docs/history/controller/COMMISSIONING_0_6.md).
+The full 0.6 runbook is kept in [docs/history/controller/COMMISSIONING_0_6.md](COMMISSIONING_0_6.md).

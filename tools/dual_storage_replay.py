@@ -1,6 +1,6 @@
 """Deterministic four-state policy replay; no HA, network, MQTT or credentials.
 
-Run python tools/dual_storage_replay.py --output docs/dual-storage/SIMULATION_RESULTS.json
+Run python tools/dual_storage_replay.py --output docs/history/dual-storage/SIMULATION_RESULTS.json
 Uses the production pure policy. Tank, forecasts and successful command/readback
 latencies are synthetic; executor/bridge failure guards have separate regressions.
 """

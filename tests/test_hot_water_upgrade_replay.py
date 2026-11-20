@@ -21,7 +21,9 @@ def report():
 
 
 def test_current_report_reproduces_all_four_strategies_and_conserves_heat(report):
-    assert report == json.loads((ROOT / "docs/completion/SIMULATION_RESULTS.json").read_text())
+    assert report == json.loads(
+        (ROOT / "docs/history/completion/SIMULATION_RESULTS.json").read_text()
+    )
     assert len(report["runs"]) == 24 and report["synthetic"]
     physics = 315 * 4.186 / 3600
     for row in report["runs"]:

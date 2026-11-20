@@ -6,6 +6,15 @@ directions take precedence. Keep development modest and focused on reliable
 status, modes, setpoints and verified existing controls; scheduling optimisation
 belongs separately in Home Assistant/EMHASS.
 
+## Authoritative operating policy (2026-11-20)
+
+[docs/OPERATING_POLICY.md](docs/OPERATING_POLICY.md) is the single source of
+requirements. Read it before any behaviour change. A value found only in a
+retired setting, default, parser structure, test, fixture, changelog or
+`docs/history/` is never a current requirement. In particular the 0.7.0 morning
+reserve (45 °C by 06:00, 42 °C by 07:00) is **cancelled**: Manual 45 °C overnight
+with the heater's native hysteresis, no morning top-up and no morning alarm.
+
 ## Standing owner decision: variable-temperature hot water (2026-11-16)
 
 Read [the owner's hot-water decision record](docs/decisions/HOT_WATER_TEMPERATURE.md)

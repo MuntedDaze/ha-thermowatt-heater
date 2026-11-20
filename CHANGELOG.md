@@ -4,13 +4,13 @@
 
 - Configuration cleanup: Back navigation, one Smart polling choice, a separate
   Legacy page and safe preference edits while Automatic is on. Behaviour
-  unchanged. See `docs/cleanup/AUDIT.md`.
+  unchanged. See `docs/history/cleanup/AUDIT.md`.
 
 ## Controller 0.17.0 companion release (bridge 1.4.1 unchanged)
 
 - Weekend comfort window: first fresh 500 W PV report opens it until 18:00;
   62 scheduled to the 16:00 deadline with forecasts; 70 unchanged. See
-  `docs/weekend/WEEKEND_STRATEGY.md`.
+  `docs/history/weekend/WEEKEND_STRATEGY.md`.
 
 ## Controller 0.16.2 companion patch (bridge 1.4.1 unchanged)
 
@@ -18,7 +18,7 @@
   a stale rolling command count at recurring boundary times, and GoodWe
   `unavailable` reports erasing qualification before a session (gaps now
   pause qualification and never count as export or permit a start). See
-  `shadow_controller/CHANGELOG.md` and `docs/solar-delay/INVESTIGATION.md`.
+  `shadow_controller/CHANGELOG.md` and `docs/history/solar-delay/INVESTIGATION.md`.
 
 ## [1.4.1] — Smart plan acceptance fix (with controller 0.16.1)
 
@@ -64,7 +64,7 @@ existing optional economics and command guards. Bridge runtime/version stays
 Bridge 1.3.17 is already installed and remains unchanged. The controller's
 completion changes and compatible in-place upgrade are documented in
 [its changelog](shadow_controller/CHANGELOG.md) and
-[the current guide](docs/completion/UPGRADE.md). No bridge version bump is needed.
+[the current guide](docs/history/completion/UPGRADE.md). No bridge version bump is needed.
 
 ## [1.3.17] - Independent-audit remediation (merged; owner-installed baseline)
 

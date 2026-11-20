@@ -22,7 +22,9 @@ def comparison():
 
 
 def test_seasonal_results_reproduce_actual_http_and_energy_accounting(comparison):
-    assert comparison == json.loads((ROOT / "docs/next-major/SEASONAL_RESULTS.json").read_text())
+    assert comparison == json.loads(
+        (ROOT / "docs/history/next-major/SEASONAL_RESULTS.json").read_text()
+    )
     assert len(comparison["reports"]) == 3
     physics = 315 * 4.186 / 3600
     for season in comparison["reports"]:

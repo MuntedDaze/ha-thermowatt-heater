@@ -7,7 +7,7 @@ automatic-control behaviour, so it belongs in its own PR, not PR #43.
 
 After a change in the Thermann app, the vendor cloud can return the previous
 mode for 2 to 63 s (owner test T3c; see command confirmation in the bridge
-[DOCS](../../thermowatt-heater/DOCS.md)). The controller
+[DOCS](../../../thermowatt-heater/DOCS.md)). The controller
 re-inspects the heater after Enable, Resume, fault acknowledgement, HA restart
 and guest/holiday transitions. It accepts the first read whose `poll_at` is
 later than `inspect_after`. If that read comes within the lag (for example an

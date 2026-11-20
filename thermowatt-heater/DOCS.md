@@ -2,7 +2,7 @@
 
 *Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
-Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. This branch contains bridge 1.4.1, a maintenance update of released 1.4.0 (itself based on the owner's installed 1.3.17); see the [1.4.1 in-place upgrade](../docs/audits/UPGRADE_1_4_1.md). Existing credentials, guards, IDs and enabled settings are preserved. See the [current evidence](../docs/next-major/EVIDENCE.md) and [existing-system upgrade](../docs/next-major/OWNER_UPGRADE.md). No live installation or physical behaviour is verified by development; public distribution is deferred.
+Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. This branch contains bridge 1.4.1, a maintenance update of released 1.4.0 (itself based on the owner's installed 1.3.17); see the [1.4.1 in-place upgrade](../docs/history/audits/UPGRADE_1_4_1.md). Existing credentials, guards, IDs and enabled settings are preserved. See the [current evidence](../docs/history/next-major/EVIDENCE.md) and [existing-system upgrade](../docs/owner/UPGRADE.md). No live installation or physical behaviour is verified by development; public distribution is deferred.
 
 **Defaults are safe:** cloud access off, commands off, polling every 30 minutes.
 
@@ -32,8 +32,8 @@ auth_retry_generation: 0
 | `poll_interval_minutes` + `poll_interval_unit` | Fixed background polling: 1–120 minutes, or 60–7200 seconds. Default 30 minutes, clock-aligned (:00/:30). Restart reads once, then rejoins slots. In fixed mode, guarded reads keep the slots and a due poll reuses status from the last 3 minutes. Optional adaptive mode below uses the same worker with a successful-read anchor instead. |
 | `min_cloud_retry_minutes` | First wait after an ordinary cloud error, 5–1440 minutes (default 60). Repeated errors double it, up to 24 hours. A success resets it. |
 | `on_demand_refresh_enabled` | Optional read-only refresh on `P/<serial>/refresh`, at most one read per 5 minutes. Off by default; the controller does not need it. |
-| `adaptive_polling_enabled` + `adaptive_polling_qualified` | Both false by default. Both plus controller plan enable and fixed interval ≥15 minutes are required for bridge-owned bounded adaptive status scheduling. Requires independent qualification. Missing/expired plans select fixed fallback; auth/backoff/quotas/confirmation retain priority. See the [wire contract and telemetry](../docs/final-integration/TELEMETRY.md). |
-| `event_aware_polling_qualified` | New separate default-false permission, including upgrades. Allows v2 purpose-bound longer quiet observations only after independent review; the controller also needs its quiet permission and selected 30–90 minute owner-change bound. Active temperature validity and strict 60-second command checks stay unchanged. See [evidence and limits](../docs/pre-review/POLLING.md). |
+| `adaptive_polling_enabled` + `adaptive_polling_qualified` | Both false by default. Both plus controller plan enable and fixed interval ≥15 minutes are required for bridge-owned bounded adaptive status scheduling. Requires independent qualification. Missing/expired plans select fixed fallback; auth/backoff/quotas/confirmation retain priority. See the [wire contract and telemetry](../docs/history/final-integration/TELEMETRY.md). |
+| `event_aware_polling_qualified` | New separate default-false permission, including upgrades. Allows v2 purpose-bound longer quiet observations only after independent review; the controller also needs its quiet permission and selected 30–90 minute owner-change bound. Active temperature validity and strict 60-second command checks stay unchanged. See [evidence and limits](../docs/history/pre-review/POLLING.md). |
 | `auth_retry_generation` | Increase by one to allow **one** new authentication attempt after a lock (see below). 0 starts locked. |
 
 Options are read from `/data/options.json` (`!secret` works). Credentials are never logged or passed on the command line.
@@ -69,7 +69,7 @@ Native protection cycles remain independent. Confirmed cloud OFF is a software
 state, not proof of zero electrical consumption. A failed/unconfirmed protective
 OFF must be reported as an unverified lockout. CT-free baseline and required
 off-peak heating are supported by the controller; optional solar heat needs a
-fresh commissioned raw circuit measurement. See [upgrade/rollback](https://github.com/MuntedDaze/ha-thermowatt-heater/blob/codex/economic-dual-storage/docs/dual-storage/UPGRADE.md)
+fresh commissioned raw circuit measurement. See [upgrade/rollback](https://github.com/MuntedDaze/ha-thermowatt-heater/blob/codex/economic-dual-storage/docs/history/dual-storage/UPGRADE.md)
 before returning from a 62°C state to an older bridge.
 
 How a command is carried out:
@@ -140,6 +140,6 @@ and qualification flags remain stored; choosing a new mode does not rewrite them
 Smart ordinary GETs reuse the session with the existing bounded401 refresh/retry.
 Discovery, command preparation/POST and confirmation retain proactive authentication
 guards. No vendor TTL is asserted, uncertain POSTs are not retried and authentication
-locks require deliberate operator recovery. [Evidence](../docs/next-major/EVIDENCE.md)
-and [in-place owner upgrade](../docs/next-major/OWNER_UPGRADE.md).
+locks require deliberate operator recovery. [Evidence](../docs/history/next-major/EVIDENCE.md)
+and [in-place owner upgrade](../docs/owner/UPGRADE.md).
 

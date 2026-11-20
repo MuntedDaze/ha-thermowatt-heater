@@ -173,7 +173,7 @@ discovery or proof the registry still uses them. If renamed, choose the actual I
 
 Verify W/kW and sign with a known load during separately approved observation;
 negative/export conventions differ by integration. The reported AC output must
-not be confused with DC panel power. Follow [forecast setup](../../shadow_controller/FORECAST_SETUP.md)
+not be confused with DC panel power. Follow [forecast setup](../../../shadow_controller/FORECAST_SETUP.md)
 for genuine calculation timestamps; a heartbeat is not a new forecast. CT-free
 required heating can use verified raw grid export plus forecasts. It never
 subtracts inferred element watts to create optional-solar authority.

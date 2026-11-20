@@ -11,7 +11,7 @@
 - The low-water warning, pre-peak observation minutes and the no-effect
   weekend keys can be edited while Automatic is on (still validated).
 - Removes two definitions unreferenced since 0.9.0.
-- Audit: `docs/cleanup/AUDIT.md`. No heating, command or polling behaviour change.
+- Audit: `docs/history/cleanup/AUDIT.md`. No heating, command or polling behaviour change.
 
 ## 0.17.0 — owner's weekend comfort window (bridge unchanged)
 
@@ -30,7 +30,7 @@
 - `weekend_qualify_minutes`, `weekend_sunset_kw` and `weekend_sunset_minutes`
   no longer affect control; kept for saved settings and rollback.
 - Weekday tariff treatment and DST conversion are unchanged.
-- Evidence: `tools/weekend_replay.py`, `docs/weekend/WEEKEND_STRATEGY.md`.
+- Evidence: `tools/weekend_replay.py`, `docs/history/weekend/WEEKEND_STRATEGY.md`.
   Automatic heating behaviour: owner approval required before merge.
 
 ## 0.16.2 — avoidable morning solar-boost delays (bridge unchanged)
@@ -52,7 +52,7 @@
 - Owner events record the command gate that held a wanted change and the
   rolling command count, so a future delay can be attributed from timestamps.
 - Synthetic mechanism replay: `tools/morning_solar_delay_replay.py`; findings
-  in `docs/solar-delay/INVESTIGATION.md`. This changes automatic heating
+  in `docs/history/solar-delay/INVESTIGATION.md`. This changes automatic heating
   behaviour and needs explicit owner approval before merge.
 
 ## 0.16.1 — diagnostics companion to bridge 1.4.1
@@ -100,7 +100,7 @@
   local grid-event evaluation and small additions to existing hot-water diagnostics.
 - Existing domain, config entry, storage names, entity IDs, targets, credentials,
   bridge protocol and enable flags retained; CT-free record defaults blank.
-- Bridge 1.3.17 unchanged. In-place upgrade: docs/completion/UPGRADE.md.
+- Bridge 1.3.17 unchanged. In-place upgrade: docs/history/completion/UPGRADE.md.
 
 ## 0.14.0 — configuration usability (unmerged development)
 
@@ -200,7 +200,7 @@
   remains intact. Untagged old sessions are retained as unclassified diagnostics.
   Adaptive polling remains shadow; calibration remains diagnostic.
 - Requires bridge 1.3.14 and separately completed four-state qualification.
-  Upgrade/rollback: `docs/dual-storage/UPGRADE.md`. No installation or merge.
+  Upgrade/rollback: `docs/history/dual-storage/UPGRADE.md`. No installation or merge.
 
 ## 0.9.1 — corrections from the independent audit of 13 Nov 2026 (owner approval required)
 
@@ -226,7 +226,7 @@ Not changed (deferred): the Low findings of the first audit, M6 (a rollback note
 
 ## 0.9.0 — the simplified three-state controller (owner approval required)
 
-Replaces the 0.4–0.8 planner, economic permission and morning fail-safe with the agreed policy (`simple_policy.py`, [SIMPLIFIED_STRATEGY.md](SIMPLIFIED_STRATEGY.md)). Requires Thermann Hot Water **1.3.13**.
+Replaces the 0.4–0.8 planner, economic permission and morning fail-safe with the agreed policy (`simple_policy.py`, [SIMPLIFIED_STRATEGY.md](../docs/history/controller/SIMPLIFIED_STRATEGY.md)). Requires Thermann Hot Water **1.3.13**.
 
 - **Three heater states:** OFF, Manual 45 °C (weekday nights and weekends) and Manual 70 °C. Each command is a guarded bridge payload naming the state it leaves (`<target>@<prior>`), so an app change is never overwritten.
 - **Weekday:**
@@ -270,7 +270,7 @@ Replaces the 0.4–0.8 planner, economic permission and morning fail-safe with t
 
 ## 0.7.1 — settings safety and validation (development)
 
-From the settings audit ([SETTINGS_AUDIT.md](SETTINGS_AUDIT.md)). No change to the two commands, the bridge allowlist or stored controller state.
+From the settings audit ([SETTINGS_AUDIT.md](../docs/history/controller/SETTINGS_AUDIT.md)). No change to the two commands, the bridge allowlist or stored controller state.
 
 - **Locked while automatic control is on:** command topic, T3 qualification, dwell, command and request budgets, confirmation timeout, latency reserve, meter sign and verification, the tariff contract, freshness limits and sensor mappings. Turn control off to change them. Preferences, notifications and Restore recommended still apply at once.
 - **Command topic must match the mapped heater** (`command_topic_does_not_match_heater` otherwise).

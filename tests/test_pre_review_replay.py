@@ -22,7 +22,7 @@ def report():
 
 def test_comparison_is_reproducible_and_counts_every_actual_http_category(report):
     assert report == json.loads(
-        (ROOT / "docs/pre-review/WEEK_RESULTS.json").read_text(encoding="utf-8")
+        (ROOT / "docs/history/pre-review/WEEK_RESULTS.json").read_text(encoding="utf-8")
     )
     assert len(report["runs"]) == 8
     physics = 315 * 4.186 / 3600

@@ -38,7 +38,7 @@ work around a refusal.
 Only separately authorised read-only cloud access may verify the account/device.
 A lock permits no retry until the cause and deliberate recovery are reviewed.
 Never delete a guard, increment generations repeatedly or paste raw HTTP bodies
-into troubleshooting reports. The existing [bridge guide](../../thermowatt-heater/DOCS.md)
+into troubleshooting reports. The existing [bridge guide](../../../thermowatt-heater/DOCS.md)
 explains its one-attempt authentication and command confirmation.
 
 Copy the reviewed `custom_components/thermann_shadow` directory to HA’s
@@ -94,7 +94,7 @@ freshness/sign. Meter remap/unit/model changes invalidate qualification.
 Previously commissioned meter loss must remain a notified fault; do not remove
 its mapping just to hide the outage. AC/oven channels are independent.
 
-The optional [monitoring guide](../../energy_monitoring/README.md) explains copying
+The optional [monitoring guide](../../../energy_monitoring/README.md) explains copying
 the generated package and seven-view dashboard. Edit the map for the actual
 installation, leaving absent grid/solar/household meters blank; regenerate and
 check HA configuration before restarting. In combined mode prices come from the

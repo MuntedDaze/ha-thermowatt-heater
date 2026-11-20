@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "docs/next-major"
+ROOT = Path(__file__).resolve().parents[1] / "docs/history/next-major"
 
 
 def build():

@@ -4,7 +4,7 @@ Bridge 1.3.15 / controller 0.11.0 on draft PR #35. This extends, rather than
 replaces, the [schema-2 four-state contract](../dual-storage/TELEMETRY_INTERFACE.md)
 and [original smart-controller contract](../smart-controller/TELEMETRY_INTERFACE.md).
 Those documents describe their older candidate checkpoints; the deltas below
-are authoritative for this branch. The combined [monitoring contract](../../energy_monitoring/ENTITY_CONTRACT.md)
+are authoritative for this branch. The combined [monitoring contract](../../../energy_monitoring/ENTITY_CONTRACT.md)
 is updated locally; Fable’s original #32 branch/worktree is unchanged.
 
 ## Ownership and data flow
