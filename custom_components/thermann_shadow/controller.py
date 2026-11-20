@@ -467,6 +467,14 @@ class Controller:
         self.refusal = None
         self.guest_started, self.guest_until = _iso(now), _iso(now + timedelta(hours=hours))
         self.guest_target_c = 62
+        # The owner's explicit Override supersedes a pending solar protective
+        # exit (audit M1, 20 Nov 2026). Otherwise it stayed latched for 12 h:
+        # a false "protective OFF unconfirmed" alert, phantom exposure, and an
+        # OFF instead of the policy's state when the Override expired. If the
+        # Override ends or is cancelled inside a peak, the policy requests the
+        # peak OFF again and the exit re-latches from the observed state.
+        self.protective_exit = None
+        self.solar_session_active = False
         if self.hold or self.state == OWNER_OVERRIDE:
             self.hold = False
             self._reinspect(now, "guest_mode_started_reinspecting")

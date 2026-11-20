@@ -85,3 +85,92 @@ def test_only_the_emhass_forecast_series_and_the_conservative_floor_remain():
     source = (ROOT / "custom_components/thermann_shadow/forecast.py").read_text(encoding="utf-8")
     assert '"watts"' not in source and "age_coverage_ratio" not in source
     assert forecast.FALLBACK_LOAD_KW == 1.0
+
+
+# --- independent release audit (20 Nov 2026) --------------------------------------------------
+
+ALL_TRANSITIONS = [
+    f"{target}@{prior}"
+    for target in ("off", "Manual:45", "Manual:62", "Manual:70")
+    for prior in ("off", "45", "62", "70")
+    if target.split(":")[-1] != prior
+]
+
+
+def test_m1_override_supersedes_a_pending_protective_exit():
+    """A protective exit latched in a peak (cloud in back-off, OFF not sent)
+    must not survive the owner's 12hr Override: no false alert or exposure for
+    12 hours, and the policy's state, not OFF, when the Override expires."""
+    from datetime import timedelta
+
+    from test_controller_0_9_0 import cfg, local, obs, publishes, ready, want
+
+    conf = cfg()
+    peak = local(hour=17, minute=30)  # evening peak, Hobart daylight time
+    c = ready(peak, "Manual", 70.0)
+    blocked = obs(peak, "Manual", 70.0, cloud_health="backoff", bridge_transitions=ALL_TRANSITIONS)
+    effects = c.step(blocked, ctl.Want("off", "peak_solar_withdrawn", 4), conf)
+    assert c.protective_exit is not None and not publishes(effects)
+    assert any(e.key == "protective_exit_unresolved" for e in effects if e.kind == "notify")
+
+    assert c.start_guest(peak + timedelta(minutes=1))
+    assert c.protective_exit is None and not c.solar_session_active
+    now = peak + timedelta(minutes=20)
+    healthy = obs(now, "Manual", 70.0, bridge_transitions=ALL_TRANSITIONS)
+    effects = c.step(healthy, ctl.Want("normal_storage", "12hr_override", 2), conf)
+    assert publishes(effects) == ["Manual:62@70"]
+    assert not any(e.key == "protective_exit_unresolved" for e in effects if e.kind == "notify")
+    assert any(e.key == "protective_exit_unresolved" for e in effects if e.kind == "resolve")
+    assert "protective_exit_unresolved" not in str(c.active_alerts)
+
+    # Confirm, then let the Override expire in the morning off-peak.
+    now += timedelta(minutes=2)
+    c.step(
+        obs(now, "Manual", 62.0, poll_age=5, bridge_transitions=ALL_TRANSITIONS), want("hold"), conf
+    )
+    expiry = peak + timedelta(hours=12, minutes=5)
+    after = obs(expiry, "Manual", 62.0, bridge_transitions=ALL_TRANSITIONS)
+    effects = c.step(after, ctl.Want("baseline", "baseline", 5), conf)
+    assert c.protective_exit is None
+    assert publishes(effects) == ["Manual:45@62"]  # not off@62
+
+
+def test_m1_a_peak_after_the_override_still_relatches_the_protective_exit():
+    from datetime import timedelta
+
+    from test_controller_0_9_0 import cfg, local, obs, ready
+
+    conf = cfg()
+    peak = local(hour=17, minute=30)
+    c = ready(peak, "Manual", 62.0)
+    assert c.start_guest(peak)
+    assert c.cancel_guest(peak + timedelta(minutes=5))
+    blocked = obs(
+        peak + timedelta(minutes=6),
+        "Manual",
+        62.0,
+        cloud_health="backoff",
+        bridge_transitions=ALL_TRANSITIONS,
+    )
+    c.step(blocked, ctl.Want("off", "peak_lockout", 4), conf)
+    assert c.protective_exit is not None  # safety retained outside the Override
+
+
+def test_l2_next_peak_is_the_exact_minute_boundary():
+    from datetime import datetime
+
+    policy = sp.SimplePolicy(sp.PolicySettings(tariff_clock="standard"), TARIFFS)
+    now = datetime(2026, 11, 17, 7, 57, 45, tzinfo=m.HOBART)  # 06:57:45 AEST
+    peak = policy.next_peak(now)
+    assert peak.astimezone(m.STANDARD).time().isoformat() == "07:00:00"
+    assert peak.second == 0 and peak.microsecond == 0
+    # The full 2-minute peak lead applies: the OFF falls due at 06:58:00 AEST.
+    lead = peak - sp.PolicySettings().peak_lead
+    assert lead.astimezone(m.STANDARD).time().isoformat() == "06:58:00"
+
+
+def test_l1_diagnostic_report_shows_the_solar_start_headroom():
+    source = (ROOT / "custom_components/thermann_shadow/report.py").read_text(encoding="utf-8")
+    assert '"solar_start_headroom_kw"' in source and '"solar_start_headroom_basis"' in source
+    upgrade = (ROOT / "docs/owner/UPGRADE.md").read_text(encoding="utf-8")
+    assert "solar_start_headroom_basis: agreed_constant" in upgrade

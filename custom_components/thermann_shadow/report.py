@@ -10,6 +10,7 @@ import json
 import math
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .config import solar_start_headroom_kw
 from .report_codes import INTERNAL_CODES
 
 
@@ -398,6 +399,13 @@ def build(runtime, now, ha_version="unknown"):
                 "learning_hardware_qualified",
                 "tariff_verified",
             )
+        }
+        | {
+            # Decision D3: 0.3 kW constant unless a differing pre-0.18 value was kept.
+            "solar_start_headroom_kw": numeric(solar_start_headroom_kw(opts)),
+            "solar_start_headroom_basis": "installed_pre_0_18_value"
+            if "export_headroom_kw" in opts
+            else "agreed_constant",
         },
         "tariff": {
             "profile": code(opts.get("tariff_profile")),
@@ -471,7 +479,7 @@ def build(runtime, now, ha_version="unknown"):
             "last_refresh": outcome(refresh.get("last"), "result"),
             "next_observation": stamp(values.get("next_cloud_poll")),
             "interval_seconds": numeric(values.get("cloud_poll_interval")),
-            "note": "Quiet Smart nights can delay detecting an app change up to 8 hours (experimental minimum: 12 hours). Every command still checks its exact prior and confirms.",
+            "note": "Quiet Smart nights can delay detecting an app change up to 8 hours. Without a valid Smart plan the app reads every 30 minutes. Every command still checks its exact prior and confirms.",
         },
         "events": [
             event(v)

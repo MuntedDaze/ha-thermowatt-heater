@@ -48,8 +48,9 @@ integration or its configuration entry. Restart Home Assistant.
   was not 0.3 kW.
 - **Configure → Advanced/System** has no *Legacy and developer settings* page;
   *Data freshness* shows only the two data-age limits.
-- **Configure → Diagnostic report** (or Download diagnostics) shows
-  `solar_start_headroom` with `basis: agreed_constant` and `kw: 0.3`, unless
+- **Configure → Diagnostic report** (or Download diagnostics) shows, under
+  `preferences`, `solar_start_headroom_kw: 0.3` and
+  `solar_start_headroom_basis: agreed_constant`, unless
   your installed value was kept.
 - The sensor `sensor.thermann_shadow_morning_hot_water_availability` keeps its
   ID and is now shown as *Low hot water before evening peak*.

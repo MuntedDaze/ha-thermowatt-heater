@@ -5,7 +5,9 @@
 - Final release: solar boosting no longer depends on forecasts (priced on the
   qualified measured surplus when none is available); Forecast.Solar and flat
   household-baseline inputs retired; recovery guidance returns to the agreed
-  policy instead of native Schedule; diagnostic report version fixed. App
+  policy instead of native Schedule; diagnostic report version fixed;
+  independent-audit fixes (Override clears a pending protective exit,
+  whole-minute peak boundary, report shows solar headroom). App
   documentation updated (recovery section); app code and version unchanged.
   See `shadow_controller/CHANGELOG.md`.
 

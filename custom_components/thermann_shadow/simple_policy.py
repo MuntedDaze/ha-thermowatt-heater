@@ -463,7 +463,10 @@ class SimplePolicy:
         cached = self._peak_cache  # (computed at, result, valid until)
         if cached and cached[0] <= now < cached[2]:
             return cached[1]
-        at, found = now, None
+        # Tariffs change on whole minutes: scan from the minute so a boundary is
+        # exactly 08:00:00, not 08:00:45 when evaluated at 07:57:45 (audit L2),
+        # which kept the full peak_lead for the protective OFF.
+        at, found = now.replace(second=0, microsecond=0), None
         while at - now < SCAN_HORIZON:
             at += SCAN_STEP
             if self._kind(at) == "peak":

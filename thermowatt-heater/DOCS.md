@@ -60,10 +60,12 @@ Manual 62°C is a thermostat setting, not proof the sensor has reached 62°C or
 that the element energises. Unsupported values and malformed payloads are refused.
 Native protection cycles remain independent. Confirmed cloud OFF is a software
 state, not proof of zero electrical consumption. A failed/unconfirmed protective
-OFF must be reported as an unverified lockout. CT-free baseline and required
-off-peak heating are supported by the controller; optional solar heat needs a
-fresh commissioned raw circuit measurement. See [upgrade/rollback](https://github.com/MuntedDaze/ha-thermowatt-heater/blob/codex/economic-dual-storage/docs/history/dual-storage/UPGRADE.md)
-before returning from a 62°C state to an older bridge.
+OFF must be reported as an unverified lockout. Baseline and required off-peak
+heating work without a heater circuit meter (CT). Optional solar heat needs
+either a commissioned dedicated circuit meter or the separately commissioned
+CT-free grid-meter record, plus fresh measured grid export. Before returning to
+an older app version from a Manual 62°C state, read the
+[upgrade and rollback guide](../docs/owner/UPGRADE.md).
 
 How a command is carried out:
 1. **Fresh status first.** A command needs status no older than 60 s. If it is older, the bridge reads once first, after checking the policy, the command's age (≤ 30 s), the device, authentication, quota and backoff. It allows at most 24 such reads a day.
