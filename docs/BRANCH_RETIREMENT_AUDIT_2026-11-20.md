@@ -62,6 +62,21 @@ Do not alter an agent's untracked local files or remove a checked-out branch.
 5. Delete only individually verified obsolete refs, without force-updating
    `main`/`dev`. Record exactly which were removed and what was retained.
 
+## Historical external beta mirror
+
+The pre-existing `.github/workflows/mirror-to-beta.yml` had a push trigger
+that automatically attempted a **force-push of `dev` to
+`waterheater-dev/ha-thermowatt-heater-beta:main`**. The beta repo's most recent
+recorded push was 1 February 2026. On the first new `dev` push, the job
+failed because `BETA_REPO_TOKEN` was unavailable; **no beta push occurred**.
+
+As part of this approved two-branch cleanup, automatic mirroring was
+**disabled**, preserving the workflow only for explicit manual dispatch from
+`dev` with the confirmation input `MIRROR-DEV-TO-BETA`. Its original
+credential requirement and external target are unchanged; the historical
+beta repository was not altered. Do not run that manual action without
+separate owner instruction.
+
 ## Outstanding admin setup
 
 At the time of the audit, GitHub reported `main.protected = false` and no
