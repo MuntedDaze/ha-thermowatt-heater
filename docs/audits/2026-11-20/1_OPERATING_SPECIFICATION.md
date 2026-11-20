@@ -80,7 +80,7 @@ states (`thermowatt-heater/thermowatt_bridge.py:273`).
 
 ## 5. EMHASS forecasting
 
-- Inputs: `sources.forecast_pv` and `sources.forecast_load` (EMHASS `sensor.p_pv_forecast` / `sensor.p_load_forecast` via the template sensors in `shadow_controller/FORECAST_SETUP.md`). A flat measured household baseline sensor is also accepted for load. `forecast.py` `build_forecast` (~line 136).
+- Inputs: `sources.forecast_pv` and `sources.forecast_load` (EMHASS `sensor.p_pv_forecast` / `sensor.p_load_forecast` via the template sensors in `shadow_controller/FORECAST_SETUP.md`). A flat measured household baseline sensor is also accepted for load (superseded in 0.18.1: only the EMHASS series is read; otherwise a 1 kW floor). `forecast.py` `build_forecast` (~line 136).
 - Net surplus per slot = min(inverter limit, PV × measured correction) × (1 − `forecast_uncertainty` 0.25) − load × 1.25 − `forecast_house_margin_kw` 0.3. PV is clipped to `pv_ac_limit_kw` (5 kW). Measured PV corrects the next 3 h only.
 - Failure: forecast older than `forecast_max_age_minutes` (120), missing or malformed → no future solar assumed. Weekday required heating then starts at the latest start (or now if cheaper); weekend window starts 62 immediately; an alert fires after 60 minutes (`controller.py` `forecast_unavailable`). Unusable load forecast → conservative 1 kW floor (cannot authorise a boost).
 - `forecast_enabled` is no longer a commissioning gate (four-state commissioning replaced it).

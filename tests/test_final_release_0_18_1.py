@@ -73,7 +73,8 @@ def test_weekend_window_without_forecast_starts_62_at_once():
 
 def test_recovery_guidance_returns_to_the_policy_not_native_schedule():
     text = ctl.RECOVERY["unexpected_mode_or_target"]
-    assert "Manual 45 °C overnight" in text and "Resume automatic control" in text
+    assert "Manual 45 °C overnight" in text and "weekend comfort window" in text
+    assert "Resume automatic control" in text
     docs = (ROOT / "thermowatt-heater/DOCS.md").read_text(encoding="utf-8")
     assert "Back to your normal programme: **Schedule**" not in docs
     assert "Resume automatic control" in docs

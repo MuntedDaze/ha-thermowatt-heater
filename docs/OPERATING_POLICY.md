@@ -147,8 +147,10 @@ EMHASS forecasts are an optional optimisation input. They may choose **when**
 required 62 °C heating starts and refine the economics of a solar boost. They
 never authorise a 70 °C boost: only fresh measured grid export (§1.6) can
 qualify surplus, and without a forecast a boost is judged on the measured
-surplus alone. If forecasts are missing, stale, flat or invalid, the fixed
-temperature and tariff rules continue: weekday 62 °C is guaranteed by its
+surplus alone. A usable forecast may also make a boost look uneconomic
+(for example, it predicts cloud); that only withholds optional heat. If
+forecasts are missing, stale or invalid, the fixed temperature and tariff
+rules continue: weekday 62 °C is guaranteed by its
 latest start, the weekend window by its deadline fallback, and overnight 45 °C
 and peak OFF are unaffected. Losing live solar/grid measurements suspends solar
 permission; surplus is never invented. The only household-load assumption

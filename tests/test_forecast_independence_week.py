@@ -57,6 +57,11 @@ def run(forecasts):
                 if entity:
                     self.report(entity, "unavailable", {})
 
+        def actions(self, local):
+            super().actions(local)
+            if not forecasts and self.runtime.forecast is not None:
+                seen.setdefault("sources", set()).add(self.runtime.forecast.source)
+
         def _forecast_ids(self):
             from test_integration_0_9_0 import FORECAST_LOAD, FORECAST_PV
 
@@ -65,6 +70,7 @@ def run(forecasts):
     report = replay.results([("fixed_30", "fixed_30", False, 60)], week_class=Week)
     (row,) = [r for r in report["runs"] if not r["ct"]]
     week = seen["week"]
+    week.sources_seen = seen.get("sources", set())
     return row, week
 
 
@@ -83,6 +89,8 @@ def test_forecast_loss_never_stops_required_heating(runs):
     with_row, _ = runs[True]
     without_row, without = runs[False]
     assert without.runtime.forecast is None or not without.runtime.forecast.slots
+    # Checked every minute of the week, not only at the end.
+    assert without.sources_seen <= {"unavailable", "disabled"}, without.sources_seen
     for row in (with_row, without_row):
         assert row["energy_kwh"]["unserved_draw"] == 0 and row["energy_kwh"]["served_draw"] == 45
     for day, stats in with_row["days"].items():

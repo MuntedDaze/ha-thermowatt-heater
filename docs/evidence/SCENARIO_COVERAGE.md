@@ -38,7 +38,7 @@ EMHASS forecasts and once with every forecast unavailable.
 | Overnight commands | Manual 45 / OFF only | Manual 45 / OFF only |
 | Weekend | 62 window, 45 at 18:00 | 62 window, 45 at 18:00 |
 | 70 °C starts | Mon, Wed ×2, Thu, Fri, Sat | Mon, Wed, Thu, Fri, Sat (measured surplus only) |
-| Command posts | 24 | 24 |
+| Cloud command POSTs (`command_posts`) | 24 | 24 |
 
 Before 0.18.1 the forecast-free run made no 70 °C starts at all: a missing
 forecast was priced as zero solar after the first 30 minutes, so solar

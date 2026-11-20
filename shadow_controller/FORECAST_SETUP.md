@@ -1,58 +1,52 @@
-> Current owner baseline: EMHASS and GoodWe already work. Preserve their existing
-> helpers, generation timestamps and entity mappings. Controller0.15.0 adds a
-> provisional nonzero load fallback; see [current interface notes](../docs/history/completion/INTERFACES.md).
-> No new load-forecasting engine or duplicate optimisation automation is required.
+# Forecast setup (optional)
 
-# Forecast setup
+Forecasts are **optional and off by default** ([operating policy §1.11](../docs/OPERATING_POLICY.md)).
+They only optimise: they can choose *when* required 62 °C heating starts and
+refine the economics of a solar boost. They never authorise a 70 °C boost
+(only fresh measured grid export can), and without them the controller keeps
+the fixed rules: weekday 62 °C by its latest start, the weekend window by its
+deadline, overnight 45 °C and peak OFF. Forecast updates cause **zero**
+Thermann requests; the controller only reads Home Assistant states.
 
-Forecasts are **optional and off by default**. Without them the planner still
-works: it uses the measured HK1000 net export for the next 15 minutes only and
-always reserves a full off-peak fallback. Forecasts improve *timing* (start on
-partial solar early, or wait for better sun); they never delay the fallback.
-
-Everything below is configured by the owner in Home Assistant. The planner only
-**reads** the resulting entity states on its one-minute local timer. It never
-calls EMHASS, Forecast.Solar, a weather service or Thermann, and forecast updates
-cause **zero** Thermann requests. Nothing here touches the Thermowatt add-on.
-
-## What the planner needs
+## What the controller reads
 
 Two optional entities, mapped in **Settings → Devices & services → Thermann
 Controller → Configure → Solar & Meters → Solar and meter readings**:
 
-| Mapping | Accepted shapes | Required attributes |
+| Mapping | Accepted shape | Required attributes |
 |---|---|---|
-| **Optional published PV forecast** | EMHASS-style `forecasts` list *or* Forecast.Solar-style `watts` mapping | `unit_of_measurement` `W`/`kW`, `forecast_generated_at` |
-| **Optional household load forecast or measured baseline** | EMHASS-style `forecasts` list *or* a plain numeric sensor (flat baseline) | list: `unit_of_measurement`, `forecast_generated_at`; numeric: `unit_of_measurement` only |
+| **Forecast solar production** | EMHASS `forecasts` list | `unit_of_measurement` `W`/`kW`, `forecast_generated_at` |
+| **Forecast household electricity use** | EMHASS `forecasts` list | `unit_of_measurement` `W`/`kW`, `forecast_generated_at` |
 
-Then choose **Solar forecasts and grid meter → Use solar and household forecasts**.
-Every field explains its units and limitations. [Settings walkthrough](../docs/history/configuration/SETTINGS.md).
+Then turn on **Solar forecasts and grid meter → Use published forecasts**.
+
+Only this EMHASS shape is a forecast (0.18.1). Anything else means no future
+solar is assumed. Without a usable household-load forecast the controller
+assumes a conservative 1 kW (or the current household load, if higher); there
+is no other load model.
 
 `forecast_generated_at` must be an offset-aware ISO timestamp of when the forecast
-was actually **calculated** — not when it was last republished. After an HA
-restart the planner waits for a generation newer than its own start. A forecast
-older than **Maximum forecast generation age** (default 120 min, max 360) is
-ignored and the decision falls back conservatively.
+was actually **calculated**, not when it was last republished. After a Home
+Assistant restart the controller waits for a generation newer than its own
+start. A forecast older than **Maximum forecast generation age** (default
+120 min) is ignored.
 
-How the planner uses them (all visible on the Diagnostics view):
+How forecasts are used (visible in the diagnostic report):
 
 - Net surplus = PV × measured correction × (1 − uncertainty) − load × (1 +
-  uncertainty) − extra household allowance. Defaults: 25 % and 0.3 kW. Solar
-  headroom (0.3 kW) applies to the *measured* surplus only.
-- The measured-vs-forecast correction compares a 15-minute mean of the GoodWe PV
-  reading with the forecast for now. It can only *reduce* PV, and it fades out
-  linearly over 3 hours, so a cloudy reading now does not erase this afternoon.
-- Gaps (such as Forecast.Solar overnight) count as **zero** solar, never held.
+  uncertainty) − extra household allowance (defaults 25 % and 0.3 kW).
+- The measured-vs-forecast PV correction fades out over 3 hours.
+- Gaps count as **zero** solar, never held.
 - Bad units, stale/future/pre-restart generation, non-finite values, unsorted or
   oversized series discard the whole forecast safely (`forecast_*` warnings).
 
-## Option A — EMHASS (recommended if already running)
+## EMHASS setup
 
 EMHASS publishes `sensor.p_pv_forecast` and `sensor.p_load_forecast` with a
 `forecasts` attribute (`[{date, p_pv_forecast}, …]`) when horizon publishing is
 enabled (the default). Custom EMHASS entity IDs also work: the value key is the
 entity's own name. EMHASS does **not** publish a generation timestamp, so stamp
-it where the owner's existing automation runs the optimisation.
+it where the existing automation runs the optimisation.
 
 1. Create a helper: **Settings → Devices & services → Helpers → Date and/or
    time** named `EMHASS forecast generated` (date and time), or in YAML:
@@ -66,8 +60,7 @@ it where the owner's existing automation runs the optimisation.
    ```
 
 2. In the **existing** automation that calls EMHASS (day-ahead or MPC), stamp
-   the time only after a successful optimisation call. Keep your own command
-   names; only the two marked steps are new:
+   the time only after a successful optimisation call:
 
    ```yaml
    - action: rest_command.emhass_dayahead_optim     # your existing call
@@ -83,10 +76,10 @@ it where the owner's existing automation runs the optimisation.
    ```
 
    Do **not** stamp on `publish-data` alone: republishing an old plan is not a
-   new forecast. A once-daily day-ahead run will usually exceed the 120-minute
-   freshness limit; MPC runs every 5–30 minutes are a better fit.
+   new forecast. MPC runs every 5–30 minutes fit the 120-minute limit better
+   than a once-daily day-ahead run.
 
-3. Add two template sensors (`configuration.yaml` or a template helper):
+3. Add two template sensors:
 
    ```yaml
    template:
@@ -117,68 +110,9 @@ it where the owner's existing automation runs the optimisation.
                   'timestamp')).isoformat() }}
    ```
 
-   If EMHASS publishes kW, set `unit_of_measurement: kW`. Check the unit in
-   **Developer tools → States** before mapping.
-
-## Option B — Forecast.Solar PV with a measured load baseline
-
-The core Forecast.Solar integration (free, no API key) needs the array's
-location, declination (tilt), azimuth and kWp. Confirm the owner's values
-(≈6.6 kWp, 5 kW inverter limit) and HA's azimuth convention in the
-[integration docs](https://www.home-assistant.io/integrations/forecast_solar/).
-Its sensors do not carry an hourly series, so buffer the cached data with the
-[`forecast_solar.get_forecast`](https://www.home-assistant.io/actions/forecast_solar.get_forecast/)
-action, which returns data HA already holds and does not request a new forecast.
-
-1. Find the Forecast.Solar config-entry ID: **Developer tools → Actions →
-   Forecast.Solar: Get forecast**, pick the entry, then switch to YAML mode.
-2. Add a trigger-based template sensor:
-
-   ```yaml
-   template:
-     - triggers:
-         - trigger: time_pattern
-           minutes: "/15"
-         - trigger: homeassistant
-           event: start
-       actions:
-         - action: forecast_solar.get_forecast
-           data:
-             config_entry: YOUR_FORECAST_SOLAR_ENTRY_ID
-             resolution: hourly
-             start: "{{ now().replace(minute=0, second=0, microsecond=0) }}"
-             end: "{{ now() + timedelta(hours=36) }}"
-           response_variable: solar
-       sensor:
-         - name: Hot water PV forecast input
-           unique_id: hot_water_pv_forecast_input
-           unit_of_measurement: W
-           state: "{{ solar.watts.values() | list | first | default(0) }}"
-           attributes:
-             watts: "{{ solar.watts }}"
-             # Last successful Forecast.Solar refresh in HA (hourly on the free
-             # plan). Verify it advances in Developer tools before relying on it.
-             forecast_generated_at: >
-               {{ states.sensor.energy_production_today.last_reported.isoformat() }}
-   ```
-
-   Replace `sensor.energy_production_today` with your Forecast.Solar "Estimated
-   energy production - today" entity. Its `last_reported` advances each time HA
-   receives a new forecast; if Forecast.Solar fails, the entity becomes
-   unavailable instead of advancing.
-
-3. Household load: Forecast.Solar has no load forecast. Use EMHASS's load
-   forecast (Option A, template 2) or a measured baseline from the built-in
-   **Statistics** helper (**Helpers → Statistics**, source
-   `sensor.goodwe_inverter_house_consumption`, characteristic *mean*, max age
-   24 hours). Map that numeric sensor as the load. It is a flat allowance with
-   no daily shape, shown as `household_load_is_flat_baseline_not_daily_profile`.
-   GoodWe house consumption can include native heater runs, which makes the
-   baseline higher and therefore more conservative.
+   If EMHASS publishes kW, set `unit_of_measurement: kW`.
 
 ## Keep the Recorder small
-
-Forecast attributes can be large. Exclude the two input sensors from history:
 
 ```yaml
 recorder:
@@ -188,33 +122,12 @@ recorder:
       - sensor.hot_water_load_forecast_input
 ```
 
-## Verify before enabling
+## Verify
 
 1. **Developer tools → States**: each input sensor has the expected unit, a
-   `forecasts` list or `watts` mapping with future timestamps, and a
-   `forecast_generated_at` within the last two hours.
-2. Map them in Configure, then turn on **Use published forecasts**.
-3. On the Diagnostics view, check: Source `published_pv_and_house_load`, a small
-   age, a non-zero interval count, and a plausible PV error/correction on a
-   sunny day. *Forecast net surplus* on Hot Water should look reasonable.
-4. If Source shows `unavailable`, the warnings list names the reason
-   (`forecast_stale_or_pre_restart`, `forecast_unit_invalid`, …). The planner is
-   then behaving exactly as with forecasts off.
-
-Compare forecast and measured PV for a few representative days before trusting
-forecast-driven waiting. No real-data forecast accuracy has been measured for
-this installation.
-
-## Why forecasts matter
-
-Without a qualified forecast, 0.4.0 credits only the measured AC solar for the
-next 30 minutes and assumes **zero** solar after that. It will therefore heat now
-on available solar when that is the cheapest option. It will never recommend
-waiting for sun it cannot see. A qualified forecast lets it recognise genuinely
-cheaper solar later. Waiting still needs a saving of at least 5 c per kWh that
-would be heated now, and a viable comfort fallback.
-
-The EMHASS household-load forecast currently includes past heater cycles (and,
-before 10 Nov 14:25, PV output). 0.4.0 therefore defaults to the de-embedded
-measured base load (`base_load_source: measured_only`). See
-[STAGE_3B_3C_PROPOSAL.md](../docs/history/controller/STAGE_3B_3C_PROPOSAL.md) for the de-embedding plan.
+   `forecasts` list with future timestamps, and a recent `forecast_generated_at`.
+2. In the diagnostic report, the forecast source is `published_pv_and_house_load`
+   with a small age and a non-zero interval count.
+3. If the source shows `unavailable`, the warnings name the reason. The
+   controller then behaves exactly as with forecasts off: required heating
+   continues, and a solar boost is judged on the measured surplus alone.
