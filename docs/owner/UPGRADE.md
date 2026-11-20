@@ -1,7 +1,8 @@
-# Upgrading the existing installation to Controller 0.18.0
+# Upgrading to Controller 0.18.0 and Thermann Hot Water 1.5.0
 
 For the owner's installation (Home Assistant OS, Thermann Hot Water app 1.4.1,
-Controller 0.17.1, CT-free GoodWe, EMHASS, fixed-AEST Aurora 93). These steps
+Controller 0.17.1, CT-free GoodWe, EMHASS, fixed-AEST Aurora 93), to Controller
+0.18.0 and then app 1.5.0. These steps
 are for the owner after review and approval; they are not permission for an
 agent to deploy, restart or operate anything. The earlier 0.16 / 1.4 guide is in
 [history](../history/next-major/OWNER_UPGRADE_0_16.md).
@@ -57,9 +58,33 @@ integration or its configuration entry. Restart Home Assistant.
 - Turn **Automatic heater control** back on only when you intend to (separate
   decision).
 
-## 4. Roll back if needed
+## 4. Update the Thermann Hot Water app to 1.5.0 (separate step)
 
-Preferred: restore the backup from step 1. Alternatively reinstall Controller
+Do this after the controller is running 0.18.0 (0.18.0 also works with 1.4.1).
+
+1. With **Automatic heater control** off, check there is no pending command
+   (*Last command result* is not `awaiting_confirmation`).
+2. **Settings → Apps → Thermann Hot Water → Update.** Supervisor asks first
+   because 1.5.0 is marked as a breaking version. Do not uninstall, reinstall
+   or delete the app's data: credentials, tokens, authentication generation,
+   guard state, request ledger and command journal stay in place.
+3. Open the app's **Configuration** tab. The only polling option is
+   **Cloud polling: smart**. The old polling mode, interval and adaptive
+   options are gone; a saved custom interval no longer applies (the fixed
+   schedule is 30 minutes). Leave `commands_enabled`, `command_policy`,
+   `cloud_enabled` and `auth_retry_generation` exactly as they were.
+4. Start the app. Its log shows `Poll interval=1800 seconds`. Within a few
+   minutes the controller's *Actual adaptive polling status* reads `adaptive:…`
+   (Smart plans accepted), or `fixed_fallback` until the first fresh reading.
+5. Turn **Automatic heater control** back on only when you intend to.
+
+## 5. Roll back if needed
+
+Preferred: restore the backup from step 1 (it restores the app and its data
+too). For the app alone, restore its partial backup taken before the update;
+1.4.1 then starts with its old option defaults (polling mode *existing*, fixed
+30-minute polling) unless you re-enter your previous options. Alternatively,
+for the controller, reinstall Controller
 0.17.1's files and restart: it loads the migrated entry (same major version).
 The retired values stay in `retired_options`, which 0.17.1 ignores, so it uses
 its old defaults for them; in particular its own polling choice returns to

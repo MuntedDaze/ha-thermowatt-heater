@@ -2,9 +2,9 @@
 
 *Unofficial community software, not a Thermann product. Formerly "Thermowatt Smart Boiler": only the display name changed; the app slug, options, MQTT topics and entity IDs are the same.*
 
-Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. This branch contains bridge 1.4.1, a maintenance update of released 1.4.0 (itself based on the owner's installed 1.3.17); see the [1.4.1 in-place upgrade](../docs/history/audits/UPGRADE_1_4_1.md). Existing credentials, guards, IDs and enabled settings are preserved. See the [current evidence](../docs/history/next-major/EVIDENCE.md) and [existing-system upgrade](../docs/owner/UPGRADE.md). No live installation or physical behaviour is verified by development; public distribution is deferred.
+Reads a Thermann / Thermowatt water heater from the MyThermowatt cloud (the API used by the Thermann Control app) and publishes it to Home Assistant over MQTT. Optionally, it accepts a closed set of guarded OFF / Manual 45 / 62 / 70°C transitions from the Thermann Controller. Version 1.5.0 has one polling option (Smart, with an automatic fixed 30-minute fallback) and no longer accepts the obsolete 1.3.11 command forms. Requirements: [operating policy](../docs/OPERATING_POLICY.md); updating: [upgrade guide](../docs/owner/UPGRADE.md). Existing credentials, guards, IDs and command settings are preserved. No live installation or physical behaviour is verified by development; public distribution is deferred.
 
-**Defaults are safe:** cloud access off, commands off, polling every 30 minutes.
+**Defaults are safe:** cloud access off, commands off; Smart polling with a fixed 30-minute fallback.
 
 ## Configuration
 
@@ -14,13 +14,9 @@ password: ""
 cloud_enabled: false
 commands_enabled: false
 command_policy: automation
-poll_interval_minutes: 30
-poll_interval_unit: minutes
+cloud_polling: smart
 min_cloud_retry_minutes: 60
 on_demand_refresh_enabled: false
-adaptive_polling_enabled: false
-adaptive_polling_qualified: false
-event_aware_polling_qualified: false
 auth_retry_generation: 0
 ```
 
@@ -28,12 +24,10 @@ auth_retry_generation: 0
 | --- | --- |
 | `cloud_enabled` | Allows this add-on to use the cloud at all. |
 | `commands_enabled` | Allows MQTT heater commands. Leave `false` for read-only use. |
-| `command_policy` | `automation` (default) accepts only the exact-prior transition allowlist below, plus the two retained legacy forms, and refuses unsupported payloads before a cloud request. `legacy` restores the older, broader command set; only choose it deliberately. |
-| `poll_interval_minutes` + `poll_interval_unit` | Fixed background polling: 1–120 minutes, or 60–7200 seconds. Default 30 minutes, clock-aligned (:00/:30). Restart reads once, then rejoins slots. In fixed mode, guarded reads keep the slots and a due poll reuses status from the last 3 minutes. Optional adaptive mode below uses the same worker with a successful-read anchor instead. |
+| `command_policy` | `automation` (default) accepts only the exact-prior transition allowlist below and refuses everything else before a cloud request. `legacy` is the owner's manual-control protocol (plain modes and temperature writes, for example from the Home Assistant water-heater card); only choose it deliberately. |
+| `cloud_polling` | `smart` (default, the single normal mode): reads when the Thermann Controller's expiring plans say a reading is useful (up to 8 hours apart for a confirmed quiet 45 or OFF overnight); the controller follows this choice automatically. Whenever no valid plan is in force — startup, communication problems, a missing or rejected plan, scheduler failure — reads are clock-aligned every 30 minutes. `fixed`: recovery only, always every 30 minutes. Neither changes command freshness, confirmation, request protections or authentication locks. |
 | `min_cloud_retry_minutes` | First wait after an ordinary cloud error, 5–1440 minutes (default 60). Repeated errors double it, up to 24 hours. A success resets it. |
 | `on_demand_refresh_enabled` | Optional read-only refresh on `P/<serial>/refresh`, at most one read per 5 minutes. Off by default; the controller does not need it. |
-| `adaptive_polling_enabled` + `adaptive_polling_qualified` | Both false by default. Both plus controller plan enable and fixed interval ≥15 minutes are required for bridge-owned bounded adaptive status scheduling. Requires independent qualification. Missing/expired plans select fixed fallback; auth/backoff/quotas/confirmation retain priority. See the [wire contract and telemetry](../docs/history/final-integration/TELEMETRY.md). |
-| `event_aware_polling_qualified` | New separate default-false permission, including upgrades. Allows v2 purpose-bound longer quiet observations only after independent review; the controller also needs its quiet permission and selected 30–90 minute owner-change bound. Active temperature validity and strict 60-second command checks stay unchanged. See [evidence and limits](../docs/history/pre-review/POLLING.md). |
 | `auth_retry_generation` | Increase by one to allow **one** new authentication attempt after a lock (see below). 0 starts locked. |
 
 Options are read from `/data/options.json` (`!secret` works). Credentials are never logged or passed on the command line.
@@ -50,9 +44,8 @@ The reading comes from a sensor near the **bottom** of the tank. It can drop sha
 ## Commands (when enabled)
 
 Under the `automation` policy:
-- **Three-state transitions (1.3.13)**, written `<target>@<prior>`: `Manual:45@off`, `Manual:70@off`, `Manual:45@70`, `Manual:70@45`, `off@45` and `off@70`. The fresh status must show exactly the stated prior state (OFF, or Manual at 45 or 70 °C). Anything else, such as a change made in the app, is refused with no request (`refused_mode_mismatch` or `refused_target_mismatch`), so an owner change is never overwritten.
-- `Manual:70` (1.3.11 form) is accepted only from OFF. It sends 70 °C explicitly; an OFF target other than 70 that is still usable is refused, never overwritten.
-- `off` (1.3.11 form) is accepted only from Manual at 70 °C.
+- **Exact-prior transitions**, written `<target>@<prior>` (table below). The fresh status must show exactly the stated prior state (OFF, or Manual at 45, 62 or 70 °C). Anything else, such as a change made in the app, is refused with no request (`refused_mode_mismatch` or `refused_target_mismatch`), so an owner change is never overwritten.
+- 1.5.0 removed the 1.3.11 bare forms `Manual:70` and `off`; they are refused (`refused_by_policy`). Only Controller 0.6–0.8 sent them; 0.9.0 and later use the transitions.
 - Anything else, including a change made in the app since the last poll, is refused with no request.
 - A command already in place (OFF while OFF) sends nothing.
 
@@ -89,7 +82,7 @@ Retained MQTT messages and commands older than 30 seconds are ignored.
 - **Transient failures** (timeouts, connection errors, HTTP 5xx) get at most three attempts, 60 s and then 300 s apart. The count survives restarts.
 - **Rejections lock immediately.** That covers 401, 403, 429, an unrecognised response, or a TLS error. The bridge then idles; it does not exit or loop.
 - **Locks are persistent.** Restarting, updating, changing the password or toggling Watchdog does **not** clear a lock.
-- **Refresh heuristic:** vendor token lifetime is not established. From 1.3.13 a request made when the token is at least 20 minutes old (or of unknown age after a restart) refreshes it **first**. A successful 30-minute poll then normally costs a refresh plus a status request; actual errors can add requests. A refresh is never attempted inside the guard's 5-minute cooldown. A read that still gets 401 refreshes once and repeats once, and a 401 within 5 minutes of any refresh locks (`cloud_refresh_cooldown`), exactly as before.
+- **Refresh heuristic:** vendor token lifetime is not established. With Smart polling, ordinary status reads reuse the session and follow the bounded 401 refresh/retry below; discovery, command preparation, POSTs and confirmation keep the proactive rule. Otherwise, from 1.3.13 a request made when the token is at least 20 minutes old (or of unknown age after a restart) refreshes it **first**. A successful 30-minute poll then normally costs a refresh plus a status request; actual errors can add requests. A refresh is never attempted inside the guard's 5-minute cooldown. A read that still gets 401 refreshes once and repeats once, and a 401 within 5 minutes of any refresh locks (`cloud_refresh_cooldown`), exactly as before.
 - **Commands are never replayed** after an authentication failure.
 
 ### Clearing an authentication lock (owner action)
@@ -127,19 +120,3 @@ Logs never contain credentials, tokens or response bodies.
 - **Roll back an update:** restore the partial backup of this add-on taken before updating. That is the only way back to an older version.
 
 Older detailed notes (per-version upgrade guides, diagnostic reviews, deployment evidence) are in [docs/history](https://github.com/MuntedDaze/ha-thermowatt-heater/tree/main/docs/history).
-# New explicit polling choices (bridge1.4)
-
-The new `polling_mode` defaults to `existing`, preserving earlier options,
-credentials, guard/generation, quotas and command journal. `smart` and `minimum`
-accept bounded v3 plans through the same scheduler with the unchanged180-second
-lease and30-minute crash fallback. Select the matching controller mode explicitly.
-Quiet healthy owner-change detection may take8h/12h; outages can take longer.
-`fixed_30` uses the familiar30-minute background schedule. Legacy numeric options
-and qualification flags remain stored; choosing a new mode does not rewrite them.
-
-Smart ordinary GETs reuse the session with the existing bounded401 refresh/retry.
-Discovery, command preparation/POST and confirmation retain proactive authentication
-guards. No vendor TTL is asserted, uncertain POSTs are not retried and authentication
-locks require deliberate operator recovery. [Evidence](../docs/history/next-major/EVIDENCE.md)
-and [in-place owner upgrade](../docs/owner/UPGRADE.md).
-

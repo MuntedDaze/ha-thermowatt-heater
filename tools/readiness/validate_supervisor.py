@@ -24,11 +24,10 @@ for change in (
     {"auth_retry_generation": -1},
     {"cloud_enabled": "not-a-boolean"},
     {"password": 123},
-    {"poll_interval_minutes": 0},
-    {"poll_interval_minutes": 7201},
-    {"poll_interval_unit": "hours"},
+    {"cloud_polling": "existing"},
+    {"cloud_polling": "minimum"},
+    {"cloud_polling": True},
     {"on_demand_refresh_enabled": "not-a-boolean"},
-    {"poll_interval_minutes": "not-a-number"},
     {"min_cloud_retry_minutes": 4},
     {"min_cloud_retry_minutes": 1441},
     {"min_cloud_retry_minutes": "not-a-number"},
@@ -38,12 +37,28 @@ for change in (
     except vol.Invalid:
         continue
     raise AssertionError("Supervisor accepted an invalid synthetic option")
+# 1.5.0 update path: options saved by 1.4.1 contain keys that no longer exist.
+# Supervisor must accept them and drop the unknown keys (the add-on then sees
+# only the new schema), never refuse to start the updated app.
+saved_1_4_1 = {
+    **{key: value for key, value in raw["options"].items() if key != "cloud_polling"},
+    "polling_mode": "existing",
+    "poll_interval_minutes": 15,
+    "poll_interval_unit": "minutes",
+    "adaptive_polling_enabled": False,
+    "adaptive_polling_qualified": False,
+    "event_aware_polling_qualified": False,
+}
+updated = options.validate({**raw["options"], **saved_1_4_1})
+assert updated["cloud_polling"] == "smart", updated
+assert not set(updated) - set(raw["options"]), "removed 1.4.1 options were not dropped"
 print(
     json.dumps(
         {
             "supervisor": SUPERVISOR_VERSION,
             "config": "PASS",
             "options": "PASS",
+            "update_from_1_4_1_options": "PASS",
             "mqtt_dependency_declaration": "PASS",
             "network": "none",
             "supervisor_daemon_started": False,

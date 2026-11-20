@@ -1,6 +1,6 @@
 """Small read-only configuration and local-attempt ledger; no cloud client."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 import json
 import logging
 import math
@@ -21,21 +21,6 @@ KINDS = (
 # Categories added after the ledger format was introduced. A ledger written by
 # an older version lacks them and is upgraded with a zero count, never reset.
 ADDED_KINDS = frozenset({"command_refresh"})
-
-
-def poll_seconds(options: Mapping[str, object]) -> int:
-    # Retain the numeric key for upgrades; the form labels it 'Polling interval'.
-    value = options.get("poll_interval_minutes", 30)
-    unit = options.get("poll_interval_unit", "minutes")
-    if type(value) is not int or unit not in ("seconds", "minutes"):
-        raise ValueError("poll_interval_invalid")
-    seconds = value * (60 if unit == "minutes" else 1)
-    if not 60 <= seconds <= 7200:
-        raise ValueError("poll_interval_invalid")
-    mode = options.get("polling_mode", "existing")
-    if not isinstance(mode, str) or mode not in {"existing", "smart", "fixed_30", "minimum"}:
-        raise ValueError("polling_mode_invalid")
-    return seconds if mode == "existing" else 1800
 
 
 def daily_limit(body: object) -> bool:

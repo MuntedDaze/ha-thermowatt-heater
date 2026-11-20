@@ -1,6 +1,36 @@
 # Changelog
 
-## Controller 0.18.0 companion release (works with bridge 1.4.1 or 1.5.0)
+## [1.5.0] — one polling option; obsolete command forms removed (with controller 0.18.0)
+
+Owner decisions D2 and D4 of 20 November 2026 (`docs/OPERATING_POLICY.md`).
+
+- **One polling configuration.** New option `cloud_polling`: `smart` (default,
+  the single normal mode) or `fixed` (recovery only). The controller follows
+  it automatically (`polling_preference` in diagnostics) and has no polling
+  setting of its own. Whenever no valid Smart plan is in force — startup,
+  communication problems, a missing or rejected plan, scheduler failure — the
+  app reads every 30 minutes. Command freshness (60 s), confirmation, request
+  accounting, back-off and authentication guards are unchanged.
+- **Removed options:** `polling_mode`, `poll_interval_minutes`,
+  `poll_interval_unit`, `adaptive_polling_enabled`, `adaptive_polling_qualified`
+  and `event_aware_polling_qualified`. Supervisor drops them from saved options
+  on update; a saved custom interval no longer applies (fixed schedule is
+  30 minutes). The pre-Smart version 1/2 plans and the Minimum/fixed_30 plan
+  modes are no longer accepted.
+- **Obsolete command forms removed (D4).** The 1.3.11 bare `Manual:70` (from
+  OFF) and `off` (from Manual 70) are refused. Their only consumer was
+  Controller 0.6–0.8; Controller 0.9.0 and later (installed: 0.17.1) send only
+  the exact-prior `<target>@<prior>` transitions, which are unchanged. Manual
+  owner control under `command_policy: legacy` (plain modes and temperature
+  writes) is unchanged; only the guarded `Manual:70` form is gone there too.
+- Unchanged: credentials, tokens, authentication generation and guard state,
+  request ledger, command journal, MQTT topics and entity IDs, command
+  validation and confirmation.
+- Marked as a breaking version so Supervisor asks before updating. Changes
+  polling behaviour and the command allowlist: owner approval required before
+  merge; installation needs separate approval.
+
+## Controller 0.18.0 (works with bridge 1.4.1 or 1.5.0)
 
 - One authoritative operating policy (`docs/OPERATING_POLICY.md`); the
   cancelled morning reserve is gone from settings, validation and documents.

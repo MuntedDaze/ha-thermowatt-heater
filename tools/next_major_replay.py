@@ -36,10 +36,9 @@ class SmartWeek(FailureWeek):
             )
         self.runtime.set_native_reference(self.entry.options)
         self.executor.configure(self.entry.options)
-        self.bridge.options["polling_mode"] = mode
-        if mode != "existing":
-            self.bridge.poll_schedule.smart_mode = mode
-            self.bridge.poll_schedule.enabled = True
+        if mode == "smart":
+            self.bridge.options["cloud_polling"] = "smart"
+            self.bridge.smart = self.bridge.poll_schedule.enabled = True
         self.token_at = self.bridge.token_obtained_at or self.t
         if not self.failure_week:
             # FailureWeek wraps plan delivery; keep it for loss comparisons only.

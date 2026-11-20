@@ -124,11 +124,11 @@ def test_other_transition_forms_are_refused_before_any_request(factory, clock, p
 def test_the_1_3_11_payloads_keep_their_meaning_for_the_installed_controller(factory, clock):
     bridge = commanded(factory)
     set_status(bridge, 9, 45)
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))  # off only from Manual 70
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))  # off only from Manual 70
     assert calls(bridge) == [] and last_command(bridge)["result"] == "refused_target_mismatch"
     set_status(bridge, 8, 70)
     bridge.session.request.side_effect = [response(204)]
-    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70"))
+    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70@off"))
     assert posts(bridge) == [("POST", "manual")]
 
 

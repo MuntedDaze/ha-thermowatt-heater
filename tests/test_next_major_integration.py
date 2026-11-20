@@ -11,9 +11,8 @@ def smart(rig):
     rig.entry.options.update(optional_solar_boost=False)  # polling follows the app (D2)
     rig.runtime.apply_options(rig.entry.options, rig.sources)
     rig.executor.configure(rig.entry.options)
-    rig.bridge.options["polling_mode"] = "smart"
-    rig.bridge.poll_schedule.smart_mode = "smart"
-    rig.bridge.poll_schedule.enabled = True
+    rig.bridge.options["cloud_polling"] = "smart"
+    rig.bridge.smart = rig.bridge.poll_schedule.enabled = True
     rig.bridge.publish_diagnostics(force=True)
 
 

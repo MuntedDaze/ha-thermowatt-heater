@@ -59,7 +59,7 @@ def start_off(factory, clock, immediate):
     """Stale Manual 70 -> `off`: refresh, POST, immediate read ``immediate``."""
     bridge = commanded(factory)
     stale(bridge, 9)
-    mqtt(bridge, "off")
+    mqtt(bridge, "off@70")
     bridge.session.request.side_effect = [body(MANUAL_70), response(204), body(immediate)]
     bridge.tick()
     return bridge, clock()
@@ -134,7 +134,7 @@ def test_immediate_read_already_showing_the_request_needs_no_follow_up(factory, 
 def test_delayed_resume_confirms_only_at_manual_70(factory, clock):
     bridge = commanded(factory)
     stale(bridge, 8, 70)
-    mqtt(bridge, "Manual:70")
+    mqtt(bridge, "Manual:70@off")
     bridge.session.request.side_effect = [body(OFF_70), response(204), body(OFF_70)]
     bridge.tick()
     posted = clock()
@@ -158,7 +158,7 @@ def test_delayed_resume_confirms_only_at_manual_70(factory, clock):
 def test_a_third_state_during_confirmation_stops_without_success(factory, clock, later, result):
     bridge = commanded(factory)
     stale(bridge, 8, 70)
-    mqtt(bridge, "Manual:70")
+    mqtt(bridge, "Manual:70@off")
     bridge.session.request.side_effect = [body(OFF_70), response(204), body(OFF_70)]
     bridge.tick()
     posted = clock()
@@ -195,14 +195,14 @@ def test_every_command_while_pending_is_refused_without_a_request(factory, clock
     assert diag["refused_while_pending"]["result"] == "refused_confirmation_pending"
     # The pending record is never overwritten by the refusal.
     assert diag["last_command"]["result"] == "awaiting_confirmation"
-    assert diag["last_command"]["payload"] == "off"
+    assert diag["last_command"]["payload"] == "off@70"
 
 
 def test_mqtt_redelivery_of_the_same_command_never_posts_twice(factory, clock):
     bridge, posted = start_off(factory, clock, MANUAL_70)
     for seconds in (20, 40):
         clock.now = posted + seconds
-        mqtt(bridge, "off")
+        mqtt(bridge, "off@70")
         bridge.tick()
     bridge.session.request.side_effect = [body(OFF_70)]
     advance_to(bridge, clock, 60, posted)
@@ -215,7 +215,7 @@ def test_after_a_terminal_outcome_the_next_command_is_accepted_normally(factory,
     bridge.session.request.side_effect = [body(OFF_70)]
     advance_to(bridge, clock, 60, posted)
     clock.now = posted + 120  # status 60 s old: fresh for the next command
-    mqtt(bridge, "Manual:70")
+    mqtt(bridge, "Manual:70@off")
     bridge.session.request.side_effect = [response(204), body(MANUAL_70)]
     bridge.tick()
     assert [c[1] for c in posts(bridge)] == ["off", "manual"]
@@ -271,7 +271,7 @@ def test_follow_up_lockout_keeps_the_guard_and_expires_without_requests(factory,
 def test_immediate_read_failure_is_resolved_by_a_follow_up(factory, clock):
     bridge = commanded(factory)
     stale(bridge, 9)
-    mqtt(bridge, "off")
+    mqtt(bridge, "off@70")
     bridge.session.request.side_effect = [body(MANUAL_70), response(204), response(503)]
     bridge.tick()
     posted = clock()
@@ -288,7 +288,7 @@ def test_post_with_unknown_outcome_is_observed_never_resent(factory, clock, fail
     """A POST timeout or server error may still have reached the heater."""
     bridge = commanded(factory)
     stale(bridge, 9)
-    mqtt(bridge, "off")
+    mqtt(bridge, "off@70")
     bridge.session.request.side_effect = [body(MANUAL_70), failure]
     bridge.tick()
     posted = clock()
@@ -304,7 +304,7 @@ def test_post_with_unknown_outcome_is_observed_never_resent(factory, clock, fail
 def test_explicit_cloud_rejection_is_terminal_with_no_follow_up(factory, clock):
     bridge = commanded(factory)
     stale(bridge, 9)
-    mqtt(bridge, "off")
+    mqtt(bridge, "off@70")
     bridge.session.request.side_effect = [body(MANUAL_70), response(body={"success": False})]
     bridge.tick()
     assert last_command(bridge)["result"] == "rejected_by_cloud"
@@ -337,7 +337,7 @@ def test_a_background_poll_in_the_window_is_evidence_without_a_duplicate_read(fa
 def test_restart_while_pending_never_resends_and_the_next_read_decides(factory, clock):
     bridge, posted = start_off(factory, clock, MANUAL_70)
     saved = json.loads(bridge.command_state_path.read_text())
-    assert saved["pending"]["payload"] == "off"
+    assert saved["pending"]["payload"] == "off@70"
     text = bridge.command_state_path.read_text()
     for secret in ("SYNTHETIC_PASSWORD", "SYNTHETIC_ACCESS", "SYNTHETIC_REFRESH", "synthetic@"):
         assert secret not in text
@@ -346,7 +346,7 @@ def test_restart_while_pending_never_resends_and_the_next_read_decides(factory, 
     assert restarted.last_command["result"] == "awaiting_confirmation"
     clock.now = posted + 30
     restarted.mqtt_connected.set()
-    mqtt(restarted, "off")  # a replayed or repeated command after restart
+    mqtt(restarted, "off@70")  # a replayed or repeated command after restart
     restarted.session.request.side_effect = [
         response(body={"result": {"termostati": [{"seriale": SERIAL}]}}),
         body(OFF_70),
@@ -378,7 +378,7 @@ def test_restart_after_the_deadline_ends_not_confirmed_before_any_request(factor
 def test_command_state_storage_failure_refuses_before_any_post(factory, clock, monkeypatch):
     bridge = commanded(factory)
     stale(bridge, 9)
-    mqtt(bridge, "off")
+    mqtt(bridge, "off@70")
     bridge.session.request.side_effect = [body(MANUAL_70)]
 
     def broken():

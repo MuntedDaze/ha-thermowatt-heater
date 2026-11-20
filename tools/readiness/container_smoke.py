@@ -77,7 +77,7 @@ def smoke(image, arch, output):
             "password": "SYNTHETIC_CLOUD_PASSWORD",
             "cloud_enabled": False,
             "commands_enabled": False,
-            "poll_interval_minutes": 30,
+            "cloud_polling": "fixed",
             "min_cloud_retry_minutes": 60,
             "on_demand_refresh_enabled": True,  # Cloud disabled must still prevent every read.
             "auth_retry_generation": 1,
@@ -389,7 +389,7 @@ def smoke(image, arch, output):
                     + docker("logs", replacement).stderr.decode()
                 )
                 assert "Bridge running; cloud=False, commands=False" in replacement_logs
-                interval = legacy["options"].get("poll_interval_minutes", 30) * 60
+                interval = 1800  # 1.5.0: a saved pre-1.5 interval is ignored (D2)
                 retry = legacy["options"].get("min_cloud_retry_minutes", 60)
                 assert f"Poll interval={interval} seconds." in replacement_logs
                 assert f"Minimum cloud retry={retry} minutes." in replacement_logs

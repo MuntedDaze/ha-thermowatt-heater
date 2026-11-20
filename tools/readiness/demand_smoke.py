@@ -39,6 +39,7 @@ options = {
     "commands_enabled": False,
     "auth_retry_generation": 1,
     "on_demand_refresh_enabled": True,
+    "cloud_polling": "fixed",  # clock-aligned schedule asserted below
 }
 status = {"result": {"T_Avg": "48", "T_SetPoint": "60", "Cmd": "17", "WaterHeaterSts": "1"}}
 with tempfile.TemporaryDirectory(dir=os.environ.get("THERMOWATT_SMOKE_TMP")) as directory:

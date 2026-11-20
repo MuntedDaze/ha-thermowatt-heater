@@ -22,7 +22,7 @@ from thermowatt_polling import AdaptiveSchedule
 
 adaptive = importlib.import_module(f"{m.__package__}.adaptive")
 SERIAL = "TEST123"
-SMART = {"polling_mode": "smart"}
+SMART = {"cloud_polling": "smart"}
 
 
 def hint(bridge, clock, delay=2400, **changes):
@@ -164,9 +164,7 @@ def test_restart_restores_counters_not_lease_or_cached_status(tmp_path):
         p.write_text(json.dumps(d), encoding="utf-8")
 
     def schedule():
-        return AdaptiveSchedule(
-            True, lambda: now.wall, lambda: now.mono, path, writer, smart_mode="smart"
-        )
+        return AdaptiveSchedule(True, lambda: now.wall, lambda: now.mono, path, writer)
 
     s = schedule()
     s.observed(SERIAL, now.wall, 1800)
@@ -210,8 +208,7 @@ def test_real_controller_follows_the_app_smart_choice_without_command_or_duplica
 
     rig = Rig(tmp_path, monkeypatch, hobart(MON, 22, 10))
     rig.bridge.options.update(SMART)
-    rig.bridge.poll_schedule.enabled = True
-    rig.bridge.poll_schedule.smart_mode = "smart"
+    rig.bridge.smart = rig.bridge.poll_schedule.enabled = True
     rig.run(hobart(MON + 1, 0, 15))
     assert rig.bridge.poll_schedule.counts["accepted"] > 60
     assert rig.bridge.poll_schedule.counts["rejected"] == 0

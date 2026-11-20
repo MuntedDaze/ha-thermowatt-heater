@@ -1,4 +1,4 @@
-"""Configurable ordinary polling; synthetic clocks, credentials and HTTP only."""
+"""Fixed ordinary polling (30 minutes since 1.5.0); synthetic clocks, credentials and HTTP only."""
 
 import json
 
@@ -10,9 +10,10 @@ from test_cloud_and_commands import ready, status_messages
 
 
 @pytest.mark.parametrize("minutes", [None, 5, 30, 90, 120])
-def test_successful_polling_respects_interval_and_default(factory, clock, minutes):
+def test_successful_polling_uses_the_fixed_30_minute_schedule(factory, clock, minutes):
+    # 1.5.0 (decision D2): a saved pre-1.5 interval is ignored.
     bridge = factory(**({} if minutes is None else {"poll_interval_minutes": minutes}))
-    interval = (30 if minutes is None else minutes) * 60
+    interval = 30 * 60
     ready(bridge)
     original_guard = bridge.guard.path.read_bytes()
     bridge.session.request.side_effect = [response(body=STATUS) for _ in range(3)]
@@ -167,7 +168,7 @@ def test_fresh_command_keeps_cadence_and_stale_status_gets_one_bounded_refresh(f
 )
 @pytest.mark.parametrize("minutes", [None, 30, 60])
 @pytest.mark.parametrize("retry", [None, 60, 180])
-def test_saved_options_keep_credentials_flags_generation_and_custom_interval(
+def test_saved_options_keep_credentials_flags_generation_and_ignore_old_interval(
     module, tmp_path, factory, cloud, commands, minutes, retry
 ):
     options = {
@@ -185,19 +186,37 @@ def test_saved_options_keep_credentials_flags_generation_and_custom_interval(
     path.write_text(json.dumps(options))
     original = path.read_bytes()
     bridge = factory(**module.load_options(path))
-    assert bridge.options == options
-    assert bridge.poll_interval == (30 if minutes is None else minutes) * 60
+    assert bridge.options == {**options, "cloud_polling": "fixed"}  # fixture default
+    assert bridge.poll_interval == 1800
     assert bridge.min_cloud_retry == (60 if retry is None else retry) * 60
     assert path.read_bytes() == original
     bridge.session.request.assert_not_called()
 
 
-@pytest.mark.parametrize("minutes", [0, -1, 121, True, False, 30.5, "30", None, []])
-def test_invalid_poll_option_fails_before_startup(module, tmp_path, minutes):
+@pytest.mark.parametrize("value", ["existing", "minimum", "fixed_30", "", None, True, 1])
+def test_invalid_cloud_polling_option_fails_before_startup(module, tmp_path, value):
     path = tmp_path / "options.json"
-    path.write_text(json.dumps({"poll_interval_minutes": minutes}))
+    path.write_text(json.dumps({"cloud_polling": value}))
     with pytest.raises(ValueError):
         module.load_options(path)
+
+
+def test_removed_pre_1_5_polling_options_are_ignored(module, tmp_path):
+    """Supervisor drops unknown options on update; a stale options file must still load."""
+    path = tmp_path / "options.json"
+    path.write_text(
+        json.dumps(
+            {
+                "polling_mode": "minimum",
+                "poll_interval_minutes": 0,
+                "poll_interval_unit": "hours",
+                "adaptive_polling_enabled": "yes",
+                "adaptive_polling_qualified": True,
+                "event_aware_polling_qualified": True,
+            }
+        )
+    )
+    assert module.load_options(path)["polling_mode"] == "minimum"
 
 
 @pytest.mark.parametrize("minutes", [0, 4, 1441, True, 60.5, "60", None, []])
@@ -208,17 +227,17 @@ def test_invalid_cloud_retry_option_fails_before_startup(module, tmp_path, minut
         module.load_options(path)
 
 
-@pytest.mark.parametrize("poll,retry", [(120, 5), (30, 60), (5, 1440)])
-def test_retry_floor_and_bounded_backoff(factory, clock, poll, retry, caplog):
-    bridge = factory(poll_interval_minutes=poll, min_cloud_retry_minutes=retry)
+@pytest.mark.parametrize("retry", [5, 60, 1440])
+def test_retry_floor_and_bounded_backoff(factory, clock, retry, caplog):
+    bridge = factory(min_cloud_retry_minutes=retry)
     ready(bridge)
-    base = max(poll, retry) * 60
+    base = max(30, retry) * 60
     for attempt in range(7):
         bridge.session.request.side_effect = [response(body={"success": False})]
         bridge.tick()
         expected = min(86400, base * 2 ** min(attempt, 4))
         assert bridge.next_cloud - clock() == expected
-        assert expected >= poll * 60 and expected >= retry * 60
+        assert expected >= 1800 and expected >= retry * 60
         assert f"backoff_seconds={expected}" in caplog.text
         clock.advance(expected)
 

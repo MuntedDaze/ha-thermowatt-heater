@@ -159,7 +159,8 @@ universal default. [Every field and its units](../SETTINGS.md) is indexed.
 ## Cloud checks and learning
 
 **Smart is the single normal polling mode** (owner decision, 20 November 2026).
-It is configured in one place, the Thermann Hot Water app's options; the
+It is configured in one place, the Thermann Hot Water app's `cloud_polling`
+option (from app 1.5.0); the
 controller has no polling setting and follows the app automatically. There is
 one scheduler and HTTP client, owned by the app.
 

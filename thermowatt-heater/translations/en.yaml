@@ -10,16 +10,10 @@ configuration:
     description: Leave disabled for read-only use. Separate owner approval is required for control.
   command_policy:
     name: Command policy
-    description: automation accepts only the closed exact-prior OFF/45/62/70 transition protocol and retained narrow legacy forms. Other setpoints and malformed commands are refused. legacy is the older broader protocol and must not be used to bypass qualification.
-  polling_mode:
-    name: Cloud polling mode
-    description: existing preserves all saved polling and qualification choices. smart explicitly permits bounded event-aware quiet checks with a 30-minute crash fallback, coordinated with the controller; minimum accepts up to 12-hour owner-change detection delay. fixed_30 keeps compatibility. No option changes heater command permissions or certifies physical tests. Ordinary Smart status GETs use the existing bounded 401/refresh path; command authentication and all lockouts remain.
-  poll_interval_minutes:
-    name: Polling interval
-    description: Value in the selected unit. Seconds 60–7200; Minutes 1–120. This historic YAML key is retained for upgrades; missing units mean Minutes.
-  poll_interval_unit:
-    name: Polling interval unit
-    description: Select seconds or minutes for the single numeric Polling interval setting.
+    description: automation accepts only the closed exact-prior OFF/45/62/70 transition protocol used by the Thermann Controller. Other setpoints and malformed commands are refused. legacy is the owner's manual-control protocol (plain modes and temperature writes) and must not be used to bypass qualification.
+  cloud_polling:
+    name: Cloud polling
+    description: smart (recommended, the single normal mode) reads the heater when the Thermann Controller's plans say a reading is useful, up to 8 hours apart for a confirmed quiet 45 or OFF overnight; the controller follows this choice automatically. Whenever no valid plan is in force (startup, communication problems, a missing or rejected plan, scheduler failure) the app reads every 30 minutes. fixed is for recovery only - always every 30 minutes. Neither choice changes command freshness checks, confirmation, request protections or authentication lockouts.
   min_cloud_retry_minutes:
     name: Minimum cloud error cooldown (minutes)
     description: Default 60. Ordinary errors wait at least this and the normal polling interval, with bounded exponential backoff. This does not reset authentication lockouts.
@@ -29,12 +23,3 @@ configuration:
   on_demand_refresh_enabled:
     name: Allow read-only on-demand refresh
     description: Disabled by default. Accepts non-retained refresh requests for known devices, coalesced in the existing worker. Waits at least 5 minutes after any status attempt and never bypasses guards or cloud-error cooldowns. Do not trigger from rapidly changing solar values.
-  adaptive_polling_enabled:
-    name: Enable actual adaptive polling
-    description: Disabled by default pending review and supervised validation. The bridge remains the only HTTP authority, using bounded expiring controller plans with fixed fallback. Requires separate qualification below.
-  adaptive_polling_qualified:
-    name: Adaptive polling independently qualified
-    description: Leave false until the owner has separately reviewed and supervised polling, freshness, restart and guard behaviour. Does not change authentication or heater-command permission.
-  event_aware_polling_qualified:
-    name: Longer quiet checks independently qualified
-    description: Default false, including upgrades. Requires independent acceptance of at least 7 days fixed-60 read-only polling with zero refresh rejection or hidden keepalive; repeat at fixed-90 before choosing 90. Controller quiet permission and accepted owner-change delay are also required. No auth safeguard changes.

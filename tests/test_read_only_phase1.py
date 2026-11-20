@@ -9,46 +9,13 @@ import yaml
 
 from conftest import STATUS, TOKENS, response
 from test_cloud_and_commands import ready
-from thermowatt_read_only import poll_seconds
 
 
-@pytest.mark.parametrize(
-    "value,unit,expected",
-    [
-        (60, "seconds", 60),
-        (7200, "seconds", 7200),
-        (1, "minutes", 60),
-        (120, "minutes", 7200),
-        (30, "minutes", 1800),
-    ],
-)
-def test_units_and_legacy_migration(factory, value, unit, expected):
+@pytest.mark.parametrize("value,unit", [(60, "seconds"), (120, "minutes"), (0, "hours")])
+def test_pre_1_5_interval_options_are_ignored_and_the_schedule_is_30_minutes(factory, value, unit):
+    # 1.5.0 (owner decision D2): one polling option; the fixed schedule is 30 min.
     bridge = factory(poll_interval_minutes=value, poll_interval_unit=unit)
-    assert bridge.poll_interval == expected
-    assert poll_seconds({"poll_interval_minutes": value, "poll_interval_unit": unit}) == expected
-    assert poll_seconds({"poll_interval_minutes": 17}) == 1020
-    assert poll_seconds({}) == 1800
-
-
-@pytest.mark.parametrize(
-    "value,unit",
-    [
-        (59, "seconds"),
-        (7201, "seconds"),
-        (121, "minutes"),
-        (0, "minutes"),
-        (30, "hours"),
-        (True, "seconds"),
-        (1.5, "minutes"),
-        ("60", "seconds"),
-        (None, "minutes"),
-    ],
-)
-def test_cross_field_validation_before_startup(module, tmp_path, value, unit):
-    path = tmp_path / "options.json"
-    path.write_text(json.dumps({"poll_interval_minutes": value, "poll_interval_unit": unit}))
-    with pytest.raises(ValueError):
-        module.load_options(path)
+    assert bridge.poll_interval == 1800
 
 
 @pytest.mark.parametrize("success", [False, True, None])
@@ -236,13 +203,21 @@ def test_diagnostics_unknown_before_poll_then_age_health_and_safe_last_error(fac
         Environment().from_string(config["value_template"]).render(value_json=message)
 
 
-def test_translation_uses_single_interval_number_and_clear_units():
+def test_translation_covers_exactly_the_options_and_one_polling_choice():
     addon = Path(__file__).parents[1] / "thermowatt-heater"
     config = yaml.safe_load((addon / "config.yaml").read_text())
     translation = yaml.safe_load((addon / "translations/en.yaml").read_text())["configuration"]
-    assert translation["poll_interval_minutes"]["name"] == "Polling interval"
+    assert translation["cloud_polling"]["name"] == "Cloud polling"
     assert set(translation) == set(config["schema"])
-    assert "poll_interval_value" not in config["schema"]
+    for removed in (
+        "polling_mode",
+        "poll_interval_minutes",
+        "poll_interval_unit",
+        "adaptive_polling_enabled",
+        "adaptive_polling_qualified",
+        "event_aware_polling_qualified",
+    ):
+        assert removed not in config["schema"] and removed not in config["options"]
 
 
 def test_diagnostic_publish_failure_cannot_lock_authentication(factory, caplog):
