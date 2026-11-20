@@ -72,8 +72,6 @@ def test_tariff_gaps_or_invalid_periods_are_rejected(bad):
 @pytest.mark.parametrize(
     "option,value",
     [
-        ("target_c", 40),
-        ("target_c", 71),
         ("feed_in_rate", float("nan")),
         ("meter_verified", "true"),
         ("tariff_clock", "UTC"),
@@ -113,10 +111,10 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
             if isinstance(node, ast.Attribute) and node.attr in actuation:
                 seen.setdefault(path.name, set()).add(node.attr)
         if "_attr_state_class" in source:
-            # Only the actual/advisory polling durations are measurement
-            # statistics. Tank models and estimated energy remain unclassified.
+            # Only the actual polling duration is a measurement statistic.
+            # Tank models and estimated energy remain unclassified.
             assert path.name == "sensor.py"
-            assert 'if key in {"cloud_poll_interval", "adaptive_poll_interval"}' in source
+            assert 'if key == "cloud_poll_interval":' in source
             assert "SensorStateClass.MEASUREMENT" in source
             assert "SensorStateClass.TOTAL" not in source
     assert seen == {"executor.py": {"async_publish", "async_call"}}
@@ -127,7 +125,7 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
     assert "refresh_topic(self.cfg.command_topic)" in executor
     assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.17.1"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.18.0"
     assert manifest["integration_type"] == "hub"
     assert "mqtt" not in manifest.get("dependencies", [])  # loads without MQTT
 
@@ -191,7 +189,8 @@ def test_custom_settings_and_dashboard_have_no_control_actions():
     forms = importlib.import_module(f"{package.__name__}.configuration")
     shown = [k for page in forms.PAGES for k in steps[page]["data"]]
     catalog = importlib.import_module(f"{package.__name__}.settings")
-    assert set(shown) == set(c.DEFAULT_OPTIONS) - catalog.RETIRED
+    assert set(shown) == set(c.DEFAULT_OPTIONS) == set(catalog.CATALOG)
+    assert not set(shown) & c.RETIRED_OPTIONS
     assert len(shown) == len(set(shown))
     assert set(steps["init"]["menu_options"]) == set(forms.MENUS["init"])
     dashboard = yaml.safe_load(

@@ -62,11 +62,13 @@ Thermowatt can reject that pointless boost. At48°C with qualified surplus it ma
 select70 directly instead of45→62→70. Higher targets are not selected merely
 because they exist. A missed62 target is not treated as an emergency.
 
-Before either configured peak, a genuinely fresh bottom reading below the chosen
-warning level (default35°C) can generate a low-water notice. Default observation
-lead is30 minutes. Stale/unavailable means unverified, not measured cold. An alert
-does not create peak permission. Old45-by06:00/42-by07:00 production warnings are
-retired; saved legacy settings remain for rollback.
+Shortly before the **evening** peak, a genuinely fresh bottom reading below the
+chosen warning level (default 35 °C) generates a low-water notice. There is no
+check before the morning peak: Manual 45 °C overnight with the heater's native
+hysteresis is the agreed policy, and a bottom reading below 42 °C then is
+accepted. The 45-by-06:00 / 42-by-07:00 morning requirement is cancelled
+([operating policy](../OPERATING_POLICY.md)). Stale/unavailable means
+unverified, not measured cold. The notice never creates heating permission.
 
 ## Solar and weekends
 
@@ -156,16 +158,16 @@ universal default. [Every field and its units](../SETTINGS.md) is indexed.
 
 ## Cloud checks and learning
 
-Keep existing choices until deliberately changed. Select the same new mode in
-the bridge App Configuration and controller **Advanced/System → Cloud checks
-and data age**. There is still one scheduler and HTTP client, owned by the bridge.
+**Smart is the single normal polling mode** (owner decision, 20 November 2026).
+It is configured in one place, the Thermann Hot Water app's options; the
+controller has no polling setting and follows the app automatically. There is
+one scheduler and HTTP client, owned by the app.
 
-| Mode | Healthy quiet interval / trade-off |
+| Situation | Reads |
 |---|---|
-| Keep existing | Preserves earlier flags, qualification and numeric interval |
-| Smart — Recommended | Up to8h overnight/90min daytime; useful decisions shorten the interval |
-| Fixed30 — Compatibility |30-minute background checks, plus command checks/confirmation |
-| Experimental minimum | Up to12h overnight/3h quiet daytime; greater outside-app detection delay |
+| Smart, healthy | Up to 8 h overnight / 90 min by day for a confirmed quiet 45 or OFF; useful decisions shorten the interval; otherwise every 15–30 min |
+| Startup, communication problem, missing or rejected plan, scheduler failure | Automatic fixed 30-minute schedule (no setting needed) |
+| App set to *Fixed* (recovery only) | Fixed 30-minute schedule; the controller sends no plans |
 
 Quiet intervals need confirmed steady baseline/OFF and safe local context, not
 merely the previous command. The existing180-second controller lease expires
@@ -236,7 +238,7 @@ remains separate. A diagnostic-save fault cannot authorise or interrupt commands
 | Weekend measured-PV comfort | New policy, deliberate off-peak grid assistance; owner validation after installation |
 | CT-free optional peak solar | Explicit experimental mode; grid authority and short-import/unconfirmed-OFF exposure |
 | CT-measured solar | Real circuit commissioning required; no electrical-isolation claim |
-| Smart/Minimum | Explicit choices; bounded healthy owner-detection delay and fixed fallback |
+| Smart polling | Single normal mode; bounded healthy owner-detection delay and automatic fixed fallback |
 | Learning display / learned control | Diagnostic evidence / separate default-off qualified authority |
 | Thermal state and exposure | Inferred/nominal diagnostics, not metered energy or hygiene proof |
 | Flat/TOU/shoulder/seasonal/midday windows | One supported model; owner verifies actual contract |

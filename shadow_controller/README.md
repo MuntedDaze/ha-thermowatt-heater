@@ -9,7 +9,8 @@ storage. One guarded command arbiter (`controller.py`) decides whether a change
 may be sent and supervises its confirmation; nothing else publishes heater
 commands. With automatic control off the same policy runs read-only.
 
-Files here: [changelog](CHANGELOG.md), [forecast setup](FORECAST_SETUP.md),
-[how it decides](HOW_IT_DECIDES.md), [commissioning](COMMISSIONING_SIMPLIFIED.md)
-and the Thermowatt dashboard source (`dashboard.yaml`). Older controller
-documents are in [docs/history/controller](../docs/history/controller/).
+Files here: [changelog](CHANGELOG.md), [forecast setup](FORECAST_SETUP.md) and
+the Thermowatt dashboard source (`dashboard.yaml`). Upgrading:
+[docs/owner/UPGRADE.md](../docs/owner/UPGRADE.md). Older controller documents,
+including the 0.9 decision walkthrough and commissioning runbook, are in
+[docs/history/controller](../docs/history/controller/).

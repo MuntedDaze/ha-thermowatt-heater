@@ -1,4 +1,4 @@
-"""Index every current/retired preference directly from the validated metadata."""
+"""Index every current setting (and name the retired keys) from the validated metadata."""
 
 import argparse
 import importlib
@@ -97,22 +97,21 @@ def build():
     lines += [
         "## Retired settings",
         "",
-        "Retained for upgrade/rollback compatibility; they do not add competing control policies.",
+        "These keys are not settings any more: nothing reads, validates or shows them.",
+        "Controller 0.18.0 moved any saved value, unchanged, into the unread",
+        "`retired_options` record (kept only for rollback and audit). They are never",
+        "requirements; see [OPERATING_POLICY.md](OPERATING_POLICY.md) section 1.1.",
         "",
-    ]
-    for key, meta in settings.CATALOG.items():
-        if meta.group == "Retired":
-            lines += [f"- `{key}` — {meta.name}: {meta.explanation}"]
-    lines += [
+        ", ".join(f"`{key}`" for key in sorted(config.RETIRED_OPTIONS)),
         "",
         "## Practical starting choices",
         "",
-        "Use the household's verified contract and appliance settings. Jacob retains45/62/70,",
-        "fixedAEST, verified Aurora periods and export-positive GoodWe; these are examples,",
-        "not universal defaults. Weekend500W/15min, sunset200W/30min, end18:00 and cooldown10min",
-        "are editable starting preferences. Minimum15-minute ordinary command spacing remains.",
-        "Keep physical qualifications truthful; new polling modes and experimental CT-free",
-        "permission are explicit choices. Do not change token/lockout state to clear a warning.",
+        "Use the household's verified contract and appliance settings. The owner retains",
+        "45/62/70, fixed AEST, verified Aurora periods and export-positive GoodWe; these are",
+        "examples, not universal defaults. Weekend 500 W trigger, end 18:00 and cooldown 10 min",
+        "are editable starting preferences. Minimum 15-minute ordinary command spacing remains.",
+        "Cloud polling is chosen once, in the Thermann Hot Water app (Smart). Keep physical",
+        "qualifications truthful. Do not change token/lockout state to clear a warning.",
         "",
     ]
     return "\n".join(lines)

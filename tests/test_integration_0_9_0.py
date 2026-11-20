@@ -113,7 +113,6 @@ class Rig:
                 "forecast_uncertainty": 0.0,
                 "forecast_house_margin_kw": 0.0,
                 "controller_command_topic": TOPIC,
-                "controller_three_state_qualified": True,
                 "controller_four_state_qualified": True,
                 "heater_meter_verification": "sensor.synthetic_heater_w|W",
             },

@@ -52,7 +52,6 @@ def schedule_at(wall, mode="smart"):
 
 
 def plan_for(status_at, now, **kwargs):
-    kwargs.setdefault("mode", "smart")
     kwargs.setdefault("temperature_valid", True)
     return json.dumps(adaptive.smart_plan(now, status_at, **kwargs))
 
@@ -379,7 +378,7 @@ def test_post_upgrade_night_accepts_smart_plans_and_activates(tmp_path, monkeypa
     assert rig.bridge.usage.counts.get("status", 0) - reads <= 4
     assert not rig.posts  # nothing to change: Manual 45 overnight is the policy
     data = report.build(rig.runtime, rig.now(), "2026.11.1")["polling"]
-    assert data["actual_mode"] == "adaptive" and data["choice"] == "smart"
+    assert data["actual_mode"] == "adaptive" and data["bridge_preference"] == "smart"
     assert data["plans_accepted"] > 0 and data["plans_rejected"] == 0
     assert data["last_acceptance"]["reason"] == "stable_baseline"
 

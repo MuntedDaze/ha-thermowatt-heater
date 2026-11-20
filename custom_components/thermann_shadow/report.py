@@ -387,7 +387,6 @@ def build(runtime, now, ha_version="unknown"):
                 "optional_solar_boost",
                 "weekend_solar_heating",
                 "weekend_pv_start_kw",
-                "weekend_qualify_minutes",
                 "solar_cooldown_minutes",
                 "low_water_warning_c",
                 "off_peak_rate",
@@ -451,8 +450,7 @@ def build(runtime, now, ha_version="unknown"):
             },
         },
         "polling": {
-            "choice": code(opts.get("polling_mode")),
-            # What the bridge is actually doing, separately from the choice:
+            # One polling configuration (D2): the app's option is the choice;
             # Smart selected but "fixed_fallback" means no plan is in force.
             "bridge_preference": polling_code(attrs.get("polling_preference")),
             "actual_mode": polling_code(attrs.get("polling_mode")),

@@ -1,6 +1,7 @@
 """Reproducible offline cost/request comparisons, with explicit model limits.
 
-Run: python tools/controller_replay.py --output docs/history/smart-controller/SIMULATION_RESULTS.json
+Run: python tools/controller_replay.py --output docs/evidence/CONTROLLER_REPLAY.json
+(0.18.0: the retired polling-day comparison moved to docs/history/smart-controller/.)
 No HA installation, network, credentials, MQTT or device access.
 """
 
@@ -24,7 +25,7 @@ def modules():
         sys.modules[name] = package
     return tuple(
         importlib.import_module(f"{name}.{part}")
-        for part in ("model", "config", "simple_policy", "polling")
+        for part in ("model", "config", "simple_policy", "adaptive")
     )
 
 
@@ -91,75 +92,6 @@ def dispatch_case(name, availability, withdrawal=5, later_solar=False):
     }
 
 
-def polling_day(strategy):
-    _, _, _, p = modules()
-    start = datetime(2026, 11, 16, tzinfo=timezone.utc)
-    shadow = p.PollingShadow(True)
-    counts = {
-        kind: 0
-        for kind in (
-            "auth_refresh",
-            "routine_status",
-            "pre_command_status",
-            "command_post",
-            "confirmation_status",
-        )
-    }
-    status_minutes = []
-    token_at = None
-    last_status = None
-    last_command = None
-    commands = {367, 667, 907, 1327}
-
-    def request(kind, minute):
-        nonlocal token_at, last_status
-        if token_at is None or minute - token_at >= 20:
-            counts["auth_refresh"] += 1
-            token_at = minute
-        counts[kind] += 1
-        if kind != "command_post":
-            last_status = minute
-            status_minutes.append(minute)
-
-    for i in range(1440):
-        if i in commands:
-            if last_status is None or i - last_status > 1:
-                request("pre_command_status", i)
-            request("command_post", i)
-            last_command = i
-        if i - 1 in commands:
-            request("confirmation_status", i)
-        if strategy == "adaptive":
-            due = shadow.observe(
-                p.PollContext(
-                    start + timedelta(minutes=i),
-                    start + timedelta(minutes=last_status) if last_status is not None else None,
-                    any(a <= i < b for a, b in ((367, 607), (667, 807), (907, 1027))),
-                    command_at=start + timedelta(minutes=last_command)
-                    if last_command is not None
-                    else None,
-                )
-            )
-            due = due or i == 0
-        else:
-            due = i % int(strategy) == 0
-        if due and (last_status is None or i - last_status > 3):
-            request("routine_status", i)
-    owner_event = 383
-    detection = next((i - owner_event for i in status_minutes if i >= owner_event), None)
-    return {
-        "strategy": strategy,
-        "http": counts,
-        "total_http": sum(counts.values()),
-        "persistent_owner_event_detection_minutes": detection,
-        "transient_event_384_to_393_missed": not any(384 <= i <= 393 for i in status_minutes),
-        "maximum_status_gap_minutes": max(
-            b - a for a, b in zip(status_minutes, status_minutes[1:], strict=False)
-        ),
-        "limits": "synthetic fixed command timeline; 20-minute refresh heuristic; successful reads only; no vendor expiry assertion",
-    }
-
-
 def report():
     cases = {
         "clear": lambda i: 3.5,
@@ -174,7 +106,6 @@ def report():
         "dispatch": [
             dispatch_case(name, fn, minutes) for name, fn in cases.items() for minutes in (10, 5, 2)
         ],
-        "polling": [polling_day(strategy) for strategy in ("30", "60", "adaptive")],
         "full_controller_evidence": "tests/test_integration_0_9_0.py and tests/test_audit_regressions_0_9_1.py exercise real executor/bridge with synthetic cloud",
     }
 

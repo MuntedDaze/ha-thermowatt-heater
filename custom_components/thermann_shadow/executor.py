@@ -29,7 +29,7 @@ from datetime import datetime, timedelta, time
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .config import DOMAIN
+from .config import DOMAIN, solar_start_headroom_kw
 from .controller import (
     CONFIRMING,
     STEADY,
@@ -45,8 +45,7 @@ from .controller import (
     refresh_topic,
 )
 from zoneinfo import ZoneInfo
-from .polling import PollContext, PollingShadow
-from .adaptive import make_plan, event_plan, smart_plan
+from .adaptive import smart_plan
 from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
 from .solar import ct_free_record, grid_sanity
 
@@ -55,6 +54,8 @@ STORAGE_VERSION = 1
 NOTIFY_SERVICE = re.compile(r"^[a-z0-9_]{1,64}$")
 VENDOR_MODES = {"Manual", "Schedule", "Eco", "Off", "Holiday", "Unknown"}
 SHADOW_LOG_LENGTH = 30
+# Longest healthy quiet interval of a Smart v3 plan (8 hours overnight).
+SMART_OWNER_CHECK_MAX_SECONDS = 28800
 
 
 def controller_config(
@@ -65,16 +66,12 @@ def controller_config(
     values = {**DEFAULT_OPTIONS, **options}
     return ControllerConfig(
         command_topic=str(values["controller_command_topic"]).strip(),
-        bridge_commands_qualified=values["controller_bridge_qualified"] is True,
-        three_state_qualified=values["controller_three_state_qualified"] is True,
         max_commands_per_day=int(values["controller_max_commands_per_day"]),
         confirmation_timeout_minutes=float(values["controller_confirmation_timeout_minutes"]),
         max_requests_per_day=int(values["controller_max_requests_per_day"]),
         poll_interval_minutes=poll_minutes,
         expected_command_topic=expected_topic,
-        published_forecasts_enabled=values["forecast_enabled"] is True,
         tariff_verified=values["tariff_verified"] is True,
-        requires_four_states=True,
         four_state_qualified=values["controller_four_state_qualified"] is True,
         element_kw=float(values["element_kw"]),
         solar_cooldown_minutes=float(values["solar_cooldown_minutes"]),
@@ -96,7 +93,6 @@ class Executor:
         self._saved: dict | None = None
         self._refresh_wanted = False
         self._last_poll_plan_at = None
-        self.poll_shadow = PollingShadow()
         self.reset_policy()
         self.configure(entry.options)
 
@@ -126,27 +122,16 @@ class Executor:
                 "boost_min_saving_aud",
                 "weekend_solar_heating",
                 "weekend_pv_start_kw",
-                "weekend_qualify_minutes",
                 "weekend_end_time",
-                "weekend_sunset_kw",
-                "weekend_sunset_minutes",
                 "peak_command_lead_minutes",
             )
         )
+        economic_change = economic_change or solar_start_headroom_kw(
+            values
+        ) != solar_start_headroom_kw(self.runtime.native_options)
         self.runtime.set_native_reference(options)
         if economic_change:
             self.reset_policy()
-        shadow_settings = (
-            values["adaptive_polling_shadow"],
-            values["adaptive_poll_heating_minutes"],
-            values["adaptive_poll_stable_minutes"],
-        )
-        if shadow_settings != (
-            self.poll_shadow.enabled,
-            self.poll_shadow.heating_minutes,
-            self.poll_shadow.stable_minutes,
-        ):
-            self.poll_shadow = PollingShadow(*shadow_settings)
         self.notify_service = str(values["controller_notify_service"]).strip()
 
     def reset_policy(self) -> None:
@@ -159,22 +144,16 @@ class Executor:
                 boost_enabled=self.runtime.native_options["optional_solar_boost"],
                 weekend_enabled=self.runtime.native_options["weekend_solar_heating"],
                 weekend_pv_kw=self.runtime.native_options["weekend_pv_start_kw"],
-                weekend_qualify=timedelta(
-                    minutes=self.runtime.native_options["weekend_qualify_minutes"]
-                ),
                 weekend_end=time.fromisoformat(self.runtime.native_options["weekend_end_time"]),
-                sunset_kw=self.runtime.native_options["weekend_sunset_kw"],
-                sunset_delay=timedelta(
-                    minutes=self.runtime.native_options["weekend_sunset_minutes"]
-                ),
                 peak_lead=timedelta(
                     minutes=self.runtime.native_options["peak_command_lead_minutes"]
                 ),
                 peak_policy=self.runtime.native_options["peak_heating_policy"],
                 element_kw=float(self.runtime.native_options["element_kw"]),
                 kwh_per_c=float(self.runtime.native_options["tank_litres"]) * 4.186 / 3600,
+                # Decision D3: element power + 0.3 kW (3.3 kW for a 3 kW element).
                 peak_start_kw=float(self.runtime.native_options["element_kw"])
-                + settings.export_headroom_kw,
+                + solar_start_headroom_kw(self.runtime.native_options),
                 meter_max_age=timedelta(seconds=settings.grid_max_age_seconds),
                 soft_target_margin=timedelta(
                     minutes=float(self.runtime.native_options["completion_margin_minutes"])
@@ -392,12 +371,8 @@ class Executor:
         ):
             return
         if (
-            (
-                self.runtime.native_options["polling_mode"] not in {"smart", "minimum"}
-                and (
-                    not self.runtime.native_options["event_aware_polling_enabled"]
-                    or not self.runtime.native_options["adaptive_polling_enabled"]
-                )
+            not self._bridge_smart(
+                self.hass.states.get(self.runtime.sources.get("cloud_health", ""))
             )
             or not self._quiet_state(obs, self.last_decision)
             or obs.cloud_health != "ok"
@@ -405,7 +380,7 @@ class Executor:
             or obs.auth_mode != "authorized"
             or not isinstance(schedule, dict)
             or schedule.get("active") is not True
-            or schedule.get("plan_version") not in (2, 3)
+            or schedule.get("plan_version") != 3
             or schedule.get("reason")
             not in ("stable_baseline", "stable_off", "quiet_before_decision")
             or obs.poll_at is None
@@ -414,18 +389,9 @@ class Executor:
             return
         owner = schedule.get("owner_check_seconds")
         next_at = schedule.get("next_at")
-        maximum = self.runtime.native_options["owner_change_check_minutes"] * 60
-        cap = 5400
-        if schedule.get("plan_version") == 3 and self.runtime.native_options["polling_mode"] in {
-            "smart",
-            "minimum",
-        }:
-            cap = maximum = (
-                43200 if self.runtime.native_options["polling_mode"] == "minimum" else 28800
-            )
         if (
             type(owner) is not int
-            or not 1800 <= owner <= min(cap, maximum)
+            or not 1800 <= owner <= SMART_OWNER_CHECK_MAX_SECONDS
             or type(next_at) not in (int, float)
             or not obs.poll_at.timestamp() <= next_at <= obs.poll_at.timestamp() + owner + 1
         ):
@@ -732,36 +698,8 @@ class Executor:
                     await self._notify(effect)
                 elif effect.kind == "resolve":
                     self._dismiss(effect.key)
-            actions = [
-                self.runtime.values.get("next_tariff_change"),
-                decision.plan.get("best_start"),
-                decision.plan.get("latest_start"),
-                decision.plan.get("next_baseline"),
-                now if decision.command and self.controller.enabled else None,
-            ]
-            actions = [at for at in actions if at is not None and at >= now]
-            self.poll_shadow.observe(
-                PollContext(
-                    now=now,
-                    status_at=obs.poll_at,
-                    heating=(self.runtime.circuit.state == "on")
-                    if self.runtime.circuit.valid
-                    else None,
-                    command_at=self.controller.last_command_at(),
-                    confirming=self.controller.state == CONFIRMING,
-                    uncertain=self.runtime.temperature_c is None,
-                    decision_at=min(actions) if actions else None,
-                    completion_at=_dt(self.runtime.completion.get("earliest")),
-                    cloud_ready=obs.cloud_health == "ok"
-                    and obs.auth_mode == "authorized"
-                    and not obs.cooldown_seconds,
-                    desired_target_c=decision.plan.get("desired_target_c"),
-                    reported_target_c=obs.target_c if obs.mode == "Manual" else None,
-                )
-            )
-            # An already-selected storage target needs no new start decision.
-            # Keep the old shadow comparison intact, but do not spend real GETs
-            # on its hypothetical latest-start or zero-benefit pause window.
+            # An already-selected storage target needs no new start decision:
+            # no real GETs for a latest-start or zero-benefit pause window.
             storing = (self.policy.setpoint(state) or 0) >= int(
                 self.runtime.native_options["normal_storage_c"]
             )
@@ -784,10 +722,23 @@ class Executor:
             self.last_evaluated_at = now
         self._notify_listeners()
 
+    def _bridge_smart(self, health) -> bool:
+        """The app is set to Smart polling and accepts v3 plans (decision D2).
+
+        One polling configuration: the Thermann Hot Water app's option decides
+        and the controller follows it. Anything else (the app's Fixed recovery
+        mode, an app without v3 plans, missing diagnostics) means no plan is
+        sent and the app keeps its automatic fixed schedule.
+        """
+        attrs = health.attributes if health is not None else {}
+        versions = attrs.get("adaptive_plan_versions", [])
+        return (
+            attrs.get("polling_preference") == "smart"
+            and isinstance(versions, list)
+            and any(type(v) is int and v == 3 for v in versions)
+        )
+
     async def _publish_poll_plan(self, now, obs, decision, decision_at):
-        mode = self.runtime.native_options["polling_mode"]
-        if mode == "existing" and not self.runtime.native_options["adaptive_polling_enabled"]:
-            return
         if self.controller.state == CONFIRMING:
             return  # the bridge owns the existing confirmation read sequence
         if (
@@ -799,52 +750,20 @@ class Executor:
         if topic is None or obs.cloud_health != "ok" or obs.auth_mode != "authorized":
             return
         health = self.hass.states.get(self.runtime.sources.get("cloud_health", ""))
-        versions = health.attributes.get("adaptive_plan_versions", []) if health else []
-        wants_event_aware = self.runtime.native_options["event_aware_polling_enabled"]
-        event_aware = (
-            wants_event_aware
-            and isinstance(versions, list)
-            and any(type(v) is int and v == 2 for v in versions)
+        if not self._bridge_smart(health):
+            return  # Fixed/unknown: the app's automatic fixed schedule applies
+        zone = ZoneInfo(self.runtime.settings.time_zone)
+        clock = now.astimezone(zone).time().replace(tzinfo=None)
+        overnight = clock < self.policy.s.daytime_start or clock >= self.policy.s.baseline_start
+        plan = smart_plan(
+            now,
+            obs.poll_at,
+            stable_state=self._quiet_state(obs, decision),
+            overnight=overnight,
+            temperature_valid=self.runtime.temperature_c is not None,
+            decision_at=self._event_decision_at(now, decision, decision_at),
+            completion_at=_dt(self.runtime.completion.get("earliest")),
         )
-        if mode == "existing" and wants_event_aware and not event_aware:
-            return  # no v2 qualification/capability: expire into fixed fallback
-        if mode != "existing":
-            if not isinstance(versions, list) or 3 not in versions:
-                return  # older bridge remains on its original fixed fallback
-            zone = ZoneInfo(self.runtime.settings.time_zone)
-            clock = now.astimezone(zone).time().replace(tzinfo=None)
-            overnight = clock < self.policy.s.daytime_start or clock >= self.policy.s.baseline_start
-            plan = smart_plan(
-                now,
-                obs.poll_at,
-                mode=mode,
-                stable_state=self._quiet_state(obs, decision),
-                overnight=overnight,
-                temperature_valid=self.runtime.temperature_c is not None,
-                decision_at=self._event_decision_at(now, decision, decision_at),
-                completion_at=_dt(self.runtime.completion.get("earliest")),
-            )
-        elif event_aware:
-            plan = event_plan(
-                now,
-                obs.poll_at,
-                stable_state=self._quiet_state(obs, decision),
-                temperature_valid=self.runtime.temperature_c is not None,
-                decision_at=self._event_decision_at(now, decision, decision_at),
-                owner_check_minutes=self.runtime.native_options["owner_change_check_minutes"],
-                status_max_minutes=self.runtime.settings.status_max_age_minutes,
-            )
-        else:
-            plan = make_plan(
-                now,
-                obs.poll_at,
-                heating=self.runtime.circuit.state == "on",
-                has_ct=self.runtime.circuit.valid,
-                temperature_valid=self.runtime.temperature_c is not None,
-                decision_at=decision_at,
-                completion_at=_dt(self.runtime.completion.get("earliest")),
-                status_max_minutes=self.runtime.settings.status_max_age_minutes,
-            )
         if plan is None:
             return
         self._last_poll_plan_at = now
@@ -1033,14 +952,6 @@ class Executor:
                 0, self.cfg.max_requests_per_day - summary["requests_last_24h"]
             )
             if summary["requests_last_24h"] is not None
-            else None,
-            "next_adaptive_poll": self.poll_shadow.next_due,
-            "adaptive_poll_interval": (
-                self.poll_shadow.next_due - self.poll_shadow.virtual_at
-            ).total_seconds()
-            if self.poll_shadow.enabled
-            and self.poll_shadow.next_due
-            and self.poll_shadow.virtual_at
             else None,
         }
 

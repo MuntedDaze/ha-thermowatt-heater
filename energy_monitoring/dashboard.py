@@ -295,7 +295,6 @@ def hot_water_view(config):
             ("status_age", "Status age"),
             ("last_poll", "Last successful poll"),
             ("next_poll", "Next actual background poll"),
-            ("next_adaptive_poll", "Next hypothetical shadow poll"),
             ("adaptive_status", "Adaptive polling status / reason"),
             ("request_budget", "Request budget remaining (rolling 24h)"),
             ("exit_request_reserve", "Requests reserved before a solar start"),

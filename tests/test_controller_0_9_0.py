@@ -27,7 +27,7 @@ def local(year=2026, month=11, day=16, hour=12, minute=0):
 
 
 def cfg(**changes):
-    values = {"command_topic": TOPIC, "three_state_qualified": True}
+    values = {"command_topic": TOPIC, "four_state_qualified": True}
     values.update(changes)
     return ctl.ControllerConfig(**values)
 
@@ -83,9 +83,9 @@ def notices(effects):
 
 def test_a_fresh_install_cannot_command():
     missing = ctl.ControllerConfig().missing_commissioning()
-    assert missing == ["command_topic_not_configured", "three_state_commands_not_qualified"]
-    assert cfg(three_state_qualified=False).missing_commissioning() == [
-        "three_state_commands_not_qualified"
+    assert missing == ["command_topic_not_configured", "four_state_commands_not_qualified"]
+    assert cfg(four_state_qualified=False).missing_commissioning() == [
+        "four_state_commands_not_qualified"
     ]
     now = local()
     c = ctl.Controller()

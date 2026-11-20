@@ -142,24 +142,25 @@ def test_flat_statistics_household_baseline_and_its_freshness():
 def test_restore_preserves_tariff_contract_and_undo_reverts_only_preferences():
     current = c.saved_options(
         {
-            "target_c": 65,
-            "margin_minutes": 45,
+            "forecast_uncertainty": 0.4,
+            "pv_ac_limit_kw": 6.0,
             "peak_rate": 0.4,
             "feed_in_rate": 0.05,
             "peak_evening_start": "17:00",
-            "paused": True,
+            "retired_options": {"paused": True},
         }
     )
     restored = catalog.recommended_options(current)
-    assert restored["target_c"] == 70 and restored["margin_minutes"] == 30
+    assert restored["forecast_uncertainty"] == 0.25 and restored["pv_ac_limit_kw"] == 5.0
     assert restored["peak_rate"] == 0.4 and restored["feed_in_rate"] == 0.05
-    assert restored["peak_evening_start"] == "17:00" and restored["paused"] is True
-    assert restored[catalog.BACKUP_KEY] == {"target_c": 65, "margin_minutes": 45}
+    assert restored["peak_evening_start"] == "17:00"
+    assert restored["retired_options"] == {"paused": True}  # never touched by Restore
+    assert restored[catalog.BACKUP_KEY] == {"forecast_uncertainty": 0.4, "pv_ac_limit_kw": 6.0}
     c.parse_options(restored)  # stored snapshot does not break validation
-    edited = catalog.apply_changes(restored, {"margin_minutes": 20})
-    assert edited[catalog.BACKUP_KEY] == {"target_c": 65}  # newest owner edit wins
+    edited = catalog.apply_changes(restored, {"pv_ac_limit_kw": 7.0})
+    assert edited[catalog.BACKUP_KEY] == {"forecast_uncertainty": 0.4}  # newest edit wins
     undone = catalog.undo_restore(edited)
-    assert undone["target_c"] == 65 and undone["margin_minutes"] == 20
+    assert undone["forecast_uncertainty"] == 0.4 and undone["pv_ac_limit_kw"] == 7.0
     assert catalog.BACKUP_KEY not in undone
     with pytest.raises(ValueError):
         catalog.undo_restore(undone)
@@ -168,24 +169,14 @@ def test_restore_preserves_tariff_contract_and_undo_reverts_only_preferences():
 
 
 def test_describe_reports_current_recommended_and_original():
-    info = catalog.describe("switching_benefit_aud", 0.2)
-    assert info["current_value"] == 0.2 and info["recommended_default"] == 0.10
-    assert info["original_default"] == 0.10 and info["recommended_equals_original"]
+    info = catalog.describe("forecast_uncertainty", 0.2)
+    assert info["current_value"] == 0.2 and info["recommended_default"] == 0.25
+    assert info["original_default"] == 0.25 and info["recommended_equals_original"]
     assert info["changed_from_recommended"] and info["restore_recommended"] == "restores"
     assert catalog.describe("peak_rate", 0.361878)["restore_recommended"] == "preserves"
     # Original defaults are pinned: a future recommendation change must not
     # silently rewrite what shipped. Update DEFAULT_OPTIONS only, never this.
     pinned = {
-        "morning_threshold_c": 40.0,
-        "morning_time": "07:00",
-        "target_c": 70.0,
-        "margin_minutes": 30.0,
-        "solar_hold_minutes": 10.0,
-        "solar_loss_minutes": 20.0,
-        "minimum_cycle_minutes": 30.0,
-        "minimum_gap_minutes": 30.0,
-        "export_headroom_kw": 0.3,
-        "switching_benefit_aud": 0.10,
         "peak_rate": 0.361878,
         "off_peak_rate": 0.170200,
         "feed_in_rate": 0.092760,

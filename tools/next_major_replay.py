@@ -25,8 +25,9 @@ class SmartWeek(FailureWeek):
         self.token_at = None
         self.expired_status_401 = 0
         super().__init__(*args, **kwargs)
-        mode = self.strategy if self.strategy in {"smart", "minimum"} else "existing"
-        self.entry.options["polling_mode"] = mode
+        # One polling configuration (0.18.0): only the app's option is set;
+        # the controller follows it.
+        mode = "smart" if self.strategy == "smart" else "existing"
         if not self.ct:
             from test_existing_installation_upgrade import solar
 
@@ -106,7 +107,7 @@ def results(seasons=None):
             patch.setattr(SmartWeek, "failure_week", failures)
             patch.setattr(SmartWeek, "session_hours", ttl)
             report = base.results(
-                [(s, s, False, 60) for s in ("fixed_30", "fixed_60", "smart", "minimum")],
+                [(s, s, False, 60) for s in ("fixed_30", "fixed_60", "smart")],
                 week_class=SmartWeek,
             )
             report["season"] = name
@@ -114,7 +115,7 @@ def results(seasons=None):
                 f"Actual worker HTTP categories; legacy fixed modes use20-minute proactive heuristic. Smart ordinary GET reuses the session with bounded401 refresh/retry; command checks/POST/confirmation retain proactive preparation. Synthetic session{ttl}h, not vendor evidence."
             )
             report["assumptions"]["polling"] = (
-                "Smart8h quiet night/90min day; Minimum12h/180min; useful pre-boundary observations; original30min lease-loss fallback. Temperature never promoted to fresh."
+                "Smart8h quiet night/90min day; useful pre-boundary observations; original30min lease-loss fallback. Temperature never promoted to fresh."
             )
             report["assumptions"]["weather"] = (
                 f"Synthetic {daylight}-hour solar day; cloudy/patchy days; forecasts can be optimistic. Not measured local meteorology."

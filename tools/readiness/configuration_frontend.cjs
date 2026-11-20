@@ -32,7 +32,7 @@ async function main() {
     hot_water: [], prices: ["electricity"], peak_times: ["electricity"],
     tariff_json: ["electricity"], schedule: ["electricity"], solar: ["solar_meters"],
     sources: ["solar_meters"], equipment: ["advanced"], polling: ["advanced"],
-    commissioning: ["advanced"], bridge_sources: ["advanced"], legacy: ["advanced"],
+    commissioning: ["advanced"], bridge_sources: ["advanced"],
     period: ["electricity", "schedule"],
     heating_preferences: ["solar_meters"], ct_free_setup: ["solar_meters"], diagnostic_report: [],
   };

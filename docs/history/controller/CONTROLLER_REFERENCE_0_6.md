@@ -1,6 +1,6 @@
 # Thermann Hot Water Controller 0.6.2 — reference (historical)
 
-Superseded by [HOW_IT_DECIDES.md](../../../shadow_controller/HOW_IT_DECIDES.md) for 0.7.0.
+Superseded by [HOW_IT_DECIDES.md](HOW_IT_DECIDES.md) for 0.7.0.
 
 **Status: built and tested offline only.** Nothing has been deployed, no
 command has been sent, and no heater, Schedule, T-Comfort or bridge setting has

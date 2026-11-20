@@ -1,7 +1,27 @@
-"""Fresh pre-peak warnings; legacy morning helper retained for historical replays."""
+"""Low-water notification before the evening peak (owner decision D1, 20 Nov 2026).
 
-from datetime import datetime, time, timedelta
+A notification only: never a heating target, heating permission or change to the
+heater's native protections. There is no morning check: the 0.7.0 morning
+reserve (45 C by 06:00 / 42 C by 07:00) is cancelled (docs/OPERATING_POLICY.md).
+"""
+
+from datetime import timedelta
 from zoneinfo import ZoneInfo
+
+# A peak starting at or after this household-local hour is the evening peak
+# (the same rule simple_policy uses for weekday storage deadlines).
+EVENING_PEAK_FROM_HOUR = 12
+
+
+def evening_peak(next_peak, time_zone):
+    """``next_peak`` if it is an evening peak in household time, else None."""
+    if next_peak is None:
+        return None
+    return (
+        next_peak
+        if next_peak.astimezone(ZoneInfo(time_zone)).hour >= EVENING_PEAK_FROM_HOUR
+        else None
+    )
 
 
 def pre_peak_availability(
@@ -15,7 +35,8 @@ def pre_peak_availability(
     max_age_minutes=45,
     boot=None,
 ):
-    """Fresh bottom-probe warning for either configured peak, never a heat target."""
+    """Fresh bottom-probe warning before ``next_peak`` (the caller passes only an
+    evening peak), never a heat target."""
     result = {
         "state": "not_due",
         "threshold_c": threshold,
@@ -37,37 +58,4 @@ def pre_peak_availability(
         result["state"] = "unverified"
     else:
         result["state"] = "low" if reading < threshold else "latest_probe_above_warning"
-    return result
-
-
-def morning_availability(now, reading, observed_at, time_zone, max_age_minutes=45):
-    """Retired diagnostic helper; production uses pre_peak_availability only."""
-    local = now.astimezone(ZoneInfo(time_zone))
-    preferred = datetime.combine(local.date(), time(6), ZoneInfo(time_zone))
-    hard = datetime.combine(local.date(), time(7), ZoneInfo(time_zone))
-    result = {
-        "state": "not_due",
-        "preferred_c": 45,
-        "minimum_c": 42,
-        "preferred_at": preferred.isoformat(),
-        "minimum_at": hard.isoformat(),
-        "observed_at": observed_at.isoformat() if observed_at else None,
-        "reading_c": reading,
-        "proves_deadline_met": False,
-    }
-    if not time(5) <= local.time().replace(tzinfo=None) < time(9):
-        return result
-    fresh = (
-        reading is not None
-        and observed_at is not None
-        and timedelta(0) <= now - observed_at <= timedelta(minutes=max_age_minutes)
-    )
-    if not fresh:
-        result["state"] = "unverified"
-    elif now >= hard and observed_at >= hard and reading < 42:
-        result["state"] = "minimum_shortfall_observed"
-    elif reading < (42 if now >= hard else 45):
-        result["state"] = "at_risk"
-    else:
-        result["state"] = "latest_probe_above_requirement"
     return result

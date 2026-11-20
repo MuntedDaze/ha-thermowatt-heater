@@ -8,7 +8,6 @@ from .naming import device_info_fields, entity_id
 from .config import DOMAIN, parse_options, rejection_message, saved_options
 from .settings import (
     CATALOG,
-    RETIRED,
     apply_changes,
     describe,
     locked_changes,
@@ -83,11 +82,13 @@ class SettingEntity:
 
 
 def setup_controls(hass, entry, async_add_entities, kind, entity_class):
+    """One native entity per ACTIVE setting of this kind.
+
+    0.18.0: the catalogue contains only active settings; retired keys
+    (config.RETIRED_OPTIONS) have no entity and are removed from the registry
+    at setup (__init__._remove_retired_entities).
+    """
     runtime = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        [
-            entity_class(entry, runtime, key)
-            for key, meta in CATALOG.items()
-            if meta.kind == kind and key not in RETIRED
-        ]
+        [entity_class(entry, runtime, key) for key, meta in CATALOG.items() if meta.kind == kind]
     )

@@ -43,6 +43,9 @@ SLOT = timedelta(minutes=5)  # planning grid
 MEASURED_SPAN = timedelta(minutes=30)  # the measured surplus stands in for the forecast
 SCAN_STEP = timedelta(minutes=15)
 SCAN_HORIZON = timedelta(days=4)
+# Only the latest PV report opens the weekend window (0.17.0); a short history
+# is kept for diagnostics.
+PV_SAMPLE_RETENTION = timedelta(minutes=60)
 # Protective peak OFF only. Restarts, holiday and ordinary transitions still wait.
 SPACING_EXEMPT_REASONS = PROTECTIVE_REASONS
 
@@ -65,7 +68,7 @@ class PolicySettings:
     daytime_start: time = time(9)
     storage_ready: time = time(16)
     baseline_start: time = time(21)
-    peak_start_kw: float = 3.3  # element 3.0 kW + 0.3 kW buffer
+    peak_start_kw: float = 3.3  # element + solar.SOLAR_START_HEADROOM_KW (decision D3)
     peak_import_tolerance_kw: float = IMPORT_TOLERANCE_KW
     solar_floor_kw: float = 1.0  # least measured surplus for optional (weekend) heating
     optional_heat_margin: float = 0.02  # $/kWh saving needed for heat not otherwise needed
@@ -82,10 +85,7 @@ class PolicySettings:
     meter_max_age: timedelta = timedelta(minutes=3)
     weekend_enabled: bool = True
     weekend_pv_kw: float = 0.5
-    weekend_qualify: timedelta = timedelta(minutes=15)
     weekend_end: time = time(18)
-    sunset_kw: float = 0.2
-    sunset_delay: timedelta = timedelta(minutes=30)
 
     def __post_init__(self) -> None:
         validate_roles(self.baseline_c, self.normal_c, self.storage_c)
@@ -172,14 +172,8 @@ class SimplePolicy:
         if self.pv_samples and at <= self.pv_samples[-1][0]:
             return
         self.pv_samples.append((at, kw))
-        while self.pv_samples and at - self.pv_samples[0][0] > 2 * max(
-            self.s.weekend_qualify, self.s.sunset_delay
-        ):
+        while self.pv_samples and at - self.pv_samples[0][0] > PV_SAMPLE_RETENTION:
             self.pv_samples.popleft()
-
-    def pv_sustained(self, now, duration, predicate):
-        recent = self._coverage(self.pv_samples, now, duration)
-        return bool(recent) and all(predicate(p[1]) for p in recent)
 
     def _coverage(self, samples, now, duration):
         """Shortest genuine suffix spanning duration; no divisibility assumption.

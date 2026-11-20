@@ -70,7 +70,6 @@ def results():
         [
             ("fixed_30", "fixed_30", False, 60),
             ("fixed_60", "fixed_60", False, 60),
-            ("event_aware_60", "actual_adaptive", True, 60),
         ],
         week_class=FailureWeek,
     )

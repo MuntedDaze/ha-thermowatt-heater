@@ -9,12 +9,17 @@
 - `thermann_shadow_0_5_0/` — byte-for-byte copy at commit `8cc4a4d` (Controller
   0.5.0, the version the owner installed in Stage A, disabled).
 
+- `thermann_shadow_0_17_1_options/` — byte-for-byte copies of `config.py`,
+  `model.py`, `native.py` and `targets.py` at commit `d137c4c` (Controller
+  0.17.1, the owner's installed version). `tests/test_operating_policy_0_18_0.py`
+  uses them to prove a rollback to 0.17.1 accepts options migrated by 0.18.0.
+
 `shadow_ha_checks.upgrade_from_*` loads each in a network-less HA Core container,
 saves options and an entity rename to real HA storage, stops HA, then starts the
 current component over the same storage. It proves that entity IDs, unique IDs and
-saved options survive the upgrade. The only change made is the documented
-40 → 42 °C migration of the untouched old morning threshold, and the four retired
-0.3.0 simulation sensors are no longer provided.
+saved options survive the upgrade. Since 0.18.0 the retired settings (including
+the cancelled morning threshold) move verbatim into `retired_options`, and the
+retired entities are no longer provided.
 
 Never edit these files and never install them. Ruff excludes this folder so the
 frozen copies stay identical to what shipped.

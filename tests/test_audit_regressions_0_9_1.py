@@ -226,7 +226,7 @@ def controller_ready(now, mode="Off", target=70.0):
 
 
 def config(**changes):
-    values = {"command_topic": "P/TEST123/CMD/MODE", "three_state_qualified": True}
+    values = {"command_topic": "P/TEST123/CMD/MODE", "four_state_qualified": True}
     values.update(changes)
     return ctl.ControllerConfig(**values)
 

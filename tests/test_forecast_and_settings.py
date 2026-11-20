@@ -130,14 +130,8 @@ def test_forecast_solar_watts_adapter_and_grid_load_spike():
 @pytest.mark.parametrize(
     "key,value",
     [
-        ("solar_loss_minutes", -1),
-        ("minimum_cycle_minutes", 181),
-        ("minimum_gap_minutes", float("nan")),
-        ("switching_benefit_aud", -1),
         ("forecast_uncertainty", 1),
         ("forecast_enabled", "true"),
-        ("morning_time", "12:00"),
-        ("evening_time", "10:00"),
         ("peak_morning_end", "16:30"),
         ("forecast_max_age_minutes", 0),
     ],
@@ -169,7 +163,8 @@ def test_stored_custom_periods_are_validated_even_in_aurora_mode(profile, period
 
 def test_legacy_options_upgrade_and_recommended_restore_preserve_authority():
     old = {
-        "target_c": 65,
+        "target_c": 65,  # retired: tolerated, never read
+        "forecast_uncertainty": 0.4,
         "meter_verified": False,
         "import_positive": True,
         "sources": {"heater": "water_heater.owner"},
@@ -180,9 +175,10 @@ def test_legacy_options_upgrade_and_recommended_restore_preserve_authority():
     values = c.saved_options(old)
     assert values["tariff_profile"] == "custom"
     settings, tariffs = c.parse_options(values)
-    assert settings.target_c == 65 and not settings.meter_verified and len(tariffs) == 1
+    assert not settings.meter_verified and len(tariffs) == 1
+    assert not hasattr(settings, "target_c")
     restored = catalog.recommended_options(values)
-    assert restored["target_c"] == 70 and restored["switching_benefit_aud"] == 0.10
+    assert restored["forecast_uncertainty"] == 0.25 and restored["target_c"] == 65
     assert (
         restored["sources"] == old["sources"]
         and not restored["meter_verified"]
@@ -195,8 +191,8 @@ def test_runtime_forecast_mapping_and_local_cycle_settings_reset(runtime):  # no
     instance, report, clock = runtime
     instance.update(clock[0])
     original_sources = dict(instance.sources)
-    instance.apply_options({"target_c": 65, "morning_time": "06:30"}, instance.sources)
-    assert instance.settings.target_c == 65 and instance.settings.morning.hour == 6
+    instance.apply_options({"forecast_uncertainty": 0.4}, instance.sources)
+    assert instance.settings.forecast_uncertainty == 0.4
     assert dict(instance.sources) == original_sources and not hasattr(instance.hass, "services")
     assert instance.details["additional_cloud_requests"] == 0
     json.dumps(instance.details, allow_nan=False)

@@ -1,7 +1,7 @@
 """Shadow Planner 0.4.0: dynamic deadlines, 42 °C, freshness, heater state,
 incremental economics, native awareness. Offline; no HA, cloud or heater."""
 
-from datetime import time, timedelta
+from datetime import timedelta
 import importlib
 import importlib.util
 from types import SimpleNamespace
@@ -84,25 +84,20 @@ def test_estimator_catches_switch_on_after_poll_and_masked_switch_off():
 
 
 def test_new_defaults_and_original_values_are_truthful():
-    assert c.DEFAULT_OPTIONS["morning_threshold_c"] == 42.0
-    info = settings_mod.describe("morning_threshold_c", 40.0)
-    assert info["recommended_default"] == 42.0 and info["original_default"] == 40.0
+    # 0.18.0: the cancelled morning reserve has no default, setting or validation.
+    for key in ("morning_threshold_c", "morning_preferred_c", "morning_hard_time", "morning_time"):
+        assert key not in c.DEFAULT_OPTIONS and key in c.RETIRED_OPTIONS
+    info = settings_mod.describe("tariff_clock", "standard")
+    assert info["recommended_default"] == "local" and info["original_default"] == "standard"
     assert not info["recommended_equals_original"]
-    assert settings_mod.describe("morning_time", "07:00")["original_default"] == "07:00"
     settings, _ = c.parse_options({})
-    assert settings.shower_time == time(7) and not settings.shower_time_enabled
-    assert settings.morning == time(8) and settings.pv_ac_limit_kw == 5.0
+    assert settings.pv_ac_limit_kw == 5.0
 
 
 @pytest.mark.parametrize(
     "key,value",
     [
-        ("shower_time", "12:30"),
-        ("expected_morning_draw_c", 41),
-        ("wait_benefit_aud_per_kwh", -0.1),
         ("pv_ac_limit_kw", 0.5),
-        ("base_load_source", "guess"),
-        ("shower_time_enabled", "yes"),
     ],
 )
 def test_new_settings_validate_atomically(key, value):
@@ -175,12 +170,14 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
             assert done.value is True
         return updates
 
-    assert run({"morning_threshold_c": 40.0})["options"]["morning_threshold_c"] == 42.0
-    assert run({"morning_threshold_c": 45.0})["options"]["morning_threshold_c"] == 45.0
-    assert run({})["minor_version"] == 5
-    # 1.2 entries keep their threshold and only get the 0.7.1 range check.
-    assert run({"morning_threshold_c": 40.0}, minor=2)["options"]["morning_threshold_c"] == 40.0
-    assert run({"morning_threshold_c": 40.0}, minor=5) == {}
+    # 0.18.0 (1.6): a retired value is moved verbatim into retired_options,
+    # never adjusted, deleted or read (the 0.4.0 40 -> 42 step is gone).
+    for minor in (1, 2, 5):
+        migrated = run({"morning_threshold_c": 40.0}, minor=minor)
+        assert migrated["minor_version"] == 6
+        assert "morning_threshold_c" not in migrated["options"]
+        assert migrated["options"]["retired_options"] == {"morning_threshold_c": 40.0}
+    assert run({"morning_threshold_c": 40.0}, minor=6) == {}
     current = run({}, minor=4)["options"]
     assert current["meter_verified"] is False and current["tariff_verified"] is False
     assert "sources" not in current
@@ -209,9 +206,9 @@ def test_entry_migration_moves_only_the_untouched_old_threshold(monkeypatch):
         "forecast_max_age_minutes": 35.0,
         "peak_rate": 2.0,
         "controller_max_commands_per_day": 5.0,
-        "controller_min_rest_minutes": 60.0,
         "controller_notify_service": "mobile_app_phone",
-        "target_c": 66.0,
+        # Retired values are preserved, unchanged and unread.
+        "retired_options": {"controller_min_rest_minutes": 240.0, "target_c": 66.0},
     }
     c.parse_options(moved)  # the migrated entry loads
     untouched = c.saved_options({})

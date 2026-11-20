@@ -6,10 +6,11 @@ Pure logic: no Home Assistant imports, no I/O. ``executor.py`` builds the
 observations, persists the returned state BEFORE publishing, and performs the
 returned effects. Every rule here errs towards "do nothing and tell the owner".
 
-Heater states (the agreed simplified strategy):
+Heater states (docs/OPERATING_POLICY.md):
   * OFF       Thermann software OFF (the heater keeps its own protections);
-  * BASELINE  Manual 45 °C (weekday nights and weekends);
-  * STORAGE   Manual 70 °C (stored heat before the evening peak, or solar).
+  * BASELINE  Manual 45 °C (overnight, and weekends until the comfort window);
+  * NORMAL    Manual 62 °C (required weekday storage, weekend window, Override);
+  * STORAGE   Manual 70 °C (optional, qualified surplus solar only).
 WHICH state is wanted is decided by ``simple_policy`` (one coordinated policy).
 This module decides only WHETHER a change may be sent now (commissioning, the
 bridge, freshness, budgets, owner control) and supervises its confirmation.
@@ -147,15 +148,11 @@ HOLIDAY_MAX_DAYS = 60
 @dataclass(frozen=True)
 class ControllerConfig:
     command_topic: str = ""
-    bridge_commands_qualified: bool = False  # 1.3.11 T3 (kept for the record)
-    three_state_qualified: bool = False  # 0.9.0: supervised 1.3.13 qualification
     # Daily limit for OPTIONAL solar starts; essential commands may go
     # ESSENTIAL_EXTRA_COMMANDS beyond it; a park (OFF) is never held back.
     max_commands_per_day: int = 8
-    # 0.9.1: automatic control needs the published (EMHASS) forecasts enabled.
-    published_forecasts_enabled: bool = True
     tariff_verified: bool = True
-    requires_four_states: bool = False
+    # Supervised OFF/45/62/70 qualification (bridge 1.3.14+); required for every command.
     four_state_qualified: bool = False
     command_spacing_minutes: float = SPACING.total_seconds() / 60
     element_kw: float = 3.0  # exposure estimate only, never electrical evidence
@@ -172,12 +169,8 @@ class ControllerConfig:
             missing.append("command_topic_not_configured")
         elif self.expected_command_topic and self.command_topic != self.expected_command_topic:
             missing.append("command_topic_does_not_match_heater")
-        if not self.three_state_qualified and not self.requires_four_states:
-            missing.append("three_state_commands_not_qualified")
-        if self.requires_four_states and not self.four_state_qualified:
+        if not self.four_state_qualified:
             missing.append("four_state_commands_not_qualified")
-        if not self.published_forecasts_enabled and not self.requires_four_states:
-            missing.append("published_forecasts_not_enabled")
         if not self.tariff_verified:
             missing.append("tariff_contract_not_verified")
         return missing
@@ -860,8 +853,6 @@ class Controller:
     ) -> list[str]:
         """Every reason the controller may NOT publish now (empty = eligible)."""
         failures = list(cfg.missing_commissioning())
-        if "62" in payload and not cfg.four_state_qualified and not cfg.requires_four_states:
-            failures.append("four_state_commands_not_qualified")
         now = obs.now
         if not obs.mqtt_ready:
             failures.append("mqtt_not_ready")
@@ -1022,7 +1013,7 @@ class Controller:
                 (
                     "pre_peak_low_hot_water",
                     "Hot water may be running low",
-                    f"The bottom tank sensor is reading {water['reading_c']:g}°C before peak electricity hours "
+                    f"The bottom tank sensor is reading {water['reading_c']:g}°C before the evening peak "
                     f"(observed {water['observed_at']}). There may be less hot water available than usual. "
                     "This does not measure every litre in the tank or automatically authorise peak heating. "
                     "Check the selected mode and cloud status; use the owner override if you want normal comfort storage.",
@@ -1170,8 +1161,8 @@ class Controller:
                         "forecast_unavailable",
                         "Hot water: EMHASS forecast unavailable",
                         "No usable published PV and household-load forecast for over an hour. "
-                        "Heating is planned from measured solar only: weekday grid heating "
-                        "waits for the latest start, and weekend solar heating rarely starts. "
+                        "No future solar is assumed: weekday 62 storage starts by its latest "
+                        "start and the weekend window starts 62 at once when it opens. "
                         "Check the EMHASS forecast sensors and 'Use published forecasts'.",
                     )
                 )

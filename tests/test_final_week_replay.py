@@ -21,11 +21,9 @@ def report():
 
 
 def test_week_replay_is_current_and_service_energy_requests_are_accounted_for(report):
-    saved = json.loads(
-        (ROOT / "docs/history/final-integration/WEEK_RESULTS.json").read_text(encoding="utf-8")
-    )
+    saved = json.loads((ROOT / "docs/evidence/WEEK_RESULTS.json").read_text(encoding="utf-8"))
     assert report == saved
-    assert len(report["runs"]) == 8
+    assert len(report["runs"]) == 4
     physics = 315 * 4.186 / 3600
     for row in report["runs"]:
         energy = row["energy_kwh"]
@@ -47,19 +45,10 @@ def test_week_replay_is_current_and_service_energy_requests_are_accounted_for(re
         assert row["equal_terminal_cost_aud"] >= row["net_heater_cost_aud"]
 
 
-def test_shadow_counts_are_not_presented_as_actual_http_savings(report):
+def test_less_frequent_fixed_reads_trade_detection_for_requests(report):
     for ct in (False, True):
         group = {r["strategy"]: r for r in report["runs"] if r["ct"] == ct}
-        fixed, shadow = group["fixed_30"], group["previous_shadow"]
-        for key in (
-            "http_categories",
-            "energy_kwh",
-            "command_posts",
-            "equal_terminal_cost_aud",
-            "days",
-        ):
-            assert fixed[key] == shadow[key]
-        assert shadow["shadow_would_reads"] > 0
+        fixed = group["fixed_30"]
         assert (
             group["fixed_60"]["unknown_temperature_minutes"] > fixed["unknown_temperature_minutes"]
         )
@@ -67,9 +56,6 @@ def test_shadow_counts_are_not_presented_as_actual_http_savings(report):
             group["fixed_60"]["persistent_owner_detection_minutes"]
             > fixed["persistent_owner_detection_minutes"]
         )
-    measured = {r["strategy"]: r for r in report["runs"] if r["ct"]}
-    assert measured["actual_adaptive"]["http_total"] < measured["fixed_30"]["http_total"]
-    assert measured["actual_adaptive"]["command_posts"] == measured["fixed_30"]["command_posts"]
 
 
 def test_failures_restart_and_missing_ct_do_not_manufacture_success(report):

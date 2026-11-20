@@ -175,7 +175,7 @@ def build():
             "icon": "mdi:solar-power",
             "cards": [
                 note(
-                    "# Electricity and optimisation\n**Configure → Electricity Tariffs** explains your prices and guided schedule. Peak is usually dearer; off-peak cheaper; shoulder intermediate. Use your retail contract, not a network price assumed to be your bill. Fixed-standard clocks ignore daylight saving; local clocks follow it.\n\n**Configure → Advanced/System → Cloud checks and data age** selects Smart, Fixed 30-minute compatibility or Experimental minimum. Match the bridge App's choice. Existing installations keep their saved polling choices until you explicitly change them."
+                    "# Electricity and optimisation\n**Configure → Electricity Tariffs** explains your prices and guided schedule. Peak is usually dearer; off-peak cheaper; shoulder intermediate. Use your retail contract, not a network price assumed to be your bill. Fixed-standard clocks ignore daylight saving; local clocks follow it.\n\n**Cloud polling** is set once, in the Thermann Hot Water app options (Smart, with an automatic fixed 30-minute fallback); this controller follows it automatically. **Configure → Advanced/System → Data freshness** only sets how old readings may be."
                 ),
                 rows(
                     "Local electricity",
@@ -206,7 +206,7 @@ def build():
                 ),
                 configure("Configure electricity and polling"),
                 note(
-                    "**CT-free:** normal tariff heating needs no dedicated circuit meter or solar forecast. Experimental optional solar heating requires real, fresh, signed grid evidence and explicit setup. Estimated watts never verify physical heating. Learning needs clean dedicated-meter cycles; nominal predictions are deliberately conservative.\n\n**Smart polling:** quiet confirmed overnight targets can be left to the native thermostat for hours, with observations arranged before useful decisions. This delays detecting app changes (up to 8 hours; Experimental minimum up to 12). Every command still requires its exact current prior and confirmation. Original fixed fallback remains if the controller lease expires."
+                    "**CT-free:** normal tariff heating needs no dedicated circuit meter or solar forecast. Experimental optional solar heating requires real, fresh, signed grid evidence and explicit setup. Estimated watts never verify physical heating. Learning needs clean dedicated-meter cycles; nominal predictions are deliberately conservative.\n\n**Smart polling:** quiet confirmed overnight targets can be left to the native thermostat for hours, with observations arranged before useful decisions. This delays detecting app changes (up to 8 hours). Every command still requires its exact current prior and confirmation. Original fixed fallback remains if the controller lease expires."
                 ),
             ],
         },
