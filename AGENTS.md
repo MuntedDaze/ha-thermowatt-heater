@@ -1,10 +1,36 @@
 # Thermowatt development and release workflow
 
 These are the owner's standing instructions for
-`MuntedDaze/ha-thermowatt-heater`, recorded on 2026-11-09. Later explicit owner
-directions take precedence. Keep development modest and focused on reliable
-status, modes, setpoints and verified existing controls; scheduling optimisation
-belongs separately in Home Assistant/EMHASS.
+`MuntedDaze/ha-thermowatt-heater`, updated on 2026-11-20. Later explicit owner
+directions take precedence. Keep development focused on the final approved
+45/62/70°C heating policy and trustworthy operation; EMHASS forecasts are
+optional scheduling advice, not a prerequisite or an independent controller.
+
+## Two-branch workflow (owner decision 2026-11-20)
+
+- **`main`:** stable, owner-approved release source. Do not commit or push
+  directly. Production installation is separately owner-controlled.
+- **`dev`:** the single permanent working branch for Claude, Codex and
+  Antigravity. New work begins here, based on the last approved `main`.
+  Do not create routine `codex/*`, `claude/*`, `feature/*`, or audit branches.
+- Work sequentially on shared files: one agent writes to `dev` at a time.
+  Independent reviewers read the same exact commit, preferably in a detached
+  read-only worktree. Never merge or write from that review worktree.
+- Before editing, verify origin, HEAD, clean/dirty files, current worktrees,
+  open PRs and that `dev` contains the intended latest work. Preserve owner
+  changes and existing worktrees; never overwrite, reset, force-push or silently
+  discard uncommitted work. If `dev` is checked out elsewhere, coordinate or
+  safely reuse its existing worktree rather than creating another branch.
+- When the whole release is tested and reviewed, create **one** PR from
+  `dev` into `main` (not stacked PRs). Merge only after the final exact
+  commit passes applicable CI and meets the owner-approval conditions below.
+  Prefer squash merges and verify the resulting `main` tree matches the
+  reviewed source. Then safely fast-forward/reset **only a clean `dev`** to
+  `main` for the next cycle; never discard unmerged work.
+- The old development branches and draft PRs are historical. Do not base
+  fresh work on them or delete an unverified branch. Preserve unmerged work,
+  branch references and worktrees until separately checked and approved
+  for safe deletion. Closing an obsolete draft PR does not delete its code.
 
 ## Authoritative operating policy (2026-11-20)
 
@@ -44,9 +70,9 @@ code without the existing review and owner-approval gates.
 
 ## Routine execution
 
-1. Verify the working directory, intended GitHub origin, branch and uncommitted
-   changes. Work on a dedicated development branch, normally prefixed `codex/`.
-   Preserve unrelated owner changes.
+1. Verify the working directory, GitHub origin, active worktree, branch and
+   uncommitted changes. Use the existing `dev` branch for all routine development;
+   preserve unrelated owner changes and do not create another development branch.
 2. Implement only the requested scope, with applicable mocked regression tests.
 3. Run all existing unit tests, static checks, native container tests and
    applicable CI workflows. Current checks include pytest, Ruff lint/format,
@@ -58,13 +84,15 @@ code without the existing review and owner-approval gates.
    of credentials, tokens, guard state, options and MQTT entity IDs. Do not
    silently change configured cloud/command flags or authentication generation.
    Documentation-only changes do not require a release/version bump.
-5. Create a PR. For changes entirely within the automatic-merge scope below,
-   wait for all required/applicable checks on the final commit to pass, check
-   reviews and unresolved concerns, mark the PR ready and squash-merge into main.
-   Do not stop just to request routine PR approval in this scope.
-6. Verify the PR actually merged and main contains the expected changes and
-   add-on version. Report the work, tested commit, squash commit, version,
-   validation results and any remaining owner installation steps.
+5. Create one PR from `dev` to `main`. For changes entirely within the
+   automatic-merge scope below, wait for all required/applicable checks on the
+   final commit to pass, check independent reviews and unresolved concerns,
+   mark the PR ready and squash-merge into `main`. Do not stop merely to ask
+   for routine approval in this scope.
+6. Verify the PR actually merged, `main` has the exact reviewed source tree
+   and expected add-on version, and synchronize `dev` from `main` only when
+   doing so cannot overwrite unfinished work. Report tested/merged commits,
+   checks, review results and remaining owner installation steps.
 
 Never merge failed, pending, incomplete or unavailable required CI. Do not
 bypass branch protection, use an administrator override, force a protected
@@ -102,9 +130,3 @@ credentials, mocked cloud HTTP and isolated services, never the owner's running
 Home Assistant, Proxmox VMs or Docker infrastructure. Never log credentials,
 tokens, API keys, sensitive response bodies or raw sensitive exceptions.
 
-## Existing exception: PR #3, version 1.3.4
-
-PR #3 changes token-refresh and lockout behavior. Retain its owner-review gate:
-report final-head checks and merge readiness, but do not mark it ready or merge
-it under the routine automatic-merge permission. It must remain unmerged until
-the owner specifically approves its merge. Deployment needs separate approval.

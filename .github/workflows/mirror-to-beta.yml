@@ -1,9 +1,14 @@
-name: Mirror dev to beta repo
+name: Optional manual mirror dev to historical beta repo
 
 on:
-  push:
-    branches: ["dev"]
-  workflow_dispatch: {}
+  # No automatic mirror: the owner's normal workflow is dev -> main in THIS repo.
+  # This historical beta repository remains an explicit, manual recovery action.
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type MIRROR-DEV-TO-BETA to acknowledge this force-pushes beta/main"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,6 +19,7 @@ concurrency:
 
 jobs:
   mirror:
+    if: ${{ github.ref == 'refs/heads/dev' && inputs.confirmation == 'MIRROR-DEV-TO-BETA' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout dev (full history)
