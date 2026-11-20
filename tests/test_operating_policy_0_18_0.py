@@ -353,3 +353,41 @@ def test_four_state_qualification_is_the_only_command_qualification():
     ]
     for field in ("three_state_qualified", "bridge_commands_qualified", "requires_four_states"):
         assert not hasattr(base, field)
+
+
+# --- rollback to the installed 0.17.1 ---------------------------------------------------------
+
+
+def _controller_0_17_1_options():
+    import sys
+    from types import ModuleType
+
+    name = "_controller_0_17_1_options"
+    if name not in sys.modules:
+        package = ModuleType(name)
+        package.__path__ = [str(ROOT / "tools/readiness/fixtures/thermann_shadow_0_17_1_options")]
+        sys.modules[name] = package
+    return importlib.import_module(f"{name}.config")
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [
+        {},
+        {"morning_threshold_c": 45.0, "polling_mode": "smart", "export_headroom_kw": 0.3},
+        {"export_headroom_kw": 0.5, "weekend_qualify_minutes": 20.0},
+        {"restore_backup": {"forecast_uncertainty": 0.4, "margin_minutes": 45.0}},
+    ],
+)
+def test_rollback_to_0_17_1_loads_options_migrated_by_0_18_0(saved):
+    old = _controller_0_17_1_options()
+    original = {**old.saved_options({}), **saved}
+    old.parse_options(original)  # what 0.17.1 had saved
+    migrated, _, _ = c.migrate_0_18_0(original)
+    c.parse_options(migrated)
+    settings_017, _ = old.parse_options(migrated)  # 0.17.1 still loads it
+    # Active values are identical; retired ones fall back to 0.17.1 defaults,
+    # except a differing headroom, which stays active in both versions.
+    for key in c.DEFAULT_OPTIONS:
+        assert old.saved_options(migrated)[key] == migrated[key], key
+    assert settings_017.export_headroom_kw == saved.get("export_headroom_kw", 0.3)
