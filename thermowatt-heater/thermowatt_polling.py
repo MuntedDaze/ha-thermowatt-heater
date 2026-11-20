@@ -1,5 +1,8 @@
-"""Bounded bridge-owned adaptive scheduling. No HTTP, auth or device commands.
+"""Bounded bridge-owned Smart scheduling. No HTTP, auth or device commands.
 
+1.5.0: only the controller's Smart (version 3) plans are accepted; the pre-Smart
+version 1/2 plans and the Minimum/fixed_30 plan modes are removed (owner
+decision D2, 20 Nov 2026). Without a valid plan the fixed schedule applies.
 MQTT plans are expiring hints anchored to the bridge's own successful status.
 All deadlines run on monotonic time. Restart discards leases/deadlines and
 requires the bridge's normal fresh discovery/status. The small journal retains
@@ -10,14 +13,11 @@ import json
 import math
 
 MIN_INTERVAL = 900
-MAX_INTERVAL = 2400
-MAX_QUIET_INTERVAL = 5400
+MAX_INTERVAL = 2400  # longest temperature-relevant (non-quiet) delay
+MAX_QUIET_INTERVAL = 28800  # 8 h: confirmed quiet baseline/OFF overnight
 LEASE_SECONDS = 180
-REASONS = frozenset(
-    {"stable", "heating", "ct_free", "uncertain", "before_decision", "near_completion", "recovery"}
-)
-QUIET_REASONS = {"stable_baseline", "stable_off"}
-EVENT_REASONS = QUIET_REASONS | {"required_temperature", "before_decision", "uncertain"}
+QUIET_REASONS = {"stable_baseline", "stable_off", "quiet_before_decision"}
+REASONS = QUIET_REASONS | {"required_temperature", "before_decision", "uncertain"}
 # Home Assistant renders a timestamp sensor's state with whole-second precision
 # (``isoformat(timespec="seconds")``), so a controller reading the bridge's
 # "Last successful poll" entity echoes floor(observation time). The bridge keeps
@@ -35,7 +35,6 @@ REJECTION_CODES = (
     "status_identity_mismatch",
     "plan_not_newer",
     "owner_check_invalid",
-    "fixed_30_invalid",
     "delay_or_reason_invalid",
 )
 
@@ -58,13 +57,8 @@ class AdaptiveSchedule:
         monotonic,
         path=None,
         writer=None,
-        *,
-        extended_qualified=False,
-        smart_mode="existing",
     ):
         self.enabled, self.clock, self.monotonic = enabled, clock, monotonic
-        self.extended_qualified = extended_qualified
-        self.smart_mode = smart_mode
         self.path, self.writer = path, writer
         self.healthy = True
         self.records = {}
@@ -162,23 +156,19 @@ class AdaptiveSchedule:
                 raise Rejected("invalid_payload") from None
             if not isinstance(plan, dict):
                 raise Rejected("invalid_payload")
-            version = plan.get("version")
-            keys = {"version", "status_at", "issued_at", "delay_seconds", "reason"}
-            if type(version) is not int or version not in (1, 2, 3):
+            if plan.get("version") != 3 or type(plan.get("version")) is not int:
                 raise Rejected("version_unsupported")
-            if version == 2:
-                if not self.extended_qualified:
-                    raise Rejected("version_unsupported")
-                keys.add("owner_check_seconds")
-            if version == 3:
-                if self.smart_mode not in {"smart", "minimum"}:
-                    raise Rejected("version_unsupported")
-                mode = plan.get("polling_mode")
-                if mode not in {"smart", "fixed_30", "minimum"} or (
-                    mode == "minimum" and self.smart_mode != "minimum"
-                ):
-                    raise Rejected("mode_mismatch")
-                keys |= {"owner_check_seconds", "polling_mode"}
+            if plan.get("polling_mode") != "smart":
+                raise Rejected("mode_mismatch")
+            keys = {
+                "version",
+                "status_at",
+                "issued_at",
+                "delay_seconds",
+                "reason",
+                "owner_check_seconds",
+                "polling_mode",
+            }
             if set(plan) != keys:
                 raise Rejected("fields_invalid")
             if not all(finite(plan[k]) for k in ("status_at", "issued_at", "delay_seconds")):
@@ -190,38 +180,13 @@ class AdaptiveSchedule:
                 raise Rejected("status_identity_mismatch")
             if record["issued"] is not None and plan["issued_at"] <= record["issued"]:
                 raise Rejected("plan_not_newer")
-            limit = MAX_INTERVAL
-            owner_limit = None
-            if version == 2:
-                owner_limit = plan["owner_check_seconds"]
-                if type(owner_limit) is not int or not 1800 <= owner_limit <= MAX_QUIET_INTERVAL:
-                    raise Rejected("owner_check_invalid")
-                if plan["reason"] in QUIET_REASONS:
-                    limit = MAX_QUIET_INTERVAL
-                limit = min(limit, owner_limit)
-            if version == 3:
-                owner_limit = plan["owner_check_seconds"]
-                maximum = 43200 if mode == "minimum" else 28800
-                if type(owner_limit) is not int or not 1800 <= owner_limit <= maximum:
-                    raise Rejected("owner_check_invalid")
-                limit = (
-                    owner_limit
-                    if plan["reason"] in (QUIET_REASONS | {"quiet_before_decision"})
-                    else min(2400, owner_limit)
-                )
-                if mode == "fixed_30" and (
-                    plan["reason"] != "fixed_30"
-                    or plan["delay_seconds"] != 1800
-                    or owner_limit != 1800
-                ):
-                    raise Rejected("fixed_30_invalid")
-            if not MIN_INTERVAL <= plan["delay_seconds"] <= limit or plan["reason"] not in (
-                REASONS
-                if version == 1
-                else EVENT_REASONS
-                if version == 2
-                else EVENT_REASONS | {"fixed_30", "quiet_before_decision"}
-            ):
+            owner_limit = plan["owner_check_seconds"]
+            if type(owner_limit) is not int or not 1800 <= owner_limit <= MAX_QUIET_INTERVAL:
+                raise Rejected("owner_check_invalid")
+            limit = (
+                owner_limit if plan["reason"] in QUIET_REASONS else min(MAX_INTERVAL, owner_limit)
+            )
+            if not MIN_INTERVAL <= plan["delay_seconds"] <= limit or plan["reason"] not in REASONS:
                 raise Rejected("delay_or_reason_invalid")
             # The controller measured its delay from status_at. For a whole-
             # second echo that is up to one second before the bridge's read, so
@@ -234,7 +199,7 @@ class AdaptiveSchedule:
                 issued=plan["issued_at"],
                 lease=self.monotonic() + LEASE_SECONDS,
                 reason=plan["reason"],
-                version=version,
+                version=3,
                 owner_limit=owner_limit,
             )
             self.counts["accepted"] += 1

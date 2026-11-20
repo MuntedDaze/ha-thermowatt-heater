@@ -23,28 +23,19 @@ def snapshot(version="1.3.2"):
 def test_upgrade_config_only_adds_poll_interval_version_and_attention_marker(source_version):
     old = snapshot(source_version)["addon_config"]
     new = yaml.safe_load((FIXTURE.parents[2] / "thermowatt-heater/config.yaml").read_text())
-    assert old["version"] == source_version and new["version"] == "1.4.1"
+    assert old["version"] == source_version and new["version"] == "1.5.0"
     assert set(old["breaking_versions"]) <= set(new["breaking_versions"])
     assert {"1.3.8", "1.3.9", "1.3.10", "1.3.11", "1.3.12", "1.3.13"} <= set(
         new["breaking_versions"]
     )
     assert new["options"].pop("command_policy") == "automation"
     assert new["schema"].pop("command_policy") == "list(automation|legacy)"
-    assert new["options"].pop("polling_mode") == "existing"
-    assert new["schema"].pop("polling_mode") == "list(existing|smart|fixed_30|minimum)"
+    # 1.5.0: one polling option (owner decision D2); the old interval keys,
+    # polling_mode and the adaptive qualification flags are gone.
+    assert new["options"].pop("cloud_polling") == "smart"
+    assert new["schema"].pop("cloud_polling") == "list(smart|fixed)"
     assert new["options"].pop("on_demand_refresh_enabled") is False
     assert new["schema"].pop("on_demand_refresh_enabled") == "bool"
-    for key in (
-        "adaptive_polling_enabled",
-        "adaptive_polling_qualified",
-        "event_aware_polling_qualified",
-    ):
-        assert new["options"].pop(key) is False
-        assert new["schema"].pop(key) == "bool"
-    assert new["options"].pop("poll_interval_minutes") == 30
-    assert new["schema"].pop("poll_interval_minutes") == "int(1,7200)"
-    assert new["options"].pop("poll_interval_unit") == "minutes"
-    assert new["schema"].pop("poll_interval_unit") == "list(seconds|minutes)"
     assert new["options"].pop("min_cloud_retry_minutes") == 60
     assert new["schema"].pop("min_cloud_retry_minutes") == "int(5,1440)"
     if source_version == "1.3.6":
@@ -100,7 +91,8 @@ def test_persistent_upgrade_keeps_options_tokens_guard_and_entity_ids(
         clock=lambda: 1000,
     )
     assert bridge.options == options
-    assert bridge.poll_interval == options.get("poll_interval_minutes", 30) * 60
+    # 1.5.0: a saved custom interval is ignored; the fixed schedule is 30 minutes.
+    assert bridge.poll_interval == 1800
     assert bridge.min_cloud_retry == options.get("min_cloud_retry_minutes", 60) * 60
     assert options_path.read_bytes() == original_options
     assert bridge.config == old["metadata"]

@@ -60,6 +60,9 @@ def factory(tmp_path, clock):
             "cloud_enabled": True,
             "commands_enabled": False,
             "auth_retry_generation": 1,
+            # Tests written before 1.5.0 exercise the clock-aligned fixed
+            # schedule; Smart (the production default) is selected explicitly.
+            "cloud_polling": "fixed",
         }
         options.update(overrides)
         session = Mock(spec=requests.Session)

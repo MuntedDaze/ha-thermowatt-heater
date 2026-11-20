@@ -253,6 +253,7 @@ class Rig:
                 "commands_enabled": True,
                 "on_demand_refresh_enabled": True,
                 "auth_retry_generation": 1,
+                "cloud_polling": "fixed",  # Smart is selected explicitly by tests
             },
             tmp_path,
             session=session,

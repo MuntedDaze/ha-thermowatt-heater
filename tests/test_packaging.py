@@ -10,7 +10,7 @@ ADDON = ROOT / "thermowatt-heater"
 
 def test_supervisor_options_and_release_metadata(module):
     config = yaml.safe_load((ADDON / "config.yaml").read_text())
-    assert config["version"] == "1.4.1"
+    assert config["version"] == "1.5.0"
     assert config["slug"] == "thermowatt_boiler"  # installation identity never changes
     assert config["name"] == "Thermann Hot Water"
     assert "Unofficial" in config["description"]
@@ -30,6 +30,7 @@ def test_supervisor_options_and_release_metadata(module):
         "1.3.15",
         "1.3.16",
         "1.3.17",
+        "1.5.0",  # option changes: update is confirmed by the owner
     ]
     assert config["options"]["on_demand_refresh_enabled"] is False
     assert set(config["arch"]) == {"amd64", "aarch64"}
@@ -41,10 +42,8 @@ def test_supervisor_options_and_release_metadata(module):
     assert config["options"]["cloud_enabled"] is False
     assert config["options"]["commands_enabled"] is False
     assert config["options"]["auth_retry_generation"] == 0
-    assert config["options"]["poll_interval_minutes"] == 30
-    assert config["schema"]["poll_interval_minutes"] == "int(1,7200)"
-    assert config["options"]["poll_interval_unit"] == "minutes"
-    assert config["schema"]["poll_interval_unit"] == "list(seconds|minutes)"
+    assert config["options"]["cloud_polling"] == "smart"
+    assert config["schema"]["cloud_polling"] == "list(smart|fixed)"
     assert config["options"]["min_cloud_retry_minutes"] == 60
     assert config["schema"]["min_cloud_retry_minutes"] == "int(5,1440)"
     assert config["schema"]["password"] == "password"

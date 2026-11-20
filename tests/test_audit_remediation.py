@@ -132,7 +132,7 @@ def test_first_adaptive_sync_failure_is_contained_without_authentication_lock(fa
 
 
 def test_empty_active_set_with_old_deadlines_cannot_raise_in_adaptive_sync(factory):
-    b = factory(adaptive_polling_enabled=True, adaptive_polling_qualified=True)
+    b = factory(cloud_polling="smart")
     ready(b)
     b.cloud_health = "ok"
     b.next_background["TEST123"] = 1

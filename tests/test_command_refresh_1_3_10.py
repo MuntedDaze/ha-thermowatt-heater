@@ -56,7 +56,7 @@ def test_manual_70_to_off_confirms_with_the_actual_cmd_8(factory, clock):
     bridge = commanded(factory)
     set_status(bridge, 9)
     bridge.session.request.side_effect = [response(204), body(OFF_70)]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     assert calls(bridge) == [("POST", "off"), ("GET", "status")]
     assert bridge.session.request.call_args_list[0].kwargs["data"] == ""
     assert last_command(bridge)["result"] == "observed_in_status"
@@ -70,21 +70,11 @@ def test_off_to_manual_70_from_actual_cmd_8_keeping_70(factory, clock):
     bridge = commanded(factory)
     set_status(bridge, 8, 70)
     bridge.session.request.side_effect = [response(204), body(MANUAL_70)]
-    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70"))
+    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70@off"))
     write, read = bridge.session.request.call_args_list
     assert write.args[1].endswith("/manual") and write.kwargs["json"] == {"T_SetPoint": 70}
     assert last_command(bridge)["result"] == "observed_in_status"
     assert json.loads(status_messages(bridge)[-1])["result"]["vendor_mode"] == "Manual"
-
-
-@pytest.mark.parametrize("off_code", [8, 16])
-@pytest.mark.parametrize("observed", [40, 65, 20, 75, 69])
-def test_usable_non_70_target_while_off_is_never_overwritten(factory, clock, off_code, observed):
-    bridge = commanded(factory)
-    set_status(bridge, off_code, observed)
-    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70"))
-    bridge.session.request.assert_not_called()
-    assert last_command(bridge)["result"] == "refused_target_mismatch"
 
 
 @pytest.mark.parametrize("off_code", [8, 16])
@@ -95,7 +85,7 @@ def test_off_without_a_usable_target_may_resume_with_explicit_70(
     bridge = commanded(factory)
     set_status(bridge, off_code, observed)
     bridge.session.request.side_effect = [response(204), body(MANUAL_70)]
-    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70"))
+    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70@off"))
     assert bridge.session.request.call_args_list[0].kwargs["json"] == {"T_SetPoint": 70}
     assert last_command(bridge)["result"] == "observed_in_status"
 
@@ -104,7 +94,7 @@ def test_cmd_16_remains_a_confirmed_off_for_compatibility(factory, clock):
     bridge = commanded(factory)
     set_status(bridge, 9)
     bridge.session.request.side_effect = [response(204), body({**OFF_70, "Cmd": "16"})]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     assert last_command(bridge)["result"] == "observed_in_status"
 
 
@@ -113,7 +103,7 @@ def test_off_is_not_confirmed_by_any_other_mode_code(factory, clock, cmd):
     bridge = commanded(factory)
     set_status(bridge, 9)
     bridge.session.request.side_effect = [response(204), body({**OFF_70, "Cmd": cmd})]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     # 1.3.11: the previous mode (9) awaits a bounded follow-up; any other code
     # is neither old nor requested and ends the command (never success).
     expected = "awaiting_confirmation" if cmd == "9" else "unexpected_state_after_command"
@@ -167,7 +157,7 @@ def test_fresh_status_is_reused_without_a_refresh(factory, clock):
     bridge = commanded(factory)
     set_status(bridge, 9, age=59)
     bridge.session.request.side_effect = [response(204), body(OFF_70)]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     assert calls(bridge) == [("POST", "off"), ("GET", "status")]
     assert bridge.usage.counts["command_refresh"] == 0
 
@@ -177,7 +167,7 @@ def test_fresh_status_is_reused_without_a_refresh(factory, clock):
 
 @pytest.mark.parametrize(
     "start,payload,after",
-    [(9, "off", OFF_70), (8, "Manual:70", MANUAL_70)],
+    [(9, "off@70", OFF_70), (8, "Manual:70@off", MANUAL_70)],
 )
 def test_stale_status_one_refresh_then_command_and_confirmation(
     factory, clock, start, payload, after
@@ -200,7 +190,7 @@ def test_refresh_through_the_tick_counts_as_the_due_poll_without_a_duplicate(fac
     stale(bridge, 9)
     bridge.next_poll = clock()  # an ordinary poll is due in the same tick
     bridge.next_background[SERIAL] = clock()
-    bridge.commands.put((clock(), SERIAL, "MODE", "off"))
+    bridge.commands.put((clock(), SERIAL, "MODE", "off@70"))
     bridge.session.request.side_effect = [body(MANUAL_70), response(204), body(OFF_70)]
     bridge.tick()
     assert [c[0] for c in calls(bridge)] == ["GET", "POST", "GET"]
@@ -214,7 +204,7 @@ def test_refresh_does_not_move_the_ordinary_poll_schedule(factory, clock):
     bridge.tick()  # ordinary poll
     deadline = bridge.next_poll
     clock.advance(600)
-    bridge.commands.put((clock(), SERIAL, "MODE", "off"))
+    bridge.commands.put((clock(), SERIAL, "MODE", "off@70"))
     bridge.session.request.side_effect = [body(MANUAL_70), response(204), body(OFF_70)]
     bridge.tick()
     assert bridge.session.request.call_count == 4
@@ -225,9 +215,8 @@ def test_refresh_does_not_move_the_ordinary_poll_schedule(factory, clock):
 @pytest.mark.parametrize(
     "refreshed,reason",
     [
-        ({**MANUAL_70, "Cmd": "17", "T_SetPoint": "40"}, "refused_target_mismatch"),
-        ({**MANUAL_70, "T_SetPoint": "65"}, "refused_target_mismatch"),
-        ({**OFF_70, "T_SetPoint": "65"}, "refused_target_mismatch"),
+        ({**MANUAL_70, "Cmd": "17", "T_SetPoint": "40"}, "refused_mode_mismatch"),
+        ({**MANUAL_70, "T_SetPoint": "65"}, "refused_mode_mismatch"),
         ({**MANUAL_70, "Cmd": "17"}, "refused_mode_mismatch"),  # Schedule at 70
         ({**MANUAL_70, "Cmd": "3"}, "refused_mode_mismatch"),  # Eco at 70
         ({**MANUAL_70, "Cmd": "65"}, "refused_mode_mismatch"),  # Holiday
@@ -240,7 +229,7 @@ def test_resume_is_revalidated_against_the_refreshed_status(factory, clock, refr
     bridge = commanded(factory)
     stale(bridge, 8, 70)
     bridge.session.request.side_effect = [body(refreshed)]
-    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70"))
+    bridge.process_command((clock(), SERIAL, "MODE", "Manual:70@off"))
     assert calls(bridge) == [("GET", "status")]  # never a write
     assert last_command(bridge)["result"] == reason
 
@@ -259,7 +248,7 @@ def test_park_is_revalidated_and_never_overrides_an_owner_choice(factory, clock,
     bridge = commanded(factory)
     stale(bridge, 9)
     bridge.session.request.side_effect = [body(refreshed)]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     assert calls(bridge) == [("GET", "status")]  # never a write
     assert last_command(bridge)["result"] == reason
 
@@ -268,12 +257,12 @@ def test_park_is_revalidated_and_never_overrides_an_owner_choice(factory, clock,
 def test_automation_park_with_fresh_status_also_requires_manual_70(factory, clock, cmd, setpoint):
     bridge = commanded(factory)
     set_status(bridge, cmd, setpoint)
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     bridge.session.request.assert_not_called()
     assert last_command(bridge)["result"].startswith("refused_")
 
 
-def test_legacy_policy_keeps_the_1_3_9_off_and_resume_rules(factory, clock):
+def test_legacy_policy_keeps_plain_off_for_manual_owner_control(factory, clock):
     bridge = commanded(factory, command_policy="legacy")
     set_status(bridge, 17, 40)
     bridge.session.request.side_effect = [response(204), body(OFF_70)]
@@ -285,7 +274,7 @@ def test_park_sees_heater_already_off_after_refresh_and_sends_nothing(factory, c
     bridge = commanded(factory)
     stale(bridge, 9)
     bridge.session.request.side_effect = [body(OFF_70)]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     assert calls(bridge) == [("GET", "status")]
     assert last_command(bridge)["result"] == "already_in_requested_state"
 
@@ -299,7 +288,7 @@ def test_command_that_expires_during_a_slow_refresh_is_not_sent(factory, clock):
         return body(MANUAL_70)
 
     bridge.session.request.side_effect = slow
-    bridge.process_command((clock() - 29, SERIAL, "MODE", "off"))
+    bridge.process_command((clock() - 29, SERIAL, "MODE", "off@70"))
     assert bridge.session.request.call_count == 1
     assert last_command(bridge)["result"] == "dropped_command_expired_during_refresh"
 
@@ -322,7 +311,7 @@ def test_command_that_expires_during_a_slow_refresh_is_not_sent(factory, clock):
 def test_refresh_failure_rejects_the_command_with_poll_backoff(factory, clock, failure, code):
     bridge = commanded(factory)
     stale(bridge, 9)
-    bridge.commands.put((clock(), SERIAL, "MODE", "off"))
+    bridge.commands.put((clock(), SERIAL, "MODE", "off@70"))
     bridge.session.request.side_effect = [failure]
     bridge.tick()
     assert calls(bridge) == [("GET", "status")]  # no POST
@@ -336,7 +325,9 @@ def test_refresh_failure_rejects_the_command_with_poll_backoff(factory, clock, f
     for _ in range(30):  # nothing is retried, even when the command is re-sent
         clock.advance(60)
         bridge.on_mqtt_message(
-            None, None, SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=b"off", retain=False)
+            None,
+            None,
+            SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=b"off@70", retain=False),
         )
         bridge.tick()
     assert bridge.session.request.call_count == 1
@@ -346,7 +337,7 @@ def test_refresh_failure_rejects_the_command_with_poll_backoff(factory, clock, f
 def test_refresh_quota_or_forbidden_keeps_the_persistent_lockout(factory, clock, module, status):
     bridge = commanded(factory)
     stale(bridge, 9)
-    bridge.commands.put((clock(), SERIAL, "MODE", "off"))
+    bridge.commands.put((clock(), SERIAL, "MODE", "off@70"))
     bridge.session.request.side_effect = [response(status)]
     bridge.tick()
     assert calls(bridge) == [("GET", "status")]
@@ -363,7 +354,7 @@ def test_refresh_quota_or_forbidden_keeps_the_persistent_lockout(factory, clock,
 def test_refresh_authentication_failure_sends_no_command(factory, clock):
     bridge = commanded(factory)
     stale(bridge, 9)
-    bridge.commands.put((clock(), SERIAL, "MODE", "off"))
+    bridge.commands.put((clock(), SERIAL, "MODE", "off@70"))
     # 401 on the read, then the token refresh itself is refused.
     bridge.session.request.side_effect = [response(401), response(400)]
     bridge.tick()
@@ -382,7 +373,7 @@ def test_refresh_after_an_expired_access_token_uses_the_existing_single_refresh(
         response(204),
         body(OFF_70),
     ]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     assert calls(bridge) == [
         ("GET", "status"),
         ("POST", "refresh"),
@@ -417,7 +408,7 @@ def test_refresh_not_permitted_rejects_without_any_request(factory, clock, setup
     bridge = commanded(factory)
     stale(bridge, 9)
     setup(bridge, clock)
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     bridge.session.request.assert_not_called()
     assert last_command(bridge)["result"] == reason
     assert last_command(bridge)["status_refresh"] == "refused"
@@ -428,18 +419,18 @@ def test_refresh_budget_is_a_rolling_24_hours(factory, clock):
     for _ in range(bridge.COMMAND_REFRESH_DAILY_LIMIT):
         stale(bridge, 9)
         bridge.session.request.side_effect = [body(OFF_70)]
-        bridge.process_command((clock(), SERIAL, "MODE", "off"))
+        bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
         assert last_command(bridge)["result"] == "already_in_requested_state"
         clock.advance(120)
     stale(bridge, 9)
     bridge.session.request.reset_mock(side_effect=True)
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     bridge.session.request.assert_not_called()
     assert last_command(bridge)["result"] == "refused_status_refresh_limit"
     clock.advance(86400)
     stale(bridge, 9)
     bridge.session.request.side_effect = [body(OFF_70)]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     assert last_command(bridge)["result"] == "already_in_requested_state"
 
 
@@ -471,8 +462,8 @@ def test_off_policy_payloads_never_cause_a_refresh(factory, clock, kind, payload
 @pytest.mark.parametrize(
     "command,reason",
     [
-        (lambda c: (c() - 31, SERIAL, "MODE", "off"), "dropped_command_older_than_30s"),
-        (lambda c: (c(), "OTHER", "MODE", "off"), "dropped_unknown_device"),
+        (lambda c: (c() - 31, SERIAL, "MODE", "off@70"), "dropped_command_older_than_30s"),
+        (lambda c: (c(), "OTHER", "MODE", "off@70"), "dropped_unknown_device"),
     ],
 )
 def test_stale_or_unknown_commands_never_cause_a_refresh(factory, clock, command, reason):
@@ -492,7 +483,7 @@ def test_commands_disabled_by_default_never_refresh(factory, clock):
             None, None, SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=payload, retain=False)
         )
     assert bridge.commands.empty()
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     bridge.session.request.assert_not_called()
     assert bridge.last_command is None
 
@@ -501,7 +492,7 @@ def test_mqtt_callback_only_queues_even_with_stale_status(factory, clock):
     bridge = commanded(factory)
     stale(bridge, 9)
     bridge.on_mqtt_message(
-        None, None, SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=b"off", retain=False)
+        None, None, SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=b"off@70", retain=False)
     )
     bridge.session.request.assert_not_called()
     assert bridge.commands.qsize() == 1
@@ -515,7 +506,9 @@ def test_duplicate_commands_produce_one_write(factory, clock):
     stale(bridge, 9)
     for _ in range(3):
         bridge.on_mqtt_message(
-            None, None, SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=b"off", retain=False)
+            None,
+            None,
+            SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=b"off@70", retain=False),
         )
     bridge.session.request.side_effect = [body(MANUAL_70), response(204), body(OFF_70)]
     bridge.tick()
@@ -534,7 +527,7 @@ def test_retained_command_replay_is_ignored(factory, clock):
     bridge = commanded(factory)
     stale(bridge, 9)
     bridge.on_mqtt_message(
-        None, None, SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=b"off", retain=True)
+        None, None, SimpleNamespace(topic=f"P/{SERIAL}/CMD/MODE", payload=b"off@70", retain=True)
     )
     assert bridge.commands.empty()
 
@@ -545,7 +538,7 @@ def test_restart_needs_discovery_before_any_command_and_keeps_the_guard(factory,
     restarted = factory(commands_enabled=True)
     assert restarted.guard.path.read_bytes() == guard
     assert restarted.confirmed == {} and restarted.command_refreshes == []
-    restarted.process_command((clock(), SERIAL, "MODE", "off"))
+    restarted.process_command((clock(), SERIAL, "MODE", "off@70"))
     restarted.session.request.assert_not_called()
     assert restarted.last_command["result"] == "dropped_unknown_device"
 
@@ -553,8 +546,8 @@ def test_restart_needs_discovery_before_any_command_and_keeps_the_guard(factory,
 def test_failure_clears_queued_commands_so_none_runs_later(factory, clock):
     bridge = commanded(factory)
     stale(bridge, 9)
-    bridge.commands.put((clock(), SERIAL, "MODE", "off"))
-    bridge.commands.put((clock(), SERIAL, "MODE", "Manual:70"))
+    bridge.commands.put((clock(), SERIAL, "MODE", "off@70"))
+    bridge.commands.put((clock(), SERIAL, "MODE", "Manual:70@off"))
     bridge.session.request.side_effect = [requests.Timeout()]
     bridge.tick()
     assert bridge.commands.empty()
@@ -567,7 +560,7 @@ def test_diagnostics_report_refresh_count_and_limit(factory, clock):
     bridge = commanded(factory)
     stale(bridge, 9)
     bridge.session.request.side_effect = [body(MANUAL_70), response(204), body(OFF_70)]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     payload = json.loads(
         [
             c
@@ -629,7 +622,7 @@ def test_refresh_is_announced_before_its_status_so_it_is_never_read_as_an_outcom
     bridge = commanded(factory)
     stale(bridge, 9)
     bridge.session.request.side_effect = [body(OFF_70)]
-    bridge.process_command((clock(), SERIAL, "MODE", "off"))
+    bridge.process_command((clock(), SERIAL, "MODE", "off@70"))
     sequence = []
     for call in bridge.mqtt_client.publish.call_args_list:
         if call.args[0].endswith("/DIAGNOSTICS"):

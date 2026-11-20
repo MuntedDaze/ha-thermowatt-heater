@@ -19,7 +19,7 @@ import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
 import requests
 
-from thermowatt_read_only import RequestUsage, daily_limit, poll_seconds
+from thermowatt_read_only import RequestUsage, daily_limit
 from thermowatt_polling import AdaptiveSchedule
 
 LOG = logging.getLogger("thermowatt")
@@ -256,16 +256,19 @@ class AuthGuard:
         self._save()
 
 
-# MODE payloads that name the only acceptable Manual target. 70 °C is the
-# owner-approved storage target; nothing else is accepted in guarded form.
-GUARDED_PAYLOADS = {"Manual:70": 70}
 PLAIN_PAYLOADS = {"off", "Off", "Eco", "Auto", "Manual"}
-# Command policy. "automation" (the default) accepts EXACTLY the two operations
-# the hot-water controller needs; every other command (temperature writes, Eco,
+# Command policy. "automation" (the default) accepts EXACTLY the guarded
+# exact-prior transitions below; every other command (temperature writes, Eco,
 # Auto/Schedule, plain Manual, Holiday, malformed payloads) is refused before
-# any cloud request. "legacy" restores the full 1.3.8 command set and must be
-# chosen explicitly. Read-only monitoring is identical under both.
+# any cloud request. "legacy" is the owner's manual-control protocol (plain
+# modes and temperature writes, e.g. from the Home Assistant water-heater card)
+# and must be chosen explicitly. Read-only monitoring is identical under both.
 COMMAND_POLICIES = ("automation", "legacy")
+# Owner decision D2 (20 Nov 2026): one polling configuration. "smart" is the
+# single normal mode; "fixed" is a recovery choice. Both share the fixed
+# 30-minute schedule whenever no valid Smart plan is in force.
+CLOUD_POLLING = ("smart", "fixed")
+FIXED_POLL_SECONDS = 1800
 # Guarded transitions (1.3.14): "<target>@<prior>". The controller states
 # the exact state it expects to leave; the FRESH status (<= 60 s) must show it,
 # or the command is refused with no request (an owner change in the app is
@@ -284,11 +287,10 @@ TRANSITIONS = {
     "Manual:45@62": (45, 62),
     "Manual:70@62": (70, 62),
 }
-# The 1.3.11 forms stay accepted for the installed controller: Manual:70 from
-# OFF only, off from Manual 70 only.
-AUTOMATION_COMMANDS = {("MODE", "Manual:70"), ("MODE", "off")} | {
-    ("MODE", payload) for payload in TRANSITIONS
-}
+# 1.5.0: the 1.3.11 bare forms (Manual:70 from OFF, off from Manual 70) are
+# removed. Their only consumer was Controller 0.6-0.8; Controller 0.9.0 and
+# later send only these exact-prior transitions.
+AUTOMATION_COMMANDS = {("MODE", payload) for payload in TRANSITIONS}
 # Software OFF. Cmd 8 is what the owner's heater actually reports when switched
 # OFF from Manual (observed in T3, 1.3.10). Cmd 16 was the original assumption
 # and is retained for compatibility; it may be OFF entered from another mode but
@@ -353,7 +355,9 @@ class MyThermowattBridge:
         monotonic=time.monotonic,
     ):
         self.options = options
-        self.poll_interval = poll_seconds(options)
+        # Fixed schedule: startup, communication problems, missing or rejected
+        # plans, scheduler failure, and the Fixed recovery choice (1.5.0).
+        self.poll_interval = FIXED_POLL_SECONDS
         self.min_cloud_retry = options.get("min_cloud_retry_minutes", 60) * 60
         self.request_counts = {
             kind: 0
@@ -426,20 +430,16 @@ class MyThermowattBridge:
         self.reconnect_refresh = False
         self.read_this_tick = set()  # serials whose status was read in this tick
         self.poll_hints = {}
+        # One polling configuration (1.5.0): Smart (default) accepts the
+        # controller's expiring v3 plans; Fixed (recovery) never does. Without
+        # a valid plan both use the fixed 30-minute schedule.
+        self.smart = self.options.get("cloud_polling", "smart") == "smart"
         self.poll_schedule = AdaptiveSchedule(
-            (
-                self.options.get("adaptive_polling_enabled", False)
-                and self.options.get("adaptive_polling_qualified", False)
-                and self.poll_interval >= 900
-                and self.options.get("polling_mode", "existing") != "fixed_30"
-            )
-            or self.options.get("polling_mode") in {"smart", "minimum"},
+            self.smart,
             self.clock,
             self.monotonic,
             self.data_dir / "poll_state.json",
             atomic_json,
-            extended_qualified=self.options.get("event_aware_polling_qualified", False),
-            smart_mode=self.options.get("polling_mode", "existing"),
         )
         self.failures = self.usage.failures
         if self.usage.cooldown_until > self.clock():
@@ -640,7 +640,7 @@ class MyThermowattBridge:
         # Command pre-reads, confirmations, discovery and POSTs retain proactive
         # preparation; a POST is never retried on an unknown outcome.
         ordinary_smart_get = (
-            self.options.get("polling_mode") in {"smart", "minimum"}
+            self.smart
             and method == "GET"
             and endpoint == "/status"
             and self.discovered
@@ -838,7 +838,7 @@ class MyThermowattBridge:
             timestamp = self.last_success.get(serial)
             schedule = self.poll_schedule.summary(serial)
             payload = {
-                "bridge_version": "1.4.1",
+                "bridge_version": "1.5.0",
                 "last_successful_poll": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
                 if timestamp is not None
                 else None,
@@ -865,12 +865,11 @@ class MyThermowattBridge:
                     if self.refresh_activity["last"]
                     else None,
                 },
-                "adaptive_plan_versions": [1]
-                + ([2] if self.poll_schedule.extended_qualified else [])
-                + ([3] if self.poll_schedule.smart_mode in {"smart", "minimum"} else []),
-                "polling_preference": self.options.get("polling_mode", "existing"),
+                "adaptive_plan_versions": [3] if self.smart else [],
+                # The single polling configuration; the controller follows it.
+                "polling_preference": "smart" if self.smart else "fixed",
                 "ordinary_get_authentication": "bounded_reactive_refresh"
-                if self.options.get("polling_mode") in {"smart", "minimum"}
+                if self.smart
                 else "legacy_20_minute_heuristic",
                 "commands_enabled": bool(self.options.get("commands_enabled", False)),
                 "command_policy": self.options.get("command_policy", "automation"),
@@ -1182,7 +1181,7 @@ class MyThermowattBridge:
 
     @staticmethod
     def _safe_payload(payload):
-        known = payload in GUARDED_PAYLOADS or payload in PLAIN_PAYLOADS or payload in TRANSITIONS
+        known = payload in PLAIN_PAYLOADS or payload in TRANSITIONS
         return payload if known else "other"
 
     def _command_result(self, kind, payload, result, refresh=None, error=None, extra=None):
@@ -1378,8 +1377,6 @@ class MyThermowattBridge:
             ):
                 return None
             return ("/manual", temperature)
-        if kind == "MODE" and payload in GUARDED_PAYLOADS:
-            return ("/manual", GUARDED_PAYLOADS[payload])
         if kind == "MODE" and payload in TRANSITIONS:
             target = TRANSITIONS[payload][0]
             return ("/off", None) if target == "off" else ("/manual", target)
@@ -1482,11 +1479,9 @@ class MyThermowattBridge:
                 return
         status = self.confirmed[serial][1]
         mode, observed = int(status["Cmd"]), status["T_SetPoint"]
-        # Automation policy: the controller's view may be up to one poll
+        # Exact-prior transitions: the controller's view may be up to one poll
         # interval old, so the FRESH status must still show the exact state the
-        # command is meant to leave (OFF for Manual:70, Manual 70 for off).
-        automation = policy != "legacy"
-
+        # command is meant to leave.
         arguments, expected = {}, None
         if payload in TRANSITIONS and kind == "MODE":
             target, prior = TRANSITIONS[payload]
@@ -1520,41 +1515,10 @@ class MyThermowattBridge:
                 return
             arguments = {"json": {"T_SetPoint": int(temperature)}}
             expected = ({9}, temperature)
-        elif payload in GUARDED_PAYLOADS:
-            # Guarded Manual: enter Manual ONLY at the stated target, sent
-            # explicitly. Accepted when the fresh observed target already equals
-            # it, or when the heater is software OFF and reports NO usable
-            # target (outside 20-75 °C). A usable target other than 70 (in any
-            # mode, OFF included) may be a deliberate owner setting: it is
-            # refused, never silently "corrected" to 70.
-            off_without_target = mode in OFF_CODES and not 20 <= observed <= 75
-            if observed != temperature and not off_without_target:
-                LOG.warning("Guarded Manual refused: observed target differs. No request sent.")
-                self._command_result(kind, payload, "refused_target_mismatch", refresh=refresh)
-                return
-            if mode == 9 and observed == temperature:
-                self._command_result(kind, payload, "already_in_requested_state", refresh=refresh)
-                return
-            if automation and mode not in OFF_CODES:
-                # The controller resumes ONLY from OFF. Schedule, Eco, Holiday or
-                # an unknown mode at 70 is the owner's choice (perhaps made in
-                # the app since the controller last saw the heater): refused.
-                LOG.warning("Guarded Manual refused: heater not OFF. No request sent.")
-                self._command_result(kind, payload, "refused_mode_mismatch", refresh=refresh)
-                return
-            arguments = {"json": {"T_SetPoint": int(temperature)}}
-            expected = ({9}, temperature)  # confirmed only as Manual AT 70
         else:
             if payload == "off" and mode in OFF_CODES:
                 # Already OFF: a second write would only cost a request.
                 self._command_result(kind, payload, "already_in_requested_state", refresh=refresh)
-                return
-            if automation and payload == "off" and (mode != 9 or observed != 70):
-                # The controller parks ONLY from Manual 70 °C. Any other mode or
-                # target is the owner's choice and is never switched OFF.
-                reason = "refused_mode_mismatch" if mode != 9 else "refused_target_mismatch"
-                LOG.warning("Park refused: heater not in Manual 70. No request sent.")
-                self._command_result(kind, payload, reason, refresh=refresh)
                 return
             expected = (
                 {
@@ -1569,7 +1533,7 @@ class MyThermowattBridge:
             if payload == "Manual":
                 if not 20 <= observed <= 75:
                     # Plain Manual reuses the observed setpoint; never send an
-                    # invalid one (possible only while OFF). Use Manual:70.
+                    # invalid one (possible only while OFF). Set a temperature.
                     self._command_result(
                         kind, payload, "refused_setpoint_unavailable", refresh=refresh
                     )
@@ -1858,14 +1822,7 @@ def load_options(path):
     for key in ("email", "password"):
         if not isinstance(options.get(key, ""), str):
             raise ValueError
-    for key in (
-        "cloud_enabled",
-        "commands_enabled",
-        "on_demand_refresh_enabled",
-        "adaptive_polling_enabled",
-        "adaptive_polling_qualified",
-        "event_aware_polling_qualified",
-    ):
+    for key in ("cloud_enabled", "commands_enabled", "on_demand_refresh_enabled"):
         if type(options.get(key, False)) is not bool:
             raise ValueError
     if options.get("command_policy", "automation") not in COMMAND_POLICIES:
@@ -1873,9 +1830,8 @@ def load_options(path):
     generation = options.get("auth_retry_generation", 0)
     if type(generation) is not int or generation < 0:
         raise ValueError
-    if options.get("polling_mode", "existing") not in {"existing", "smart", "fixed_30", "minimum"}:
-        raise ValueError("polling_mode_invalid")
-    poll_seconds(options)
+    if options.get("cloud_polling", "smart") not in CLOUD_POLLING:
+        raise ValueError("cloud_polling_invalid")
     for key, default, maximum in (("min_cloud_retry_minutes", 60, 1440),):
         interval = options.get(key, default)
         if type(interval) is not int or not 5 <= interval <= maximum:
@@ -1891,14 +1847,7 @@ def main():
         signal.signal(signum, lambda *_: stop.set())
     try:
         bridge = MyThermowattBridge(load_options("/data/options.json"))
-    except Exception as error:
-        if isinstance(error, ValueError) and error.args == ("poll_interval_invalid",):
-            LOG.error(
-                "Startup paused: code=poll_interval_invalid. Seconds 60-7200; Minutes 1-120. "
-                "No cloud requests sent."
-            )
-            stop.wait()
-            return
+    except Exception:
         LOG.error(
             "Startup paused: configuration or private storage invalid. No cloud requests sent."
         )

@@ -227,7 +227,6 @@ def test_expired_cooldown_does_not_reset_exponential_history_on_restart(factory,
 @pytest.mark.parametrize(
     "error,code",
     [
-        ("poll_interval_invalid", "poll_interval_invalid"),
         ("SENSITIVE_BODY", "configuration or private storage invalid"),
     ],
 )

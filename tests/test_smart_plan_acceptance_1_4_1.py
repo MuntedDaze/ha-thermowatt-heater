@@ -42,7 +42,7 @@ def ha_status_at(epoch):
 
 def schedule_at(wall, mode="smart"):
     clock = {"wall": wall, "mono": 10_000.0}
-    s = AdaptiveSchedule(True, lambda: clock["wall"], lambda: clock["mono"], smart_mode=mode)
+    s = AdaptiveSchedule(True, lambda: clock["wall"], lambda: clock["mono"])
 
     def advance(seconds):
         clock["wall"] += seconds
@@ -147,7 +147,6 @@ def test_rejection_categories_are_closed_and_journal_format_is_unchanged(tmp_pat
         lambda: clock["wall"],
         tmp_path / "poll_state.json",
         lambda path, data: writes.append(data),
-        smart_mode="smart",
     )
     now = datetime.fromtimestamp(wall, timezone.utc)
     good = plan_for(ha_status_at(wall), now, stable_state="baseline")
@@ -186,7 +185,7 @@ def test_a_1_4_0_journal_with_38_rejections_loads_and_keeps_counting(tmp_path):
     path = tmp_path / "poll_state.json"
     old = {"accepted": 0, "rejected": 38, "ordinary_reads": 12, "reused_reads": 3}
     path.write_text(json.dumps({"version": 1, "counts": old}), encoding="utf-8")
-    s = AdaptiveSchedule(True, lambda: 0.0, lambda: 0.0, path, smart_mode="smart")
+    s = AdaptiveSchedule(True, lambda: 0.0, lambda: 0.0, path)
     assert s.active and s.counts == old and s.rejections == {}
 
 
@@ -195,7 +194,7 @@ def test_a_1_4_0_journal_with_38_rejections_loads_and_keeps_counting(tmp_path):
 
 def smart_bridge(factory, clock, **options):
     clock.now += FRACTION  # production clocks are never whole seconds
-    b = factory(polling_mode="smart", **options)
+    b = factory(cloud_polling="smart", **options)
     ready(b)
     b.session.request.side_effect = [response(body=STATUS)]
     b.tick()
@@ -226,7 +225,7 @@ def diagnostics(b):
 def test_worker_leaves_fixed_fallback_once_a_fresh_read_is_echoed(factory, clock):
     b = smart_bridge(factory, clock)
     assert diagnostics(b)["polling_mode"] == "fixed_fallback"
-    assert diagnostics(b)["adaptive_plan_versions"] == [1, 3]
+    assert diagnostics(b)["adaptive_plan_versions"] == [3]
     read_at = b.last_success[SERIAL]
     for _ in range(5):  # the controller republishes every minute
         clock.advance(60)
