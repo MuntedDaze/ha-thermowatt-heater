@@ -303,9 +303,8 @@ async def check_configuration(hass, entry):
     hass.states.async_set(pv_source, 100, {"unit_of_measurement": "W"})
     hass.states.async_set(pv_source, 1000, {"unit_of_measurement": "W"})
     await hass.async_block_till_done()
-    assert not runtime.executor.policy.pv_sustained(
-        dt_util.utcnow(), timedelta(minutes=15), lambda kw: kw >= 0.5
-    )
+    # 0.17.0: only the latest fresh PV report opens the weekend window.
+    assert runtime.executor.policy.pv_window_open(dt_util.utcnow())
     # Exercise real HA callbacks for a required-meter outage/recovery in one
     # loop turn. Every command is blocked by the absent MQTT/commissioning;
     # no fake physical qualification or service transport is provided.

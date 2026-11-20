@@ -15,13 +15,13 @@ from conftest import STATUS, response
 adaptive = importlib.import_module(f"{m.__package__}.adaptive")
 
 
-@pytest.mark.parametrize("mode,hours", [("smart", 8), ("minimum", 12)])
+@pytest.mark.parametrize("mode,hours", [("smart", 8)])
 def test_quiet_interval_is_bounded_and_lost_lease_is_fixed30(mode, hours):
     now = at(MON, 22)
     wall = [now.timestamp()]
     schedule = AdaptiveSchedule(True, lambda: wall[0], lambda: wall[0], smart_mode=mode)
     schedule.observed("S", wall[0], 1800)
-    plan = adaptive.smart_plan(now, now, mode=mode, stable_state="baseline", overnight=True)
+    plan = adaptive.smart_plan(now, now, stable_state="baseline", overnight=True)
     assert plan["delay_seconds"] == hours * 3600
     assert schedule.accept("S", json.dumps(plan))
     assert schedule.deadline("S") == wall[0] + hours * 3600
@@ -32,18 +32,16 @@ def test_quiet_interval_is_bounded_and_lost_lease_is_fixed30(mode, hours):
 def test_pre_peak_read_and_later_exact_prior_are_distinct_useful_events():
     now = at(MON, 22)
     check = now + timedelta(hours=7, minutes=30)
-    plan = adaptive.smart_plan(
-        now, now, mode="smart", stable_state="baseline", overnight=True, decision_at=check
-    )
+    plan = adaptive.smart_plan(now, now, stable_state="baseline", overnight=True, decision_at=check)
     assert plan["reason"] == "quiet_before_decision"
     assert plan["delay_seconds"] == 7.5 * 3600
     schedule = AdaptiveSchedule(True, now.timestamp, now.timestamp, smart_mode="smart")
     schedule.observed("S", now.timestamp(), 1800)
     assert schedule.accept("S", json.dumps(plan))
     assert (
-        adaptive.smart_plan(
-            check, check, mode="smart", stable_state="baseline", decision_at=check + 28 * MIN
-        )["delay_seconds"]
+        adaptive.smart_plan(check, check, stable_state="baseline", decision_at=check + 28 * MIN)[
+            "delay_seconds"
+        ]
         == 28 * 60
     )
 
@@ -62,10 +60,7 @@ def test_pre_peak_read_and_later_exact_prior_are_distinct_useful_events():
 )
 def test_v3_rejects_excessive_mislabelled_stale_or_wrong_anchor(change):
     now = at(MON, 22)
-    plan = (
-        adaptive.smart_plan(now, now, mode="smart", stable_state="baseline", overnight=True)
-        | change
-    )
+    plan = adaptive.smart_plan(now, now, stable_state="baseline", overnight=True) | change
     schedule = AdaptiveSchedule(True, now.timestamp, now.timestamp, smart_mode="smart")
     schedule.observed("S", now.timestamp(), 1800)
     assert not schedule.accept("S", json.dumps(plan))
@@ -73,7 +68,7 @@ def test_v3_rejects_excessive_mislabelled_stale_or_wrong_anchor(change):
 
 def test_new_permission_does_not_fabricate_old_qualification():
     now = at(MON, 22)
-    plan = adaptive.smart_plan(now, now, mode="smart", stable_state="baseline", overnight=True)
+    plan = adaptive.smart_plan(now, now, stable_state="baseline", overnight=True)
     old = AdaptiveSchedule(True, now.timestamp, now.timestamp, extended_qualified=True)
     old.observed("S", now.timestamp(), 1800)
     assert not old.accept("S", json.dumps(plan))

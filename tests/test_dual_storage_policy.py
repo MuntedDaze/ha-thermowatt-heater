@@ -117,7 +117,7 @@ def test_controller_all_twelve_transitions_require_exact_fresh_prior_and_confirm
     temp = 70 if prior == OFF else ctl.TARGET_C[prior]
     c = ready(now, mode, temp)
     transitions = [ctl.payload_for(t, p) for p, t in permutations((OFF, BASE, NORMAL, STORE), 2)]
-    settings = cfg(four_state_qualified=True, requires_four_states=True)
+    settings = cfg(four_state_qualified=True)
     o = obs(now, mode, temp, bridge_transitions=transitions)
     assert publishes(c.step(o, ctl.Want(target, "test_transition"), settings)) == [
         ctl.payload_for(target, prior)
@@ -174,7 +174,7 @@ def test_restart_during_peak_reinspects_before_one_guarded_off():
     restored = ctl.Controller.from_dict(c.to_dict())
     restored.restored(now)
     wanted = ctl.Want(OFF, "peak_lockout")
-    settings = cfg(four_state_qualified=True, requires_four_states=True)
+    settings = cfg(four_state_qualified=True)
     first = restored.step(obs(now, "Manual", 62, poll_at=now), wanted, settings)
     assert not publishes(first)
     assert any(e.key == "peak_lockout_unverified" for e in first if e.kind == "notify")

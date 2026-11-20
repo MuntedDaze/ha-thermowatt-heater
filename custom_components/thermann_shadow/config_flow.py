@@ -132,7 +132,7 @@ def period_schema(row):
 
 class ShadowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    MINOR_VERSION = 5  # Presentation-only; no storage schema migration.
+    MINOR_VERSION = 6  # 0.18.0: retired settings live in the unread retired_options record.
 
     async def async_step_user(self, user_input=None):
         await self.async_set_unique_id("thermann_shadow_315l")
@@ -394,9 +394,6 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_commissioning(self, user_input=None):
         return await self._settings_page("commissioning", user_input)
-
-    async def async_step_legacy(self, user_input=None):
-        return await self._settings_page("legacy", user_input)
 
     async def _settings_page(self, step_id, user_input):
         values = saved_options(self._entry.options)

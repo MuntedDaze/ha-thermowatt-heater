@@ -21,9 +21,9 @@ import math
 
 from homeassistant.util import dt as dt_util
 
-from .config import DEFAULT_OPTIONS
+from .config import DEFAULT_OPTIONS, solar_start_headroom_kw
 from .forecast import build_forecast
-from .comfort import pre_peak_availability
+from .comfort import evening_peak, pre_peak_availability
 from .heater_state import HeaterState, HeaterStateEstimator, base_load
 from .model import Reading, _fresh, _power, number, tariff_at, timestamp
 from .measurement import CircuitPower, circuit_power, energy_reading, power_balance
@@ -555,7 +555,6 @@ class ShadowRuntime:
             self.executor.controller.reason
             if self.executor.controller.state == "change_requested"
             else None,
-            self.executor.poll_shadow.last_would_poll,
         )
         if key == self._event_key:
             return
@@ -646,7 +645,6 @@ class ShadowRuntime:
             },
             "calibration": self.history.calibration(obs.target_c),
             "learning": self.learning(now, int(self.native_options["normal_storage_c"])),
-            "polling": self.executor.poll_shadow.summary(),
         }
 
     # ------------------------------------------------------------------ displays
@@ -768,7 +766,13 @@ class ShadowRuntime:
             now,
             temperature,
             self.poll_at,
-            values.get("next_tariff_change") if values.get("next_tariff_kind") == "peak" else None,
+            # D1: the low-water notification is assessed before the evening peak only.
+            evening_peak(
+                values.get("next_tariff_change")
+                if values.get("next_tariff_kind") == "peak"
+                else None,
+                self.settings.time_zone,
+            ),
             threshold=self.native_options["low_water_warning_c"],
             lead_minutes=self.native_options["pre_peak_observation_minutes"],
             max_age_minutes=self.settings.status_max_age_minutes,
@@ -796,7 +800,15 @@ class ShadowRuntime:
             },
             "shadow_mode": not self.controller_active,
             "controller_active": self.controller_active,
-            "policy": "four_state_dual_storage (docs/dual-storage)",
+            "policy": "docs/OPERATING_POLICY.md",
+            # Decision D3: which solar start headroom applies (0.3 kW constant
+            # unless a differing pre-0.18 installed value was kept).
+            "solar_start_headroom": {
+                "kw": solar_start_headroom_kw(self.native_options),
+                "basis": "installed_pre_0_18_value"
+                if "export_headroom_kw" in self.native_options
+                else "agreed_constant",
+            },
             "additional_cloud_requests": 0,
             "local_evaluation_seconds": 60,
             "grid_sign": "import_positive" if self.settings.import_positive else "export_positive",

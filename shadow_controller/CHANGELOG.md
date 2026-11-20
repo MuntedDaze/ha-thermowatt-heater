@@ -1,5 +1,48 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.18.0 — one operating policy, one configuration (works with app 1.4.1 or 1.5.0)
+
+Implements the owner's decisions of 20 November 2026 recorded in
+`docs/OPERATING_POLICY.md`, which supersedes every earlier requirement.
+
+- **Morning reserve cancelled.** The 0.7.0 45 °C-by-06:00 / 42 °C-by-07:00
+  requirement no longer exists anywhere: no setting, default, validation,
+  helper or document presents it as current. Manual 45 overnight with the
+  heater's native hysteresis was already the behaviour and is unchanged.
+- **Low-water notification before the evening peak only (D1).** The 35 °C
+  bottom-probe warning is no longer assessed before the morning peak. It is a
+  notification only: heating, commands and native protections are unchanged.
+  The sensor keeps its entity ID and is shown as "Low hot water before evening
+  peak".
+- **One polling configuration (D2).** The controller has no polling setting.
+  It sends Smart plans only when the Thermann Hot Water app reports Smart
+  (`polling_preference`) and accepts v3 plans; otherwise the app keeps its
+  automatic fixed 30-minute schedule. The pre-Smart v1/v2 plans, the advisory
+  polling preview and its two sensors are removed.
+- **Solar start headroom is a constant (D3).** 0.3 kW above element power
+  (3.3 kW for the 3 kW element), formerly the hidden `export_headroom_kw`.
+  An installation whose stored value differed keeps that value (logged and
+  shown in diagnostics), so the upgrade cannot silently change solar
+  qualification.
+- **45 retired settings leave the configuration.** Entry migration 1.5 -> 1.6
+  moves every stored retired value, unchanged, into an unread
+  `retired_options` record; nothing reads or validates it. Inactive values can
+  no longer reject a change to an active setting. The Legacy page and the
+  entities of the 10 legacy/developer settings and the controller polling
+  choice are removed from the registry. 55 settings remain, each with a
+  documented effect (`docs/SETTINGS.md`).
+- Dead code removed: retired `Settings` fields and validation, `native.py`,
+  `polling.py`, the morning helper, the PV qualification helper unused since
+  0.17.0, three- and bridge-qualification config fields. Stale docstrings and
+  the forecast-unavailable alert text corrected.
+- Behaviour preservation: the fixed-30/60 and Smart replay weeks (CT and
+  CT-free, summer, winter, DST and failure weeks) reproduce the 0.17.1
+  evidence exactly for energy, HTTP, commands, decisions and notifications.
+- Rollback: Controller 0.17.1 still loads the 1.6 entry (same major version);
+  retired keys fall back to their old defaults there.
+- Changes notifications, polling plans and configuration: owner approval
+  required before merge; installation needs separate approval.
+
 ## 0.17.1 — simpler configuration, behaviour unchanged (bridge unchanged)
 
 - Every configuration submenu ends with **Back to main menu**.

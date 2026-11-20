@@ -7,6 +7,11 @@ WITHDRAW = timedelta(minutes=10)
 SPACING = timedelta(minutes=15)
 COOLDOWN = timedelta(minutes=10)
 IMPORT_TOLERANCE_KW = 0.2
+# Owner decision D3 (20 Nov 2026): an optional solar start needs sustained
+# measured export of at least element power plus this headroom, i.e. 3.3 kW for
+# the 3 kW element. Formerly the hidden ``export_headroom_kw`` setting (default
+# 0.3); see config.solar_start_headroom_kw for installations that differed.
+SOLAR_START_HEADROOM_KW = 0.3
 PROTECTIVE_REASONS = frozenset(
     {
         "peak_solar_withdrawn",

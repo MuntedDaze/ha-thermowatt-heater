@@ -90,8 +90,8 @@ HELP = {
         "The current optional-boost qualification or rejection reason, not a physical heating measurement.",
     ),
     "morning_availability": (
-        "Hot-water availability assessment",
-        "Fresh bottom probe below the chosen warning threshold before either peak. Unknown/stale is not measured cold.",
+        "Low hot water before evening peak",
+        "Fresh bottom probe below the chosen warning threshold shortly before the evening peak; never assessed before the morning peak. A notification only. Unknown/stale is not measured cold.",
     ),
     "heater_element_state": (
         "Estimated heating element activity",

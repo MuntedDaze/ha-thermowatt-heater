@@ -1,4 +1,10 @@
-"""Actual worker scheduling with synthetic time, MQTT and cloud only."""
+"""Actual worker scheduling of Smart (v3) plans with synthetic time, MQTT and cloud only.
+
+0.18.0: Smart is the single normal polling mode (owner decision D2). These tests
+were ported from the retired v1 plans; the scheduler properties are unchanged:
+plans only queue, deadlines never slide later, a lost lease falls back to the
+fixed schedule, bad plans are rejected, back-off is never shortened.
+"""
 
 from datetime import timedelta
 import json
@@ -16,15 +22,18 @@ from thermowatt_polling import AdaptiveSchedule
 
 adaptive = importlib.import_module(f"{m.__package__}.adaptive")
 SERIAL = "TEST123"
+SMART = {"polling_mode": "smart"}
 
 
 def hint(bridge, clock, delay=2400, **changes):
     plan = {
-        "version": 1,
+        "version": 3,
         "status_at": bridge.last_success[SERIAL],
         "issued_at": clock(),
         "delay_seconds": delay,
-        "reason": "stable",
+        "reason": "required_temperature",
+        "owner_check_seconds": 5400,
+        "polling_mode": "smart",
         **changes,
     }
     bridge.on_mqtt_message(
@@ -38,30 +47,30 @@ def hint(bridge, clock, delay=2400, **changes):
 
 
 def setup(factory, clock, **options):
-    b = factory(adaptive_polling_enabled=True, adaptive_polling_qualified=True, **options)
+    b = factory(**{**SMART, **options})
     ready(b)
     b.session.request.side_effect = [response(body=STATUS)]
     b.tick()
     return b
 
 
-def test_new_default_is_fixed_and_each_side_must_be_commissioned(factory, clock):
-    for options in ({}, {"adaptive_polling_enabled": True}, {"adaptive_polling_qualified": True}):
-        b = factory(**options)
-        assert not b.poll_schedule.active
+def test_smart_plan_bounds():
     now = at(MON, 12)
-    plan = adaptive.make_plan(now, now, heating=False, has_ct=True, temperature_valid=True)
-    assert plan["delay_seconds"] == 2400
-    assert (
-        adaptive.make_plan(now, now, heating=False, has_ct=False, temperature_valid=True)[
-            "delay_seconds"
-        ]
-        == 1800
+    quiet = adaptive.smart_plan(now, now, stable_state="baseline", temperature_valid=True)
+    assert quiet["delay_seconds"] == 5400 and quiet["owner_check_seconds"] == 5400
+    night = adaptive.smart_plan(
+        now, now, stable_state="off", temperature_valid=True, overnight=True
     )
-    imminent = adaptive.make_plan(
-        now, now, heating=True, has_ct=True, temperature_valid=True, completion_at=now + 25 * MIN
+    assert night["delay_seconds"] == 28800 and night["polling_mode"] == "smart"
+    required = adaptive.smart_plan(now, now, temperature_valid=True)
+    assert 900 <= required["delay_seconds"] <= 1800
+    assert required["reason"] == "required_temperature"
+    unknown = adaptive.smart_plan(now, now)
+    assert unknown["delay_seconds"] == 900 and unknown["reason"] == "uncertain"
+    imminent = adaptive.smart_plan(
+        now, now, stable_state="baseline", temperature_valid=True, completion_at=now + 25 * MIN
     )
-    assert imminent["delay_seconds"] == 900 and imminent["reason"] == "near_completion"
+    assert imminent["delay_seconds"] == 1500 and imminent["reason"] == "before_decision"
 
 
 def test_hints_only_queue_and_monotonic_deadline_does_not_slide(factory, clock):
@@ -110,6 +119,7 @@ def test_lost_controller_lease_falls_back_without_optimistic_delay(factory, cloc
         {"issued_at": float("nan")},
         {"reason": "bypass_auth"},
         {"extra": True},
+        {"owner_check_seconds": 28801},
     ],
 )
 def test_bad_or_stale_plans_cannot_extend_status_or_authorise_http(factory, clock, change):
@@ -153,61 +163,70 @@ def test_restart_restores_counters_not_lease_or_cached_status(tmp_path):
     def writer(p, d):
         p.write_text(json.dumps(d), encoding="utf-8")
 
-    s = AdaptiveSchedule(True, lambda: now.wall, lambda: now.mono, path, writer)
+    def schedule():
+        return AdaptiveSchedule(
+            True, lambda: now.wall, lambda: now.mono, path, writer, smart_mode="smart"
+        )
+
+    s = schedule()
     s.observed(SERIAL, now.wall, 1800)
     assert s.accept(
         SERIAL,
         json.dumps(
             {
-                "version": 1,
+                "version": 3,
                 "status_at": 10000,
                 "issued_at": 10000,
                 "delay_seconds": 2400,
-                "reason": "stable",
+                "reason": "required_temperature",
+                "owner_check_seconds": 5400,
+                "polling_mode": "smart",
             }
         ),
     )
     s.save()
-    restored = AdaptiveSchedule(True, lambda: now.wall, lambda: now.mono, path, writer)
+    restored = schedule()
     assert restored.counts["accepted"] == 1 and restored.deadline(SERIAL) is None
     now.wall -= 3600
     now.mono += 60
     assert s.deadline(SERIAL) == 2400
     path.write_text("[]", encoding="utf-8")
-    assert not AdaptiveSchedule(True, lambda: now.wall, lambda: now.mono, path, writer).active
+    assert not schedule().active
 
 
-def test_controller_decision_read_is_bounded_and_freshness_not_relaxed():
+def test_controller_plan_is_bounded_and_freshness_not_relaxed():
     now = at(MON, 12)
-    p = adaptive.make_plan(
-        now, now - 32 * MIN, heating=False, has_ct=True, temperature_valid=True, decision_at=now
-    )
+    p = adaptive.smart_plan(now, now - 32 * MIN, temperature_valid=True, decision_at=now)
     assert p["delay_seconds"] <= 2400
-    assert (
-        adaptive.make_plan(
-            now, now + timedelta(seconds=1), heating=False, has_ct=True, temperature_valid=True
-        )
-        is None
-    )
+    assert adaptive.smart_plan(now, now + timedelta(seconds=1), temperature_valid=True) is None
 
 
-def test_real_controller_plans_reach_the_real_bridge_without_command_or_duplicate_http(
+def test_real_controller_follows_the_app_smart_choice_without_command_or_duplicate_http(
     tmp_path, monkeypatch
 ):
+    """D2: one polling configuration. The controller has no polling setting; it
+    sends Smart plans because the app reports Smart, and none otherwise."""
     from test_integration_0_9_0 import Rig, hobart
 
     rig = Rig(tmp_path, monkeypatch, hobart(MON, 22, 10))
-    rig.bridge.options.update(adaptive_polling_enabled=True, adaptive_polling_qualified=True)
+    rig.bridge.options.update(SMART)
     rig.bridge.poll_schedule.enabled = True
-    options = {**rig.entry.options, "adaptive_polling_enabled": True}
-    rig.entry.options.update(options)
-    rig.runtime.apply_options(options, rig.sources)
-    rig.executor.configure(options)
+    rig.bridge.poll_schedule.smart_mode = "smart"
     rig.run(hobart(MON + 1, 0, 15))
     assert rig.bridge.poll_schedule.counts["accepted"] > 60
-    assert rig.bridge.poll_schedule.counts["ordinary_reads"] < 6
+    assert rig.bridge.poll_schedule.counts["rejected"] == 0
     assert rig.commands() == [] and rig.posts == []
     assert rig.runtime.values["adaptive_polling_status"].startswith("adaptive:")
+
+
+def test_controller_sends_no_plan_when_the_app_is_not_on_smart(tmp_path, monkeypatch):
+    from test_integration_0_9_0 import Rig, hobart
+
+    rig = Rig(tmp_path, monkeypatch, hobart(MON, 22, 10))
+    rig.run(hobart(MON, 23, 30))
+    assert rig.bridge.poll_schedule.counts["accepted"] == 0
+    assert rig.bridge.poll_schedule.counts["rejected"] == 0
+    assert not rig.bridge.poll_hints
 
 
 def test_retained_or_wrong_device_plan_is_discarded_before_queueing(factory, clock):

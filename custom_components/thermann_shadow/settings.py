@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from zoneinfo import available_timezones
 from types import MappingProxyType
 
-from .config import DEFAULT_OPTIONS
+from .config import BACKUP_KEY, DEFAULT_OPTIONS
 
 
 @dataclass(frozen=True)
@@ -20,106 +20,6 @@ class Setting:
 
 
 CATALOG = {
-    "morning_threshold_c": Setting(
-        "Morning minimum (hard)",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Minimum reading (bottom-of-tank T_Avg) by the hard morning deadline, every day. Protected over savings when at risk. A planning threshold, NEVER a heater setpoint or hygiene temperature.",
-        30,
-        60,
-        "°C",
-    ),
-    "morning_preferred_c": Setting(
-        "Morning preferred reserve",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Preferred reading by the preferred morning time, every day: extra reserve before showers, aimed for when reasonably achievable. Once that time passes unmet, only the hard minimum is pursued. Not lower than the minimum.",
-        30,
-        60,
-        "°C",
-    ),
-    "morning_preferred_time": Setting(
-        "Morning ready (preferred)",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Hobart local, every day. Aim to reach the morning threshold by this time.",
-        kind="time",
-    ),
-    "morning_hard_time": Setting(
-        "Morning ready (hard deadline)",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Hobart local, every day (showers). If the preferred time is missed, heating continues for this deadline; it is never abandoned. Must not be earlier than the preferred time.",
-        kind="time",
-    ),
-    "morning_time": Setting(
-        "Legacy: weekend morning time",
-        "Retired",
-        "Not used by automatic control since 0.7.0 (see the two morning ready times). Kept so saved settings are unchanged; only the legacy shadow display uses it.",
-        kind="time",
-    ),
-    "shower_time_enabled": Setting(
-        "Legacy: earlier weekday shower time",
-        "Retired",
-        "Not used by automatic control since 0.7.0. Kept so saved settings are unchanged.",
-        kind="switch",
-    ),
-    "shower_time": Setting(
-        "Legacy: weekday shower-ready time",
-        "Retired",
-        "Not used by automatic control since 0.7.0. Kept so saved settings are unchanged.",
-        kind="time",
-    ),
-    "expected_morning_draw_c": Setting(
-        "Expected morning hot-water use",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Reading drop assumed for morning showers when planning the afternoon target. An assumption (about 11 °C was seen on 11 Nov), not a measurement.",
-        0,
-        40,
-        "°C",
-    ),
-    "standing_loss_c_per_hour": Setting(
-        "Assumed standing heat loss",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Reading drop per hour with no use or heating. Not yet measured for this tank.",
-        0,
-        2,
-        "°C/h",
-    ),
-    "target_c": Setting(
-        "Afternoon storage target",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Selected model target is never silently reduced. 65–70°C is a planning range, not a newly qualified command limit.",
-        65,
-        70,
-        "°C",
-    ),
-    "evening_time": Setting(
-        "Weekend afternoon ready time",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Weekend (no-peak) afternoon ready time, Hobart local, after noon. Weekdays use the evening peak start automatically: 16:00 standard time, 17:00 daylight time.",
-        kind="time",
-    ),
-    "margin_minutes": Setting(
-        "Heating time allowance",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Extra full-power model minutes when heat is required. Uncalibrated; comfort overrides optional dwell.",
-        0,
-        120,
-        "min",
-    ),
-    "min_solar_kw": Setting(
-        "Minimum useful net surplus",
-        "Retired",
-        "Partial solar can be worthwhile. Economic comparison must also pass; never a variable-power command.",
-        0,
-        3,
-        "kW",
-    ),
-    "export_headroom_kw": Setting(
-        "Solar headroom",
-        "Retired",
-        "Deduct from measured surplus for uncertain household loads.",
-        0,
-        3,
-        "kW",
-    ),
     "forecast_enabled": Setting(
         "Use published forecasts",
         "Advanced",
@@ -140,60 +40,6 @@ CATALOG = {
         0,
         5,
         "kW",
-    ),
-    "solar_hold_minutes": Setting(
-        "Solar start qualification",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. How long the planner's choice between optional economic options (heat now, wait, no difference) must persist before it changes, so a passing cloud does not flip the plan. Comfort, data gates and peak decisions are never delayed by it.",
-        5,
-        30,
-        "min",
-    ),
-    "solar_loss_minutes": Setting(
-        "Economic loss grace period",
-        "Retired",
-        "Sustained cost disadvantage before a SIMULATED optional stop; short clouds do not stop a cycle.",
-        0,
-        120,
-        "min",
-    ),
-    "minimum_cycle_minutes": Setting(
-        "Minimum optional cycle",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest heating block the planner schedules. The controller's own minimum heating and rest periods still apply on top.",
-        0,
-        180,
-        "min",
-    ),
-    "minimum_gap_minutes": Setting(
-        "Minimum optional cycle gap",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest gap the planner leaves between two scheduled heating blocks (it merges closer blocks).",
-        0,
-        180,
-        "min",
-    ),
-    "switching_benefit_aud": Setting(
-        "Minimum economic switching benefit",
-        "Retired",
-        "FUTURE CONTROL ONLY: minimum benefit per heater switch. The 0.4.0 advisor uses the per-kWh waiting threshold instead.",
-        0,
-        5,
-        "AUD",
-    ),
-    "wait_benefit_aud_per_kwh": Setting(
-        "Minimum saving to recommend waiting",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Waiting is only recommended if it saves at least this much per kWh that would otherwise be heated now (first minimum cycle; 0.05 = 7.5 c for 30 min) and the comfort fallback stays viable. Solar later vs off-peak grid now is 7.7 c/kWh.",
-        0,
-        0.5,
-        "AUD/kWh",
-    ),
-    "paused": Setting(
-        "Pause shadow planning",
-        "Retired",
-        "Pauses only hypothetical decisions; native Schedule continues.",
-        kind="switch",
     ),
     "meter_verified": Setting(
         "Meter sign and units verified",
@@ -273,27 +119,12 @@ CATALOG = {
         30,
         "kW",
     ),
-    "base_load_source": Setting(
-        "Household load basis",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. measured_only: de-embedded measured base load (heater removed). measured_then_published also uses the published load forecast after 2 h; today's EMHASS load includes heater cycles.",
-        choices=("measured_only", "measured_then_published"),
-        kind="select",
-    ),
     "forecast_max_age_minutes": Setting(
         "Maximum forecast generation age",
         "Advanced",
         "Older forecasts are ignored (no future solar is assumed). EMHASS publishes every 30 minutes, so at least 35. Republishing an old forecast does not freshen it.",
         35,
         360,
-        "min",
-    ),
-    "solar_window_minutes": Setting(
-        "Recent-export scenario horizon",
-        "Retired",
-        "Bounded assumption for current export, never a daily forecast or guaranteed solar.",
-        5,
-        30,
         "min",
     ),
     "status_max_age_minutes": Setting(
@@ -312,51 +143,10 @@ CATALOG = {
         300,
         "s",
     ),
-    "expected_native_target_c": Setting(
-        "Expected native target",
-        "Retired",
-        "Reference only. Different observed mode/target latches intervention; never sets the heater.",
-        20,
-        75,
-        "°C",
-    ),
-    "native_schedule_clock": Setting(
-        "Native schedule clock reference",
-        "Retired",
-        "Reference only; never adjusts the device clock or native Schedule.",
-        choices=("local", "standard"),
-        kind="select",
-    ),
-    "native_schedule_clock_verified": Setting(
-        "Native clock checked",
-        "Retired",
-        "Owner observation only; restore preserves this verification.",
-        kind="switch",
-    ),
-    "t_comfort_reference_c": Setting(
-        "T-Comfort reference",
-        "Retired",
-        "Reference only; 10°C is not a useful comfort reserve. Never changes T-Comfort.",
-        10,
-        75,
-        "°C",
-    ),
-    "native_clock_check_date": Setting(
-        "Native clock check date",
-        "Retired",
-        "Owner check date YYYY-MM-DD, blank if unknown; reference only.",
-        kind="text",
-    ),
     "tariff_periods": Setting(
         "Custom weekly tariff periods",
         "Advanced",
         "Configure advanced JSON: days 0–6, start/end HH:MM, kind. Used only with custom tariff mode; no YAML editing.",
-        kind="form",
-    ),
-    "native_schedule_periods": Setting(
-        "Native schedule reference",
-        "Retired",
-        "Reported approximate times in JSON, for comparison only; NEVER changes the heater programme.",
         kind="form",
     ),
     "controller_command_topic": Setting(
@@ -364,34 +154,6 @@ CATALOG = {
         "System",
         "Commissioning: the Thermowatt MQTT mode command topic for your heater, exactly as written in the commissioning runbook (Stage B). Blank = the controller can never command.",
         kind="text",
-    ),
-    "controller_bridge_qualified": Setting(
-        "Bridge commands qualified (T3)",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Commissioning Stage B: ON only after the supervised T3 test showed the bridge's Manual:70 (from OFF) and off (from Manual 70) reproduce the app results. Requires Thermowatt add-on 1.3.9 or later.",
-        kind="switch",
-    ),
-    "controller_three_state_qualified": Setting(
-        "Three-state commands qualified (1.3.13)",
-        "System",
-        "Commissioning: ON only after the supervised qualification of Thermann Hot Water 1.3.13 showed every transition between OFF, Manual 45 °C and Manual 70 °C reproduces the app result, and an owner change is refused (COMMISSIONING_SIMPLIFIED.md). Automatic control cannot be enabled until it is ON.",
-        kind="switch",
-    ),
-    "controller_min_heating_minutes": Setting(
-        "Minimum heating period",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest time Manual (heating permitted) is kept before parking, unless the thermostat has already stopped the element.",
-        30,
-        180,
-        "min",
-    ),
-    "controller_min_rest_minutes": Setting(
-        "Minimum rest period",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest time parked before heating is permitted again, comfort starts included. At most the execution latency reserve plus 30 minutes, so a comfort start is never delayed beyond what the planner reserves.",
-        30,
-        90,
-        "min",
     ),
     "controller_max_commands_per_day": Setting(
         "Maximum commands per day",
@@ -415,14 +177,6 @@ CATALOG = {
         160,
         400,
     ),
-    "controller_execution_latency_minutes": Setting(
-        "Execution latency reserve",
-        "Retired",
-        "Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Comfort deadlines are planned this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command normally reaches the heater within about a minute; the 30-minute default is a conservative margin you may reduce after the supervised trial.",
-        0,
-        60,
-        "min",
-    ),
     "controller_notify_service": Setting(
         "Notification service",
         "System",
@@ -445,32 +199,7 @@ CATALOG["heater_meter_verification"] = Setting(
     "Remapping the power sensor clears this record; no relay control is used.",
     kind="text",
 )
-CATALOG.update(
-    {
-        "adaptive_polling_shadow": Setting(
-            "Compare adaptive polling (shadow only)",
-            "System",
-            "Record bounded would-be reads only. Actual bridge polling, authentication, budgets and confirmations are unchanged.",
-            kind="switch",
-        ),
-        "adaptive_poll_heating_minutes": Setting(
-            "Shadow heating poll maximum",
-            "System",
-            "Advisory heating cap, at most 60 minutes. Does not change actual reads.",
-            15,
-            60,
-            "min",
-        ),
-        "adaptive_poll_stable_minutes": Setting(
-            "Shadow stable poll maximum",
-            "System",
-            "Advisory stable cap, at most 90 minutes. Vendor inactivity expiry remains unverified.",
-            30,
-            90,
-            "min",
-        ),
-    }
-)
+CATALOG.update({})
 CATALOG.update(
     {
         "optional_heat_margin_aud_per_kwh": Setting(
@@ -570,31 +299,6 @@ CATALOG.update(
         ),
     }
 )
-CATALOG["adaptive_polling_enabled"] = Setting(
-    "Send adaptive cloud scheduling plans",
-    "System",
-    "Disabled until independent review and supervised validation. Sends bounded expiring hints only; the bridge needs its separate enabled and qualified options. Fixed fallback and every cloud/command guard remain.",
-    kind="switch",
-)
-CATALOG["event_aware_polling_enabled"] = Setting(
-    "Allow longer checks during quiet periods",
-    "System",
-    "Default off. Requires adaptive polling and the reviewed event-aware bridge. "
-    "May hold a confirmed baseline/OFF setting longer, without trusting an old temperature. "
-    "App changes can remain unseen until the selected check limit; brief changes can be missed. "
-    "Command prior checks and confirmation are unchanged.",
-    kind="switch",
-)
-CATALOG["owner_change_check_minutes"] = Setting(
-    "Maximum time between app-change checks",
-    "System",
-    "Healthy-cloud maximum between ordinary observations in quiet periods, 30–90 minutes. "
-    "Longer saves requests but delays detecting external changes. Outages can delay detection "
-    "further. Applies only with longer quiet checks enabled; temperatures still expire normally.",
-    30,
-    90,
-    "min",
-)
 CATALOG["learned_planning_enabled"] = Setting(
     "Use validated conservative learned heating rate",
     "System",
@@ -679,15 +383,6 @@ CATALOG["weekend_pv_start_kw"] = Setting(
     "kW",
     kind="number",
 )
-CATALOG["weekend_qualify_minutes"] = Setting(
-    "Weekend daylight qualification",
-    "Advanced",
-    "Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.",
-    5,
-    60,
-    "min",
-    kind="number",
-)
 CATALOG["weekend_end_time"] = Setting(
     "Weekend latest return to baseline",
     "Advanced",
@@ -696,24 +391,6 @@ CATALOG["weekend_end_time"] = Setting(
     1,
     None,
     kind="time",
-)
-CATALOG["weekend_sunset_kw"] = Setting(
-    "Weekend late-day PV threshold",
-    "Advanced",
-    "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
-    0,
-    1,
-    "kW",
-    kind="number",
-)
-CATALOG["weekend_sunset_minutes"] = Setting(
-    "Weekend low-PV ending delay",
-    "Advanced",
-    "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
-    10,
-    120,
-    "min",
-    kind="number",
 )
 CATALOG["solar_cooldown_minutes"] = Setting(
     "Wait after confirmed solar withdrawal",
@@ -727,7 +404,7 @@ CATALOG["solar_cooldown_minutes"] = Setting(
 CATALOG["pre_peak_observation_minutes"] = Setting(
     "Check hot water before peak",
     "Advanced",
-    "Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.",
+    "Minutes before each configured peak to arrange a fresh status observation; before the evening peak it is also when the low-water warning is assessed. Tariff-clock/DST conversion is automatic.",
     5,
     60,
     "min",
@@ -745,46 +422,28 @@ CATALOG["peak_command_lead_minutes"] = Setting(
 CATALOG["low_water_warning_c"] = Setting(
     "Low bottom-temperature warning",
     "Advanced",
-    "Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency.",
+    "Notify only on a fresh bottom-probe reading below this temperature shortly before the evening peak (never before the morning peak). A notification only: not a thermostat target, whole-tank measurement, heating permission or automatic emergency.",
     20,
     45,
     "°C",
     kind="number",
 )
-CATALOG["polling_mode"] = Setting(
-    "Cloud polling mode",
-    "Advanced",
-    "Keep existing preserves upgrade choices. Smart uses useful decisions and bounded quiet checks; Minimum requests accepts longer owner-change detection delays; Fixed 30 minutes retains compatibility.",
-    0,
-    1,
-    None,
-    kind="select",
-    choices=("existing", "smart", "fixed_30", "minimum"),
-)
 _DUAL_PROTECTED = _DUAL_PROTECTED | {
     "low_water_warning_c",
-    "weekend_qualify_minutes",
     "pre_peak_observation_minutes",
-    "polling_mode",
-    "weekend_sunset_minutes",
     "weekend_solar_heating",
     "peak_command_lead_minutes",
     "weekend_pv_start_kw",
     "solar_cooldown_minutes",
     "weekend_end_time",
-    "weekend_sunset_kw",
 }
 assert set(CATALOG) == set(DEFAULT_OPTIONS)
-# 0.8.0 interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
+# Interface groups. Everyday: what a homeowner adjusts. Advanced: tariff,
 # forecasts, economic and model assumptions. System: commissioning, safety
 # timing, budgets and verification (most need automatic control OFF to edit).
-# Retired: no control any more (no production effect, see SETTINGS_AUDIT.md);
-# the stored value is kept, validated and restored by a rollback.
+# Retired settings are not in the catalogue at all (config.RETIRED_OPTIONS).
 GROUPS = ("Everyday", "Advanced", "System")
-RETIRED = frozenset(key for key, meta in CATALOG.items() if meta.group == "Retired")
-# 0.9.0: every Everyday setting belonged to the retired planner; the group stays
-# so saved menus and dashboards keep working, and may be empty.
-assert {meta.group for meta in CATALOG.values()} <= {*GROUPS, "Retired"}
+assert {meta.group for meta in CATALOG.values()} <= set(GROUPS)
 
 # Truthful "original" defaults: the value each setting first shipped with
 # (0.2.0 for shared keys, 0.3.0 for new keys; identical today). RECOMMENDED is
@@ -794,8 +453,6 @@ ORIGINAL_DEFAULTS = MappingProxyType(
     {
         **DEFAULT_OPTIONS,
         # Recommendations changed in 0.4.0 by owner requirement; what shipped first:
-        "morning_threshold_c": 40.0,
-        "morning_time": "07:00",
         "meter_verified": True,
         "tariff_verified": True,
         "import_positive": False,
@@ -803,103 +460,110 @@ ORIGINAL_DEFAULTS = MappingProxyType(
     }
 )
 
-# Owner facts, verifications, contract data and references are never
-# "preferences": restoring recommendations must not rewrite them.
-PRESERVE_ON_RESTORE = frozenset(
+# Owner facts, verifications, contract data, commissioning, safety limits and
+# household choices are never "preferences": restoring recommendations must not
+# rewrite them.
+PRESERVE_ON_RESTORE = (
+    frozenset(
+        {
+            "meter_verified",
+            "tariff_verified",
+            "import_positive",
+            # Tariff contract: a verified contract is not reset to the Aurora 93
+            # defaults merely because preferences are restored.
+            "tariff_clock",
+            "tariff_profile",
+            "tariff_periods",
+            "weekend_peak",
+            "off_peak_rate",
+            "shoulder_rate",
+            "peak_rate",
+            "feed_in_rate",
+            "peak_morning_start",
+            "peak_morning_end",
+            "peak_evening_start",
+            "peak_evening_end",
+            # Commissioning facts, budgets and data-freshness limits.
+            "controller_command_topic",
+            "controller_notify_service",
+            "controller_max_commands_per_day",
+            "controller_confirmation_timeout_minutes",
+            "controller_max_requests_per_day",
+            "status_max_age_minutes",
+            "grid_max_age_seconds",
+            # 0.9.1 (audit M4): whether EMHASS is used at all is commissioning.
+            "forecast_enabled",
+            "heater_meter_verification",
+            "optional_heat_margin_aud_per_kwh",
+            "pause_min_saving_aud",
+            "learned_planning_enabled",
+            "learning_hardware_qualified",
+            "time_zone",
+            "daytime_start",
+            "storage_ready_time",
+            "baseline_start",
+        }
+    )
+    | _DUAL_PROTECTED
+)
+
+# 0.17.1: preferences that never choose a command, a target, a meter meaning or
+# a price may be edited while automatic control is on. Each takes effect at the
+# next evaluation through the same validation. They stay preserved on Restore.
+SAFE_WHILE_ACTIVE = frozenset(
     {
-        "paused",
-        "meter_verified",
-        "tariff_verified",
-        "import_positive",
-        "expected_native_target_c",
-        "native_schedule_periods",
-        "native_schedule_clock",
-        "native_schedule_clock_verified",
-        "native_clock_check_date",
-        "t_comfort_reference_c",
-        # Tariff contract: a verified contract is not reset to the Aurora 93
-        # defaults merely because comfort/cycle preferences are restored.
-        "tariff_clock",
-        "tariff_profile",
-        "tariff_periods",
-        "weekend_peak",
-        "off_peak_rate",
-        "shoulder_rate",
-        "peak_rate",
-        "feed_in_rate",
-        "peak_morning_start",
-        "peak_morning_end",
-        "peak_evening_start",
-        "peak_evening_end",
-        # Commissioning facts are never "preferences".
-        "controller_command_topic",
-        "controller_bridge_qualified",
-        "controller_three_state_qualified",
-        "controller_notify_service",
-        # 0.7.1: command safety timing, budgets and data-freshness limits are
-        # system settings, not preferences; a restore never changes them.
-        "controller_min_heating_minutes",
-        "controller_min_rest_minutes",
-        "controller_max_commands_per_day",
-        "controller_confirmation_timeout_minutes",
-        "controller_max_requests_per_day",
-        "controller_execution_latency_minutes",
-        "status_max_age_minutes",
-        "grid_max_age_seconds",
-        # 0.9.1 (audit M4): the forecast switch decides whether EMHASS is used
-        # at all and is a commissioning requirement, not a preference.
-        "forecast_enabled",
-        "heater_meter_verification",
-        "adaptive_polling_shadow",
-        "adaptive_polling_enabled",
-        "adaptive_poll_heating_minutes",
-        "adaptive_poll_stable_minutes",
-        "optional_heat_margin_aud_per_kwh",
-        "pause_min_saving_aud",
+        "low_water_warning_c",  # a warning threshold only
+        "pre_peak_observation_minutes",  # when a status read is arranged; no authority
     }
 )
+
 # 0.7.1: settings that change WHERE commands go, WHETHER they may be sent, HOW
 # often, or what a measurement or a price MEANS. Changing one while automatic
 # control is on could silently bypass a commissioning gate, redirect commands,
 # invert the meter or reprice decisions mid-run, so it is accepted only while
 # automatic control is OFF. ("sources" is the sensor-mapping page of Configure.)
-LOCKED_WHILE_ACTIVE = frozenset(
-    {
-        "controller_command_topic",
-        "controller_bridge_qualified",
-        "controller_three_state_qualified",
-        "controller_min_heating_minutes",
-        "controller_min_rest_minutes",
-        "controller_max_commands_per_day",
-        "controller_confirmation_timeout_minutes",
-        "controller_max_requests_per_day",
-        "controller_execution_latency_minutes",
-        "meter_verified",
-        "import_positive",
-        "tariff_verified",
-        "tariff_profile",
-        "tariff_clock",
-        "tariff_periods",
-        "weekend_peak",
-        "off_peak_rate",
-        "shoulder_rate",
-        "peak_rate",
-        "feed_in_rate",
-        "peak_morning_start",
-        "peak_morning_end",
-        "peak_evening_start",
-        "peak_evening_end",
-        "status_max_age_minutes",
-        "grid_max_age_seconds",
-        "forecast_enabled",
-        "sources",
-        "optional_heat_margin_aud_per_kwh",
-        "pause_min_saving_aud",
-        "heater_meter_verification",
-    }
-)
-PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | _DUAL_PROTECTED
-LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | _DUAL_PROTECTED
+LOCKED_WHILE_ACTIVE = (
+    frozenset(
+        {
+            "controller_command_topic",
+            "controller_max_commands_per_day",
+            "controller_confirmation_timeout_minutes",
+            "controller_max_requests_per_day",
+            "meter_verified",
+            "import_positive",
+            "tariff_verified",
+            "tariff_profile",
+            "tariff_clock",
+            "tariff_periods",
+            "weekend_peak",
+            "off_peak_rate",
+            "shoulder_rate",
+            "peak_rate",
+            "feed_in_rate",
+            "peak_morning_start",
+            "peak_morning_end",
+            "peak_evening_start",
+            "peak_evening_end",
+            "status_max_age_minutes",
+            "grid_max_age_seconds",
+            "forecast_enabled",
+            "sources",
+            "optional_heat_margin_aud_per_kwh",
+            "pause_min_saving_aud",
+            "heater_meter_verification",
+            "learned_planning_enabled",
+            "learning_hardware_qualified",
+            "time_zone",
+            "daytime_start",
+            "storage_ready_time",
+            "baseline_start",
+        }
+    )
+    | _DUAL_PROTECTED
+) - SAFE_WHILE_ACTIVE
+assert SAFE_WHILE_ACTIVE <= PRESERVE_ON_RESTORE
+RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
+assert not set(RESTORED) & LOCKED_WHILE_ACTIVE
 
 
 def _same(a, b) -> bool:
@@ -913,8 +577,6 @@ def _same(a, b) -> bool:
 
 def locked_changes(before: dict, after: dict) -> list[str]:
     """Locked keys whose value differs between two complete option sets."""
-    from .config import DEFAULT_OPTIONS
-
     changed = []
     for key in sorted(LOCKED_WHILE_ACTIVE):
         default = DEFAULT_OPTIONS.get(key)
@@ -934,9 +596,6 @@ def locked_message(keys) -> str:
         + ". These settings decide where commands go, whether they may be sent or what "
         "a measurement or price means. Nothing was saved."
     )
-
-
-BACKUP_KEY = "restore_backup"
 
 
 def recommended_options(current):
@@ -995,55 +654,3 @@ def describe(key, current):
         "changed_from_recommended": current != recommended,
         "restore_recommended": "restores" if key in RESTORED else "preserves",
     }
-
-
-LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {"adaptive_polling_enabled"}
-LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
-    "event_aware_polling_enabled",
-    "owner_change_check_minutes",
-}
-PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
-    "event_aware_polling_enabled",
-    "owner_change_check_minutes",
-}
-PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
-    "learned_planning_enabled",
-    "learning_hardware_qualified",
-}
-LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
-    "learned_planning_enabled",
-    "learning_hardware_qualified",
-}
-PRESERVE_ON_RESTORE = PRESERVE_ON_RESTORE | {
-    "time_zone",
-    "daytime_start",
-    "storage_ready_time",
-    "baseline_start",
-}
-LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE | {
-    "time_zone",
-    "daytime_start",
-    "storage_ready_time",
-    "baseline_start",
-}
-
-
-# 0.17.1: preferences that never choose a command, a target, a meter meaning or
-# a price may be edited while automatic control is on. Each takes effect at the
-# next evaluation through the same validation. They stay preserved on Restore.
-SAFE_WHILE_ACTIVE = frozenset(
-    {
-        "low_water_warning_c",  # a warning threshold only
-        "pre_peak_observation_minutes",  # when a status read is arranged; no authority
-        "weekend_qualify_minutes",  # no effect since 0.17.0
-        "weekend_sunset_kw",  # no effect since 0.17.0
-        "weekend_sunset_minutes",  # no effect since 0.17.0
-    }
-)
-LOCKED_WHILE_ACTIVE = LOCKED_WHILE_ACTIVE - SAFE_WHILE_ACTIVE
-assert SAFE_WHILE_ACTIVE <= PRESERVE_ON_RESTORE
-
-# Finalise only after every extension above: early snapshots silently included
-# newly protected time/learning/poll choices in Restore/Undo's cached tuple.
-RESTORED = tuple(key for key in DEFAULT_OPTIONS if key not in PRESERVE_ON_RESTORE)
-assert not set(RESTORED) & LOCKED_WHILE_ACTIVE

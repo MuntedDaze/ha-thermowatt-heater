@@ -37,6 +37,8 @@ SENSORS = {
     "forecast_net_surplus_kw": ("Forecast net surplus", "kW"),
     "forecast_age_minutes": ("Forecast age", "min"),
     "forecast_load_quality": ("Household forecast quality", None),
+    # Entity-ID basis only (kept for history/dashboards); shown as "Low hot water
+    # before evening peak" (presentation.HELP). No morning check exists.
     "morning_availability": ("Morning hot water availability", None),
     "decision": ("Decision code", None),
     "heater_element_state": ("Heater element state", None),
@@ -106,8 +108,6 @@ CONTROLLER_SENSORS = {
     "operating_mode": ("Hot water operating mode", None),
     "guest_mode_ends": ("12hr Override ends", None),
     "request_budget_remaining": ("Cloud request budget remaining", "requests"),
-    "next_adaptive_poll": ("Shadow next adaptive poll", None),
-    "adaptive_poll_interval": ("Shadow adaptive poll interval", "s"),
     "desired_temperature": ("Desired thermostat temperature", "°C"),
     "heating_requirement": ("Heating requirement", None),
     "boost_eligibility": ("Solar boost eligibility", None),
@@ -127,7 +127,6 @@ CONTROLLER_TIMESTAMPS = {
     "next_heating_stop",
     "last_command_time",
     "guest_mode_ends",
-    "next_adaptive_poll",
     "parked_off_restore_since",
     "solar_cooldown_until",
 }
@@ -166,7 +165,7 @@ class ShadowSensor(SensorEntity):
             self._attr_options = list(STATE_LABELS[key])
         if key in TIMESTAMPS:
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
-        if key in {"cloud_poll_interval", "adaptive_poll_interval"}:
+        if key == "cloud_poll_interval":
             self._attr_device_class = SensorDeviceClass.DURATION
             self._attr_state_class = SensorStateClass.MEASUREMENT
 

@@ -1,0 +1,2541 @@
+{
+  "schema_version": 1,
+  "simulated_days_per_run": 7,
+  "runs": [
+    {
+      "strategy": "fixed_30",
+      "ct": false,
+      "energy_kwh": {
+        "peak": 0.666624,
+        "off_peak": 17.454028,
+        "solar": 42.229348,
+        "served_draw": 45.0,
+        "unserved_draw": 0.0,
+        "loss": 12.30684,
+        "peak_owner": 0.0,
+        "peak_unverified_lockout": 0.666624
+      },
+      "grid_cost_aud": 3.211912,
+      "solar_opportunity_aud": 3.917194,
+      "net_heater_cost_aud": 7.129106,
+      "end_temperature_c": 53.308402,
+      "end_stored_above_15_kwh": 14.03141,
+      "command_intents": 24,
+      "command_posts": 24,
+      "http_categories": {
+        "password_login": 1,
+        "token_refresh": 335,
+        "discovery": 0,
+        "status": 326,
+        "command": 24,
+        "confirmation": 24,
+        "command_refresh": 12
+      },
+      "http_total": 722,
+      "maximum_status_age_minutes": 89.0,
+      "maximum_healthy_status_age_minutes": 29.666667,
+      "unknown_temperature_minutes": 44,
+      "required_planning_unknown_minutes": 12,
+      "stale_command_blocked_minutes": 32,
+      "persistent_owner_detection_minutes": 15.0,
+      "transient_app_change_observed": false,
+      "forecast_mae_kw": 0.509104,
+      "conditional_latest_completion_mae_minutes": null,
+      "evaluated_completion_samples": 0,
+      "poll_reason_minutes": {
+        "disabled": 10080
+      },
+      "days": {
+        "2026-11-16": {
+          "required_c": 62,
+          "max_daytime_c": 62.010695,
+          "at_peak_c": 61.457361,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.198755
+        },
+        "2026-11-17": {
+          "required_c": 62,
+          "max_daytime_c": 62.10123,
+          "at_peak_c": 61.98123,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.006875
+        },
+        "2026-11-18": {
+          "required_c": 62,
+          "max_daytime_c": 61.110947,
+          "at_peak_c": 60.320947,
+          "required_target_reached": false,
+          "at_peak_storage_shortfall_kwh": 0.614995
+        },
+        "2026-11-19": {
+          "required_c": 62,
+          "max_daytime_c": 62.123716,
+          "at_peak_c": 61.800382,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.073115
+        },
+        "2026-11-20": {
+          "required_c": 62,
+          "max_daytime_c": 62.128685,
+          "at_peak_c": 50.447928,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 4.231235
+        },
+        "2026-11-21": {
+          "required_c": null,
+          "max_daytime_c": 62.070163,
+          "at_peak_c": 61.073497,
+          "required_target_reached": null,
+          "at_peak_storage_shortfall_kwh": null
+        },
+        "2026-11-22": {
+          "required_c": null,
+          "max_daytime_c": 62.030541,
+          "at_peak_c": 61.733875,
+          "required_target_reached": null,
+          "at_peak_storage_shortfall_kwh": null
+        }
+      },
+      "events": [
+        {
+          "at": "2026-11-18T02:03:00+00:00",
+          "event": "transient_app_change"
+        },
+        {
+          "at": "2026-11-18T02:08:00+00:00",
+          "event": "transient_app_return"
+        },
+        {
+          "at": "2026-11-18T07:15:00+00:00",
+          "event": "persistent_owner_app_change"
+        },
+        {
+          "at": "2026-11-18T09:15:00+00:00",
+          "event": "owner_returns_off_and_resumes"
+        },
+        {
+          "at": "2026-11-20T20:30:00+00:00",
+          "event": "HA_controller_and_history_restart_no_intent_replay"
+        }
+      ],
+      "decisions": [
+        {
+          "at": "2026-11-15T14:01:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T14:30:00+00:00",
+          "reason": "heater_state_not_controlled",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T14:31:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T02:30:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T03:30:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T00:00:00+00:00",
+          "reason": "storage_waiting_for_cheaper_window",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T03:05:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T03:07:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T04:30:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:30:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T01:30:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T07:30:00+00:00",
+          "reason": "mode_or_target_changed_outside_controller",
+          "state": "owner_override",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T09:15:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T09:30:00+00:00",
+          "reason": "heater_state_not_controlled",
+          "state": "parked",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T09:31:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T01:30:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T02:30:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T03:30:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T04:30:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T01:30:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T02:30:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:58:00+00:00",
+          "reason": "cloud_health_backoff",
+          "state": "change_requested",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T06:30:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T06:32:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T20:23:00+00:00",
+          "reason": "storage_waiting_for_cheaper_window",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T20:30:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T21:00:00+00:00",
+          "reason": "storage_waiting_for_cheaper_window",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T21:58:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T22:00:00+00:00",
+          "reason": "weekend_daytime_storage",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T07:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T07:02:00+00:00",
+          "reason": "weekend_day_ended",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-21T13:00:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T02:11:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T02:13:00+00:00",
+          "reason": "weekend_daytime_storage",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-22T07:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-22T07:02:00+00:00",
+          "reason": "weekend_day_ended",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T13:00:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        }
+      ],
+      "notifications": [
+        "thermann_shadow_cloud_fault",
+        "thermann_shadow_control_restored",
+        "thermann_shadow_override_mode_or_target_changed_outside_controller",
+        "thermann_shadow_peak_lockout_unverified",
+        "thermann_shadow_protective_exit_unresolved",
+        "thermann_shadow_status_stale"
+      ],
+      "clean_history_sessions": 0,
+      "common_terminal_stored_kwh": 14.03141,
+      "terminal_replenishment_kwh": 0.0,
+      "equal_terminal_cost_aud": 7.129106
+    },
+    {
+      "strategy": "fixed_60",
+      "ct": false,
+      "energy_kwh": {
+        "peak": 2.745443,
+        "off_peak": 21.741096,
+        "solar": 35.863461,
+        "served_draw": 45.0,
+        "unserved_draw": 0.0,
+        "loss": 12.30684,
+        "peak_owner": 0.0,
+        "peak_unverified_lockout": 2.745443
+      },
+      "grid_cost_aud": 4.69385,
+      "solar_opportunity_aud": 3.326695,
+      "net_heater_cost_aud": 8.020545,
+      "end_temperature_c": 53.308402,
+      "end_stored_above_15_kwh": 14.03141,
+      "command_intents": 24,
+      "command_posts": 23,
+      "http_categories": {
+        "password_login": 1,
+        "token_refresh": 169,
+        "discovery": 0,
+        "status": 160,
+        "command": 23,
+        "confirmation": 23,
+        "command_refresh": 13
+      },
+      "http_total": 389,
+      "maximum_status_age_minutes": 118.0,
+      "maximum_healthy_status_age_minutes": 60.666667,
+      "unknown_temperature_minutes": 2335,
+      "required_planning_unknown_minutes": 393,
+      "stale_command_blocked_minutes": 0,
+      "persistent_owner_detection_minutes": 45.0,
+      "transient_app_change_observed": false,
+      "forecast_mae_kw": 0.509104,
+      "conditional_latest_completion_mae_minutes": null,
+      "evaluated_completion_samples": 0,
+      "poll_reason_minutes": {
+        "disabled": 10080
+      },
+      "days": {
+        "2026-11-16": {
+          "required_c": 62,
+          "max_daytime_c": 62.010695,
+          "at_peak_c": 61.457361,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.198755
+        },
+        "2026-11-17": {
+          "required_c": 62,
+          "max_daytime_c": 62.031387,
+          "at_peak_c": 61.84472,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.056875
+        },
+        "2026-11-18": {
+          "required_c": 62,
+          "max_daytime_c": 60.974438,
+          "at_peak_c": 60.184438,
+          "required_target_reached": false,
+          "at_peak_storage_shortfall_kwh": 0.664995
+        },
+        "2026-11-19": {
+          "required_c": 62,
+          "max_daytime_c": 62.123716,
+          "at_peak_c": 61.800382,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.073115
+        },
+        "2026-11-20": {
+          "required_c": 62,
+          "max_daytime_c": 62.128685,
+          "at_peak_c": 50.447928,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 4.231235
+        },
+        "2026-11-21": {
+          "required_c": null,
+          "max_daytime_c": 61.927459,
+          "at_peak_c": 60.527459,
+          "required_target_reached": null,
+          "at_peak_storage_shortfall_kwh": null
+        },
+        "2026-11-22": {
+          "required_c": null,
+          "max_daytime_c": 62.100541,
+          "at_peak_c": 61.733875,
+          "required_target_reached": null,
+          "at_peak_storage_shortfall_kwh": null
+        }
+      },
+      "events": [
+        {
+          "at": "2026-11-18T02:03:00+00:00",
+          "event": "transient_app_change"
+        },
+        {
+          "at": "2026-11-18T02:08:00+00:00",
+          "event": "transient_app_return"
+        },
+        {
+          "at": "2026-11-18T07:15:00+00:00",
+          "event": "persistent_owner_app_change"
+        },
+        {
+          "at": "2026-11-18T09:15:00+00:00",
+          "event": "owner_returns_off_and_resumes"
+        },
+        {
+          "at": "2026-11-20T20:30:00+00:00",
+          "event": "HA_controller_and_history_restart_no_intent_replay"
+        },
+        {
+          "at": "2026-11-20T23:00:00+00:00",
+          "event": "owner_acknowledges_recovered_fault"
+        }
+      ],
+      "decisions": [
+        {
+          "at": "2026-11-15T14:01:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T15:00:00+00:00",
+          "reason": "heater_state_not_controlled",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T15:01:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T03:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T03:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T04:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T04:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T05:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T05:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-16T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T00:00:00+00:00",
+          "reason": "storage_waiting_for_cheaper_window",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T02:46:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T02:48:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T02:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T02:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T03:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T03:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T04:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T04:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T05:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T05:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T08:00:00+00:00",
+          "reason": "mode_or_target_changed_outside_controller",
+          "state": "owner_override",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T09:15:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T10:00:00+00:00",
+          "reason": "heater_state_not_controlled",
+          "state": "parked",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T10:01:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T02:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T02:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T03:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T03:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T04:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T04:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T05:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T05:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T02:00:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T02:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T03:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T03:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T04:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T04:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:59:00+00:00",
+          "reason": "bridge_refused_or_dropped",
+          "state": "fault_locked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T23:00:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T00:00:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T00:02:00+00:00",
+          "reason": "command_spacing",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T00:15:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T00:17:00+00:00",
+          "reason": "weekend_daytime_storage",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T07:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T07:02:00+00:00",
+          "reason": "weekend_day_ended",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-21T13:00:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T01:46:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T01:48:00+00:00",
+          "reason": "weekend_daytime_storage",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-22T07:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-22T07:02:00+00:00",
+          "reason": "weekend_day_ended",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T13:00:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        }
+      ],
+      "notifications": [
+        "thermann_shadow_cloud_fault",
+        "thermann_shadow_control_restored",
+        "thermann_shadow_fault_bridge_refused_or_dropped",
+        "thermann_shadow_override_mode_or_target_changed_outside_controller",
+        "thermann_shadow_peak_lockout_unverified",
+        "thermann_shadow_protective_exit_unresolved"
+      ],
+      "clean_history_sessions": 0,
+      "common_terminal_stored_kwh": 14.03141,
+      "terminal_replenishment_kwh": 0.0,
+      "equal_terminal_cost_aud": 8.020545
+    },
+    {
+      "strategy": "fixed_30",
+      "ct": true,
+      "energy_kwh": {
+        "peak": 0.666624,
+        "off_peak": 11.848039,
+        "solar": 47.835337,
+        "served_draw": 45.0,
+        "unserved_draw": 0.0,
+        "loss": 12.30684,
+        "peak_owner": 0.0,
+        "peak_unverified_lockout": 0.666624
+      },
+      "grid_cost_aud": 2.257773,
+      "solar_opportunity_aud": 4.437206,
+      "net_heater_cost_aud": 6.694979,
+      "end_temperature_c": 53.308402,
+      "end_stored_above_15_kwh": 14.03141,
+      "command_intents": 30,
+      "command_posts": 30,
+      "http_categories": {
+        "password_login": 1,
+        "token_refresh": 335,
+        "discovery": 0,
+        "status": 326,
+        "command": 30,
+        "confirmation": 30,
+        "command_refresh": 15
+      },
+      "http_total": 737,
+      "maximum_status_age_minutes": 89.0,
+      "maximum_healthy_status_age_minutes": 29.666667,
+      "unknown_temperature_minutes": 44,
+      "required_planning_unknown_minutes": 12,
+      "stale_command_blocked_minutes": 32,
+      "persistent_owner_detection_minutes": 15.0,
+      "transient_app_change_observed": false,
+      "forecast_mae_kw": 0.509104,
+      "conditional_latest_completion_mae_minutes": 103.269089,
+      "evaluated_completion_samples": 7,
+      "poll_reason_minutes": {
+        "disabled": 10080
+      },
+      "days": {
+        "2026-11-16": {
+          "required_c": 62,
+          "max_daytime_c": 70.001262,
+          "at_peak_c": 69.647928,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.0
+        },
+        "2026-11-17": {
+          "required_c": 62,
+          "max_daytime_c": 62.117897,
+          "at_peak_c": 61.98123,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.006875
+        },
+        "2026-11-18": {
+          "required_c": 62,
+          "max_daytime_c": 63.650822,
+          "at_peak_c": 63.324155,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.0
+        },
+        "2026-11-19": {
+          "required_c": 62,
+          "max_daytime_c": 70.110949,
+          "at_peak_c": 69.990949,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.0
+        },
+        "2026-11-20": {
+          "required_c": 62,
+          "max_daytime_c": 63.52727,
+          "at_peak_c": 51.676514,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 3.781235
+        },
+        "2026-11-21": {
+          "required_c": null,
+          "max_daytime_c": 70.040731,
+          "at_peak_c": 69.264064,
+          "required_target_reached": null,
+          "at_peak_storage_shortfall_kwh": null
+        },
+        "2026-11-22": {
+          "required_c": null,
+          "max_daytime_c": 62.033875,
+          "at_peak_c": 61.733875,
+          "required_target_reached": null,
+          "at_peak_storage_shortfall_kwh": null
+        }
+      },
+      "events": [
+        {
+          "at": "2026-11-18T02:03:00+00:00",
+          "event": "transient_app_change"
+        },
+        {
+          "at": "2026-11-18T02:08:00+00:00",
+          "event": "transient_app_return"
+        },
+        {
+          "at": "2026-11-18T07:15:00+00:00",
+          "event": "persistent_owner_app_change"
+        },
+        {
+          "at": "2026-11-18T09:15:00+00:00",
+          "event": "owner_returns_off_and_resumes"
+        },
+        {
+          "at": "2026-11-20T20:30:00+00:00",
+          "event": "HA_controller_and_history_restart_no_intent_replay"
+        }
+      ],
+      "decisions": [
+        {
+          "at": "2026-11-15T14:01:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T14:30:00+00:00",
+          "reason": "heater_state_not_controlled",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T14:31:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T00:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T00:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-16T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-16T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-16T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-16T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T00:00:00+00:00",
+          "reason": "storage_waiting_for_cheaper_window",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T04:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T04:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:20:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:30:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T00:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T00:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-18T00:22:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-18T00:24:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T02:04:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T04:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T04:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-18T04:22:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-18T04:24:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T07:30:00+00:00",
+          "reason": "mode_or_target_changed_outside_controller",
+          "state": "owner_override",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T09:15:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T09:30:00+00:00",
+          "reason": "heater_state_not_controlled",
+          "state": "parked",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T09:31:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T02:01:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T03:01:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T04:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T04:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-19T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-19T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-19T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-19T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T00:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T00:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-20T01:21:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-20T01:23:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:21:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:58:00+00:00",
+          "reason": "cloud_health_backoff",
+          "state": "change_requested",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T06:30:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T06:32:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T20:23:00+00:00",
+          "reason": "storage_waiting_for_cheaper_window",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T20:30:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T21:00:00+00:00",
+          "reason": "storage_waiting_for_cheaper_window",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T22:13:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T22:15:00+00:00",
+          "reason": "weekend_daytime_storage",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T23:28:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T23:30:00+00:00",
+          "reason": "solar_opportunity_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-21T07:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-21T07:02:00+00:00",
+          "reason": "weekend_day_ended",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-21T13:00:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T03:10:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T03:12:00+00:00",
+          "reason": "weekend_daytime_storage",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-22T07:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-22T07:02:00+00:00",
+          "reason": "weekend_day_ended",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T13:00:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        }
+      ],
+      "notifications": [
+        "thermann_shadow_cloud_fault",
+        "thermann_shadow_control_restored",
+        "thermann_shadow_heater_meter_unavailable",
+        "thermann_shadow_override_mode_or_target_changed_outside_controller",
+        "thermann_shadow_peak_lockout_unverified",
+        "thermann_shadow_protective_exit_unresolved",
+        "thermann_shadow_status_stale"
+      ],
+      "clean_history_sessions": 0,
+      "common_terminal_stored_kwh": 14.03141,
+      "terminal_replenishment_kwh": 0.0,
+      "equal_terminal_cost_aud": 6.694979
+    },
+    {
+      "strategy": "fixed_60",
+      "ct": true,
+      "energy_kwh": {
+        "peak": 2.340992,
+        "off_peak": 16.0571,
+        "solar": 41.851908,
+        "served_draw": 45.0,
+        "unserved_draw": 0.0,
+        "loss": 12.30684,
+        "peak_owner": 0.0,
+        "peak_unverified_lockout": 2.340992
+      },
+      "grid_cost_aud": 3.580072,
+      "solar_opportunity_aud": 3.882183,
+      "net_heater_cost_aud": 7.462255,
+      "end_temperature_c": 53.035383,
+      "end_stored_above_15_kwh": 13.93141,
+      "command_intents": 29,
+      "command_posts": 28,
+      "http_categories": {
+        "password_login": 1,
+        "token_refresh": 172,
+        "discovery": 0,
+        "status": 160,
+        "command": 28,
+        "confirmation": 28,
+        "command_refresh": 16
+      },
+      "http_total": 405,
+      "maximum_status_age_minutes": 118.0,
+      "maximum_healthy_status_age_minutes": 60.666667,
+      "unknown_temperature_minutes": 2293,
+      "required_planning_unknown_minutes": 351,
+      "stale_command_blocked_minutes": 0,
+      "persistent_owner_detection_minutes": 45.0,
+      "transient_app_change_observed": false,
+      "forecast_mae_kw": 0.509104,
+      "conditional_latest_completion_mae_minutes": 109.477788,
+      "evaluated_completion_samples": 10,
+      "poll_reason_minutes": {
+        "disabled": 10080
+      },
+      "days": {
+        "2026-11-16": {
+          "required_c": 62,
+          "max_daytime_c": 70.001262,
+          "at_peak_c": 69.647928,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.0
+        },
+        "2026-11-17": {
+          "required_c": 62,
+          "max_daytime_c": 62.098211,
+          "at_peak_c": 61.708211,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.106875
+        },
+        "2026-11-18": {
+          "required_c": 62,
+          "max_daytime_c": 63.577803,
+          "at_peak_c": 63.051136,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.0
+        },
+        "2026-11-19": {
+          "required_c": 62,
+          "max_daytime_c": 70.110949,
+          "at_peak_c": 69.990949,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 0.0
+        },
+        "2026-11-20": {
+          "required_c": 62,
+          "max_daytime_c": 63.52727,
+          "at_peak_c": 51.676514,
+          "required_target_reached": true,
+          "at_peak_storage_shortfall_kwh": 3.781235
+        },
+        "2026-11-21": {
+          "required_c": null,
+          "max_daytime_c": 70.067554,
+          "at_peak_c": 69.127554,
+          "required_target_reached": null,
+          "at_peak_storage_shortfall_kwh": null
+        },
+        "2026-11-22": {
+          "required_c": null,
+          "max_daytime_c": 62.044189,
+          "at_peak_c": 61.460856,
+          "required_target_reached": null,
+          "at_peak_storage_shortfall_kwh": null
+        }
+      },
+      "events": [
+        {
+          "at": "2026-11-18T02:03:00+00:00",
+          "event": "transient_app_change"
+        },
+        {
+          "at": "2026-11-18T02:08:00+00:00",
+          "event": "transient_app_return"
+        },
+        {
+          "at": "2026-11-18T07:15:00+00:00",
+          "event": "persistent_owner_app_change"
+        },
+        {
+          "at": "2026-11-18T09:15:00+00:00",
+          "event": "owner_returns_off_and_resumes"
+        },
+        {
+          "at": "2026-11-20T20:30:00+00:00",
+          "event": "HA_controller_and_history_restart_no_intent_replay"
+        },
+        {
+          "at": "2026-11-20T23:00:00+00:00",
+          "event": "owner_acknowledges_recovered_fault"
+        }
+      ],
+      "decisions": [
+        {
+          "at": "2026-11-15T14:01:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T15:00:00+00:00",
+          "reason": "heater_state_not_controlled",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T15:01:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-15T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T00:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T00:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-16T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-16T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-16T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-16T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-16T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T00:00:00+00:00",
+          "reason": "storage_waiting_for_cheaper_window",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T02:46:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T02:48:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T04:04:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T04:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-17T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-17T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T00:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T00:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-18T00:22:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-18T00:24:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T02:04:00+00:00",
+          "reason": "storage_within_thermostat_band",
+          "state": "normal_storage_62",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T02:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T03:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T03:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-18T03:22:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-18T03:24:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T04:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T05:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T05:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-18T08:00:00+00:00",
+          "reason": "mode_or_target_changed_outside_controller",
+          "state": "owner_override",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T09:15:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T10:00:00+00:00",
+          "reason": "heater_state_not_controlled",
+          "state": "parked",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T10:01:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 55
+        },
+        {
+          "at": "2026-11-18T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-18T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T00:00:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T00:02:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T02:03:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T02:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T03:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-19T03:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-19T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-19T06:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-19T11:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-19T11:02:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T20:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-19T21:00:00+00:00",
+          "reason": "peak_lockout",
+          "state": "parked",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T00:00:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-20T00:02:00+00:00",
+          "reason": "weekday_solar_boost_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-20T01:21:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-20T01:23:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T02:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T03:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T03:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T04:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T04:46:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:00:00+00:00",
+          "reason": "storage_target_reached",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:21:00+00:00",
+          "reason": "storage_until_peak",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:58:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T05:59:00+00:00",
+          "reason": "bridge_refused_or_dropped",
+          "state": "fault_locked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-20T23:00:00+00:00",
+          "reason": "waiting_for_new_heater_status",
+          "state": "observing",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T00:00:00+00:00",
+          "reason": "confirming_off",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T00:02:00+00:00",
+          "reason": "command_spacing",
+          "state": "parked",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T00:15:00+00:00",
+          "reason": "confirming_storage",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-21T00:17:00+00:00",
+          "reason": "solar_opportunity_continues",
+          "state": "storage_70",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-21T07:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 70
+        },
+        {
+          "at": "2026-11-21T07:02:00+00:00",
+          "reason": "weekend_day_ended",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-21T13:00:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T01:46:00+00:00",
+          "reason": "confirming_normal_storage",
+          "state": "confirming",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T01:48:00+00:00",
+          "reason": "weekend_daytime_storage",
+          "state": "normal_storage_62",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-22T07:00:00+00:00",
+          "reason": "confirming_baseline",
+          "state": "confirming",
+          "target_c": 62
+        },
+        {
+          "at": "2026-11-22T07:02:00+00:00",
+          "reason": "weekend_day_ended",
+          "state": "baseline_45",
+          "target_c": 45
+        },
+        {
+          "at": "2026-11-22T13:00:00+00:00",
+          "reason": "baseline",
+          "state": "baseline_45",
+          "target_c": 45
+        }
+      ],
+      "notifications": [
+        "thermann_shadow_cloud_fault",
+        "thermann_shadow_control_restored",
+        "thermann_shadow_fault_bridge_refused_or_dropped",
+        "thermann_shadow_heater_meter_unavailable",
+        "thermann_shadow_override_mode_or_target_changed_outside_controller",
+        "thermann_shadow_peak_lockout_unverified",
+        "thermann_shadow_protective_exit_unresolved"
+      ],
+      "clean_history_sessions": 0,
+      "common_terminal_stored_kwh": 14.03141,
+      "terminal_replenishment_kwh": 0.1,
+      "equal_terminal_cost_aud": 7.479275
+    }
+  ],
+  "assumptions": {
+    "tank": "315 L uniform / 3 kW / native 8 C hysteresis / 0.2 C per hour loss; receipt-rounded cloud probe; native protective cycles omitted",
+    "service": "identical 2.5 kWh morning + evening demand; Thursday adds 4 and Friday 6; initial45, equal terminal replenishment hypothetical later grid at0.1702",
+    "weather": "Mon sunny, Tue cloudy with optimistic forecast, Wed patchy, Thu heavy draw, Fri CT and cloud-status outages, Sat restart, Sun cloudy weekend",
+    "owner": "Wednesday five-minute app change and later two-hour Manual55 peak intervention; simulated owner resumes explicitly, never auto-overwrites owner hold",
+    "cloud": "actual mocked worker, 30s command readback, existing 20m refresh heuristic, authentic backoff; atomic private storage simulated in memory to avoid platform filesystem noise",
+    "cost": "marginal heater grid + foregone feed-in; no whole-house bill or annual savings claim; zero OFF watts only a tank-model assumption",
+    "prediction": "conditional latest bound error against simulated target crossing; sparse/changed/drawn cycles excluded, not real measured hardware accuracy"
+  }
+}

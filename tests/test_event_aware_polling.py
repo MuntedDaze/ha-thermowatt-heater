@@ -1,4 +1,9 @@
-"""Decision-specific freshness and wire limits, synthetic time and I/O only."""
+"""Decision-specific freshness and wire limits, synthetic time and I/O only.
+
+0.18.0: the controller no longer creates version-2 ("event-aware") plans; it
+sends only Smart v3 plans. The bridge-side v2 tests below build the old wire
+format locally (``event``) until the app drops v2 acceptance.
+"""
 
 from datetime import timedelta
 from datetime import datetime
@@ -12,7 +17,44 @@ from test_simple_policy import at, MON, sp, snap, TARIFFS
 from test_measured_performance import perf, power, meter
 from thermowatt_polling import AdaptiveSchedule
 
-event = importlib.import_module(f"{m.__package__}.adaptive").event_plan
+
+def event(
+    now,
+    status_at,
+    *,
+    stable_state=None,
+    temperature_valid=False,
+    decision_at=None,
+    owner_check_minutes=60,
+    status_max_minutes=45,
+):
+    """The retired controller v2 plan, kept here only as a wire-format fixture."""
+    import math
+
+    owner_limit = int(owner_check_minutes * 60)
+    if stable_state in ("baseline", "off"):
+        delay, reason = owner_limit, "stable_" + stable_state
+    else:
+        cap = min(owner_limit, 2400, max(900, (status_max_minutes - 5) * 60))
+        next_slot = (math.floor(status_at.timestamp() / 1800) + 1) * 1800
+        delay = min(cap, max(900, next_slot - status_at.timestamp()))
+        reason = "required_temperature"
+        if not temperature_valid:
+            delay, reason = 900, "uncertain"
+    if isinstance(decision_at, datetime):
+        candidate = (decision_at - status_at).total_seconds()
+        if candidate < delay:
+            delay = max(900, candidate)
+            if delay <= 2400:
+                reason = "before_decision"
+    return {
+        "version": 2,
+        "status_at": status_at.timestamp(),
+        "issued_at": now.timestamp(),
+        "delay_seconds": math.floor(delay),
+        "reason": reason,
+        "owner_check_seconds": owner_limit,
+    }
 
 
 @pytest.mark.parametrize("quiet,minutes", [("baseline", 60), ("off", 90), (None, 60)])
@@ -77,21 +119,9 @@ def test_old_adaptive_qualification_does_not_silently_authorise_long_quiet_check
     assert scheduler.deadline("S") == now.timestamp() + 1800
 
 
-def test_new_quiet_authority_is_default_off_locked_and_preserved():
-    settings = importlib.import_module(f"{m.__package__}.settings")
-    assert c.DEFAULT_OPTIONS["event_aware_polling_enabled"] is False
-    for key in ("event_aware_polling_enabled", "owner_change_check_minutes"):
-        assert key in settings.LOCKED_WHILE_ACTIVE and key in settings.PRESERVE_ON_RESTORE
-    for value in (True, 29, 91, float("nan"), 60.5):
-        with pytest.raises(ValueError):
-            c.parse_options({"owner_change_check_minutes": value})
-
-
 def test_actual_restore_and_undo_preserve_all_new_critical_choices():
     settings = importlib.import_module(f"{m.__package__}.settings")
     protected = {
-        "event_aware_polling_enabled": True,
-        "owner_change_check_minutes": 90,
         "time_zone": "Australia/Perth",
         "daytime_start": "08:30",
         "storage_ready_time": "14:00",
@@ -107,25 +137,6 @@ def test_actual_restore_and_undo_preserve_all_new_critical_choices():
     undone = settings.undo_restore(restored)
     assert undone["forecast_uncertainty"] == 0.4
     assert all(undone[key] == value for key, value in protected.items())
-
-
-def test_requested_event_mode_without_bridge_v2_permission_sends_no_v1_plan(tmp_path, monkeypatch):
-    from test_integration_0_9_0 import Rig, hobart, drive
-
-    rig = Rig(tmp_path, monkeypatch, hobart(MON, 23), reading=45, mode="Manual", setpoint=45)
-    options = {
-        **rig.entry.options,
-        "adaptive_polling_enabled": True,
-        "event_aware_polling_enabled": True,
-    }
-    rig.entry.options.update(options)
-    rig.runtime.apply_options(options, rig.sources)
-    rig.executor.configure(options)
-    observation = rig.executor.observe(rig.now())
-    decision, _ = rig.executor.decide(rig.now(), observation)
-    drive(rig.executor._publish_poll_plan(rig.now(), observation, decision, None))
-    assert not any(topic.endswith("/poll_plan") for topic, _ in rig.ha_publishes)
-    assert not rig.bridge.poll_hints and rig.posts == []
 
 
 def test_ct_free_verified_export_can_choose_required_heat_but_never_optional_boost():
@@ -162,8 +173,22 @@ def test_passive_lease_suppresses_only_passive_alert_not_command_freshness_gate(
     assert not any(e.kind == "publish" for e in effects)
 
 
+def setup(factory, clock, **options):
+    """A bridge in its pre-Smart adaptive mode (v1/v2 plans), as before 0.18.0."""
+    from test_cloud_and_commands import ready
+    from conftest import STATUS, response
+
+    b = factory(adaptive_polling_enabled=True, adaptive_polling_qualified=True, **options)
+    ready(b)
+    b.session.request.side_effect = [response(body=STATUS)]
+    b.tick()
+    return b
+
+
+SERIAL = "TEST123"
+
+
 def test_quiet_ticks_do_not_refresh_auth_until_a_real_read_is_due(factory, clock):
-    from test_actual_adaptive_polling import setup, SERIAL
     from conftest import response, STATUS, TOKENS
 
     bridge = setup(factory, clock, event_aware_polling_qualified=True)
@@ -186,7 +211,6 @@ def test_quiet_ticks_do_not_refresh_auth_until_a_real_read_is_due(factory, clock
 def test_failed_refresh_after_quiet_period_locks_once_without_status_or_command(
     factory, clock, module
 ):
-    from test_actual_adaptive_polling import setup
     from conftest import response
 
     bridge = setup(factory, clock, event_aware_polling_qualified=True)
@@ -201,49 +225,3 @@ def test_failed_refresh_after_quiet_period_locks_once_without_status_or_command(
         clock.advance(3600)
         bridge.tick()
     assert bridge.session.request.call_count == count == 2
-
-
-@pytest.mark.parametrize("minutes", [30, 60, 90])
-def test_real_ct_free_controller_detects_a_night_app_change_within_selected_bound(
-    tmp_path, monkeypatch, minutes
-):
-    from test_integration_0_9_0 import Rig, hobart, drive, SERIAL
-
-    rig = Rig(tmp_path, monkeypatch, hobart(MON, 23), reading=45, mode="Manual", setpoint=45)
-    options = {
-        **rig.entry.options,
-        "adaptive_polling_enabled": True,
-        "event_aware_polling_enabled": True,
-        "owner_change_check_minutes": minutes,
-        "heater_meter_verification": "",
-        "normal_storage_c": "62",
-        "peak_heating_policy": "Never schedule heating during peak",
-    }
-    rig.sources.pop("heater_power")
-    rig.entry.options.update(options)
-    rig.runtime.apply_options(options, rig.sources)
-    rig.executor.configure(options)
-    rig.bridge.options.update(adaptive_polling_enabled=True, adaptive_polling_qualified=True)
-    rig.bridge.poll_schedule.enabled = True
-    rig.bridge.poll_schedule.extended_qualified = True
-    rig.bridge.poll_schedule.observed(SERIAL, rig.bridge.last_success[SERIAL], 1800)
-    rig.enable()
-    change_at = None
-    for _ in range(180):
-        for _ in range(3):
-            rig.t += 20
-            rig.bridge.tick()
-        rig.tank.minute(rig.t)
-        rig._meter()
-        rig.runtime.update(rig.now())
-        drive(rig.executor.async_step(rig.now()))
-        if change_at is None and rig.executor._quiet_state(
-            rig.executor.last_observation, rig.executor.last_decision
-        ):
-            rig.tank.apply("Manual", 55, rig.t)
-            change_at = rig.now()
-        elif change_at is not None and rig.executor.controller.state == "owner_override":
-            assert (rig.now() - change_at).total_seconds() <= minutes * 60 + 60
-            assert rig.posts == []
-            return
-    pytest.fail("Outside app change was not detected within the bounded test")

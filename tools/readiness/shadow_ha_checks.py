@@ -5,7 +5,8 @@ container with --network none. Never import this on the owner's Home Assistant.
 - invalid combinations, atomic saves, restore and undo;
 - every dashboard entity reference and every markdown template rendered by HA;
 - forecast-present, Forecast.Solar, flat-baseline and invalid/stale paths;
-- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0, 0.6.1, 0.6.2 and 0.7.0 -> 0.7.1 upgrades over persisted HA storage;
+- genuine 0.2.0, 0.3.0, 0.5.0, 0.6.0, 0.6.1, 0.6.2 and 0.7.0 -> current upgrades over persisted HA
+  storage, including the 0.18.0 move of retired settings into retired_options;
 - unchanged MQTT payloads (no state write) stay fresh while polls succeed.
 """
 
@@ -29,7 +30,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM
 
 ROOT = Path("/workspace")
-CURRENT_VERSION = "0.17.1"
+CURRENT_VERSION = "0.18.0"
 LEGACY = ROOT / "tools/readiness/fixtures/thermann_shadow_0_2_0"
 SETTING_DOMAINS = {"number", "time", "select", "switch", "text", "button"}
 NATIVE_CARDS = {
@@ -252,15 +253,15 @@ async def upgrade_from(folder, fixture, version, customise):
     assert await async_setup_component(hass, "thermann_shadow", {})
     await hass.async_block_till_done()
     assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
-    # The only rewrite is the documented 1.1 -> 1.2 migration of the untouched
-    # old 40 °C default to the 42 °C requirement; everything else is kept
-    # (the 1.2 -> 1.3 range check of 0.7.1 changes nothing in range).
-    assert entry.minor_version == 5
-    assert_preserved_options(entry.options, saved_options, threshold_migrated=True)
+    # 0.18.0 (1.6): retired settings, including the cancelled 40/42 °C morning
+    # threshold, move verbatim into retired_options; active values are kept.
+    assert entry.minor_version == 6
+    assert_preserved_options(entry.options, saved_options)
     runtime = hass.data["thermann_shadow"][entry.entry_id]
     for key, value in customise.items():
         if key in {"target_c", "margin_minutes"}:
-            assert getattr(runtime.settings, key) == value, key
+            assert entry.options["retired_options"][key] == value, key
+            assert key not in entry.options and not hasattr(runtime.settings, key)
     registry = er.async_get(hass)
     after = {
         item.unique_id: item.entity_id
@@ -284,7 +285,7 @@ async def upgrade_from(folder, fixture, version, customise):
         "legacy_entities": len(before),
         "entities_after_upgrade": len(after),
         "retired_still_registered": len(retired & set(after)),
-        "morning_threshold_migrated_40_to_42": True,
+        "retired_settings_preserved_unread": True,
     }
 
 
@@ -316,13 +317,17 @@ async def upgrade_from_0_3_0(folder):
 # --- Native settings through the real service layer --------------------------------
 
 
-def assert_preserved_options(actual, before, threshold_migrated=False):
+def assert_preserved_options(actual, before):
+    from custom_components.thermann_shadow.config import RETIRED_OPTIONS
+
     for key, value in before.items():
         if key == "sources":
             assert all(actual[key][k] == v for k, v in value.items()), key
             assert set(actual[key]) - set(value) <= {"pv_ac"}
-        elif key == "morning_threshold_c" and threshold_migrated and value == 40:
-            assert actual[key] == 42
+        elif key in RETIRED_OPTIONS:
+            # 0.18.0: moved verbatim, never adjusted, deleted or read.
+            assert key not in actual, key
+            assert actual["retired_options"][key] == value, key
         else:
             assert actual[key] == value, key
     assert set(actual) - set(before) <= {
@@ -333,6 +338,7 @@ def assert_preserved_options(actual, before, threshold_migrated=False):
         "sources",
         "peak_heating_policy",
         "time_zone",
+        "retired_options",
     }
 
 
@@ -353,8 +359,6 @@ def alternate(key, meta, default):
         hour, minute = int(default[:2]), int(default[3:5])
         later = {"peak_morning_start": -30, "peak_evening_end": 30}.get(key, 30)
         total = hour * 60 + minute + later
-        if key == "morning_time":
-            total = hour * 60 + minute - 15
         return f"{total // 60:02d}:{total % 60:02d}"
     step = 0.01 if meta.high - meta.low <= 2 or key.endswith("rate") else 1
     value = default + step
@@ -933,9 +937,9 @@ async def _upgrade_from_0_6(folder, version):
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
         assert_preserved_options(entry.options, saved_options)
-        assert entry.minor_version == 5  # 0.7.1 range check ran and changed nothing
+        assert entry.minor_version == 6  # range check changed nothing; retired keys moved
         runtime = hass.data["thermann_shadow"][entry.entry_id]
-        assert runtime.settings.target_c == 68.0
+        assert entry.options["retired_options"]["target_c"] == 68.0
         assert runtime.executor.cfg.max_commands_per_day == 5
         assert runtime.executor.controller.enabled is False
         # 0.8.0 display names: entry and device renamed in place; the domain,
@@ -1055,9 +1059,9 @@ async def upgrade_from_0_5_0(folder):
         await hass.async_block_till_done()
         assert entry.state is config_entries.ConfigEntryState.LOADED, entry.state
         assert_preserved_options(entry.options, saved_options)
-        assert entry.minor_version == 5  # 0.7.1 range check ran and changed nothing
+        assert entry.minor_version == 6  # range check changed nothing; retired keys moved
         runtime = hass.data["thermann_shadow"][entry.entry_id]
-        assert runtime.settings.target_c == 68.0
+        assert entry.options["retired_options"]["target_c"] == 68.0
         assert runtime.executor.cfg.max_commands_per_day == 5
         assert runtime.executor.controller.enabled is False
         # 0.8.0 display names: entry and device renamed in place; the domain,

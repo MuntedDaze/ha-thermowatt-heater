@@ -75,10 +75,6 @@ class Week(Rig):
             "baseline_c": "45",
             "optional_solar_boost": True,
             "peak_heating_policy": "Never schedule heating during peak",
-            "adaptive_polling_enabled": strategy == "actual_adaptive",
-            "adaptive_polling_shadow": strategy == "previous_shadow",
-            "event_aware_polling_enabled": event_aware,
-            "owner_change_check_minutes": owner_minutes,
         }
         self.entry.options.update(options)
         if not ct:
@@ -90,17 +86,6 @@ class Week(Rig):
             self.bridge.poll_interval = 3600
             self.bridge.next_poll = self.bridge.next_background[SERIAL] = self.bridge._next_slot()
             self.bridge.publish_diagnostics(force=True)
-        if strategy == "actual_adaptive":
-            self.bridge.options.update(
-                adaptive_polling_enabled=True,
-                adaptive_polling_qualified=True,
-                event_aware_polling_qualified=event_aware,
-            )
-            self.bridge.poll_schedule.enabled = True
-            self.bridge.poll_schedule.extended_qualified = event_aware
-            self.bridge.poll_schedule.observed(
-                SERIAL, self.bridge.last_success[SERIAL], self.bridge.poll_interval
-            )
         self.install_history_store()
         self.enable()
 
@@ -356,7 +341,6 @@ class Week(Rig):
             if self.prediction_n
             else None,
             "evaluated_completion_samples": self.prediction_n,
-            "shadow_would_reads": self.executor.poll_shadow.would_polls,
             "poll_reason_minutes": dict(self.poll_reasons),
             "days": self.day_stats,
             "events": self.events,
@@ -367,10 +351,7 @@ class Week(Rig):
 
 
 def results(strategies=None, week_class=Week):
-    strategies = strategies or [
-        (name, name, False, 60)
-        for name in ("fixed_30", "fixed_60", "previous_shadow", "actual_adaptive")
-    ]
+    strategies = strategies or [(name, name, False, 60) for name in ("fixed_30", "fixed_60")]
     rows = []
     for ct in (False, True):
         for label, strategy, event_aware, owner_minutes in strategies:
@@ -424,7 +405,6 @@ def results(strategies=None, week_class=Week):
                 "weather": "Mon sunny, Tue cloudy with optimistic forecast, Wed patchy, Thu heavy draw, Fri CT and cloud-status outages, Sat restart, Sun cloudy weekend",
                 "owner": "Wednesday five-minute app change and later two-hour Manual55 peak intervention; simulated owner resumes explicitly, never auto-overwrites owner hold",
                 "cloud": "actual mocked worker, 30s command readback, existing 20m refresh heuristic, authentic backoff; atomic private storage simulated in memory to avoid platform filesystem noise",
-                "old_shadow": "previous_shadow leaves actual fixed30 unchanged; shadow_would_reads is advisory on actual observations, not a closed-loop estimate of HTTP or energy savings",
                 "cost": "marginal heater grid + foregone feed-in; no whole-house bill or annual savings claim; zero OFF watts only a tank-model assumption",
                 "prediction": "conditional latest bound error against simulated target crossing; sparse/changed/drawn cycles excluded, not real measured hardware accuracy",
             },

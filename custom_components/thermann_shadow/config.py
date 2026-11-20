@@ -2,9 +2,9 @@
 
 import json
 import re
-from datetime import time
 
 from .model import Settings, Tariff, number, validate_tariffs, validate_settings
+from .solar import SOLAR_START_HEADROOM_KW
 
 DOMAIN = "thermann_shadow"
 # Legacy IDs remain solely for migration and documented household examples.
@@ -31,22 +31,14 @@ OPTIONAL_SOURCES = {
 # AC-side inverter output, consistent with the AC meter and house load. Used
 # when no explicit pv_ac mapping is saved (existing 0.3.0 entries).
 DEFAULT_PV_AC = "sensor.goodwe_inverter_total_power"
-# Old default morning threshold. A saved value equal to it was never chosen by
-# the owner, so the 0.4.0 entry migration moves it to the new 42 °C requirement.
-LEGACY_MORNING_THRESHOLD_C = 40.0
 DEFAULT_OPTIONS = {
     "weekend_solar_heating": True,
     "weekend_pv_start_kw": 0.5,
-    "weekend_qualify_minutes": 15.0,
     "weekend_end_time": "18:00",
-    "weekend_sunset_kw": 0.2,
-    "weekend_sunset_minutes": 30.0,
     "solar_cooldown_minutes": 10.0,
     "pre_peak_observation_minutes": 30.0,
     "peak_command_lead_minutes": 2.0,
     "low_water_warning_c": 35.0,
-    "polling_mode": "existing",
-    "paused": False,
     "meter_verified": False,
     "tariff_verified": False,
     "import_positive": True,
@@ -55,43 +47,17 @@ DEFAULT_OPTIONS = {
     "daytime_start": "09:00",
     "storage_ready_time": "16:00",
     "baseline_start": "21:00",
-    "target_c": 70.0,
-    "morning_threshold_c": 42.0,
-    "morning_preferred_c": 45.0,
-    "expected_native_target_c": 70.0,
-    "margin_minutes": 30.0,
     "feed_in_rate": 0.092760,
     "off_peak_rate": 0.170200,
     "shoulder_rate": 0.170200,
     "peak_rate": 0.361878,
-    "export_headroom_kw": 0.3,
     "status_max_age_minutes": 45.0,
     "grid_max_age_seconds": 120.0,
-    "solar_hold_minutes": 10.0,
-    "solar_window_minutes": 15.0,
-    "min_solar_kw": 0.1,
-    "switching_benefit_aud": 0.10,
-    "solar_loss_minutes": 20.0,
-    "minimum_cycle_minutes": 30.0,
-    "minimum_gap_minutes": 30.0,
     "forecast_enabled": False,
     "forecast_uncertainty": 0.25,
     "forecast_max_age_minutes": 120.0,
     "forecast_house_margin_kw": 0.3,
-    # Weekday deadlines follow the tariff's actual peak starts. These household
-    # times apply when a day has no peak (weekends) or the tariff is unverified.
-    "morning_time": "08:00",
-    "evening_time": "16:00",
-    "shower_time_enabled": False,
-    "shower_time": "07:00",
-    # 0.7.0: morning comfort every day (Hobart local).
-    "morning_preferred_time": "06:00",
-    "morning_hard_time": "07:00",
-    "expected_morning_draw_c": 10.0,
-    "standing_loss_c_per_hour": 0.2,
-    "wait_benefit_aud_per_kwh": 0.05,
     "pv_ac_limit_kw": 5.0,
-    "base_load_source": "measured_only",
     "tariff_profile": "aurora_93",
     "peak_morning_start": "07:00",
     "peak_morning_end": "10:00",
@@ -99,35 +65,15 @@ DEFAULT_OPTIONS = {
     "peak_evening_end": "21:00",
     "weekend_peak": False,
     "tariff_periods": '[{"days":[0,1,2,3,4],"start":"00:00","end":"07:00","kind":"off_peak"},{"days":[0,1,2,3,4],"start":"07:00","end":"10:00","kind":"peak"},{"days":[0,1,2,3,4],"start":"10:00","end":"16:00","kind":"off_peak"},{"days":[0,1,2,3,4],"start":"16:00","end":"21:00","kind":"peak"},{"days":[0,1,2,3,4],"start":"21:00","end":"00:00","kind":"off_peak"},{"days":[5,6],"start":"00:00","end":"00:00","kind":"off_peak"}]',
-    "native_schedule_periods": '[{"days":[0,1,2,3,4],"start":"04:00","end":"08:00"},{"days":[0,1,2,3,4],"start":"11:00","end":"17:00"},{"days":[5,6],"start":"06:00","end":"22:00"}]',
-    "native_schedule_clock": "local",
-    "native_schedule_clock_verified": False,
-    "native_clock_check_date": "",
-    "t_comfort_reference_c": 10.0,
-    # Production controller. A fresh install CANNOT command: no topic, no T3
-    # qualification, and the master switch (stored with the controller state,
-    # not here) defaults to OFF. (0.6.0 removed the empty-Schedule confirmation.)
     "controller_command_topic": "",
-    "controller_bridge_qualified": False,
-    # 0.9.0: ON only after the supervised bridge 1.3.13 three-state qualification.
-    "controller_three_state_qualified": False,
-    "controller_min_heating_minutes": 30.0,
-    "controller_min_rest_minutes": 30.0,
     "controller_max_commands_per_day": 6.0,
     "controller_confirmation_timeout_minutes": 65.0,
     "controller_max_requests_per_day": 220.0,
-    "controller_execution_latency_minutes": 30.0,
     "controller_notify_service": "",
     "heater_meter_verification": "",  # commissioned entity_id|W (or |kW); no default authority
     "ct_free_solar_verification": "",  # separate supervised grid-only commissioning record
-    "adaptive_polling_shadow": False,
-    "adaptive_polling_enabled": False,
-    "event_aware_polling_enabled": False,
-    "owner_change_check_minutes": 60.0,
     "learned_planning_enabled": False,
     "learning_hardware_qualified": False,
-    "adaptive_poll_heating_minutes": 60.0,
-    "adaptive_poll_stable_minutes": 90.0,
     "optional_heat_margin_aud_per_kwh": 0.02,
     "pause_min_saving_aud": 0.30,
     "baseline_c": "45",
@@ -142,6 +88,75 @@ DEFAULT_OPTIONS = {
     "boost_min_saving_aud": 0.10,
     "controller_four_state_qualified": False,
 }
+# Settings retired from active use (0.8.0-0.18.0). Nothing reads them. The 1.6
+# entry migration (0.18.0) moves any stored value, unchanged, into the
+# RETIRED_RECORD dictionary so it stays available for a rollback or an audit but
+# can never be read, validated or shown as a current setting again. Their
+# former entities are removed from the registry at setup (__init__.py).
+# docs/OPERATING_POLICY.md section 1.1 lists what each group was replaced by.
+RETIRED_OPTIONS = frozenset(
+    {
+        # 0.7.0 morning reserve (45 C by 06:00 / 42 C by 07:00): cancelled 20 Nov 2026.
+        "morning_threshold_c",
+        "morning_preferred_c",
+        "morning_preferred_time",
+        "morning_hard_time",
+        "morning_time",
+        "shower_time_enabled",
+        "shower_time",
+        "evening_time",
+        # 0.4-0.8 economic planner, replaced by the simplified policy (0.9.0).
+        "target_c",
+        "expected_morning_draw_c",
+        "standing_loss_c_per_hour",
+        "margin_minutes",
+        "min_solar_kw",
+        "solar_hold_minutes",
+        "solar_loss_minutes",
+        "solar_window_minutes",
+        "minimum_cycle_minutes",
+        "minimum_gap_minutes",
+        "switching_benefit_aud",
+        "wait_benefit_aud_per_kwh",
+        "base_load_source",
+        "paused",
+        "controller_min_heating_minutes",
+        "controller_min_rest_minutes",
+        "controller_execution_latency_minutes",
+        # Native Schedule / T-Comfort references (shadow era).
+        "expected_native_target_c",
+        "native_schedule_periods",
+        "native_schedule_clock",
+        "native_schedule_clock_verified",
+        "native_clock_check_date",
+        "t_comfort_reference_c",
+        # Superseded commissioning acknowledgements (four-state qualification;
+        # the 0.5.0 empty-Schedule confirmation was removed in 0.6.0).
+        "controller_empty_schedule_confirmed",
+        "controller_bridge_qualified",
+        "controller_three_state_qualified",
+        # Weekend qualification and low-PV early end, replaced in 0.17.0.
+        "weekend_qualify_minutes",
+        "weekend_sunset_kw",
+        "weekend_sunset_minutes",
+        # Pre-Smart polling and the controller's own polling choice (0.18.0:
+        # the Thermann Hot Water app's polling option is the single control).
+        "polling_mode",
+        "adaptive_polling_enabled",
+        "event_aware_polling_enabled",
+        "owner_change_check_minutes",
+        "adaptive_polling_shadow",
+        "adaptive_poll_heating_minutes",
+        "adaptive_poll_stable_minutes",
+        # Now the constant solar.SOLAR_START_HEADROOM_KW (an installed value that
+        # differs is kept active; see migrate_0_18_0).
+        "export_headroom_kw",
+    }
+)
+RETIRED_RECORD = "retired_options"
+BACKUP_KEY = "restore_backup"
+assert not RETIRED_OPTIONS & set(DEFAULT_OPTIONS)
+
 # 0.7.1 (settings audit): ranges a saved value must respect. Values saved by
 # older versions outside them are brought inside once, by the entry migration
 # (see __init__.async_migrate_entry), and the change is logged.
@@ -153,9 +168,6 @@ RANGES_0_7_1 = {
     "peak_rate": (0.0, 2.0),
 }
 WHOLE_NUMBER_OPTIONS = ("controller_max_commands_per_day", "controller_max_requests_per_day")
-# F6: a rest longer than the latency reserve + this could delay a comfort start
-# beyond what the planner reserves.
-REST_BEYOND_LATENCY_MINUTES = 30.0
 NOTIFY_SERVICE_PATTERN = re.compile(r"^[a-z0-9_]{1,64}$")
 # Readable reasons for rejected settings (ValueError codes from parse_options).
 REJECTION_MESSAGES = {
@@ -165,10 +177,6 @@ REJECTION_MESSAGES = {
     "dual_storage_settings_invalid": "Check tank capacity (50–500 L), nominal element (2–3.6 kW), completion margin (5–120 minutes), useful-heat fraction (0–1) and the peak policy.",
     "settings_invalid": "A value is outside its allowed range.",
     "completion_margin_not_after_peak_lead": "The heating completion margin must be longer than the minutes reserved for the peak OFF command. Increase the completion margin or shorten the peak command lead; nothing was saved.",
-    "morning_preferred_below_minimum": "The morning preferred reserve cannot be below the morning minimum.",
-    "morning_times_order": "Morning times must be before noon, with the preferred time not after the hard deadline.",
-    "afternoon_time_invalid": "The weekend afternoon ready time must be after noon.",
-    "rest_longer_than_latency_reserve": "The minimum rest period can be at most the execution latency reserve plus 30 minutes; a longer rest could delay a comfort start beyond what the planner reserves.",
     "whole_number_required": "Command and cloud-request budgets must be whole numbers.",
     "notify_service_invalid": "Notification service: enter the service name only, for example mobile_app_phone (lower-case letters, digits and _; no 'notify.' in front).",
     "controller_setting_out_of_range": "A controller setting is outside its allowed range.",
@@ -176,8 +184,6 @@ REJECTION_MESSAGES = {
     "tariff_invalid": "Tariff prices must be between 0 and 2 $/kWh and custom periods must be valid.",
     "tariff_times_must_increase": "Peak times must increase: morning start, morning end, evening start, evening end.",
     "tariff_time_invalid": "A time is not a valid HH:MM.",
-    "native_clock_date_invalid": "The native clock check date must be YYYY-MM-DD or blank.",
-    "native_reference_invalid": "The T-Comfort reference must not exceed the expected native target.",
 }
 
 
@@ -188,9 +194,6 @@ def rejection_message(error: Exception) -> str:
 
 NEXT_RANGES = (
     ("weekend_pv_start_kw", 0.1, 3.6),
-    ("weekend_qualify_minutes", 5, 60),
-    ("weekend_sunset_kw", 0, 1),
-    ("weekend_sunset_minutes", 10, 120),
     ("solar_cooldown_minutes", 10, 60),
     ("pre_peak_observation_minutes", 5, 60),
     ("peak_command_lead_minutes", 1, 10),
@@ -198,12 +201,9 @@ NEXT_RANGES = (
 )
 
 CONTROLLER_BOUNDS = {
-    "controller_min_heating_minutes": (30, 180),
-    "controller_min_rest_minutes": (30, 90),
     "controller_max_commands_per_day": (4, 10),
     "controller_confirmation_timeout_minutes": (35, 120),
     "controller_max_requests_per_day": (160, 400),
-    "controller_execution_latency_minutes": (0, 60),
 }
 
 
@@ -253,28 +253,32 @@ def _periods(raw, rates, clock, zone="Australia/Hobart"):
     return result
 
 
-def parse_options(options):
-    from .native import parse_native
+def solar_start_headroom_kw(options) -> float:
+    """Export headroom above element power for a solar start (decision D3).
 
+    The agreed value is the constant SOLAR_START_HEADROOM_KW (0.3 kW: 3.3 kW for
+    the 3 kW element). Only an installation whose stored pre-0.18 value differed
+    keeps that value (migrate_0_18_0), so the upgrade cannot silently change
+    solar qualification; diagnostics report which basis applies.
+    """
+    value = options.get("export_headroom_kw")
+    return SOLAR_START_HEADROOM_KW if value is None else number(value)
+
+
+def parse_options(options):
+    """Validate every ACTIVE setting. Retired keys are never read or validated."""
     values = {**DEFAULT_OPTIONS, **options}
     for key in (
-        "paused",
         "meter_verified",
         "tariff_verified",
         "import_positive",
-        "native_schedule_clock_verified",
         "forecast_enabled",
         "weekend_peak",
-        "shower_time_enabled",
-        "controller_bridge_qualified",
-        "controller_three_state_qualified",
-        "adaptive_polling_shadow",
-        "adaptive_polling_enabled",
-        "event_aware_polling_enabled",
         "learned_planning_enabled",
         "learning_hardware_qualified",
         "optional_solar_boost",
         "controller_four_state_qualified",
+        "weekend_solar_heating",
     ):
         if type(values[key]) is not bool:
             raise ValueError("settings_invalid")
@@ -318,13 +322,8 @@ def parse_options(options):
         and 0.10 <= number(values["pause_min_saving_aud"]) <= 2
     ):
         raise ValueError("economic_setting_out_of_range")
-    if not (
-        15 <= number(values["adaptive_poll_heating_minutes"]) <= 60
-        and 30 <= number(values["adaptive_poll_stable_minutes"]) <= 90
-        and 30 <= number(values["owner_change_check_minutes"]) <= 90
-        and number(values["owner_change_check_minutes"]).is_integer()
-    ):
-        raise ValueError("polling_bounds_invalid")
+    if not 0 <= solar_start_headroom_kw(values) <= 3:
+        raise ValueError("settings_invalid")
     if (
         not isinstance(stamp, str)
         or len(stamp) > 258
@@ -339,22 +338,11 @@ def parse_options(options):
             raise ValueError("settings_invalid")
     if number(values["completion_margin_minutes"]) <= number(values["peak_command_lead_minutes"]):
         raise ValueError("completion_margin_not_after_peak_lead")
-    if type(values["weekend_solar_heating"]) is not bool or values["polling_mode"] not in {
-        "existing",
-        "smart",
-        "fixed_30",
-        "minimum",
-    }:
-        raise ValueError("settings_invalid")
     if not 12 * 60 <= _minute(values["weekend_end_time"]) <= 23 * 60:
         raise ValueError("tariff_time_invalid")
     for key in WHOLE_NUMBER_OPTIONS:
         if number(values[key]) != int(number(values[key])):
             raise ValueError("whole_number_required")  # F10
-    if number(values["controller_min_rest_minutes"]) > (
-        number(values["controller_execution_latency_minutes"]) + REST_BEYOND_LATENCY_MINUTES
-    ):
-        raise ValueError("rest_longer_than_latency_reserve")  # F6
     for key, (low, high) in RANGES_0_7_1.items():
         if not low <= number(values[key]) <= high:
             raise ValueError("tariff_invalid" if key.endswith("_rate") else "settings_invalid")
@@ -421,47 +409,18 @@ def parse_options(options):
             key: values[key]
             if key
             in {
-                "paused",
                 "meter_verified",
                 "tariff_verified",
                 "import_positive",
                 "tariff_clock",
                 "time_zone",
                 "forecast_enabled",
-                "shower_time_enabled",
-                "base_load_source",
             }
             else number(values[key])
             for key in Settings.__dataclass_fields__
-            if key not in {"morning", "evening", "shower_time", "morning_preferred", "morning_hard"}
-        },
-        morning=time(*divmod(_minute(values["morning_time"]), 60)),
-        evening=time(*divmod(_minute(values["evening_time"]), 60)),
-        shower_time=time(*divmod(_minute(values["shower_time"]), 60)),
-        morning_preferred=time(*divmod(_minute(values["morning_preferred_time"]), 60)),
-        morning_hard=time(*divmod(_minute(values["morning_hard_time"]), 60)),
+        }
     )
-    # Cross-field checks first, so the owner sees WHICH rule failed.
-    if not settings.morning_threshold_c <= settings.morning_preferred_c:
-        raise ValueError("morning_preferred_below_minimum")
-    if not time(0) <= settings.morning_preferred <= settings.morning_hard <= time(11, 59):
-        raise ValueError("morning_times_order")
-    if not time(12) <= settings.evening <= time(23, 59):
-        raise ValueError("afternoon_time_invalid")
     validate_settings(settings)
-    from datetime import date
-
-    checked = values["native_clock_check_date"]
-    if not isinstance(checked, str) or (
-        checked and date.fromisoformat(checked).isoformat() != checked
-    ):
-        raise ValueError("native_clock_date_invalid")
-    parse_native(values["native_schedule_periods"])
-    if (
-        values["native_schedule_clock"] not in {"local", "standard"}
-        or not 10 <= number(values["t_comfort_reference_c"]) <= settings.expected_native_target_c
-    ):
-        raise ValueError("native_reference_invalid")
     return settings, tariffs
 
 
@@ -494,30 +453,6 @@ def migrate_0_7_1(options):
             except (TypeError, ValueError, OverflowError):
                 continue
             put(key, float(int(value)))
-    try:
-        latency = number(
-            result.get(
-                "controller_execution_latency_minutes",
-                DEFAULT_OPTIONS["controller_execution_latency_minutes"],
-            )
-        )
-        rest = number(
-            result.get(
-                "controller_min_rest_minutes", DEFAULT_OPTIONS["controller_min_rest_minutes"]
-            )
-        )
-    except (TypeError, ValueError, OverflowError):
-        pass
-    else:
-        limit = min(
-            CONTROLLER_BOUNDS["controller_min_rest_minutes"][1],
-            latency + REST_BEYOND_LATENCY_MINUTES,
-        )
-        if rest > limit:
-            put(
-                "controller_min_rest_minutes",
-                float(max(CONTROLLER_BOUNDS["controller_min_rest_minutes"][0], limit)),
-            )
     notify = result.get("controller_notify_service")
     if (
         isinstance(notify, str)
@@ -528,6 +463,49 @@ def migrate_0_7_1(options):
         name = name[len("notify.") :] if name.startswith("notify.") else name
         put("controller_notify_service", name if NOTIFY_SERVICE_PATTERN.match(name) else "")
     return result, changes
+
+
+def migrate_0_18_0(options):
+    """1.5 -> 1.6: move every retired setting into the RETIRED_RECORD.
+
+    Returns (options, moved_keys, kept_headroom_kw). Values are moved verbatim,
+    never deleted; an existing record entry is never overwritten (idempotent).
+    Restore/undo snapshot entries for retired keys move with them.
+
+    Decision D3: a valid stored ``export_headroom_kw`` that differs from the
+    agreed 0.3 kW stays active (top level), so solar qualification is not changed
+    silently; the caller logs it and diagnostics report it.
+    """
+    result = dict(options)
+    raw = result.get(RETIRED_RECORD)
+    record = dict(raw) if isinstance(raw, dict) else {}
+    kept = None
+    if "export_headroom_kw" in result:
+        try:
+            value = number(result["export_headroom_kw"])
+        except (TypeError, ValueError, OverflowError):
+            value = None
+        if value is not None and 0 <= value <= 3 and abs(value - SOLAR_START_HEADROOM_KW) > 1e-9:
+            kept = value
+    moved = []
+    for key in sorted(RETIRED_OPTIONS):
+        if key not in result or (key == "export_headroom_kw" and kept is not None):
+            continue
+        record.setdefault(key, result.pop(key))
+        moved.append(key)
+    backup = result.get(BACKUP_KEY)
+    if isinstance(backup, dict):
+        stale = {key: value for key, value in backup.items() if key not in DEFAULT_OPTIONS}
+        if stale:
+            record.setdefault(BACKUP_KEY, stale)
+            remaining = {k: v for k, v in backup.items() if k in DEFAULT_OPTIONS}
+            if remaining:
+                result[BACKUP_KEY] = remaining
+            else:
+                result.pop(BACKUP_KEY)
+    if record:
+        result[RETIRED_RECORD] = record
+    return result, moved, kept
 
 
 def saved_options(options):

@@ -25,9 +25,6 @@ def test_renamed_entities_keep_their_historical_ids():
     assert naming.entity_id("sensor", "12hr Override ends") == (
         "sensor.thermann_shadow_guest_mode_ends"
     )
-    assert naming.entity_id("time", settings.CATALOG["evening_time"].name) == (
-        "time.thermann_shadow_afternoon_comfort_preference"
-    )
     # Unrenamed entities: the same ID the old "Thermann Shadow" device produced.
     assert naming.entity_id("switch", "Automatic heater control") == (
         "switch.thermann_shadow_automatic_heater_control"

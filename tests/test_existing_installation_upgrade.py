@@ -383,25 +383,6 @@ def test_owner_intervention_retires_optional_session_authority(action):
     assert controller.solar_session_active is False
 
 
-@pytest.mark.parametrize(
-    "hour,reading,age,expected",
-    [
-        (6, 44, 0, "at_risk"),
-        (7, 41, 0, "minimum_shortfall_observed"),
-        (7, 45, 60, "unverified"),
-        (7, 45, 0, "latest_probe_above_requirement"),
-    ],
-)
-def test_morning_requirements_report_evidence_without_authorising_extra_heat(
-    hour, reading, age, expected
-):
-    comfort = importlib.import_module(f"{sp.__package__}.comfort")
-    now = at(MON, hour)
-    result = comfort.morning_availability(now, reading, now - age * MIN, "Australia/Hobart")
-    assert result["state"] == expected
-    assert result["proves_deadline_met"] is False
-
-
 def test_local_ticks_cannot_extend_qualification_or_import_report_coverage():
     now = at(MON, 18)
     for grid in (-4, 3):

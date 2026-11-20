@@ -71,11 +71,11 @@ def assert_entity_serialization(hass, sources):
     response = json.loads(frames[0])
     assert response["success"] is True
     returned = {state["entity_id"]: state for state in response["result"]}
-    for key in ("cloud_poll_interval", "shadow_adaptive_poll_interval"):
+    for key in ("cloud_poll_interval",):
         attrs = returned[f"sensor.thermann_shadow_{key}"]["attributes"]
         assert attrs["device_class"] == "duration" and attrs["state_class"] == "measurement", attrs
         assert attrs["unit_of_measurement"] == "s", attrs
-    for key in ("expected_heating_completion", "next_cloud_poll", "shadow_next_adaptive_poll"):
+    for key in ("expected_heating_completion", "next_cloud_poll"):
         assert (
             returned[f"sensor.thermann_shadow_{key}"]["attributes"]["device_class"] == "timestamp"
         )

@@ -112,9 +112,9 @@
           "weekend_pv_start_kw": "Measured PV production in kW. The first fresh report at or above this opens the weekend window until the end time; 0.5 kW means 500 W.",
           "weekend_end_time": "Household local clock: the weekend window ends and the thermostat target returns to baseline at this time. This does not cool stored water.",
           "solar_cooldown_minutes": "Minutes after confirmed withdrawal OFF before another optional solar start. Fresh qualification can overlap this wait. Ordinary 15-minute command spacing also applies.",
-          "pre_peak_observation_minutes": "Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.",
+          "pre_peak_observation_minutes": "Minutes before each configured peak to arrange a fresh status observation; before the evening peak it is also when the low-water warning is assessed. Tariff-clock/DST conversion is automatic.",
           "peak_command_lead_minutes": "Minutes reserved for local evaluation, cloud command and confirmation before peak. Must be shorter than the heating completion margin in Hot Water. This is not a guaranteed electrical cutoff.",
-          "low_water_warning_c": "Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency."
+          "low_water_warning_c": "Notify only on a fresh bottom-probe reading below this temperature shortly before the evening peak (never before the morning peak). A notification only: not a thermostat target, whole-tank measurement, heating permission or automatic emergency."
         }
       },
       "ct_free_setup": {
@@ -159,13 +159,12 @@
       },
       "advanced": {
         "title": "Advanced/System",
-        "description": "Engineering and commissioning settings. Leave qualifications, learning and adaptive control off until separately approved checks pass. These pages do not enable automatic heating. Existing command verification, fault locks and owner protections still apply.",
+        "description": "Engineering and commissioning settings. Leave qualifications and learning off until separately approved checks pass. These pages do not enable automatic heating. Existing command verification, fault locks and owner protections still apply.",
         "menu_options": {
           "equipment": "Equipment and savings",
-          "polling": "Cloud checks and data age",
+          "polling": "Data freshness",
           "commissioning": "Commissioning and safeguards",
           "bridge_sources": "Bridge status readings",
-          "legacy": "Legacy and developer settings",
           "init": "Back to main menu"
         }
       },
@@ -292,15 +291,13 @@
         }
       },
       "polling": {
-        "title": "Cloud checks and data age",
-        "description": "One choice: Cloud polling mode (Smart recommended). Select the same mode in the Thermann Hot Water app options; the app owns every cloud request. A fresh command prior and confirmation are always required. {detail}",
+        "title": "Data freshness",
+        "description": "How old heater and meter readings may be before they are not used. Cloud polling itself is configured once, in the Thermann Hot Water app (Smart, with an automatic fixed 30-minute fallback); this controller follows it automatically. A fresh command prior and confirmation are always required. {detail}",
         "data": {
-          "polling_mode": "Cloud polling mode",
           "status_max_age_minutes": "Maximum age of temperature used for planning",
           "grid_max_age_seconds": "Maximum age of local power readings"
         },
         "data_description": {
-          "polling_mode": "Smart is the recommended choice: reads are arranged for useful decisions with bounded quiet checks. Minimum makes fewer requests but notices app changes later. Fixed 30 minutes and Keep existing (legacy adaptive switches on the Legacy page) retain compatibility. Choose the same mode in the Thermann Hot Water app options.",
           "status_max_age_minutes": "Minutes before a cloud heater observation is too old for temperature-sensitive planning; 45 is the existing starting value for 30-minute fixed checks. This does not schedule a refresh or relax the bridge's exact-prior command checks. Quiet holds use separate bounded rules.",
           "grid_max_age_seconds": "Seconds before local grid observations are considered stale; 120 is an example. Missing or stale data resets economic holds and cannot authorise solar-only heating. Changing this does not trigger cloud requests."
         }
@@ -349,34 +346,6 @@
           "last_poll": "Select the bridge's last-successful-poll timestamp sensor. It must describe a real successful observation, not a template's update time. An old observation cannot be treated as fresh.",
           "cloud_health": "Select the existing bridge cloud-health sensor. Faults and outages conservatively restrict control; choosing a different label cannot clear a real fault.",
           "requests": "Select the bridge local-lifetime request-attempt sensor, including persistent/complete accounting attributes. Used by request budgets; not a manually reset daily counter."
-        }
-      },
-      "legacy": {
-        "title": "Legacy and developer settings",
-        "description": "Settings kept only so existing saved options, entities and a rollback are unchanged. None of them is needed in the recommended configuration, and each description says when it still has an effect. Changing them never qualifies hardware or authorises heater operation. {detail}",
-        "data": {
-          "adaptive_polling_enabled": "Allow adaptive cloud checks",
-          "event_aware_polling_enabled": "Allow longer checks during quiet periods",
-          "owner_change_check_minutes": "Longest quiet-period check interval",
-          "adaptive_polling_shadow": "Preview adaptive cloud checks",
-          "adaptive_poll_heating_minutes": "Preview: longest check interval while heating",
-          "adaptive_poll_stable_minutes": "Preview: longest check interval while stable",
-          "controller_three_state_qualified": "Legacy OFF / 45 / 70 command tests completed",
-          "weekend_qualify_minutes": "Weekend daylight qualification",
-          "weekend_sunset_kw": "Weekend late-day PV threshold",
-          "weekend_sunset_minutes": "Weekend low-PV ending delay"
-        },
-        "data_description": {
-          "adaptive_polling_enabled": "Pre-Smart adaptive hints, default off. Requires the bridge's separate enabled/qualified options. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.",
-          "event_aware_polling_enabled": "Pre-Smart quiet-period hints, default off. Requires adaptive hints and a qualified bridge. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.",
-          "owner_change_check_minutes": "Minutes, 30–90, for pre-Smart quiet-period hints. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes. Smart uses its own bounded quiet intervals.",
-          "adaptive_polling_shadow": "Developer comparison only: record when the old adaptive model would read the cloud. Never changes actual bridge requests, polling or heating.",
-          "adaptive_poll_heating_minutes": "Developer comparison only: minutes, up to 60, for the old advisory model. Never changes actual cloud reads.",
-          "adaptive_poll_stable_minutes": "Developer comparison only: minutes, up to 90, for the old advisory model. Never changes actual cloud reads.",
-          "controller_three_state_qualified": "Legacy record kept for existing installations. Has no effect: commands require the four-state (OFF/45/62/70) qualification. Changing it never authorises heater operation.",
-          "weekend_qualify_minutes": "Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.",
-          "weekend_sunset_kw": "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
-          "weekend_sunset_minutes": "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged."
         }
       },
       "schedule": {
@@ -439,14 +408,6 @@
     }
   },
   "selector": {
-    "polling_mode": {
-      "options": {
-        "existing": "Keep existing polling choices",
-        "smart": "Smart — Recommended",
-        "fixed_30": "Fixed 30 minutes — Compatibility",
-        "minimum": "Experimental minimum requests"
-      }
-    },
     "tariff_profile": {
       "options": {
         "flat": "Flat rate — one price all day",

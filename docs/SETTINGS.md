@@ -21,8 +21,7 @@ cents/kWh here, percentages are0–100; native entity units/IDs remain compatibl
 - [Advanced schedule data](#tariff-json)
 - [Solar forecasts and grid meter](#solar)
 - [Equipment and savings](#equipment)
-- [Cloud checks and data age](#polling)
-- [Legacy and developer settings](#legacy)
+- [Data freshness](#polling)
 - [Commissioning and safeguards](#commissioning)
 - [Sensor mappings](#sensor-mappings)
 - [Retired settings](#retired-settings)
@@ -119,7 +118,7 @@ Minutes after confirmed withdrawal OFF before another optional solar start. Fres
 
 Stored key: `pre_peak_observation_minutes`. Default: `30.0`. Allowed: 5–60. Units: min. Existing active-control guard applies where relevant.
 
-Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.
+Minutes before each configured peak to arrange a fresh status observation; before the evening peak it is also when the low-water warning is assessed. Tariff-clock/DST conversion is automatic.
 
 ### Request peak OFF this much early
 
@@ -131,7 +130,7 @@ Minutes reserved for local evaluation, cloud command and confirmation before pea
 
 Stored key: `low_water_warning_c`. Default: `35.0`. Allowed: 20–45. Units: °C. Existing active-control guard applies where relevant.
 
-Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency.
+Notify only on a fresh bottom-probe reading below this temperature shortly before the evening peak (never before the morning peak). A notification only: not a thermostat target, whole-tank measurement, heating permission or automatic emergency.
 
 <a id="prices"></a>
 ## Plan, prices and clock
@@ -321,15 +320,9 @@ Stored key: `pause_min_saving_aud`. Default: `0.3`. Allowed: 0.1–2. Units: AUD
 Australian dollars a later window must save, for example $0.30. Heating must still fit before the planning deadline. Increasing this reduces changes for small estimated savings.
 
 <a id="polling"></a>
-## Cloud checks and data age
+## Data freshness
 
-One choice: Cloud polling mode (Smart recommended). Select the same mode in the Thermann Hot Water app options; the app owns every cloud request. A fresh command prior and confirmation are always required.
-
-### Cloud polling mode
-
-Stored key: `polling_mode`. Default: `existing`. Allowed: existing / smart / fixed_30 / minimum. Units: none. Turn Automatic off before changing.
-
-Smart is the recommended choice: reads are arranged for useful decisions with bounded quiet checks. Minimum makes fewer requests but notices app changes later. Fixed 30 minutes and Keep existing (legacy adaptive switches on the Legacy page) retain compatibility. Choose the same mode in the Thermann Hot Water app options.
+How old heater and meter readings may be before they are not used. Cloud polling itself is configured once, in the Thermann Hot Water app (Smart, with an automatic fixed 30-minute fallback); this controller follows it automatically. A fresh command prior and confirmation are always required.
 
 ### Maximum age of temperature used for planning
 
@@ -342,71 +335,6 @@ Minutes before a cloud heater observation is too old for temperature-sensitive p
 Stored key: `grid_max_age_seconds`. Default: `120.0`. Allowed: 30–300. Units: s. Turn Automatic off before changing.
 
 Seconds before local grid observations are considered stale; 120 is an example. Missing or stale data resets economic holds and cannot authorise solar-only heating. Changing this does not trigger cloud requests.
-
-<a id="legacy"></a>
-## Legacy and developer settings
-
-Settings kept only so existing saved options, entities and a rollback are unchanged. None of them is needed in the recommended configuration, and each description says when it still has an effect. Changing them never qualifies hardware or authorises heater operation.
-
-### Allow adaptive cloud checks
-
-Stored key: `adaptive_polling_enabled`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
-
-Pre-Smart adaptive hints, default off. Requires the bridge's separate enabled/qualified options. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.
-
-### Allow longer checks during quiet periods
-
-Stored key: `event_aware_polling_enabled`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
-
-Pre-Smart quiet-period hints, default off. Requires adaptive hints and a qualified bridge. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.
-
-### Longest quiet-period check interval
-
-Stored key: `owner_change_check_minutes`. Default: `60.0`. Allowed: 30–90. Units: min. Turn Automatic off before changing.
-
-Minutes, 30–90, for pre-Smart quiet-period hints. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes. Smart uses its own bounded quiet intervals.
-
-### Preview adaptive cloud checks
-
-Stored key: `adaptive_polling_shadow`. Default: `False`. Allowed: On / Off. Units: none. Existing active-control guard applies where relevant.
-
-Developer comparison only: record when the old adaptive model would read the cloud. Never changes actual bridge requests, polling or heating.
-
-### Preview: longest check interval while heating
-
-Stored key: `adaptive_poll_heating_minutes`. Default: `60.0`. Allowed: 15–60. Units: min. Existing active-control guard applies where relevant.
-
-Developer comparison only: minutes, up to 60, for the old advisory model. Never changes actual cloud reads.
-
-### Preview: longest check interval while stable
-
-Stored key: `adaptive_poll_stable_minutes`. Default: `90.0`. Allowed: 30–90. Units: min. Existing active-control guard applies where relevant.
-
-Developer comparison only: minutes, up to 90, for the old advisory model. Never changes actual cloud reads.
-
-### Legacy OFF / 45 / 70 command tests completed
-
-Stored key: `controller_three_state_qualified`. Default: `False`. Allowed: On / Off. Units: none. Turn Automatic off before changing.
-
-Legacy record kept for existing installations. Has no effect: commands require the four-state (OFF/45/62/70) qualification. Changing it never authorises heater operation.
-
-### Weekend daylight qualification
-
-Stored key: `weekend_qualify_minutes`. Default: `15.0`. Allowed: 5–60. Units: min. Existing active-control guard applies where relevant.
-
-Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.
-
-### Weekend late-day PV threshold
-
-Stored key: `weekend_sunset_kw`. Default: `0.2`. Allowed: 0–1. Units: kW. Existing active-control guard applies where relevant.
-
-Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.
-
-### Weekend low-PV ending delay
-
-Stored key: `weekend_sunset_minutes`. Default: `30.0`. Allowed: 10–120. Units: min. Existing active-control guard applies where relevant.
-
-Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.
 
 <a id="commissioning"></a>
 ## Commissioning and safeguards
@@ -540,47 +468,18 @@ Mapping key: `heater_energy`. Optional raw cumulative import-energy Wh/kWh entit
 
 ## Retired settings
 
-Retained for upgrade/rollback compatibility; they do not add competing control policies.
+These keys are not settings any more: nothing reads, validates or shows them.
+Controller 0.18.0 moved any saved value, unchanged, into the unread
+`retired_options` record (kept only for rollback and audit). They are never
+requirements; see [OPERATING_POLICY.md](OPERATING_POLICY.md) section 1.1.
 
-- `morning_threshold_c` — Morning minimum (hard): Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Minimum reading (bottom-of-tank T_Avg) by the hard morning deadline, every day. Protected over savings when at risk. A planning threshold, NEVER a heater setpoint or hygiene temperature.
-- `morning_preferred_c` — Morning preferred reserve: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Preferred reading by the preferred morning time, every day: extra reserve before showers, aimed for when reasonably achievable. Once that time passes unmet, only the hard minimum is pursued. Not lower than the minimum.
-- `morning_preferred_time` — Morning ready (preferred): Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Hobart local, every day. Aim to reach the morning threshold by this time.
-- `morning_hard_time` — Morning ready (hard deadline): Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Hobart local, every day (showers). If the preferred time is missed, heating continues for this deadline; it is never abandoned. Must not be earlier than the preferred time.
-- `morning_time` — Legacy: weekend morning time: Not used by automatic control since 0.7.0 (see the two morning ready times). Kept so saved settings are unchanged; only the legacy shadow display uses it.
-- `shower_time_enabled` — Legacy: earlier weekday shower time: Not used by automatic control since 0.7.0. Kept so saved settings are unchanged.
-- `shower_time` — Legacy: weekday shower-ready time: Not used by automatic control since 0.7.0. Kept so saved settings are unchanged.
-- `expected_morning_draw_c` — Expected morning hot-water use: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Reading drop assumed for morning showers when planning the afternoon target. An assumption (about 11 °C was seen on 11 Nov), not a measurement.
-- `standing_loss_c_per_hour` — Assumed standing heat loss: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Reading drop per hour with no use or heating. Not yet measured for this tank.
-- `target_c` — Afternoon storage target: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Selected model target is never silently reduced. 65–70°C is a planning range, not a newly qualified command limit.
-- `evening_time` — Weekend afternoon ready time: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Weekend (no-peak) afternoon ready time, Hobart local, after noon. Weekdays use the evening peak start automatically: 16:00 standard time, 17:00 daylight time.
-- `margin_minutes` — Heating time allowance: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Extra full-power model minutes when heat is required. Uncalibrated; comfort overrides optional dwell.
-- `min_solar_kw` — Minimum useful net surplus: Partial solar can be worthwhile. Economic comparison must also pass; never a variable-power command.
-- `export_headroom_kw` — Solar headroom: Deduct from measured surplus for uncertain household loads.
-- `solar_hold_minutes` — Solar start qualification: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. How long the planner's choice between optional economic options (heat now, wait, no difference) must persist before it changes, so a passing cloud does not flip the plan. Comfort, data gates and peak decisions are never delayed by it.
-- `solar_loss_minutes` — Economic loss grace period: Sustained cost disadvantage before a SIMULATED optional stop; short clouds do not stop a cycle.
-- `minimum_cycle_minutes` — Minimum optional cycle: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest heating block the planner schedules. The controller's own minimum heating and rest periods still apply on top.
-- `minimum_gap_minutes` — Minimum optional cycle gap: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest gap the planner leaves between two scheduled heating blocks (it merges closer blocks).
-- `switching_benefit_aud` — Minimum economic switching benefit: FUTURE CONTROL ONLY: minimum benefit per heater switch. The 0.4.0 advisor uses the per-kWh waiting threshold instead.
-- `wait_benefit_aud_per_kwh` — Minimum saving to recommend waiting: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Waiting is only recommended if it saves at least this much per kWh that would otherwise be heated now (first minimum cycle; 0.05 = 7.5 c for 30 min) and the comfort fallback stays viable. Solar later vs off-peak grid now is 7.7 c/kWh.
-- `paused` — Pause shadow planning: Pauses only hypothetical decisions; native Schedule continues.
-- `base_load_source` — Household load basis: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. measured_only: de-embedded measured base load (heater removed). measured_then_published also uses the published load forecast after 2 h; today's EMHASS load includes heater cycles.
-- `solar_window_minutes` — Recent-export scenario horizon: Bounded assumption for current export, never a daily forecast or guaranteed solar.
-- `expected_native_target_c` — Expected native target: Reference only. Different observed mode/target latches intervention; never sets the heater.
-- `native_schedule_clock` — Native schedule clock reference: Reference only; never adjusts the device clock or native Schedule.
-- `native_schedule_clock_verified` — Native clock checked: Owner observation only; restore preserves this verification.
-- `t_comfort_reference_c` — T-Comfort reference: Reference only; 10°C is not a useful comfort reserve. Never changes T-Comfort.
-- `native_clock_check_date` — Native clock check date: Owner check date YYYY-MM-DD, blank if unknown; reference only.
-- `native_schedule_periods` — Native schedule reference: Reported approximate times in JSON, for comparison only; NEVER changes the heater programme.
-- `controller_bridge_qualified` — Bridge commands qualified (T3): Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Commissioning Stage B: ON only after the supervised T3 test showed the bridge's Manual:70 (from OFF) and off (from Manual 70) reproduce the app results. Requires Thermowatt add-on 1.3.9 or later.
-- `controller_min_heating_minutes` — Minimum heating period: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest time Manual (heating permitted) is kept before parking, unless the thermostat has already stopped the element.
-- `controller_min_rest_minutes` — Minimum rest period: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Shortest time parked before heating is permitted again, comfort starts included. At most the execution latency reserve plus 30 minutes, so a comfort start is never delayed beyond what the planner reserves.
-- `controller_execution_latency_minutes` — Execution latency reserve: Not used since 0.9.0 (the simplified policy has fixed, agreed values). Kept so saved settings and a rollback are unchanged. Comfort deadlines are planned this much earlier, and the pre-peak park is brought forward by it. With bridge 1.3.10 a command normally reaches the heater within about a minute; the 30-minute default is a conservative margin you may reduce after the supervised trial.
+`adaptive_poll_heating_minutes`, `adaptive_poll_stable_minutes`, `adaptive_polling_enabled`, `adaptive_polling_shadow`, `base_load_source`, `controller_bridge_qualified`, `controller_empty_schedule_confirmed`, `controller_execution_latency_minutes`, `controller_min_heating_minutes`, `controller_min_rest_minutes`, `controller_three_state_qualified`, `evening_time`, `event_aware_polling_enabled`, `expected_morning_draw_c`, `expected_native_target_c`, `export_headroom_kw`, `margin_minutes`, `min_solar_kw`, `minimum_cycle_minutes`, `minimum_gap_minutes`, `morning_hard_time`, `morning_preferred_c`, `morning_preferred_time`, `morning_threshold_c`, `morning_time`, `native_clock_check_date`, `native_schedule_clock`, `native_schedule_clock_verified`, `native_schedule_periods`, `owner_change_check_minutes`, `paused`, `polling_mode`, `shower_time`, `shower_time_enabled`, `solar_hold_minutes`, `solar_loss_minutes`, `solar_window_minutes`, `standing_loss_c_per_hour`, `switching_benefit_aud`, `t_comfort_reference_c`, `target_c`, `wait_benefit_aud_per_kwh`, `weekend_qualify_minutes`, `weekend_sunset_kw`, `weekend_sunset_minutes`
 
 ## Practical starting choices
 
-Use the household's verified contract and appliance settings. Jacob retains45/62/70,
-fixedAEST, verified Aurora periods and export-positive GoodWe; these are examples,
-not universal defaults. Weekend500W/15min, sunset200W/30min, end18:00 and cooldown10min
-are editable starting preferences. Minimum15-minute ordinary command spacing remains.
-Keep physical qualifications truthful; new polling modes and experimental CT-free
-permission are explicit choices. Do not change token/lockout state to clear a warning.
+Use the household's verified contract and appliance settings. The owner retains
+45/62/70, fixed AEST, verified Aurora periods and export-positive GoodWe; these are
+examples, not universal defaults. Weekend 500 W trigger, end 18:00 and cooldown 10 min
+are editable starting preferences. Minimum 15-minute ordinary command spacing remains.
+Cloud polling is chosen once, in the Thermann Hot Water app (Smart). Keep physical
+qualifications truthful. Do not change token/lockout state to clear a warning.

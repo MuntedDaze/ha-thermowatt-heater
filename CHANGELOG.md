@@ -1,5 +1,13 @@
 # Changelog
 
+## Controller 0.18.0 companion release (works with bridge 1.4.1 or 1.5.0)
+
+- One authoritative operating policy (`docs/OPERATING_POLICY.md`); the
+  cancelled morning reserve is gone from settings, validation and documents.
+  Low-water notification before the evening peak only; the controller follows
+  the app's Smart polling choice; 0.3 kW solar headroom constant; 45 retired
+  settings migrated into an unread record. See `shadow_controller/CHANGELOG.md`.
+
 ## Controller 0.17.1 companion release (bridge 1.4.1 unchanged)
 
 - Configuration cleanup: Back navigation, one Smart polling choice, a separate

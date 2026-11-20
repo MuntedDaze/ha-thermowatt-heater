@@ -1,4 +1,4 @@
-"""Thermann Controller 0.10.0: one coordinated policy (simple_policy.py) and the
+"""Thermann Controller 0.18.0: one coordinated policy (simple_policy.py) and the
 production controller. The controller (executor.py/controller.py) is the only
 component that may publish a Thermann mode command, and it cannot do so until
 the owner completes commissioning and enables automatic control. With control
@@ -18,10 +18,9 @@ from homeassistant.util import dt as dt_util
 
 import logging
 
-from .config import DOMAIN, LEGACY_MORNING_THRESHOLD_C, migrate_0_7_1, parse_options
+from .config import DOMAIN, RETIRED_OPTIONS, migrate_0_7_1, migrate_0_18_0, parse_options
 from .executor import Executor
 from .naming import ENTRY_TITLE, OLD_ENTRY_TITLES, RETIRED_SENSORS
-from .settings import RETIRED
 from .runtime import ShadowRuntime
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -47,8 +46,7 @@ RETIRED_ENTITY_SUFFIXES = frozenset(
         # 0.9.0: the holiday departure and return datetimes became date entities.
         "holiday_start",
         "holiday_return",
-        "setting_controller_empty_schedule_confirmed",
-        *(f"setting_{key}" for key in RETIRED),
+        *(f"setting_{key}" for key in RETIRED_OPTIONS),
     }
 )
 
@@ -158,23 +156,22 @@ async def async_setup_entry(hass, entry):
 
 
 async def async_migrate_entry(hass, entry):
-    """1.1 -> 1.2 (0.4.0): an untouched old 40 °C morning threshold becomes 42 °C.
-    1.2 -> 1.3 (0.7.1): values outside the tightened ranges are brought inside.
+    """Versioned option migrations. Major version stays 1, so older releases can
+    still load the entry for a rollback.
 
-    Only the exact old default is moved; any value the owner chose is kept.
-    Major version stays 1, so a 0.3.0 rollback can still load the entry.
+    1.2 -> 1.3 (0.7.1): values outside the tightened ranges are brought inside.
+    1.3 -> 1.4: implicit household facts of pre-0.11 installations are preserved.
+    1.5 -> 1.6 (0.18.0): retired settings move, unchanged, into the unread
+    ``retired_options`` record (config.migrate_0_18_0).
+    (1.1 -> 1.2 once adjusted a morning threshold; that setting is retired.)
     """
-    if entry.version != 1 or entry.minor_version >= 5:
+    if entry.version != 1 or entry.minor_version >= 6:
         return True
+    log = logging.getLogger(__name__)
     options = dict(entry.options)
-    if entry.minor_version < 2 and options.get("morning_threshold_c") == LEGACY_MORNING_THRESHOLD_C:
-        options["morning_threshold_c"] = 42.0
-    # 1.2 -> 1.3 (0.7.1, settings audit): values outside the tightened ranges
-    # move to the nearest allowed value, and each is logged. A 0.7.0 rollback
-    # still loads a 1.3 entry (same major version).
     options, changes = migrate_0_7_1(options) if entry.minor_version < 3 else (options, {})
     for key, (old, new) in changes.items():
-        logging.getLogger(__name__).warning(
+        log.warning(
             "Setting %s was %s, outside the range allowed since 0.7.1; now %s.", key, old, new
         )
     from .installation import preserve_existing
@@ -190,7 +187,20 @@ async def async_migrate_entry(hass, entry):
             "time_zone": "Australia/Hobart",
             **options,
         }
-    hass.config_entries.async_update_entry(entry, options=options, minor_version=5)
+    options, moved, kept = migrate_0_18_0(options)
+    if moved:
+        log.info(
+            "0.18.0: %d retired settings moved unchanged to retired_options: %s.",
+            len(moved),
+            ", ".join(moved),
+        )
+    if kept is not None:
+        log.warning(
+            "0.18.0: the stored solar start headroom is %s kW, not the agreed 0.3 kW. It is "
+            "kept so solar qualification does not change; confirm it with the owner.",
+            kept,
+        )
+    hass.config_entries.async_update_entry(entry, options=options, minor_version=6)
     return True
 
 

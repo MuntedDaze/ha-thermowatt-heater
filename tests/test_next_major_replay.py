@@ -22,9 +22,7 @@ def comparison():
 
 
 def test_seasonal_results_reproduce_actual_http_and_energy_accounting(comparison):
-    assert comparison == json.loads(
-        (ROOT / "docs/history/next-major/SEASONAL_RESULTS.json").read_text()
-    )
+    assert comparison == json.loads((ROOT / "docs/evidence/SEASONAL_RESULTS.json").read_text())
     assert len(comparison["reports"]) == 3
     physics = 315 * 4.186 / 3600
     for season in comparison["reports"]:
@@ -39,13 +37,7 @@ def test_seasonal_results_reproduce_actual_http_and_energy_accounting(comparison
             )
             assert row["additional_failures"]["http_after_refresh_rejection"] == 0
             assert row["maximum_healthy_status_age_minutes"] <= (
-                721
-                if row["strategy"] == "minimum"
-                else 481
-                if row["strategy"] == "smart"
-                else 61
-                if row["strategy"] == "fixed_60"
-                else 31
+                481 if row["strategy"] == "smart" else 61 if row["strategy"] == "fixed_60" else 31
             )
 
 
@@ -54,7 +46,7 @@ def test_request_savings_do_not_hide_target_outcomes_or_owner_detection(comparis
         for ct in (False, True):
             rows = {r["strategy"]: r for r in season["runs"] if r["ct"] == ct}
             fixed = rows["fixed_30"]
-            for strategy in ("smart", "minimum"):
+            for strategy in ("smart",):
                 row = rows[strategy]
                 assert row["http_total"] < fixed["http_total"] * 0.8
                 assert row["command_posts"] == fixed["command_posts"]
@@ -62,9 +54,7 @@ def test_request_savings_do_not_hide_target_outcomes_or_owner_detection(comparis
                     d["required_target_reached"] for d in fixed["days"].values()
                 ]
                 assert row["persistent_owner_detection_minutes"] is not None
-                assert row["persistent_owner_detection_minutes"] <= (
-                    720 if strategy == "minimum" else 480
-                )
+                assert row["persistent_owner_detection_minutes"] <= 480
                 # A short app change may be missed, or caught by a useful read.
                 # Validate the disclosed outcome against the actual owner hold;
                 # never require the improved schedule to miss a real change.

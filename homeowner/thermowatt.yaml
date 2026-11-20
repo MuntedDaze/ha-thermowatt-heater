@@ -260,9 +260,9 @@ views:
         follow it.
 
 
-        **Configure → Advanced/System → Cloud checks and data age** selects Smart, Fixed 30-minute
-        compatibility or Experimental minimum. Match the bridge App''s choice. Existing installations
-        keep their saved polling choices until you explicitly change them.'
+        **Cloud polling** is set once, in the Thermann Hot Water app options (Smart, with an automatic
+        fixed 30-minute fallback); this controller follows it automatically. **Configure → Advanced/System
+        → Data freshness** only sets how old readings may be.'
   - type: grid
     cards:
     - type: entities
@@ -324,9 +324,8 @@ views:
 
         **Smart polling:** quiet confirmed overnight targets can be left to the native thermostat
         for hours, with observations arranged before useful decisions. This delays detecting app
-        changes (up to 8 hours; Experimental minimum up to 12). Every command still requires its
-        exact current prior and confirmation. Original fixed fallback remains if the controller lease
-        expires.'
+        changes (up to 8 hours). Every command still requires its exact current prior and confirmation.
+        Original fixed fallback remains if the controller lease expires.'
 - title: Advanced and diagnostics
   path: diagnostics
   icon: mdi:stethoscope

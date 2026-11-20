@@ -25,7 +25,6 @@ LEGACY_NAMES = {
     "Start 12hr Override": "Start guest mode (12 h)",
     "Cancel 12hr Override": "Cancel guest mode",
     "12hr Override ends": "Guest mode ends",
-    "Weekend afternoon ready time": "Afternoon comfort preference",
 }
 
 
@@ -93,4 +92,7 @@ RETIRED_SENSORS = (
     "native_predicted_cost_aud",
     "native_vs_best_plan_aud",
     "schedule_advisor_suggestion",
+    # 0.18.0: the advisory polling-preview sensors (PollingShadow removed).
+    "next_adaptive_poll",
+    "adaptive_poll_interval",
 )

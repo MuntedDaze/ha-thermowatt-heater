@@ -8,7 +8,7 @@ from test_next_major_policy import ctl
 
 
 def smart(rig):
-    rig.entry.options.update(polling_mode="smart", optional_solar_boost=False)
+    rig.entry.options.update(optional_solar_boost=False)  # polling follows the app (D2)
     rig.runtime.apply_options(rig.entry.options, rig.sources)
     rig.executor.configure(rig.entry.options)
     rig.bridge.options["polling_mode"] = "smart"

@@ -16,7 +16,7 @@ MENUS = {
     "init": ("hot_water", "electricity", "solar_meters", "diagnostic_report", "advanced"),
     "electricity": ("prices", "peak_times", "schedule", "tariff_json"),
     "solar_meters": ("solar", "sources"),
-    "advanced": ("equipment", "polling", "commissioning", "bridge_sources", "legacy"),
+    "advanced": ("equipment", "polling", "commissioning", "bridge_sources"),
 }
 PAGES = {
     "hot_water": (
@@ -75,23 +75,8 @@ PAGES = {
         "pause_min_saving_aud",
     ),
     "polling": (
-        "polling_mode",
         "status_max_age_minutes",
         "grid_max_age_seconds",
-    ),
-    # 0.17.1: settings with no effect in the recommended configuration, kept so
-    # saved options, entities and rollback are unchanged. Not homeowner choices.
-    "legacy": (
-        "adaptive_polling_enabled",
-        "event_aware_polling_enabled",
-        "owner_change_check_minutes",
-        "adaptive_polling_shadow",
-        "adaptive_poll_heating_minutes",
-        "adaptive_poll_stable_minutes",
-        "controller_three_state_qualified",
-        "weekend_qualify_minutes",
-        "weekend_sunset_kw",
-        "weekend_sunset_minutes",
     ),
     "commissioning": (
         "ct_free_solar_verification",
@@ -244,30 +229,6 @@ FIELDS = {
         "Minimum saving before waiting for a better window",
         "Australian dollars a later window must save, for example $0.30. Heating must still fit before the planning deadline. Increasing this reduces changes for small estimated savings.",
     ),
-    "adaptive_polling_shadow": (
-        "Preview adaptive cloud checks",
-        "Developer comparison only: record when the old adaptive model would read the cloud. Never changes actual bridge requests, polling or heating.",
-    ),
-    "adaptive_polling_enabled": (
-        "Allow adaptive cloud checks",
-        "Pre-Smart adaptive hints, default off. Requires the bridge's separate enabled/qualified options. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.",
-    ),
-    "event_aware_polling_enabled": (
-        "Allow longer checks during quiet periods",
-        "Pre-Smart quiet-period hints, default off. Requires adaptive hints and a qualified bridge. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes.",
-    ),
-    "owner_change_check_minutes": (
-        "Longest quiet-period check interval",
-        "Minutes, 30–90, for pre-Smart quiet-period hints. Legacy: only used when Cloud polling mode is Keep existing; no effect with Smart, Minimum or Fixed 30 minutes. Smart uses its own bounded quiet intervals.",
-    ),
-    "adaptive_poll_heating_minutes": (
-        "Preview: longest check interval while heating",
-        "Developer comparison only: minutes, up to 60, for the old advisory model. Never changes actual cloud reads.",
-    ),
-    "adaptive_poll_stable_minutes": (
-        "Preview: longest check interval while stable",
-        "Developer comparison only: minutes, up to 90, for the old advisory model. Never changes actual cloud reads.",
-    ),
     "status_max_age_minutes": (
         "Maximum age of temperature used for planning",
         "Minutes before a cloud heater observation is too old for temperature-sensitive planning; 45 is the existing starting value for 30-minute fixed checks. This does not schedule a refresh or relax the bridge's exact-prior command checks. Quiet holds use separate bounded rules.",
@@ -279,10 +240,6 @@ FIELDS = {
     "controller_command_topic": (
         "Bridge command address (MQTT topic)",
         "Commissioning only. Copy the exact mode-command topic announced by your existing bridge. Blank prevents controller commands. Do not guess it or point at another appliance; keep automatic control off while changing it.",
-    ),
-    "controller_three_state_qualified": (
-        "Legacy OFF / 45 / 70 command tests completed",
-        "Legacy record kept for existing installations. Has no effect: commands require the four-state (OFF/45/62/70) qualification. Changing it never authorises heater operation.",
     ),
     "controller_four_state_qualified": (
         "OFF / 45 / 62 / 70 command tests completed",
@@ -501,21 +458,9 @@ FIELDS["weekend_pv_start_kw"] = (
     "Weekend daylight trigger",
     "Measured PV production in kW. The first fresh report at or above this opens the weekend window until the end time; 0.5 kW means 500 W.",
 )
-FIELDS["weekend_qualify_minutes"] = (
-    "Weekend daylight qualification",
-    "Not used since 0.17.0: one fresh PV report opens the weekend window. Kept so saved settings and a rollback are unchanged.",
-)
 FIELDS["weekend_end_time"] = (
     "Weekend latest return to baseline",
     "Household local clock: the weekend window ends and the thermostat target returns to baseline at this time. This does not cool stored water.",
-)
-FIELDS["weekend_sunset_kw"] = (
-    "Weekend late-day PV threshold",
-    "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
-)
-FIELDS["weekend_sunset_minutes"] = (
-    "Weekend low-PV ending delay",
-    "Not used since 0.17.0: low late-day PV no longer ends the weekend window early. Kept so saved settings and a rollback are unchanged.",
 )
 FIELDS["solar_cooldown_minutes"] = (
     "Wait after confirmed solar withdrawal",
@@ -523,7 +468,7 @@ FIELDS["solar_cooldown_minutes"] = (
 )
 FIELDS["pre_peak_observation_minutes"] = (
     "Check hot water before peak",
-    "Minutes before a configured peak to arrange a meaningful status observation and low-water assessment. Tariff-clock/DST conversion is automatic.",
+    "Minutes before each configured peak to arrange a fresh status observation; before the evening peak it is also when the low-water warning is assessed. Tariff-clock/DST conversion is automatic.",
 )
 FIELDS["peak_command_lead_minutes"] = (
     "Request peak OFF this much early",
@@ -531,14 +476,10 @@ FIELDS["peak_command_lead_minutes"] = (
 )
 FIELDS["low_water_warning_c"] = (
     "Low bottom-temperature warning",
-    "Warn only on a fresh bottom-probe reading below this temperature near peak. It is not a thermostat target, whole-tank measurement or automatic emergency.",
-)
-FIELDS["polling_mode"] = (
-    "Cloud polling mode",
-    "Smart is the recommended choice: reads are arranged for useful decisions with bounded quiet checks. Minimum makes fewer requests but notices app changes later. Fixed 30 minutes and Keep existing (legacy adaptive switches on the Legacy page) retain compatibility. Choose the same mode in the Thermann Hot Water app options.",
+    "Notify only on a fresh bottom-probe reading below this temperature shortly before the evening peak (never before the morning peak). A notification only: not a thermostat target, whole-tank measurement, heating permission or automatic emergency.",
 )
 
-assert set(FIELDS) == {k for k, v in CATALOG.items() if v.group != "Retired"}
+assert set(FIELDS) == set(CATALOG)
 assert len([k for keys in PAGES.values() for k in keys]) == len(FIELDS)
 assert {k for keys in PAGES.values() for k in keys} == set(FIELDS)
 assert set(FIELDS) <= set(DEFAULT_OPTIONS)

@@ -18,7 +18,7 @@ report = importlib.import_module(f"{m.__package__}.report")
 
 @pytest.mark.parametrize(
     "step,duration,kind",
-    [(130, 600, "import"), (130, 600, "export"), (120, 900, "pv"), (130, 1800, "sunset")],
+    [(130, 600, "import"), (130, 600, "export")],
 )
 def test_nondivisor_cadence_covers_actual_duration_without_early_or_missing_trigger(
     step, duration, kind
@@ -29,44 +29,24 @@ def test_nondivisor_cadence_covers_actual_duration_without_early_or_missing_trig
     def qualifies(t):
         if kind == "import":
             return p.importing_continuously(t)
-        if kind == "export":
-            return p.surplus_qualified(t)
-        return p.pv_sustained(
-            t, timedelta(seconds=duration), lambda kw: kw >= 0.5 if kind == "pv" else kw < 0.2
-        )
+        return p.surplus_qualified(t)
 
     for seconds in range(0, duration + step + 1, step):
         t = now + timedelta(seconds=seconds)
-        if kind in {"pv", "sunset"}:
-            p.add_pv(t, 1 if kind == "pv" else 0.1)
-        else:
-            p.add_meter(t, 0.4 if kind == "import" else -4, heater_kw=0)
+        p.add_meter(t, 0.4 if kind == "import" else -4, heater_kw=0)
         assert qualifies(t) is (seconds >= duration)
     assert not qualifies(t + timedelta(seconds=181))
 
 
-@pytest.mark.parametrize("kind", ["import", "export", "pv"])
+@pytest.mark.parametrize("kind", ["import", "export"])
 def test_failed_intermediate_report_resets_continuous_evidence(kind):
     now = at(MON, 12)
     p = sp.SimplePolicy(S, TARIFFS)
     for second in (0, 100, 210, 320, 460, 590, 730):
         t = now + timedelta(seconds=second)
-        if kind == "pv":
-            p.add_pv(t, 0.1 if second == 320 else 1)
-        else:
-            kw = (
-                (0.1 if second == 320 else 0.4)
-                if kind == "import"
-                else (-1 if second == 320 else -4)
-            )
-            p.add_meter(t, kw, heater_kw=0)
-    assert not (
-        p.pv_sustained(t, 10 * MIN, lambda kw: kw >= 0.5)
-        if kind == "pv"
-        else p.importing_continuously(t)
-        if kind == "import"
-        else p.surplus_qualified(t)
-    )
+        kw = (0.1 if second == 320 else 0.4) if kind == "import" else (-1 if second == 320 else -4)
+        p.add_meter(t, kw, heater_kw=0)
+    assert not (p.importing_continuously(t) if kind == "import" else p.surplus_qualified(t))
 
 
 def test_in_place_peak_adoption_requires_full_start_quality_and_records_no_command():
@@ -142,7 +122,7 @@ def test_raw_pv_dip_and_grid_reset_reports_survive_coalesced_evaluations(tmp_pat
     now = rig.now()
     for i in range(16):
         p.add_pv(now - (15 - i) * MIN, 1)
-    assert p.pv_sustained(now, 15 * MIN, lambda kw: kw >= 0.5)
+    assert p.pv_window_open(now)  # 0.17.0: the latest fresh report decides
 
     def captured(key, watts, seconds):
         when = now + timedelta(seconds=seconds)
@@ -153,8 +133,9 @@ def test_raw_pv_dip_and_grid_reset_reports_survive_coalesced_evaluations(tmp_pat
         rig.runtime.capture_input_report(event, when)
 
     captured("pv", 100, 1)
+    assert not p.pv_window_open(now + timedelta(seconds=1))
     captured("pv", 1000, 2)
-    assert not p.pv_sustained(now + timedelta(seconds=2), 15 * MIN, lambda kw: kw >= 0.5)
+    assert p.pv_window_open(now + timedelta(seconds=2))
     p.samples.clear()
     for i in range(11):
         p.add_meter(now - (10 - i) * MIN, 0.4, heater_kw=0)

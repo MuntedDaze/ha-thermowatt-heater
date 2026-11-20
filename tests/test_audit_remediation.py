@@ -168,7 +168,7 @@ def test_real_off_outage_backoff_restart_and_restore_never_bypass_peak(factory, 
     b.session.request.side_effect = http
     b.tick()
     controller = ctl.Controller(enabled=True, state=ctl.PARKED, heater=ctl.OFF)
-    configuration = cfg(requires_four_states=True, four_state_qualified=True)
+    configuration = cfg(four_state_qualified=True)
     for elapsed in range(0, 18 * 3600, 20):
         clock.now = start + elapsed
         if elapsed == 4 * 3600:
@@ -366,8 +366,8 @@ def test_both_dst_change_days_keep_fixed_standard_tariff_and_event_deadline_in_u
     )
     boundary = day.replace(hour=16)
     assert policy.next_peak(day) == boundary
-    event = importlib.import_module(f"{m.__package__}.adaptive").event_plan
-    plan = event(day, day, stable_state="off", decision_at=boundary - timedelta(minutes=2))
+    smart = importlib.import_module(f"{m.__package__}.adaptive").smart_plan
+    plan = smart(day, day, stable_state="off", decision_at=boundary - timedelta(minutes=2))
     assert plan["delay_seconds"] == 58 * 60
     for i in range(181):
         stamp = day + timedelta(minutes=i)

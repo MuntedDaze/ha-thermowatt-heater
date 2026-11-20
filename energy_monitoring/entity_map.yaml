@@ -150,7 +150,6 @@ hot_water:
   learning_sessions: sensor.thermann_shadow_clean_heating_learning_sessions
   prediction_error: sensor.thermann_shadow_held_out_heating_prediction_error
   learned_rate: sensor.thermann_shadow_learned_heating_rate
-  next_adaptive_poll: sensor.thermann_shadow_shadow_next_adaptive_poll
   request_budget: sensor.thermann_shadow_cloud_request_budget_remaining
   telemetry: sensor.thermann_shadow_controller_telemetry
 

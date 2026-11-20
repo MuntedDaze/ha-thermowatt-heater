@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "evidence": "synthetic offline comparisons, not observed outcomes or savings promises",
+  "operating_policy": "Manual 45 baseline, weekday Manual 70 retained; native protections unchanged",
+  "dispatch": [
+    {
+      "scenario": "clear",
+      "withdraw_minutes": 10,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.5,
+      "heater_solar_kwh": 1.0,
+      "export_lost_kwh": 1.0,
+      "lost_feed_in_aud": 0.09276,
+      "net_heat_cost_aud": 0.17786,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.0,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        }
+      ],
+      "command_count": 1,
+      "estimated_incremental_command_http": 3,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "clear",
+      "withdraw_minutes": 5,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.5,
+      "heater_solar_kwh": 1.0,
+      "export_lost_kwh": 1.0,
+      "lost_feed_in_aud": 0.09276,
+      "net_heat_cost_aud": 0.17786,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.0,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        }
+      ],
+      "command_count": 1,
+      "estimated_incremental_command_http": 3,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "clear",
+      "withdraw_minutes": 2,
+      "peak_import_kwh": 0.0,
+      "off_peak_import_kwh": 0.5,
+      "heater_solar_kwh": 1.0,
+      "export_lost_kwh": 1.0,
+      "lost_feed_in_aud": 0.09276,
+      "net_heat_cost_aud": 0.17786,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.0,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        }
+      ],
+      "command_count": 1,
+      "estimated_incremental_command_http": 3,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "short_sun_then_dark",
+      "withdraw_minutes": 10,
+      "peak_import_kwh": 0.5,
+      "off_peak_import_kwh": 0.85,
+      "heater_solar_kwh": 0.15,
+      "export_lost_kwh": 0.15,
+      "lost_feed_in_aud": 0.013914,
+      "net_heat_cost_aud": 0.339523,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 1.983333,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        },
+        {
+          "minute": 23,
+          "state": "off",
+          "reason": "peak_solar_withdrawn"
+        }
+      ],
+      "command_count": 2,
+      "estimated_incremental_command_http": 6,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "short_sun_then_dark",
+      "withdraw_minutes": 5,
+      "peak_import_kwh": 0.25,
+      "off_peak_import_kwh": 1.1,
+      "heater_solar_kwh": 0.15,
+      "export_lost_kwh": 0.15,
+      "lost_feed_in_aud": 0.013914,
+      "net_heat_cost_aud": 0.291603,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 1.983333,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        },
+        {
+          "minute": 18,
+          "state": "off",
+          "reason": "peak_solar_withdrawn"
+        }
+      ],
+      "command_count": 2,
+      "estimated_incremental_command_http": 6,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "short_sun_then_dark",
+      "withdraw_minutes": 2,
+      "peak_import_kwh": 0.1,
+      "off_peak_import_kwh": 1.25,
+      "heater_solar_kwh": 0.15,
+      "export_lost_kwh": 0.15,
+      "lost_feed_in_aud": 0.013914,
+      "net_heat_cost_aud": 0.262852,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 1.983333,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        },
+        {
+          "minute": 15,
+          "state": "off",
+          "reason": "peak_solar_withdrawn"
+        }
+      ],
+      "command_count": 2,
+      "estimated_incremental_command_http": 6,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "four_minute_cloud",
+      "withdraw_minutes": 10,
+      "peak_import_kwh": 0.2,
+      "off_peak_import_kwh": 0.5,
+      "heater_solar_kwh": 0.8,
+      "export_lost_kwh": 0.8,
+      "lost_feed_in_aud": 0.074208,
+      "net_heat_cost_aud": 0.231684,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.466667,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        }
+      ],
+      "command_count": 1,
+      "estimated_incremental_command_http": 3,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "four_minute_cloud",
+      "withdraw_minutes": 5,
+      "peak_import_kwh": 0.2,
+      "off_peak_import_kwh": 0.5,
+      "heater_solar_kwh": 0.8,
+      "export_lost_kwh": 0.8,
+      "lost_feed_in_aud": 0.074208,
+      "net_heat_cost_aud": 0.231684,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.466667,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        }
+      ],
+      "command_count": 1,
+      "estimated_incremental_command_http": 3,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "four_minute_cloud",
+      "withdraw_minutes": 2,
+      "peak_import_kwh": 0.1,
+      "off_peak_import_kwh": 1.2,
+      "heater_solar_kwh": 0.2,
+      "export_lost_kwh": 0.2,
+      "lost_feed_in_aud": 0.018552,
+      "net_heat_cost_aud": 0.25898,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.466667,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        },
+        {
+          "minute": 16,
+          "state": "off",
+          "reason": "peak_solar_withdrawn"
+        }
+      ],
+      "command_count": 2,
+      "estimated_incremental_command_http": 6,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "small_import",
+      "withdraw_minutes": 10,
+      "peak_import_kwh": 0.0475,
+      "off_peak_import_kwh": 0.5,
+      "heater_solar_kwh": 0.9525,
+      "export_lost_kwh": 0.9525,
+      "lost_feed_in_aud": 0.088354,
+      "net_heat_cost_aud": 0.190643,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.411667,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        }
+      ],
+      "command_count": 1,
+      "estimated_incremental_command_http": 3,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "small_import",
+      "withdraw_minutes": 5,
+      "peak_import_kwh": 0.0475,
+      "off_peak_import_kwh": 0.5,
+      "heater_solar_kwh": 0.9525,
+      "export_lost_kwh": 0.9525,
+      "lost_feed_in_aud": 0.088354,
+      "net_heat_cost_aud": 0.190643,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.411667,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        }
+      ],
+      "command_count": 1,
+      "estimated_incremental_command_http": 3,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    },
+    {
+      "scenario": "small_import",
+      "withdraw_minutes": 2,
+      "peak_import_kwh": 0.0475,
+      "off_peak_import_kwh": 0.5,
+      "heater_solar_kwh": 0.9525,
+      "export_lost_kwh": 0.9525,
+      "lost_feed_in_aud": 0.088354,
+      "net_heat_cost_aud": 0.190643,
+      "useful_heat_kwh": 1.5,
+      "equal_service_achieved": true,
+      "forecast_error_mae_kw": 0.411667,
+      "commands": [
+        {
+          "minute": 10,
+          "state": "storage",
+          "reason": "peak_solar_qualified"
+        }
+      ],
+      "command_count": 1,
+      "estimated_incremental_command_http": 3,
+      "limits": "30-minute pure policy dispatch; later replenishment guaranteed; no tank stratification or command latency"
+    }
+  ],
+  "full_controller_evidence": "tests/test_integration_0_9_0.py and tests/test_audit_regressions_0_9_1.py exercise real executor/bridge with synthetic cloud"
+}

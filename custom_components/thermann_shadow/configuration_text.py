@@ -19,10 +19,9 @@ TITLES = {
     "solar": "Solar forecasts and grid meter",
     "sources": "Solar and meter readings",
     "equipment": "Equipment and savings",
-    "polling": "Cloud checks and data age",
+    "polling": "Data freshness",
     "commissioning": "Commissioning and safeguards",
     "bridge_sources": "Bridge status readings",
-    "legacy": "Legacy and developer settings",
 }
 BACK = "Back to main menu"
 DESCRIPTIONS = {
@@ -33,7 +32,7 @@ DESCRIPTIONS = {
     "hot_water": "Choose thermostat targets and permitted heating. Your saved temperatures are retained. The owner's agreed example is 45°C baseline / 62°C normal / 70°C optional solar, with peak OFF. It is not a universal hygiene recommendation. Follow the appliance instructions and your plumber's advice. {detail}",
     "electricity": "Use your actual retailer's usage prices and times, not a network tariff assumed to be your bill. Start with Plan, prices and clock. Flat plans need no time periods. The two-peak example and the guided custom schedule are alternative schedules for the same tariff model; the chosen plan type decides which is active.",
     "solar_meters": "Everything here is optional for basic tariff-based heating. Without a dedicated hot-water circuit meter, normal required heating uses conservative estimates; electrical ON/OFF is unverified and optional solar-only boost requires its separate CT-free commissioning record. A missing previously commissioned meter remains a fault.",
-    "advanced": "Engineering and commissioning settings. Leave qualifications, learning and adaptive control off until separately approved checks pass. These pages do not enable automatic heating. Existing command verification, fault locks and owner protections still apply.",
+    "advanced": "Engineering and commissioning settings. Leave qualifications and learning off until separately approved checks pass. These pages do not enable automatic heating. Existing command verification, fault locks and owner protections still apply.",
     "prices": "Prices below are Australian cents per kWh (25 means $0.25/kWh). Check the retail contract's tax basis consistently. Off-peak is usually cheaper, peak usually dearer, and shoulder is the period between them. Daily supply charges do not affect heating-window choices. Your saved values are prefilled, not replaced by example prices. {detail}",
     "peak_times": "These hours apply only when the Aurora-style two-peak example is selected. They are tariff-clock times, not necessarily the summer wall clock. Other plans should use the guided custom schedule. All four times must increase. {detail}",
     "tariff_json": "Expert alternative; most users should choose the guided schedule. This edits the saved custom table, but does not select Custom automatically. JSON rate overrides use dollars/kWh. Every day in every month needs complete coverage without overlaps. {detail}",
@@ -41,8 +40,7 @@ DESCRIPTIONS = {
     "sources": "Select existing Home Assistant readings, not device names. Leave optional fields blank when equipment is absent. This page only reads local states. Changing the hot-water power mapping clears its commissioning/learning qualification. Bridge status mappings are in Advanced/System.",
     "bridge_sources": "Required readings from the existing Thermann bridge. Selecting entities reads their states; it neither contacts the vendor nor sends heater commands. Change mappings only with automatic control off.",
     "equipment": "Advanced planning assumptions, not new heater qualifications. Use appliance-label ratings; estimates do not prove actual element operation or whole-tank temperature. Do not adjust assumptions just to make a prediction look better. {detail}",
-    "polling": "One choice: Cloud polling mode (Smart recommended). Select the same mode in the Thermann Hot Water app options; the app owns every cloud request. A fresh command prior and confirmation are always required. {detail}",
-    "legacy": "Settings kept only so existing saved options, entities and a rollback are unchanged. None of them is needed in the recommended configuration, and each description says when it still has an effect. Changing them never qualifies hardware or authorises heater operation. {detail}",
+    "polling": "How old heater and meter readings may be before they are not used. Cloud polling itself is configured once, in the Thermann Hot Water app (Smart, with an automatic fixed 30-minute fallback); this controller follows it automatically. A fresh command prior and confirmation are always required. {detail}",
     "commissioning": "Advanced; do not tick qualifications to bypass a warning. Follow separately approved supervised commissioning. Saving this form neither authorises physical tests nor turns on automatic control. Leave command address/CT record blank if not commissioned. {detail}",
 }
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -66,12 +64,6 @@ KINDS = {
     "peak": "Peak / restricted heating",
 }
 SELECT_LABELS = {
-    "polling_mode": {
-        "existing": "Keep existing polling choices",
-        "smart": "Smart — Recommended",
-        "fixed_30": "Fixed 30 minutes — Compatibility",
-        "minimum": "Experimental minimum requests",
-    },
     "tariff_profile": {
         "flat": "Flat rate — one price all day",
         "aurora_93": "Aurora-style two-peak example (verify your contract)",

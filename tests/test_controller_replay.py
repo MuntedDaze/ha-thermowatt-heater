@@ -38,23 +38,8 @@ def test_faster_withdrawal_can_save_or_cost_dollars_for_equal_service():
         ] == pytest.approx(1.5)
 
 
-def test_request_ledger_accounts_for_all_calls_and_detection_tradeoff():
-    rows = [replay.polling_day(x) for x in ("30", "60", "adaptive")]
-    assert rows[0]["total_http"] > rows[1]["total_http"] > rows[2]["total_http"]
-    assert (
-        rows[0]["persistent_owner_event_detection_minutes"]
-        < rows[2]["persistent_owner_event_detection_minutes"]
-    )
-    for row in rows:
-        assert row["total_http"] == sum(row["http"].values())
-        assert row["http"]["command_post"] == row["http"]["confirmation_status"] == 4
-        assert row["maximum_status_gap_minutes"] <= (
-            int(row["strategy"]) if row["strategy"].isdigit() else 90
-        )
-
-
 def test_checked_in_replay_results_match_the_current_code():
-    saved = json.loads((ROOT / "docs/history/smart-controller/SIMULATION_RESULTS.json").read_text())
+    saved = json.loads((ROOT / "docs/evidence/CONTROLLER_REPLAY.json").read_text())
     assert saved == replay.report()
 
 

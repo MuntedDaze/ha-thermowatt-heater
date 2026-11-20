@@ -64,7 +64,6 @@ def test_dashboard_maps_four_state_and_prediction_contract_without_ct_dependency
         "measurement_mode",
         "expected_completion",
         "next_poll",
-        "next_adaptive_poll",
         "request_budget",
     ):
         assert config["hot_water"][key] in refs
