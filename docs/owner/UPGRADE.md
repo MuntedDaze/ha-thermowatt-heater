@@ -1,30 +1,31 @@
-# Upgrading to Controller 0.18.0 and Thermann Hot Water 1.5.0
+# Upgrading to Controller 0.18.1 and Thermann Hot Water 1.5.0
 
 For the owner's installation (Home Assistant OS, Thermann Hot Water app 1.4.1,
 Controller 0.17.1, CT-free GoodWe, EMHASS, fixed-AEST Aurora 93), to Controller
-0.18.0 and then app 1.5.0. These steps
+0.18.1 and then app 1.5.0. These steps
 are for the owner after review and approval; they are not permission for an
 agent to deploy, restart or operate anything. The earlier 0.16 / 1.4 guide is in
 [history](../history/next-major/OWNER_UPGRADE_0_16.md).
 
 What changes is listed in the [controller changelog](../../shadow_controller/CHANGELOG.md);
 the requirements are in [OPERATING_POLICY.md](../OPERATING_POLICY.md).
-Controller 0.18.0 works with app 1.4.1; the app update is a separate step.
+Controller 0.18.1 works with app 1.4.1; the app update is a separate step.
 
 ## 1. Before you start
 
 1. **Settings → System → Backups:** create a full backup including Home
    Assistant and the Thermann Hot Water app data. Download it.
-2. **Check the solar start headroom (decision D3).** Controller 0.18.0 uses
-   0.3 kW above element power (3.3 kW). If your saved configuration ever stored a
-   different `export_headroom_kw`, 0.18.0 keeps that value instead so solar
+2. **Check the solar start headroom (decision D3).** Controller 0.18.x uses
+   0.3 kW above element power (3.3 kW). (Owner check, 20 Nov 2026: the installed
+   value is 0.3, so nothing changes.) If a saved configuration stored a
+   different `export_headroom_kw`, 0.18.x keeps that value instead so solar
    qualification cannot change silently. To see the saved value now, open the
    file `/config/.storage/core.config_entries` (read-only, for example with the
    File editor app), find the `thermann_shadow` entry and look for
    `"export_headroom_kw"` in its `options`. Absent or `0.3` means nothing changes.
    Do not edit the file.
 3. Note whether any of your own dashboards or automations use these entities,
-   which 0.18.0 removes (the shipped dashboards do not): the Legacy-page
+   which 0.18.x removes (the shipped dashboards do not): the Legacy-page
    settings (adaptive polling, quiet-period checks, app-change check interval,
    polling preview and its two limits, three-state qualification, weekend
    daylight qualification, late-day PV threshold and delay), the controller's
@@ -60,7 +61,7 @@ integration or its configuration entry. Restart Home Assistant.
 
 ## 4. Update the Thermann Hot Water app to 1.5.0 (separate step)
 
-Do this after the controller is running 0.18.0 (0.18.0 also works with 1.4.1).
+Do this after the controller is running 0.18.1 (it also works with 1.4.1).
 
 1. With **Automatic heater control** off, check there is no pending command
    (*Last command result* is not `awaiting_confirmation`).
@@ -89,3 +90,29 @@ for the controller, reinstall Controller
 The retired values stay in `retired_options`, which 0.17.1 ignores, so it uses
 its old defaults for them; in particular its own polling choice returns to
 *Keep existing* (fixed polling) until you select Smart again there.
+
+## 6. Supervised commissioning checklist (before Automatic is turned on)
+
+Run with the owner present, in a quiet off-peak period. Each step only reads
+state unless it says otherwise.
+
+1. **Configuration intact:** tariff prices and peak times, fixed AEST clock,
+   time zone, grid sign (`import_positive` off for export-positive GoodWe),
+   CT-free record, command topic and *Four-state commands qualified* are as
+   they were before the upgrade. *Settings* shows no Legacy page.
+2. **Bridge healthy:** *Cloud health* `ok`, authentication `authorized`,
+   commands enabled as before, request budget with headroom.
+3. **Policy view in Shadow (Automatic still off):** *Requested mode* and
+   *Current heating plan* match the policy for the time of day — Manual 45
+   overnight, OFF in a peak, Manual 62 planned on a weekday before the evening
+   peak. No morning top-up is planned.
+4. **Forecast independence:** the diagnostic report's `forecast` section shows
+   whether EMHASS is in use. If it is unavailable, the plan still shows the
+   weekday latest start and the weekend deadline; no action is needed.
+5. **Owner turns Automatic on** (separate approval). Watch the first command:
+   *Last command result* reaches `observed_in_status` and the Thermann app shows
+   the same target.
+6. **Owner change test:** change the mode in the Thermann app; the controller
+   shows *owner override* and sends nothing until **Resume automatic control**.
+7. Leave it running and review the next weekday peak transition (OFF at about
+   07:58 / 16:58 Hobart summer time) and the following 62 storage.

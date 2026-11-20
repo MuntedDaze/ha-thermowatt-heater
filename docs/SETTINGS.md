@@ -448,11 +448,11 @@ Mapping key: `export_energy`. Optional cumulative kWh export sensor retained for
 
 ### Forecast solar production
 
-Mapping key: `forecast_pv`. Optional EMHASS solar-forecast series, or supported buffered Forecast.Solar watts, with its original forecast_generated_at timestamp. Predicts future production, not guaranteed spare power. Leave unmapped when forecasts are off.
+Mapping key: `forecast_pv`. Optional EMHASS solar-forecast series with its original forecast_generated_at timestamp. Only optimises when required heating starts and the economics of a measured solar boost; it never authorises a boost, and heating continues without it. Leave unmapped when forecasts are off.
 
 ### Forecast household electricity use
 
-Mapping key: `forecast_load`. Optional timestamped EMHASS household-load forecast or supported measured baseline. Used with solar forecasts; neither forecast is required for basic tariff heating. Stale forecasts are ignored.
+Mapping key: `forecast_load`. Optional timestamped EMHASS household-load forecast. Without a usable one, a conservative 1 kW floor (or the current household load, if higher) is assumed. Neither forecast is required for heating. Stale forecasts are ignored.
 
 ### Inverter's usable AC output
 

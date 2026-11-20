@@ -135,7 +135,7 @@ RECOVERY = {
     "intent_unresolved_after_restart": "Home Assistant restarted while a command was unconfirmed and no later status resolved it. Check the Thermann app, then Acknowledge fault.",
     "unexpected_mode_during_confirmation": "The heater reported a mode that was neither the previous nor the requested one. Check the Thermann app. Resume automatic control when you are satisfied.",
     "mode_or_target_changed_outside_controller": "The Thermann mode or target changed without a controller command (for example in the app). Automatic control stays paused until you press Resume automatic control.",
-    "unexpected_mode_or_target": "The heater is not OFF or a supported Manual 45/62/70 °C target (for example it is in Schedule, Eco or another Manual target). Automatic control will not touch it. In the Thermann app choose an independently qualified supported state, then press Resume automatic control.",
+    "unexpected_mode_or_target": "The heater is not OFF or a supported Manual 45/62/70 °C target (for example it is in Schedule, Eco or another Manual target). Automatic control will not touch it. To return to the agreed operating policy, select in the Thermann app the state the policy wants now (Manual 45 °C overnight and at weekends, Manual 62 °C on weekdays between peaks, OFF during a peak), then press Resume automatic control.",
     "owner_hold": "You placed the heater on hold. Automatic control sends nothing until you press Resume automatic control.",
     "guest_mode_not_applied": "The 12hr Override wants Manual at 62 °C but the controller could not apply it (see the reason and gate failures). Check the Thermann Hot Water app and the Thermann app; you can select the intended temperature in the app yourself.",
 }

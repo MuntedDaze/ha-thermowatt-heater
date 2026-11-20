@@ -119,4 +119,6 @@ def test_release_version_references_agree_with_manifests():
     bridge = (ADDON / "thermowatt_bridge.py").read_text()
     assert set(re.findall(r'"bridge_version": "([^"]+)"', bridge)) == {config["version"]}
     report = (ROOT / "custom_components/thermann_shadow/report.py").read_text()
+    # The diagnostic report names the controller version that produced it.
+    assert f'"controller": "{manifest["version"]}"' in report
     assert f'"{config["version"]}"' in report  # report accepts the current bridge

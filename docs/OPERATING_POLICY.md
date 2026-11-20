@@ -8,18 +8,20 @@ or a historical record.
 
 | | |
 |---|---|
-| Applies to | Controller 0.18.0 and Thermann Hot Water app 1.5.0 onward |
+| Applies to | Controller 0.18.1 and Thermann Hot Water app 1.5.0 onward |
 | Last owner decision | 20 November 2026 |
 | Temperature decision record | [decisions/HOT_WATER_TEMPERATURE.md](decisions/HOT_WATER_TEMPERATURE.md) |
 | Audit behind this document | [audits/2026-11-20/](audits/2026-11-20/README.md) |
 | History (not requirements) | [history/](history/README.md) |
 
-**Implementation status.** §1 is in force now. §2 describes Controller 0.18.0
-and app 1.5.0, which implement the 20 November decisions (evening-only
-low-water notice, one Smart polling configuration, the 0.3 kW constant and the
-removal of obsolete settings and command forms). Until those releases are
-approved and installed, Controller 0.17.1 / app 1.4.1 already follow §1 except
-for those four items.
+**Objective (owner, 20 November 2026).** Minimise electricity cost, maximise
+genuine solar self-consumption, maintain adequate hot water, and keep the
+system reliable, predictable and safe. Intelligence improves those
+fundamentals; it is never a dependency for basic heating.
+
+**Implementation status.** §2 describes Controller 0.18.1 and app 1.5.0. The
+owner's installation runs Controller 0.17.1 / app 1.4.1 until the supervised
+in-place upgrade ([docs/owner/UPGRADE.md](owner/UPGRADE.md)).
 
 The document has three parts: **1. Policy** (what the owner requires),
 **2. Implementation** (how the code meets it, with source locations) and
@@ -139,7 +141,21 @@ communication problems, for a missing or rejected plan, or after a scheduler
 failure. The fallback never bypasses command freshness checks or cloud request
 protections. The app keeps a *Fixed* choice for recovery only.
 
-### 1.11 Safety mechanisms that must be preserved
+### 1.11 Forecasts are optional
+
+EMHASS forecasts are an optional optimisation input. They may choose **when**
+required 62 °C heating starts and refine the economics of a solar boost. They
+never authorise a 70 °C boost: only fresh measured grid export (§1.6) can
+qualify surplus, and without a forecast a boost is judged on the measured
+surplus alone. If forecasts are missing, stale, flat or invalid, the fixed
+temperature and tariff rules continue: weekday 62 °C is guaranteed by its
+latest start, the weekend window by its deadline fallback, and overnight 45 °C
+and peak OFF are unaffected. Losing live solar/grid measurements suspends solar
+permission; surplus is never invented. The only household-load assumption
+without a usable forecast is a conservative 1 kW floor (or the current
+household load, if higher); there is no second load model.
+
+### 1.12 Safety mechanisms that must be preserved
 
 Exact-prior guarded transitions between OFF/45/62/70 only; fresh (≤ 60 s)
 status before every command; confirmation by later status, never a repeated
@@ -151,7 +167,7 @@ protections untouched.
 
 ---
 
-## 2. Implementation (Controller 0.18.0, app 1.5.0)
+## 2. Implementation (Controller 0.18.1, app 1.5.0)
 
 Paths are relative to the repository root.
 
@@ -189,11 +205,17 @@ observations, persists before publishing and publishes at most one message.
 
 ### 2.4 Forecasts
 
-`forecast.py` `build_forecast`: EMHASS PV and household-load forecasts, PV
-clipped to the inverter limit and corrected by measured PV for 3 h, uncertainty
-margin and household allowance applied. Missing or stale forecasts assume no
-future solar; weekday heating then starts by the latest start, the weekend
-window starts 62 at once, and an alert follows after 60 minutes.
+`forecast.py` `build_forecast`: only the EMHASS published `forecasts` series
+for PV and household load (other shapes are not forecasts). PV is clipped to
+the inverter limit and corrected by measured PV for 3 h; the uncertainty margin
+and household allowance are applied; an unusable load series uses the floor
+`FALLBACK_LOAD_KW` (1 kW) or the current house load. Missing or stale forecasts
+assume no future solar for planning: weekday heating starts by the latest
+start, the weekend window starts 62 at once, and an alert follows after 60
+minutes. `simple_policy._boost` prices a boost on the qualified measured
+surplus when no forecast is available. Evidence:
+`tests/test_forecast_independence_week.py`, `tests/test_final_release_0_18_1.py`
+and [evidence/SCENARIO_COVERAGE.md](evidence/SCENARIO_COVERAGE.md).
 
 ### 2.5 Measurements
 

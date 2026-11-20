@@ -115,7 +115,8 @@ Logs never contain credentials, tokens or response bodies.
 
 ## Recovery
 
-- **Hot water now:** Thermann app → **Manual at 70 °C**. Back to your normal programme: **Schedule**.
+- **Hot water now:** press the Thermann Controller's **12hr Override 62°C**, or select **Manual 62 °C** in the Thermann app.
+- **Back to normal operation:** select in the Thermann app the state the [operating policy](../docs/OPERATING_POLICY.md) wants now (Manual 45 °C overnight and at weekends, Manual 62 °C on weekdays between peaks, OFF during a peak), then press **Resume automatic control** in Home Assistant. Do not switch the heater to the native **Schedule** programme: the controller treats Schedule as an owner change and stays paused.
 - **Stop commands:** set `commands_enabled: false` and restart the add-on.
 - **Roll back an update:** restore the partial backup of this add-on taken before updating. That is the only way back to an older version.
 

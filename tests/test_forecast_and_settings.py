@@ -111,12 +111,24 @@ def test_bad_forecasts_fall_back_without_blocking_temperature_plan(case):
         assert not result.slots and result.warnings  # no valid PV provenance
 
 
-def test_forecast_solar_watts_adapter_and_grid_load_spike():
+def test_retired_forecast_solar_shape_is_not_a_forecast_and_load_spike_is_honoured():
     now = local(hour=11)
     settings, _ = c.parse_options(
         {"forecast_enabled": True, "forecast_uncertainty": 0, "forecast_house_margin_kw": 0}
     )
-    pv = series(now, watts={(now + timedelta(hours=i)).isoformat(): 4000 for i in range(7)})
+    watts = SimpleNamespace(
+        state="7",
+        attributes={
+            "unit_of_measurement": "W",
+            "forecast_generated_at": now.isoformat(),
+            "watts": {(now + timedelta(hours=i)).isoformat(): 4000 for i in range(7)},
+        },
+    )
+    retired = forecast.build_forecast(
+        now, now - timedelta(minutes=1), settings, watts, series(now, "load", 1)
+    )
+    assert not retired.slots and retired.source == "unavailable"  # no solar is assumed
+    pv = series(now, "pv", 4)
     result = forecast.build_forecast(
         now, now - timedelta(minutes=1), settings, pv, series(now, "load", 1)
     )

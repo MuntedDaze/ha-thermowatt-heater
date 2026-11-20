@@ -308,7 +308,7 @@ views:
   - type: grid
     cards:
     - type: button
-      name: Configure electricity and polling
+      name: Configure electricity
       icon: mdi:cog-outline
       tap_action:
         action: navigate
