@@ -1,0 +1,143 @@
+{
+  "integration": "tapo_smart_controller",
+  "version": "0.3.0",
+  "note": "Entity IDs published for dashboards for the default two-bathroom setup (Main Bathroom, Ensuite). A different bathroom name changes only the name part. Verified against a real Home Assistant Core instance by tests/ha_compat/test_entity_contract.py.",
+  "entities": {
+    "sensor.tapo_smart_controller_main_bathroom_humidity": {
+      "name": "Main Bathroom Humidity",
+      "purpose": "validated humidity (%)"
+    },
+    "sensor.tapo_smart_controller_main_bathroom_temperature": {
+      "name": "Main Bathroom Temperature",
+      "purpose": "validated temperature (°C)"
+    },
+    "sensor.tapo_smart_controller_main_bathroom_background_humidity": {
+      "name": "Main Bathroom Background Humidity",
+      "purpose": "adaptive baseline (%)"
+    },
+    "sensor.tapo_smart_controller_main_bathroom_drying_progress": {
+      "name": "Main Bathroom Drying Progress",
+      "purpose": "drying progress (%)"
+    },
+    "sensor.tapo_smart_controller_main_bathroom_fan_status": {
+      "name": "Main Bathroom Fan Status",
+      "purpose": "fan state; attributes: summary, control_origin, reason"
+    },
+    "binary_sensor.tapo_smart_controller_main_bathroom_shower_detected": {
+      "name": "Main Bathroom Shower Detected",
+      "purpose": "shower detected / drying"
+    },
+    "binary_sensor.tapo_smart_controller_main_bathroom_fan_running": {
+      "name": "Main Bathroom Fan Running",
+      "purpose": "ACTUAL fan state (confirmed)"
+    },
+    "switch.tapo_smart_controller_main_bathroom_fan_manual_override": {
+      "name": "Main Bathroom Fan Manual Override",
+      "purpose": "timed manual fan override (default 20 min)"
+    },
+    "sensor.tapo_smart_controller_main_bathroom_towel_rail_remaining_time": {
+      "name": "Main Bathroom Towel Rail Remaining Time",
+      "purpose": "towel drying time remaining"
+    },
+    "sensor.tapo_smart_controller_main_bathroom_towel_rail_status": {
+      "name": "Main Bathroom Towel Rail Status",
+      "purpose": "towel state; attributes: summary, reason"
+    },
+    "binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating": {
+      "name": "Main Bathroom Towel Rail Heating",
+      "purpose": "ACTUAL heating (confirmed relay)"
+    },
+    "switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override": {
+      "name": "Main Bathroom Towel Rail Manual Override",
+      "purpose": "manual drying request (one cycle)"
+    },
+    "sensor.tapo_smart_controller_ensuite_humidity": {
+      "name": "Ensuite Humidity",
+      "purpose": "validated humidity (%)"
+    },
+    "sensor.tapo_smart_controller_ensuite_temperature": {
+      "name": "Ensuite Temperature",
+      "purpose": "validated temperature (°C)"
+    },
+    "sensor.tapo_smart_controller_ensuite_background_humidity": {
+      "name": "Ensuite Background Humidity",
+      "purpose": "adaptive baseline (%)"
+    },
+    "sensor.tapo_smart_controller_ensuite_drying_progress": {
+      "name": "Ensuite Drying Progress",
+      "purpose": "drying progress (%)"
+    },
+    "sensor.tapo_smart_controller_ensuite_fan_status": {
+      "name": "Ensuite Fan Status",
+      "purpose": "fan state; attributes: summary, control_origin, reason"
+    },
+    "binary_sensor.tapo_smart_controller_ensuite_shower_detected": {
+      "name": "Ensuite Shower Detected",
+      "purpose": "shower detected / drying"
+    },
+    "binary_sensor.tapo_smart_controller_ensuite_fan_running": {
+      "name": "Ensuite Fan Running",
+      "purpose": "ACTUAL fan state (confirmed)"
+    },
+    "switch.tapo_smart_controller_ensuite_fan_manual_override": {
+      "name": "Ensuite Fan Manual Override",
+      "purpose": "timed manual fan override (default 20 min)"
+    },
+    "sensor.tapo_smart_controller_ensuite_towel_rail_remaining_time": {
+      "name": "Ensuite Towel Rail Remaining Time",
+      "purpose": "towel drying time remaining"
+    },
+    "sensor.tapo_smart_controller_ensuite_towel_rail_status": {
+      "name": "Ensuite Towel Rail Status",
+      "purpose": "towel state; attributes: summary, reason"
+    },
+    "binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating": {
+      "name": "Ensuite Towel Rail Heating",
+      "purpose": "ACTUAL heating (confirmed relay)"
+    },
+    "switch.tapo_smart_controller_ensuite_towel_rail_manual_override": {
+      "name": "Ensuite Towel Rail Manual Override",
+      "purpose": "manual drying request (one cycle)"
+    },
+    "sensor.tapo_smart_controller_electricity_tariff_status": {
+      "name": "Electricity Tariff Status",
+      "purpose": "tariff read by the towel rails"
+    },
+    "sensor.tapo_smart_controller_active_health_warnings": {
+      "name": "Active Health Warnings",
+      "purpose": "count of active warnings"
+    },
+    "binary_sensor.tapo_smart_controller_controller_health_problem": {
+      "name": "Controller Health Problem",
+      "purpose": "any controller health problem"
+    },
+    "binary_sensor.tapo_smart_controller_simulation_mode_active": {
+      "name": "Simulation Mode Active",
+      "purpose": "shadow mode indicator"
+    },
+    "sensor.tapo_smart_controller_front_door_lock_status": {
+      "name": "Front Door Lock Status",
+      "purpose": "front-door monitor state and explanation"
+    },
+    "binary_sensor.tapo_smart_controller_front_door_open": {
+      "name": "Front Door Open",
+      "purpose": "front door contact"
+    },
+    "sensor.tapo_smart_controller_garage_door_position": {
+      "name": "Garage Door Position",
+      "purpose": "Closed / Not closed / Unknown"
+    },
+    "binary_sensor.tapo_smart_controller_garage_door_open": {
+      "name": "Garage Door Open",
+      "purpose": "garage not-closed contact"
+    },
+    "sensor.tapo_smart_controller_garage_door_status": {
+      "name": "Garage Door Status",
+      "purpose": "garage monitor state and explanation"
+    },
+    "button.tapo_smart_controller_clear_all_faults": {
+      "name": "Clear All Faults",
+      "purpose": "clear latched controller faults"
+    }
+  }
+}
