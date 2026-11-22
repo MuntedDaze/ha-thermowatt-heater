@@ -401,8 +401,8 @@ async function main() {
           expect(diagram.width).toBeGreaterThan(Math.min(size.width, 400) * 0.6);
           expect(energyText).toMatch(/Monitored share of household\s*[≈≥]?\s*\d+%/);
           // the seeded Dryer's own daily counter disagrees with its statistics: the cross-check flags it (and only it)
-          expect(energyText).toMatch(/Dryer\s*≠ device counter/);
-          expect(energyText).not.toMatch(/Fridge plug\s*≠ device counter/);
+          expect(energyText).toMatch(/Dryer.{0,60}≠ device counter/);
+          expect(energyText).not.toMatch(/Fridge plug.{0,60}≠ device counter/);
           expect(energyText).not.toMatch(/withheld|NaN|undefined/);
           // the toggle redraws the diagram for the month
           await page.evaluate(`(() => {

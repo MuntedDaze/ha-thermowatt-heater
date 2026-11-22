@@ -255,12 +255,13 @@ async def seed_device_energy(hass):
         ("sensor.dryer_total_consumption", 0.15),
         ("sensor.fridge_total_energy", 0.05),
     ):
-        hourly_start = last_hour - timedelta(hours=24 * 70 - 1)  # 1680 rows ending AT last_hour
+        hourly_start = last_hour - timedelta(hours=24 * 70 - 1)
         async_import_statistics(
             hass,
             meta(entity_id, "kWh", False, True),
-            energy_rows(hourly_start, timedelta(hours=1), 24 * 70, per_hour, 100.0),
+            energy_rows(hourly_start, timedelta(hours=1), 24 * 70 + 2, per_hour, 100.0),
         )
+    # (all seeded hourly rows run two hours past last_hour so an hour boundary crossed during a run is not a gap)
     # the inverter's whole-house sources (long-term statistics only): generation 0.5, import 0.4 and export
     # 0.1 kWh per hour on average, so the balance is valid and the monitored devices are a fraction of it
     for entity_id, per_hour in (
@@ -272,12 +273,12 @@ async def seed_device_energy(hass):
         async_import_statistics(
             hass,
             meta(entity_id, "kWh", False, True),
-            energy_rows(hourly_start, timedelta(hours=1), 24 * 70, per_hour, 2000.0),
+            energy_rows(hourly_start, timedelta(hours=1), 24 * 70 + 2, per_hour, 2000.0),
         )
     # power-only device: mean statistics (its energy is estimated from them)
     hourly = [
         StatisticData(start=last_hour - timedelta(hours=i), mean=45.0 + (i % 5), min=40.0, max=60.0)
-        for i in range(24 * 70)
+        for i in range(-2, 24 * 70)
     ]
     async_import_statistics(
         hass, meta("sensor.server_current_consumption", "W", True, False), hourly
