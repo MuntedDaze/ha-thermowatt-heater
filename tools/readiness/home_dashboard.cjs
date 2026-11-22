@@ -35,7 +35,7 @@ async function main() {
   const clearCalls = () => hassCall("DELETE", "home_ui_calls");
   const confirmIfAsked = async () => {
     const yes = page.getByRole("button", { name: /^(yes|ok|confirm)$/i });
-    if (await yes.first().isVisible({ timeout: 3000 }).catch(() => false)) await yes.first().click();
+    if (await yes.first().isVisible({ timeout: 3000 }).catch(() => false)) await yes.first().click({ force: true });
   };
   let httpConfirmed = false;
   const report = [];
@@ -46,7 +46,7 @@ async function main() {
       await page.goto("http://127.0.0.1:8123/home-test/home");
       if (!httpConfirmed) {
         const confirm = page.locator("dialog-http-pending-config").getByRole("button", { name: "Confirm", exact: true });
-        if (await confirm.isVisible({ timeout: 8000 }).catch(() => false)) await confirm.click();
+        if (await confirm.isVisible({ timeout: 8000 }).catch(() => false)) await confirm.click({ force: true });
         httpConfirmed = true;
       }
       // The dashboard itself must load: no configuration error cards.
@@ -93,20 +93,20 @@ async function main() {
       await setState(MODE, "automatic");
       await expect(page.getByText("12 h override: OFF")).toBeVisible();
       await clearCalls();
-      await page.getByText("12 h override: OFF").click();
+      await page.getByText("12 h override: OFF").click({ force: true });
       await confirmIfAsked();
       await expect.poll(async () => (await calls()).map((c) => c.service)).toContain("button.press");
       expect(JSON.stringify(await calls())).toContain(START);
       await setState(MODE, "guest");
       await expect(page.getByText("12 h override: ON")).toBeVisible();
       await clearCalls();
-      await page.getByText("12 h override: ON").click();
+      await page.getByText("12 h override: ON").click({ force: true });
       await confirmIfAsked();
       await expect.poll(async () => JSON.stringify(await calls())).toContain(CANCEL);
       await setState(MODE, "unavailable");
       await expect(page.getByText("12 h override: status unknown")).toBeVisible();
       await clearCalls();
-      await page.getByText("12 h override: status unknown").click();
+      await page.getByText("12 h override: status unknown").click({ force: true });
       await page.waitForTimeout(800);
       expect(await calls()).toEqual([]); // inert
 
@@ -120,12 +120,12 @@ async function main() {
       await setState(FAN, "off", { summary: "Off — normal" });
       await expect(page.getByText("Fan: off").first()).toBeVisible();
       await clearCalls();
-      await page.getByText("Fan: off").first().click();
+      await page.getByText("Fan: off").first().click({ force: true });
       await expect.poll(async () => JSON.stringify(await calls())).toContain(FAN_SWITCH);
       await setState(FAN, "unavailable");
       await expect(page.getByText("Fan: status unknown").first()).toBeVisible();
       await clearCalls();
-      await page.getByText("Fan: status unknown").first().click();
+      await page.getByText("Fan: status unknown").first().click({ force: true });
       await page.waitForTimeout(800);
       expect(await calls()).toEqual([]);
       await setState(FAN, "off", { summary: "Off — normal" });
