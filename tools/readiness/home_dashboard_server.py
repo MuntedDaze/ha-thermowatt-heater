@@ -249,6 +249,7 @@ async def seed_device_energy(hass):
             source="recorder",
             statistic_id=entity_id,
             unit_of_measurement=unit,
+            unit_class="energy" if unit == "kWh" else "power",
         )
 
     for entity_id, per_hour in (
