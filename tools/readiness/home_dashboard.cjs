@@ -41,21 +41,36 @@ async function main() {
   const power = (entity_id, state) => setState(entity_id, state, { unit_of_measurement: "W" });
   const calls = () => hassCall("GET", "home_ui_calls");
   const clearCalls = () => hassCall("DELETE", "home_ui_calls");
+  const tap = async (text, { first = false } = {}) => {
+    await clearCalls();
+    const target = first ? page.getByText(text).first() : page.getByText(text);
+    let confirmationShown = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await target.scrollIntoViewIfNeeded().catch(() => {});
+      await page.waitForTimeout(700); // let the card finish its layout before pressing
+      await target.click({ force: true });
+      await page.waitForTimeout(1200);
+      if (await confirmIfAsked()) confirmationShown = true;
+      await page.waitForTimeout(800);
+      const recorded = await calls();
+      if (recorded.length || confirmationShown) return { calls: recorded, confirmationShown };
+    }
+    return { calls: await calls(), confirmationShown };
+  };
   const confirmIfAsked = async () => {
     // HA shows its own confirmation dialog for tap actions with `confirmation`.
     for (const name of ["Yes", "OK", "Confirm", "Continue"]) {
-      const byRole = page.getByRole("button", { name, exact: true }).filter({ visible: true });
-      const byText = page.getByText(name, { exact: true }).filter({ visible: true });
-      for (const candidate of [byRole, byText]) {
-        if (await candidate.first().isVisible({ timeout: 1500 }).catch(() => false)) {
-          await candidate.first().click({ force: true });
+      for (const candidate of [
+        page.getByRole("button", { name, exact: true }),
+        page.getByText(name, { exact: true }),
+      ]) {
+        const visible = candidate.filter({ visible: true }).first();
+        if (await visible.isVisible()) {
+          await visible.click({ force: true });
           return true;
         }
       }
     }
-    const dialogs = await page.locator("ha-dialog, ha-wa-dialog, dialog-box").allInnerTexts().catch(() => []);
-    console.log("no confirmation button found; dialogs:", JSON.stringify(dialogs));
-    await page.screenshot({ path: `${output}/no-confirm.png` }).catch(() => {});
     return false;
   };
   // A fresh disposable HA asks to confirm its loopback-only HTTP binding; it can appear late
@@ -114,28 +129,23 @@ async function main() {
       await power("sensor.goodwe_inverter_pv_power", "4123");
       await power("sensor.goodwe_inverter_house_consumption", "1200");
 
-      // 12 h override: ON / OFF / unknown, with the existing buttons only.
+      // 12 h override: ON / OFF / unknown, with the existing buttons only (each one confirmed).
       await dismissHttpDialog();
       await setState(MODE, "automatic");
       await expect(page.getByText("12 h override: OFF")).toBeVisible();
-      await clearCalls();
-      await page.getByText("12 h override: OFF").click({ force: true });
-      await page.screenshot({ path: `${output}/after-click-${width}.png` });
-      await confirmIfAsked();
-      await expect.poll(async () => (await calls()).map((c) => c.service)).toContain("button.press");
-      expect(JSON.stringify(await calls())).toContain(START);
+      let result = await tap("12 h override: OFF");
+      expect(result.confirmationShown, "start override asks for confirmation").toBe(true);
+      expect(JSON.stringify(result.calls)).toContain(START);
       await setState(MODE, "guest");
       await expect(page.getByText("12 h override: ON")).toBeVisible();
-      await clearCalls();
-      await page.getByText("12 h override: ON").click({ force: true });
-      await confirmIfAsked();
-      await expect.poll(async () => JSON.stringify(await calls())).toContain(CANCEL);
+      result = await tap("12 h override: ON");
+      expect(result.confirmationShown, "cancel override asks for confirmation").toBe(true);
+      expect(JSON.stringify(result.calls)).toContain(CANCEL);
       await setState(MODE, "unavailable");
       await expect(page.getByText("12 h override: status unknown")).toBeVisible();
-      await clearCalls();
-      await page.getByText("12 h override: status unknown").click({ force: true });
-      await page.waitForTimeout(800);
-      expect(await calls()).toEqual([]); // inert
+      result = await tap("12 h override: status unknown");
+      expect(result.calls).toEqual([]); // inert: never a command on an unknown status
+      expect(result.confirmationShown).toBe(false);
 
       // Bathroom fan toggle: automatic vs manual vs off vs unknown (and no command when unknown).
       await setState(FAN, "on", { summary: "On — automatic, drying the room" });
@@ -143,18 +153,18 @@ async function main() {
       await expect(page.getByText("Fan: automatic").first()).toBeVisible();
       await setState(FAN_SWITCH, "on");
       await expect(page.getByText("Fan: manual").first()).toBeVisible();
+      result = await tap("Fan: manual", { first: true });
+      expect(JSON.stringify(result.calls)).toContain("turn_off"); // cancels the request
       await setState(FAN_SWITCH, "off");
       await setState(FAN, "off", { summary: "Off — normal" });
       await expect(page.getByText("Fan: off").first()).toBeVisible();
-      await clearCalls();
-      await page.getByText("Fan: off").first().click({ force: true });
-      await expect.poll(async () => JSON.stringify(await calls())).toContain(FAN_SWITCH);
+      result = await tap("Fan: off", { first: true });
+      expect(JSON.stringify(result.calls)).toContain(FAN_SWITCH);
+      expect(JSON.stringify(result.calls)).toContain("turn_on");
       await setState(FAN, "unavailable");
       await expect(page.getByText("Fan: status unknown").first()).toBeVisible();
-      await clearCalls();
-      await page.getByText("Fan: status unknown").first().click({ force: true });
-      await page.waitForTimeout(800);
-      expect(await calls()).toEqual([]);
+      result = await tap("Fan: status unknown", { first: true });
+      expect(result.calls).toEqual([]);
       await setState(FAN, "off", { summary: "Off — normal" });
 
       // No garage motor or lock controls anywhere on the page.
