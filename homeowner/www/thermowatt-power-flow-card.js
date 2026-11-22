@@ -593,6 +593,12 @@ class ThermowattPanelCard extends BaseUi {
  * (its members are shown instead) or a duplicate (same device and name as one already shown).
  * `lights` (entity + optional name) may still pin an order or a display name; `names` renames by entity ID.
  * ---------------------------------------------------------------------------------------------- */
+/** "light.hall_light" -> "Hall light": a readable name when Home Assistant gives the entity no friendly name. */
+export function prettyEntityName(entityId) {
+  const text = String(entityId).split(".").pop().replace(/_+/g, " ").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : String(entityId);
+}
+
 export function discoverLights(hass, config) {
   const exclude = new Set((config.exclude || []).map(String));
   const label = config.exclude_label ? String(config.exclude_label) : "";
@@ -613,7 +619,7 @@ export function discoverLights(hass, config) {
     if (label && (entry.labels || entry.lb || []).includes(label)) return;
     const attrs = state.attributes || {};
     if (config.exclude_groups !== false && Array.isArray(attrs.entity_id) && attrs.entity_id.length) return; // a group: its members are shown
-    const name = names[entityId] || pinnedName || attrs.friendly_name || entityId;
+    const name = names[entityId] || pinnedName || attrs.friendly_name || prettyEntityName(entityId);
     const deviceId = entry.device_id || entry.di;
     const duplicate = deviceId ? `${deviceId}|${String(name).toLowerCase()}` : null;
     if (duplicate && seenDevice.has(duplicate)) return;
@@ -630,7 +636,7 @@ export function discoverLights(hass, config) {
   };
   for (const l of config.lights || []) consider(l.entity, l.name); // pinned first, in the configured order
   const rest = Object.keys(states).filter((id) => id.startsWith("light.") && !seen.has(id));
-  const shownName = (id) => String(names[id] || (states[id].attributes || {}).friendly_name || id);
+  const shownName = (id) => String(names[id] || (states[id].attributes || {}).friendly_name || prettyEntityName(id));
   rest.sort((a, b) => shownName(a).localeCompare(shownName(b), undefined, { numeric: true }));
   for (const id of rest) consider(id, null);
   return { lights: out, unavailable };
@@ -714,7 +720,7 @@ class ThermowattLightsCard extends BaseUi {
       .lt[disabled]{cursor:default}
       .lt ha-icon{--mdc-icon-size:30px;grid-row:1 / span 2;color:var(--secondary-text-color)}
       .light.on .lt ha-icon{color:var(--state-light-active-color,#ffc107)}
-      .lt .n{font-size:16.5px;font-weight:600;color:var(--primary-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .lt .n{font-size:16.5px;font-weight:600;line-height:1.2;color:var(--primary-text-color);overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
       .lt .s{font-size:14.5px;color:var(--secondary-text-color)}
       .dense .lt .n{font-size:15px}.dense .lt ha-icon{--mdc-icon-size:24px}.dense .light{padding:10px}
       .lt:focus-visible{outline:2px solid var(--primary-color);border-radius:8px}

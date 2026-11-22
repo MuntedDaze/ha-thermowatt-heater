@@ -368,7 +368,9 @@ async def main():
     # excludes the demo ones (exactly what the `exclude` option is for) and shows only the seeded lights.
     import yaml
 
-    demo_lights = sorted(e for e in hass.states.async_entity_ids("light") if e not in seeded)
+    demo_lights = sorted(
+        {*(e for e in hass.states.async_entity_ids("light") if e not in seeded), "light.hall_light"}
+    )  # hall_light is a Device Energy fixture added later
     document = yaml.safe_load((CONFIG / "home.yaml").read_text(encoding="utf-8"))
 
     def lights_cards(node):

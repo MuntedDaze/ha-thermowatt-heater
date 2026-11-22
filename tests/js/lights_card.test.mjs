@@ -139,3 +139,9 @@ test("the layout scales from two to ten lights: density steps down and every lig
 test("no lights at all says so instead of rendering an empty card", () => {
   assert.match(text(make(homeWith({}))), /No lights were found/);
 });
+
+test("a light without a friendly name gets a readable name, not its entity ID", () => {
+  const hass = homeWith({ "light.hall_light": { state: "on", attributes: { supported_color_modes: ["onoff"] } } });
+  assert.deepEqual(names(hass), ["Hall light"]);
+  assert.equal(mod.prettyEntityName("light.kitchen_island_lamp"), "Kitchen island lamp");
+});
