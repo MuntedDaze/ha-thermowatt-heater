@@ -26,6 +26,14 @@ async function main() {
   page.setDefaultTimeout(30000);
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => {
+    if (["error", "warning"].includes(m.type())) console.log("console:", m.type(), m.text().slice(0, 300));
+  });
+  page.on("websocket", (ws) =>
+    ws.on("framesent", (f) => {
+      if (String(f.payload).includes("call_service")) console.log("ws call_service:", String(f.payload).slice(0, 300));
+    })
+  );
   const hassCall = (method, path, body) =>
     page.evaluate(([m, p, b]) => document.querySelector("home-assistant").hass.callApi(m, p, b), [method, path, body]);
   const setState = (entity_id, state, attributes = {}) => hassCall("POST", "home_ui_state", { entity_id, state, attributes });
@@ -107,6 +115,7 @@ async function main() {
       await expect(page.getByText("12 h override: OFF")).toBeVisible();
       await clearCalls();
       await page.getByText("12 h override: OFF").click({ force: true });
+      await page.screenshot({ path: `${output}/after-click-${width}.png` });
       await confirmIfAsked();
       await expect.poll(async () => (await calls()).map((c) => c.service)).toContain("button.press");
       expect(JSON.stringify(await calls())).toContain(START);
