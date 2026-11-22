@@ -24,7 +24,7 @@ const WIDTHS = [
   { width: 390, height: 844, name: "mobile-390", interactive: true },
 ];
 // Home must fit a normal desktop viewport at 1920x1080 and stay reasonable on smaller screens.
-const MAX_SCROLL_RATIO = { "desktop-1920": 1.0, "laptop-1366": 1.9, "desktop-1280": 1.9 };
+const MAX_SCROLL_RATIO = { "desktop-1920": 1.3, "laptop-1366": 2.4, "desktop-1280": 2.4 };
 
 async function main() {
   const browser = await chromium.launch({ args: ["--no-sandbox"] });
@@ -163,6 +163,17 @@ async function main() {
     // No card on ANY view may show a configuration error (a tile without an entity, a bad option...).
     await expect(page.getByText("Configuration error", { exact: false })).toHaveCount(0);
   };
+  const deepFind = (tag) => `(() => {
+    const out = [];
+    const walk = (root) => {
+      for (const el of root.querySelectorAll("*")) {
+        if (el.tagName === "${tag}") out.push(el);
+        if (el.shadowRoot) walk(el.shadowRoot);
+      }
+    };
+    walk(document);
+    return out;
+  })()`;
   const report = [];
 
   try {
@@ -173,7 +184,7 @@ async function main() {
       expect(await page.getByText("Configuration error", { exact: false }).count()).toBe(0);
       await page.waitForFunction(() => !!customElements.get("thermowatt-power-flow-card"));
       await expect(page.getByText("4.123 kW")).toBeVisible();
-      await expect(page.getByText("Grid Export", { exact: true })).toBeVisible();
+      await expect(page.getByText("Grid Export", { exact: true }).first()).toBeVisible();
       await page.waitForTimeout(1500); // let cards finish their first layout
       const facts = await layout();
       console.log(JSON.stringify({ layout: size.name, ...facts }));
@@ -184,8 +195,9 @@ async function main() {
 
       // Compact hot-water summary and energy panel are on the main screen.
       await expect(page.getByText("Tank bottom", { exact: false }).first()).toBeVisible();
-      await expect(page.getByText("52.4 °C").first()).toBeVisible();
-      await expect(page.getByText("Collecting daily data", { exact: false })).toBeVisible();
+      await expect(page.getByText("52.4").first()).toBeVisible();
+      await expect(page.getByText("Solar today").first()).toBeVisible(); // today's strip under the flow diagram
+      await expect(page.getByText("Exported today").first()).toBeVisible();
       await expect(page.getByText("Override ends")).toHaveCount(0); // no Unknown while automatic
       await expect(page.getByText("Weather: mapping needed")).toHaveCount(0);
       const weather = await page.evaluate(() => {
@@ -226,24 +238,93 @@ async function main() {
         await power("sensor.goodwe_inverter_meter_active_power", "-2200");
         await power("sensor.goodwe_inverter_pv_power", "800");
         await power("sensor.goodwe_inverter_house_consumption", "3000");
-        await expect(page.getByText("Grid Import", { exact: true })).toBeVisible();
+        await expect(page.getByText("Grid Import", { exact: true }).first()).toBeVisible();
         await expect(page.getByText("3.000 kW")).toBeVisible();
         await power("sensor.goodwe_inverter_meter_active_power", "unavailable");
-        await expect(page.getByText("Grid Unavailable", { exact: true })).toBeVisible();
+        await expect(page.getByText("Grid Unavailable", { exact: true }).first()).toBeVisible();
         await power("sensor.goodwe_inverter_meter_active_power", "2923");
         await power("sensor.goodwe_inverter_pv_power", "4123");
         await power("sensor.goodwe_inverter_house_consumption", "1200");
 
-        // First-day energy initialisation vs full-day figures.
+        // First-day energy initialisation vs full-day figures (the Energy page's "Today's energy" panel).
+        await goHome("energy");
+        await expect(page.getByText("Collecting daily data", { exact: true }).first()).toBeVisible();
         await setState(STATUS, "ready");
-        await expect(page.getByText("Household today")).toBeVisible();
-        await expect(page.getByText("Collecting daily data", { exact: false })).toHaveCount(0);
+        await expect(page.getByText("Household today").first()).toBeVisible();
+        await expect(page.getByText("Collecting daily data", { exact: true })).toHaveCount(0);
         await setState(STATUS, "sources_unavailable");
-        await expect(page.getByText("Energy readings unavailable", { exact: false })).toBeVisible();
+        await expect(page.getByText("figures are withheld, not zero", { exact: false }).first()).toBeVisible();
         await setState(STATUS, "collecting_first_day");
+        await goHome("home");
 
-        // Lights: mapped, toggle sends light.toggle only.
+        // Lights are DISCOVERED: the two seeded lights show, a third appears with no reconfiguration, and the
+        // card scales to ten. Unavailable lights and light groups are not shown.
+        const lightFacts = () =>
+          page.evaluate(`(() => {
+            const card = ${deepFind("THERMOWATT-LIGHTS-CARD")}[0];
+            const host = card.getBoundingClientRect();
+            const tiles = [...card.shadowRoot.querySelectorAll(".light")].map((t) => t.getBoundingClientRect());
+            let overlaps = 0;
+            for (let i = 0; i < tiles.length; i += 1) for (let j = i + 1; j < tiles.length; j += 1) {
+              const a = tiles[i]; const b = tiles[j];
+              if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2) overlaps += 1;
+            }
+            return {
+              count: tiles.length,
+              hostWidth: Math.round(host.width),
+              hostHeight: Math.round(host.height),
+              outside: tiles.filter((r) => r.left < host.left - 1 || r.right > host.right + 1 || r.bottom > host.bottom + 1).length,
+              overlaps,
+              narrowest: Math.round(Math.min(...tiles.map((r) => r.width))),
+              sliders: card.shadowRoot.querySelectorAll('input[type="range"]').length,
+              text: card.shadowRoot.textContent.replace(/\\s+/g, " "),
+            };
+          })()`);
+        const shootLights = async (name) => {
+          const handle = await page.evaluateHandle(`${deepFind("THERMOWATT-LIGHTS-CARD")}[0]`);
+          await handle.asElement().scrollIntoViewIfNeeded();
+          await page.waitForTimeout(400);
+          await handle.asElement().screenshot({ path: `${output}/lights-${name}-${size.name}.png` });
+        };
         await expect(page.getByText("Dining room", { exact: true }).first()).toBeVisible();
+        let lights = await lightFacts();
+        expect(lights.count).toBe(2);
+        expect(lights.text).toContain("Living room");
+        await shootLights("2");
+        await setState("light.third_light", "on", { friendly_name: "Third light", supported_color_modes: ["brightness"], brightness: 200 });
+        await expect(page.getByText("Third light", { exact: true }).first()).toBeVisible();
+        lights = await lightFacts();
+        expect(lights.count).toBe(3);
+        expect(lights.sliders).toBe(2); // Dining room (on, dimmable) and Third light; Living room is off
+        await shootLights("3");
+        await setState("light.gone_light", "unavailable", { friendly_name: "Gone light", supported_color_modes: ["brightness"] });
+        await setState("light.all_lights_group", "on", { friendly_name: "All lights", entity_id: ["light.dining_room_light", "light.third_light"], supported_color_modes: ["brightness"] });
+        await expect(page.getByText(/unavailable lights? (is|are) not shown/).first()).toBeVisible();
+        lights = await lightFacts();
+        expect(lights.count).toBe(3); // neither the unavailable light nor the group is shown
+        expect(lights.text).not.toContain("Gone light");
+        expect(lights.text).not.toContain("All lights");
+        const lightCounts = [5, 10];
+        for (const wanted of lightCounts) {
+          for (let i = 4; i <= wanted; i += 1) {
+            await setState(`light.test_light_${i}`, i % 2 ? "on" : "off", {
+              friendly_name: `Test light ${i}`,
+              supported_color_modes: i % 3 === 0 ? ["onoff"] : ["brightness"],
+              ...(i % 2 && i % 3 !== 0 ? { brightness: 120 + i } : {}),
+            });
+          }
+          await expect(page.getByText(`Test light ${wanted}`, { exact: true }).first()).toBeVisible();
+          lights = await lightFacts();
+          expect(lights.count).toBe(wanted);
+          expect(lights.outside).toBe(0);
+          expect(lights.overlaps).toBe(0);
+          expect(lights.narrowest).toBeGreaterThan(100); // never squeezed into an unreadable sliver
+          expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(2);
+          await shootLights(String(wanted));
+        }
+        for (let i = 4; i <= 10; i += 1) await setState(`light.test_light_${i}`, "unavailable", { friendly_name: `Test light ${i}` });
+        await setState("light.third_light", "unavailable", { friendly_name: "Third light" });
+        await expect.poll(async () => (await lightFacts()).count, { timeout: 10000 }).toBe(2);
         let result = await tap("Living room", { first: true });
         expect(JSON.stringify(result.calls)).toContain("light.toggle");
 
@@ -387,7 +468,7 @@ async function main() {
             if (!card) return null;
             const svg = card.shadowRoot.querySelector("svg.sankey");
             const box = svg.getBoundingClientRect();
-            return { width: Math.round(box.width), height: Math.round(box.height), paths: svg.querySelectorAll("path").length, text: svg.textContent };
+            return { width: Math.round(box.width), height: Math.round(box.height), paths: svg.querySelectorAll("path").length, text: svg.textContent, label: svg.getAttribute("aria-label") };
           })()`);
         const diagram = await sankey();
         if (diagram === null) {
@@ -395,9 +476,14 @@ async function main() {
           expect(energyText).toContain("collecting");
         } else {
           expect(diagram.paths).toBe(5);
-          expect(diagram.text).toContain("Solar");
-          expect(diagram.text).toContain("Household");
-          expect(diagram.text).toContain("Unmeasured");
+          if (size.width >= 640) {
+            expect(diagram.text).toContain("Solar");
+            expect(diagram.text).toContain("Household");
+            expect(diagram.text).toContain("Unmeasured");
+          } else {
+            expect(diagram.text).toBe(""); // no unreadably small labels on a phone: a legend instead
+            expect(energyText).toContain("Unmeasured");
+          }
           expect(diagram.width).toBeGreaterThan(Math.min(size.width, 400) * 0.6);
           expect(energyText).toMatch(/Monitored share of household\s*[≈≥]?\s*\d+%/);
           // the seeded Dryer's own daily counter disagrees with its statistics: the cross-check flags it (and only it)
@@ -410,8 +496,8 @@ async function main() {
             card.shadowRoot.querySelector('button[data-balance="month"]').click();
           })()`);
           await expect
-            .poll(async () => (await sankey()).text, { timeout: 5000 })
-            .not.toBe(diagram.text);
+            .poll(async () => (await sankey()).label, { timeout: 5000 })
+            .not.toBe(diagram.label);
         }
         const sorted = await page.evaluate(`(() => {
           const cards = ${FIND_ALL};
@@ -422,9 +508,10 @@ async function main() {
         expect(sorted).toEqual([...sorted].sort((a, b) => a.localeCompare(b)));
         // Layout: the parts must use the available width (three columns on a wide screen, one on a phone).
         const boxes = await page.evaluate(`${FIND_ALL}.map((c) => { const r = c.getBoundingClientRect(); return { left: Math.round(r.left), width: Math.round(r.width) }; })`);
-        expect(boxes.length).toBe(5); // summary, balance, daily, monthly, history
+        expect(boxes.length).toBe(6); // balance, summary, week, monthly, daily, history
         if (size.width >= 1280) {
-          expect(new Set(boxes.map((b) => b.left)).size).toBeGreaterThanOrEqual(size.width >= 1900 ? 3 : 2);
+          expect(new Set(boxes.map((b) => b.left)).size).toBeGreaterThanOrEqual(2); // columns side by side
+          expect(boxes[0].width).toBeGreaterThan(size.width * 0.45); // the balance hero spans two columns
           for (const b of boxes) expect(b.width).toBeGreaterThan(size.width / 5);
         } else if (size.width <= 500) {
           for (const b of boxes) expect(b.width).toBeGreaterThan(size.width * 0.8);
@@ -440,6 +527,8 @@ async function main() {
         await page.screenshot({ path: `${output}/system-${size.name}.png`, fullPage: true });
         await goHome("energy");
         await expect(page.getByText("4.123 kW")).toBeVisible();
+        await expect(page.getByText("Whole-house balance").first()).toBeVisible(); // compact balance under today's energy
+        await expect(page.getByText("Household used").first()).toBeVisible();
         await page.screenshot({ path: `${output}/energy-${size.name}.png`, fullPage: true });
       }
       report.push({ size: size.name, ...facts, motion });

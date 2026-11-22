@@ -249,3 +249,19 @@ test("the previous-months table says it is reconstructed, and assumed rates are 
   assert.match(html, /assumed/);
   assert.match(html, new RegExp(monthLabelOf(-1, Date.now())));
 });
+
+test("the Device energy page places every part and the parts share one statistics load", async () => {
+  const hass = hassFor({ a: { name: "A", kind: "energy", hour: one } });
+  const page = new (globalThis.customElements.get("thermowatt-device-energy-page"))();
+  page.setConfig(config({ tag: "page", part: "ignored" }));
+  page.hass = hass;
+  await settle();
+  const parts = page._children.map((child) => child._config.part);
+  assert.deepEqual(parts, ["balance", "summary", "week", "monthly", "daily", "history"]);
+  const loadSize = hass.log.length;
+  assert.ok(loadSize > 0 && loadSize <= 8, `one load, ${loadSize} requests`);
+  page.hass = hass; // another state update: no further statistics queries
+  await settle();
+  assert.equal(hass.log.length, loadSize);
+  assert.throws(() => new (globalThis.customElements.get("thermowatt-device-energy-page"))().setConfig({ rates: [] }), /rates/);
+});

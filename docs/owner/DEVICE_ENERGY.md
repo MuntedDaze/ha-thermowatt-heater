@@ -18,10 +18,13 @@ whole-house Energy view and **read-only**: it never sends a command and never po
 
 ## Layout
 
-On a wide screen the view is three columns (summary and whole-house balance | today, month to date and
-previous months | charts, per-device history and the last seven days); on a phone it is one column. These are three
-instances of the same card with a `part` option (`summary`, `balance`, `daily`, `monthly`, `history`; default
-`all`), and they **share one statistics load**, so the page makes the same number of queries as a single card would.
+The view is one full-width **page card** (`thermowatt-device-energy-page`, in a panel view) that arranges six
+parts with container queries: on a wide screen the whole-house **balance hero** (two columns) sits beside a column
+with the **summary**, the **last seven days** and the **month to date**, with the **Today** table and the
+**monthly history** underneath; on a laptop it is two columns and on a phone one. The parts are instances of the
+same card with a `part` option (`balance`, `summary`, `week`, `monthly`, `daily`, `history`; default `all`) and
+they **share one statistics load**, so the page makes the same number of queries as a single card would. (A
+panel view is used because Home Assistant's sections grid does not always honour a wide section.)
 
 ## Discovery (nothing hardcoded)
 

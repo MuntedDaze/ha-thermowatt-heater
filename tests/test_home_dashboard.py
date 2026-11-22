@@ -62,13 +62,13 @@ def view(data, path):
     return next(v for v in data["views"] if v["path"] == path)
 
 
-def stack(data, heading_text, path="home"):
+def stack(data, name, path="home"):
+    """The section holding one bathroom's panel and its controls."""
     return next(
-        c
-        for c in walk(view(data, path))
-        if c.get("type") == "vertical-stack"
-        and c["cards"][0].get("type") == "heading"
-        and c["cards"][0]["heading"] == heading_text
+        sec
+        for sec in view(data, path)["sections"]
+        if sec["cards"][0].get("type") == "custom:thermowatt-panel-card"
+        and f"'title': {json.dumps(name)}," in sec["cards"][0].get("template", "")
     )
 
 
@@ -107,6 +107,10 @@ SUPPORTED = {
     "statistic",
     "custom:thermowatt-power-flow-card",
     "custom:thermowatt-device-energy-card",
+    "custom:thermowatt-device-energy-page",
+    "custom:thermowatt-panel-card",
+    "custom:thermowatt-lights-card",
+    "logbook",
 }
 
 
@@ -117,40 +121,68 @@ def test_every_card_is_a_supported_native_or_declared_card(home, native, generic
             if kind and (
                 "entity" in item or "cards" in item or "card" in item or "content" in item
             ):
-                assert kind in SUPPORTED | {"sections"}, kind
+                assert kind in SUPPORTED | {"sections", "panel"}, kind
             if kind == "conditional":
                 assert item["conditions"] and item["card"]["type"] in SUPPORTED
             if kind == "tile":
                 assert item.get("entity"), item  # a tile card without an entity is a config error
 
 
-def test_home_layout_is_compact_and_follows_the_preferred_arrangement(home):
+PANEL = "custom:thermowatt-panel-card"
+LIGHTS = "custom:thermowatt-lights-card"
+
+
+def panel_json(card, states, now=None):
+    """Render a panel card's template like Home Assistant and return the model the card lays out."""
+    result = render(card["template"], states, now or NOW)
+    return result if isinstance(result, dict) else json.loads(result)
+
+
+def test_home_layout_is_designed_around_large_cards(home):
     data, _ = home
     h = view(data, "home")
-    assert h["type"] == "sections" and h["max_columns"] == 4 and h["dense_section_placement"]
-    sections = h["sections"]
-    # 4 columns: [flow | energy | hot water | weather] then [Main | Ensuite | lights and doors x2]
-    assert [s.get("column_span", 1) for s in sections] == [1, 1, 1, 1, 1, 1, 2]
-    flow, energy, hot, weather, main, ensuite, lights_doors = sections
+    assert h["type"] == "sections" and h["max_columns"] == 3 and h["dense_section_placement"]
+    # three columns, two rows: [energy | hot water | weather and doors] [Main | Ensuite | lights]
+    assert [s.get("column_span", 1) for s in h["sections"]] == [1, 1, 1, 1, 1, 1]
+    flow, hot, weather, main, ensuite, lights = h["sections"]
     assert flow["cards"][0]["type"] == "custom:thermowatt-power-flow-card"
-    assert any(c.get("type") == "statistic" for c in energy["cards"])
-    assert hot["cards"][0]["type"] == "markdown"
-    assert weather["cards"][0]["type"] == "weather-forecast"
-    # both bathrooms side by side beneath the energy information, one column each
-    names = [s["cards"][0]["cards"][0]["heading"] for s in (main, ensuite)]
-    assert names == ["Main Bathroom", "Ensuite"]
-    assert all(s["cards"][0]["grid_options"]["columns"] == 12 for s in (main, ensuite))
-    headings = [c.get("heading") for c in lights_doors["cards"] if c.get("type") == "heading"]
-    assert headings == ["Lights and doors"]
-    # no graphs or long explanations crowd the main screen
-    assert not [c for c in walk(h) if c.get("type") == "history-graph"]
-    assert not [c for c in walk(h) if c.get("type") == "entities"]
+    assert set(flow["cards"][0]["today"]) == {"solar", "import", "export"}  # today's figures strip
+    assert (
+        hot["cards"][0]["type"] == PANEL and "'title': 'Hot water'" in hot["cards"][0]["template"]
+    )
+    assert (
+        weather["cards"][0]["type"] == "weather-forecast" and weather["cards"][1]["type"] == PANEL
+    )
+    for section, name in ((main, "Main Bathroom"), (ensuite, "Ensuite")):
+        assert section["cards"][0]["type"] == PANEL
+        assert f"'title': {json.dumps(name)}" in section["cards"][0]["template"]
+    assert lights["cards"][0]["type"] == LIGHTS
+    # large display cards, native controls: no graphs, entity lists or markdown crowd the main screen
+    assert not [c for c in walk(h) if c.get("type") in ("history-graph", "entities", "markdown")]
+
+
+def test_tabs_show_text_labels_because_icons_hide_the_title(home, native):
+    for data, _ in (home, native):
+        assert [v["title"] for v in data["views"]] == [
+            "Home",
+            "Energy",
+            "Hot water",
+            "Bathrooms",
+            "Doors",
+            "System",
+            "Device energy",
+        ]
+        assert not [v for v in data["views"] if "icon" in v]
 
 
 def test_layout_is_responsive_and_uses_no_fixed_pixel_sizes(home):
     data, _ = home
     for v in data["views"]:
-        assert v["type"] == "sections" and v["max_columns"] in (3, 4)
+        assert v["type"] in ("sections", "panel")
+        if v["type"] == "panel":
+            assert len(v["cards"]) == 1  # one full-width page card
+            continue
+        assert v["max_columns"] in (2, 3, 4)
         for sec in v["sections"]:
             assert sec.get("column_span", 1) <= v["max_columns"]
     text = (ROOT / "homeowner/home.yaml").read_text(encoding="utf-8")
@@ -265,7 +297,7 @@ def test_dashboard_never_commands_a_physical_relay_or_the_original_devices(home)
 def test_hot_water_override_toggle_is_state_driven_and_confirmed(home):
     data, _ = home
     on, off, unknown, unavailable_now = [
-        c for c in view(data, "home")["sections"][2]["cards"] if c["type"] == "conditional"
+        c for c in view(data, "home")["sections"][1]["cards"] if c["type"] == "conditional"
     ]
     # holiday / disabled: the controller would refuse, so the tile is inert instead of misleading
     assert unavailable_now["card"]["tap_action"] == {"action": "more-info"}
@@ -415,7 +447,7 @@ NOW = datetime(2026, 11, 22, 14, 10, tzinfo=HOBART)
 
 def hot_water_text(**changes):
     states = {**SHIM_ENTITIES, **changes}
-    card = view(build.build_dashboard()[0], "home")["sections"][2]["cards"][0]
+    card = view(build.build_dashboard(custom=False)[0], "home")["sections"][2]["cards"][0]
     return render(card["content"], states, NOW)
 
 
@@ -461,7 +493,7 @@ def test_missing_values_show_a_dash_never_a_guess():
 def test_hot_water_diagnostics_show_plain_english_not_internal_codes():
     card = [
         c
-        for c in walk(view(build.build_dashboard()[0], "hot-water"))
+        for c in walk(view(build.build_dashboard(custom=False)[0], "hot-water"))
         if c.get("type") == "markdown" and "Why this decision" in c["content"]
     ][0]
     states = {
@@ -483,7 +515,9 @@ def test_hot_water_diagnostics_show_plain_english_not_internal_codes():
 
 def test_system_status_uses_plain_english_without_hiding_faults():
     card = [
-        c for c in walk(view(build.build_dashboard()[0], "system")) if c.get("type") == "markdown"
+        c
+        for c in walk(view(build.build_dashboard(custom=False)[0], "system"))
+        if c.get("type") == "markdown"
     ][0]
     base = {
         "sensor.thermann_shadow_controller_fault": "none",
@@ -524,18 +558,41 @@ def test_system_status_uses_plain_english_without_hiding_faults():
 def test_doors_view_shows_plain_status_and_never_implies_locked(home):
     data, _ = home
     doors = view(data, "doors")
-    tiles = [
-        c for c in walk(doors) if c.get("type") == "tile" and c.get("state_content") == "summary"
-    ]
-    assert {t["entity"] for t in tiles} == {
-        "sensor.tapo_smart_controller_garage_door_status",
-        "sensor.tapo_smart_controller_front_door_lock_status",
+    panel = next(c for c in walk(doors) if c.get("type") == PANEL)
+    states = {
+        "sensor.tapo_smart_controller_garage_door_position": "Closed",
+        "sensor.tapo_smart_controller_garage_door_status": {
+            "state": "confirmed_closed",
+            "attributes": {"summary": "Closed — closed-position contact is made"},
+        },
+        "binary_sensor.tapo_smart_controller_front_door_open": "off",
+        "sensor.tapo_smart_controller_front_door_lock_status": {
+            "state": "lock_integration_unavailable",
+            "attributes": {"summary": "Closed — lock status not available through Home Assistant"},
+        },
     }
-    text = json.dumps(doors)
-    assert "lock_integration_unavailable" not in text
-    assert "does not mean the front door is locked" in text
+    model = panel_json(panel, states)
+    garage, front = model["stats"]
+    assert (garage["value"], garage["tone"]) == ("Closed", "ok")
+    assert garage["detail"] == "closed-position contact is made"
+    assert (front["value"], front["tone"]) == ("Closed", "ok")
+    assert front["detail"] == "lock status not available through Home Assistant"
+    assert model["badge"]["text"] == "Monitoring only"
+    assert "does not mean the front door is locked" in model["lines"][0]
+    text = json.dumps(model)
+    assert "lock_integration_unavailable" not in text and "Locked" not in text
+    # an open or unknown contact is never shown as healthy
+    open_front = panel_json(
+        panel, {**states, "binary_sensor.tapo_smart_controller_front_door_open": "on"}
+    )
+    assert open_front["stats"][1]["value"] == "Open" and open_front["stats"][1]["tone"] == "warn"
+    unknown = panel_json(panel, {})
+    assert [s["value"] for s in unknown["stats"]] == ["Unknown", "Unknown"]
+    assert {s["tone"] for s in unknown["stats"]} == {"idle"}
     graph = next(c for c in walk(doors) if c.get("type") == "history-graph")
     assert graph["entities"] == ["binary_sensor.garage_door", "binary_sensor.front_door_door"]
+    log = next(c for c in walk(doors) if c.get("type") == "logbook")
+    assert log["target"]["entity_id"] == graph["entities"]  # recent activity, read only
 
 
 # ------------------------------------------------------------------ mappings
@@ -544,8 +601,7 @@ def test_homeowner_profile_is_fully_mapped_and_verified(home):
     mapping = ent.mapping
     assert mapping["profile"] == "homeowner" and mapping["energy"]["battery_present"] is False
     assert mapping["weather"] == {"entity": "weather.home", "status": "verified"}
-    assert mapping["lights"]["dining_room"]["entity"] == "light.dining_room_light"
-    assert mapping["lights"]["living_room"]["entity"] == "light.living_room_light"
+    assert mapping["lights"]["discover"] is True
     assert ent.unresolved == []
     assert "mapping needed" not in json.dumps(data)
     weather = next(c for c in walk(data) if c.get("type") == "weather-forecast")
@@ -553,17 +609,41 @@ def test_homeowner_profile_is_fully_mapped_and_verified(home):
     assert (
         weather["forecast_type"] == "daily" and weather["show_current"] and weather["show_forecast"]
     )
-    light_tiles = [
+    # lights are discovered at run time: no light tile and no light entity is hardcoded in the dashboard
+    assert not [c for c in walk(data) if c.get("entity", "").startswith("light.")]
+    lights = next(c for c in walk(data) if c.get("type") == LIGHTS)
+    assert lights["discover"] is True and lights["exclude_label"] == "hide_from_dashboard"
+    assert lights["names"] == {
+        "light.dining_room_light": "Dining room",
+        "light.living_room_light": "Living room",
+    }
+    assert "exclude" not in lights
+
+
+def test_lights_exclusions_come_from_the_mapping():
+    mapping = build.load_mapping()
+    mapping["lights"]["exclude"] = ["light.guest_lamp"]
+    mapping["lights"]["exclude_label"] = "not_on_dashboard"
+    data, _ = build.build_dashboard(True, mapping)
+    lights = next(c for c in walk(data) if c.get("type") == LIGHTS)
+    assert (
+        lights["exclude"] == ["light.guest_lamp"] and lights["exclude_label"] == "not_on_dashboard"
+    )
+    mapping["lights"]["discover"] = False
+    off, _ = build.build_dashboard(True, mapping)
+    assert next(c for c in walk(off) if c.get("type") == LIGHTS)["discover"] is False
+
+
+def test_the_no_custom_card_fallback_shows_the_named_lights_as_native_tiles(native):
+    data, _ = native
+    tiles = [
         c
         for c in walk(data)
         if c.get("type") == "tile" and c.get("entity", "").startswith("light.")
     ]
-    assert {t["entity"] for t in light_tiles} == {
-        "light.dining_room_light",
-        "light.living_room_light",
-    }
-    for item in light_tiles:
-        assert item["features"] == [{"type": "light-brightness"}] and item["color"] == "blue"
+    assert {t["entity"] for t in tiles} == {"light.dining_room_light", "light.living_room_light"}
+    for item in tiles:
+        assert item["features"] == [{"type": "light-brightness"}]
         assert item["tap_action"]["perform_action"] == "light.toggle"
 
 
@@ -572,13 +652,11 @@ def test_generic_profile_assumes_nothing_about_this_household(generic):
     mapping = ent.mapping
     assert mapping["profile"] == "generic"
     assert mapping["energy"]["battery_present"] == "unknown"
-    assert mapping["weather"]["entity"] == "" and mapping["lights"]["dining_room"]["entity"] == ""
+    assert mapping["weather"]["entity"] == "" and mapping["lights"]["names"] == {}
     assert sorted(set(ent.unresolved)) == [
         "device_energy.rates",
-        "lights.dining_room",
-        "lights.living_room",
         "weather",
-    ]
+    ]  # lights are discovered
     text = json.dumps(data)
     assert "weather.home" not in text and "light.dining_room_light" not in text
     assert "binary_sensor.garage_door" not in text
@@ -920,30 +998,42 @@ def test_template_unique_ids_are_stable_for_an_in_place_upgrade():
     } <= set(owner_package())  # every ID the installed package already created still exists
 
 
-def test_home_shows_collecting_text_instead_of_unavailable_tiles(home):
+def test_energy_panel_shows_collecting_text_instead_of_unavailable_tiles(home):
     data, _ = home
-    energy = view(data, "home")["sections"][1]["cards"]
-    ready = [
-        c
-        for c in energy
-        if c.get("type") == "conditional" and c["conditions"][0].get("state") == "ready"
+    panel = next(c for c in walk(view(data, "energy")) if c.get("type") == PANEL)
+    collecting = panel_json(panel, {STATUS: "collecting_first_day"}, DAY_NOW)
+    assert collecting["badge"] == {"text": "Collecting daily data", "tone": "info"}
+    assert collecting["stats"] == []  # nothing is shown as an unavailable tile
+    assert "after the next midnight" in collecting["lines"][0]
+    assert [r["label"] for r in collecting["groups"][0]["rows"]] == [
+        "Grid import since the meter started",
+        "Grid export since the meter started",
+        "Household, integrated from power (estimate)",
     ]
-    waiting = [
-        c
-        for c in energy
-        if c.get("type") == "conditional" and c["conditions"][0].get("state_not") == "ready"
+    unavailable = panel_json(panel, {STATUS: "sources_unavailable"}, DAY_NOW)
+    assert unavailable["badge"]["tone"] == "bad" and "withheld, not zero" in unavailable["lines"][0]
+    inconsistent = panel_json(panel, {STATUS: "inconsistent"}, DAY_NOW)
+    assert "export exceeds generation" in inconsistent["lines"][0]
+    ready = panel_json(
+        panel,
+        {
+            STATUS: "ready",
+            "sensor.home_consumption_today": "14.834",
+            "sensor.home_solar_used_directly_today": "7.39",
+            "sensor.home_self_consumption_today": "80.2",
+        },
+        DAY_NOW,
+    )
+    assert ready["badge"]["text"] == "Complete day"
+    assert [(s["label"], s["value"]) for s in ready["stats"]] == [
+        ("Household today", "14.83 kWh"),
+        ("Solar used directly", "7.39 kWh"),
+        ("Self-consumption", "80 %"),
     ]
-    assert len(ready) == 3 and len(waiting) == 1
-    content = waiting[0]["card"]["content"]
-    assert render(content, {STATUS: "collecting_first_day"}, DAY_NOW).startswith(
-        "**Collecting daily data.**"
-    )
-    assert render(content, {STATUS: "sources_unavailable"}, DAY_NOW).startswith(
-        "**Energy readings unavailable.**"
-    )
-    # import/export come from existing long-term statistics, available from day one
-    stats = [c["entity"] for c in energy if c.get("type") == "statistic"]
-    assert stats == [IMPORT_TOTAL, EXPORT_TOTAL]
+    assert ready["groups"] == [] and ready["lines"] == []
+    # missing figures are dashes, never zero
+    blank = panel_json(panel, {STATUS: "ready"}, DAY_NOW)
+    assert {s["value"] for s in blank["stats"]} == {"—"}
 
 
 # ------------------------------------------------------------------ the custom card
@@ -974,15 +1064,14 @@ def device_card(data):
     return next(
         c
         for c in walk(view(data, "device-energy"))
-        if c.get("type") == "custom:thermowatt-device-energy-card"
+        if c.get("type") == "custom:thermowatt-device-energy-page"
     )
 
 
-def test_device_energy_is_the_seventh_view_with_an_energy_icon(home):
+def test_device_energy_is_the_seventh_view(home):
     data, _ = home
     v = data["views"][-1]
-    assert v["path"] == "device-energy" and v["title"] == "Device Energy"
-    assert v["icon"] == "mdi:meter-electric"
+    assert v["path"] == "device-energy" and v["title"] == "Device energy"
     assert len(data["views"]) == 7
 
 
@@ -1030,9 +1119,7 @@ def test_no_device_list_or_device_entity_is_hardcoded(home):
         "rates",
         "platforms",
         "history_months",
-        "grid_options",
         "timezone",
-        "part",
         "house",
     }
     assert card["platforms"] == [
@@ -1138,11 +1225,18 @@ def test_duplicate_rate_dates_are_rejected_and_valid_schedules_are_kept_as_given
     assert build._validated_rates(schedule) == schedule
 
 
-def test_device_energy_is_split_into_parts_that_use_the_screen_width(home):
+def test_device_energy_is_one_full_width_page_card_in_a_panel_view(home):
+    """A sections grid does not always honour a wide section, so the page lays its own parts out."""
     data, _ = home
-    sections = view(data, "device-energy")["sections"]
-    parts = [[c["part"] for c in section["cards"]] for section in sections]
-    assert parts == [["summary", "balance"], ["daily", "monthly"], ["history"]]
+    v = view(data, "device-energy")
+    assert v["type"] == "panel" and "sections" not in v
+    assert [c["type"] for c in v["cards"]] == ["custom:thermowatt-device-energy-page"]
+    assert "part" not in v["cards"][0] and "grid_options" not in v["cards"][0]
+    js = (ROOT / "homeowner/www/thermowatt-power-flow-card.js").read_text(encoding="utf-8")
+    page = js[js.index("class ThermowattDeviceEnergyPage") :]
+    for part in ("balance", "summary", "week", "monthly", "daily", "history"):
+        assert f'["{part}"' in page  # every part is placed on the page
+    assert "@container" in page  # responsive by container query, not by the sections grid
 
 
 def test_whole_house_sources_come_from_the_mapping_not_from_code(home):
@@ -1155,11 +1249,6 @@ def test_whole_house_sources_come_from_the_mapping_not_from_code(home):
         "export": energy["grid_export_total"]["entity"],
         "battery_present": False,  # the owner's confirmed battery-free installation
     }
-    # every part of the view shares one configuration (one statistics load)
-    parts = [c for c in walk(view(data, "device-energy")) if c.get("type") == DEVICE_ENERGY_TYPE]
-    assert {
-        json.dumps({k: v for k, v in c.items() if k != "part"}, sort_keys=True) for c in parts
-    } == {json.dumps({k: v for k, v in parts[0].items() if k != "part"}, sort_keys=True)}
 
 
 def test_house_battery_presence_is_passed_through_exactly():
@@ -1220,3 +1309,226 @@ def test_unverified_inverter_mappings_are_never_used_for_the_balance():
     }
     house = build._house_sources(mapping)
     assert house == {"solar": "sensor.solar", "import": "sensor.import", "battery_present": False}
+
+
+# ------------------------------------------------------------------ the display panels (template -> JSON)
+HW_STATES = {
+    **SHIM_ENTITIES,
+}
+
+
+def test_hot_water_panel_is_large_type_plain_english(home):
+    data, _ = home
+    card = view(data, "home")["sections"][1]["cards"][0]
+    m = panel_json(card, HW_STATES)
+    assert m["title"] == "Hot water" and m["badge"] == {"text": "Automatic", "tone": "info"}
+    assert m["hero"] == {
+        "label": "Tank bottom",
+        "value": "52.4",
+        "unit": "°C",
+        "caption": "Updated 7 min ago · last poll 14:05",
+    }
+    by_label = {s["label"]: s for s in m["stats"]}
+    assert (
+        by_label["Heater"]["value"] == "Manual" and by_label["Heater"]["detail"] == "Target 62 °C"
+    )
+    assert by_label["Tariff"]["value"] == "Off-peak" and by_label["Tariff"]["tone"] == "ok"
+    assert by_label["Solar boost"]["value"] == "Idle"
+    assert by_label["Next"]["value"] == "Wait for off peak"
+    assert by_label["Next"]["detail"] == "Next poll 14:30"
+    assert "Override ends" not in by_label  # never "Unknown" during normal automatic operation
+    assert "_" not in json.dumps(m)  # no internal identifiers
+    assert m["columns"] == 2
+
+
+def test_hot_water_panel_reported_and_desired_targets_and_override_expiry(home):
+    data, _ = home
+    card = view(data, "home")["sections"][1]["cards"][0]
+    differ = panel_json(
+        card, {**HW_STATES, "sensor.thermann_shadow_desired_thermostat_temperature": "45.0"}
+    )
+    assert {s["label"]: s for s in differ["stats"]}["Heater"][
+        "detail"
+    ] == "Target 62 °C · desired 45 °C"
+    active = panel_json(
+        card,
+        {
+            **HW_STATES,
+            MODE: "guest",
+            "sensor.thermann_shadow_guest_mode_ends": "2026-11-23T02:10:00+11:00",
+        },
+    )
+    assert active["badge"] == {"text": "12 h override", "tone": "warn"}
+    assert {s["label"]: s for s in active["stats"]}["Override ends"]["value"] == "02:10"
+    peak = panel_json(card, {**HW_STATES, "sensor.thermann_shadow_current_tariff": "peak"})
+    assert {s["label"]: s for s in peak["stats"]}["Tariff"]["tone"] == "warn"
+
+
+def test_hot_water_panel_missing_values_are_dashes_never_a_guess(home):
+    data, _ = home
+    card = view(data, "home")["sections"][1]["cards"][0]
+    m = panel_json(
+        card,
+        {
+            **HW_STATES,
+            "sensor.thermann_shadow_bottom_temperature": "unavailable",
+            "sensor.thermann_shadow_status_age": "unknown",
+            "sensor.home_last_successful_poll": "unavailable",
+            MODE: "unavailable",
+        },
+    )
+    assert m["hero"]["value"] is None  # the card shows a dash, not 0
+    assert m["hero"]["caption"] == "Age unknown · last poll —"
+    assert m["badge"] == {"text": "Status unknown", "tone": "idle"}
+
+
+def test_diagnostics_panel_shows_plain_english_not_internal_codes(home):
+    data, _ = home
+    card = next(
+        c
+        for c in walk(view(data, "hot-water"))
+        if c.get("type") == PANEL and "Plan and diagnostics" in c["template"]
+    )
+    states = {
+        "sensor.thermann_shadow_current_heating_plan": "Heat to 62 °C before 16:00",
+        "sensor.thermann_shadow_next_intended_action": "wait_for_off_peak",
+        "sensor.thermann_shadow_next_heating_start": "2026-11-22T23:00:00+11:00",
+        "sensor.thermann_shadow_solar_boost_status": "no_qualified_session",
+        "sensor.thermann_shadow_why_thermowatt_made_this_decision": "peak_no_grid_heating",
+        "sensor.thermann_shadow_last_command_result": "confirmed",
+        "sensor.thermann_shadow_cloud_requests_in_last_24_hours": "31",
+    }
+    rows = {r["label"]: r["value"] for r in panel_json(card, states)["rows"]}
+    assert rows["Next action"] == "Wait for off peak" and rows["Next heating start"] == "23:00"
+    assert (
+        rows["Why this decision"] == "Peak no grid heating"
+        and rows["Cloud requests in 24 h"] == "31"
+    )
+    assert "_" not in json.dumps(rows)
+    blank = {r["label"]: r["value"] for r in panel_json(card, {})["rows"]}
+    assert blank["Next heating start"] == "none planned" and blank["Plan"] is None
+
+
+def test_system_panel_uses_plain_english_and_tones_without_hiding_faults(home):
+    data, _ = home
+    card = next(
+        c for c in walk(view(data, "system")) if c.get("type") == PANEL and c.get("template")
+    )
+    base = {
+        "sensor.thermann_shadow_controller_fault": "none",
+        "sensor.thermann_shadow_cloud_health": "ok",
+        CONTROL: "observing",
+        "sensor.tapo_smart_controller_electricity_tariff_status": "off_peak",
+        "sensor.tapo_smart_controller_active_health_warnings": "0",
+        "binary_sensor.tapo_smart_controller_controller_health_problem": "off",
+        "binary_sensor.tapo_smart_controller_simulation_mode_active": "off",
+    }
+
+    def rows(states):
+        m = panel_json(card, states)
+        return {r["label"]: r for g in m["groups"] for r in g["rows"]}
+
+    ok = rows(base)
+    assert ok["Cloud connection"]["value"] == "Connected" and ok["Cloud connection"]["tone"] == "ok"
+    assert ok["Heating control problem"]["value"] == "No problems detected"
+    assert ok["Supervision"]["value"] == "Observing: checking the heater before acting"
+    assert ok["Health"]["value"] == "No problems detected (0 active warnings)"
+    assert ok["Mode"]["value"] == "Live control" and ok["Mode"]["tone"] == "ok"
+    assert ok["Tariff read by the controller"]["value"] == "Off-peak"
+    assert "off_peak" not in json.dumps(ok)
+    bad = rows(
+        {
+            **base,
+            "sensor.thermann_shadow_controller_fault": "off_restoration_unconfirmed",
+            "sensor.thermann_shadow_cloud_health": "auth_locked",
+            CONTROL: "fault_locked",
+            "binary_sensor.tapo_smart_controller_controller_health_problem": "on",
+            "binary_sensor.tapo_smart_controller_simulation_mode_active": "on",
+        }
+    )
+    assert bad["Heating control problem"]["value"] == "Off restoration unconfirmed"
+    assert bad["Heating control problem"]["tone"] == "bad"  # a fault stays a fault
+    assert (
+        bad["Cloud connection"]["tone"] == "bad"
+        and "Sign-in locked" in bad["Cloud connection"]["value"]
+    )
+    assert (
+        bad["Supervision"]["value"] == "Fault: needs acknowledgement"
+        and bad["Supervision"]["tone"] == "bad"
+    )
+    assert bad["Health"]["tone"] == "bad" and bad["Health"]["value"].startswith("Problem reported")
+    assert bad["Mode"]["tone"] == "warn" and "no devices are switched" in bad["Mode"]["value"]
+    unknown = rows({**base, "sensor.thermann_shadow_controller_fault": "unavailable"})
+    assert (
+        unknown["Heating control problem"]["value"] == "Unknown"
+    )  # unknown is never shown as healthy
+    assert unknown["Heating control problem"]["tone"] == "idle"
+    nothing = rows({})
+    assert {nothing[k]["tone"] for k in ("Cloud connection", "Supervision", "Health", "Mode")} == {
+        "idle"
+    }
+
+
+def test_bathroom_panel_shows_two_large_numbers_and_the_shower_status(home):
+    data, _ = home
+    card = stack(data, "Main Bathroom")["cards"][0]
+    states = {
+        "sensor.tapo_smart_controller_main_bathroom_humidity": "67.3",
+        "sensor.tapo_smart_controller_main_bathroom_temperature": "24.84",
+        "binary_sensor.tapo_smart_controller_main_bathroom_shower_detected": "on",
+    }
+    m = panel_json(card, states)
+    assert m["title"] == "Main Bathroom"
+    assert m["badge"]["text"] == "Shower detected"
+    hum, temp = m["heroes"]
+    assert (hum["value"], hum["unit"]) == ("67", "%") and (temp["value"], temp["unit"]) == (
+        "24.8",
+        "°C",
+    )
+    off = panel_json(
+        card, {**states, "binary_sensor.tapo_smart_controller_main_bathroom_shower_detected": "off"}
+    )
+    assert off["badge"]["text"] == "No shower detected"
+    blank = panel_json(card, {})
+    assert blank["badge"]["text"] == "Shower status unknown"
+    assert [h["value"] for h in blank["heroes"]] == [None, None]  # dashes, never zero
+
+
+def test_settings_panel_only_navigates(home):
+    data, _ = home
+    panel = next(
+        c for c in walk(view(data, "system")) if c.get("type") == PANEL and c.get("actions")
+    )
+    assert [a["path"] for a in panel["actions"]] == [
+        "/config/integrations/integration/thermann_shadow",
+        "/config/integrations/integration/tapo_smart_controller",
+    ]
+    assert all(a["path"].startswith("/") for a in panel["actions"])
+
+
+def test_display_cards_never_call_services_or_poll():
+    js = (ROOT / "homeowner/www/thermowatt-power-flow-card.js").read_text(encoding="utf-8")
+    panel = js[js.index("class ThermowattPanelCard") : js.index("export function discoverLights")]
+    for forbidden in ("callService", "callWS", "fetch(", "setInterval"):
+        assert forbidden not in panel, forbidden
+    # the only services the lights card may call are light.toggle and light.turn_on, on a tap or a slider move
+    lights = js[
+        js.index("class ThermowattLightsCard") : js.index(
+            'if (typeof customElements !== "undefined") {\n  if (!customElements.get("thermowatt-panel-card"))'
+        )
+    ]
+    assert set(re.findall(r'callService\("(\w+)", "(\w+)"', lights)) == {
+        ("light", "toggle"),
+        ("light", "turn_on"),
+    }
+
+
+def test_panel_templates_are_valid_for_every_view(home, generic):
+    """Every template renders to a JSON object (or the object Home Assistant parses) with no stray markup."""
+    for data, _ in (home, generic):
+        for card in walk(data):
+            if card.get("type") == PANEL and card.get("template"):
+                for states in ({}, SHIM_ENTITIES):
+                    model = panel_json(card, states)
+                    assert isinstance(model, dict) and model["title"]
+                    assert "{{" not in json.dumps(model) and "{%" not in json.dumps(model)

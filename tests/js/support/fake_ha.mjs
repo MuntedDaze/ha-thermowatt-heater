@@ -4,11 +4,24 @@ import assert from "node:assert/strict";
 globalThis.window = globalThis;
 class FakeElement {
   attachShadow() {
-    this.sr = { innerHTML: "", listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } };
+    const stubs = {};
+    this.sr = {
+      innerHTML: "",
+      listeners: {},
+      addEventListener(type, fn) {
+        this.listeners[type] = fn;
+      },
+      // enough of a shadow root for the page card, which places child cards in named slots
+      querySelector(selector) {
+        stubs[selector] = stubs[selector] || { children: [], appendChild(child) { this.children.push(child); }, textContent: "" };
+        return stubs[selector];
+      },
+    };
     return this.sr;
   }
 }
 globalThis.HTMLElement = FakeElement;
+globalThis.document = { createElement: (tag) => new (globalThis.customElements.get(tag))() };
 const registry = new Map();
 globalThis.customElements = { get: (n) => registry.get(n), define: (n, c) => registry.set(n, c) };
 export const mod = await import("../../../homeowner/www/thermowatt-power-flow-card.js");
@@ -117,3 +130,6 @@ export async function atTime(ms, fn) {
 export function click(card, selector, dataset) {
   card.sr.listeners.click({ target: { closest: (query) => (query.includes(selector) ? { dataset } : null) } });
 }
+
+export const Lights = registry.get("thermowatt-lights-card");
+export const Panel = registry.get("thermowatt-panel-card");

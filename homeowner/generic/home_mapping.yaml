@@ -16,9 +16,13 @@ energy:
   # Unknown until you confirm: set false (no battery) to enable the derived daily figures.
   battery_present: unknown
 weather: {entity: "", status: unmapped}
+# Lights are discovered at run time (nothing to list). Hide one with the Home Assistant label below, or
+# list its entity ID in `exclude`. `names` renames lights (and is the list the no-custom-card fallback shows).
 lights:
-  dining_room: {entity: "", status: unmapped}
-  living_room: {entity: "", status: unmapped}
+  discover: true
+  exclude: []
+  exclude_label: hide_from_dashboard
+  names: {}
 bathrooms:
   - name: Main Bathroom
     original: {}      # leave empty to chart the Tapo controller's own sensors
