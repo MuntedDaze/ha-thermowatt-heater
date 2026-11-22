@@ -54,8 +54,12 @@ async function main() {
       if (await confirmIfAsked()) confirmationShown = true;
       await page.waitForTimeout(800);
       const recorded = await calls();
-      if (recorded.length || confirmationShown) return { calls: recorded, confirmationShown };
+      if (recorded.length || confirmationShown) {
+        await page.keyboard.press("Escape"); // close any more-info dialog the tap opened
+        return { calls: recorded, confirmationShown };
+      }
     }
+    await page.keyboard.press("Escape"); // an inert tile opens more-info (read-only): close it
     return { calls: await calls(), confirmationShown };
   };
   const confirmIfAsked = async () => {
