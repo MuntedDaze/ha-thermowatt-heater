@@ -1460,23 +1460,43 @@ views:
       heading: Plan and diagnostics
       heading_style: subtitle
       icon: mdi:text-box-search-outline
-    - type: entities
-      show_header_toggle: false
-      entities:
-      - entity: sensor.thermann_shadow_current_heating_plan
-        name: Plan
-      - entity: sensor.thermann_shadow_next_intended_action
-        name: Next action
-      - entity: sensor.thermann_shadow_next_heating_start
-        name: Next heating start
-      - entity: sensor.thermann_shadow_solar_boost_status
-        name: Solar boost
-      - entity: sensor.thermann_shadow_why_thermowatt_made_this_decision
-        name: Decision evidence
-      - entity: sensor.thermann_shadow_last_command_result
-        name: Last command outcome
-      - entity: sensor.thermann_shadow_cloud_requests_in_last_24_hours
-        name: Cloud requests (24 h)
+    - type: markdown
+      content: '{% set bad = [''unknown'', ''unavailable'', ''none'', ''''] %}
+
+        {% macro nice(v) -%}{{ v | replace(''_'', '' '') | capitalize }}{%- endmacro %}
+
+        {% macro hhmm(v) -%}{% set d = as_datetime(v, none) %}{{ as_local(d).strftime(''%H:%M'')
+        if d is not none else ''—'' }}{%- endmacro %}
+
+        {% set plan = states(''sensor.thermann_shadow_current_heating_plan'') %}
+
+        {% set nxt = states(''sensor.thermann_shadow_next_intended_action'') %}
+
+        {% set start = states(''sensor.thermann_shadow_next_heating_start'') %}
+
+        {% set boost = states(''sensor.thermann_shadow_solar_boost_status'') %}
+
+        {% set why = states(''sensor.thermann_shadow_why_thermowatt_made_this_decision'') %}
+
+        {% set last = states(''sensor.thermann_shadow_last_command_result'') %}
+
+        {% set reqs = states(''sensor.thermann_shadow_cloud_requests_in_last_24_hours'') %}
+
+        - **Plan** {{ plan if plan not in bad else ''—'' }}
+
+        - **Next action** {{ nice(nxt) if nxt not in bad else ''—'' }}
+
+        - **Next heating start** {{ hhmm(start) if start not in bad else ''none planned'' }}
+
+        - **Solar boost** {{ nice(boost) if boost not in bad else ''—'' }}
+
+        - **Why this decision** {{ nice(why) if why not in bad else ''—'' }}
+
+        - **Last command** {{ nice(last) if last not in bad else ''—'' }}
+
+        - **Cloud requests in 24 h** {{ reqs if reqs not in bad else ''—'' }}
+
+        '
       grid_options:
         columns: 12
   - type: grid

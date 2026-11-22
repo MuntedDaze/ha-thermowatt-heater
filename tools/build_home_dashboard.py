@@ -684,6 +684,40 @@ def system_summary(ent, columns=12):
     return note(text, columns)
 
 
+DIAGNOSTICS_TEMPLATE = """{% set bad = @@BAD@@ %}
+{% macro nice(v) -%}{{ v | replace('_', ' ') | capitalize }}{%- endmacro %}
+{% macro hhmm(v) -%}{% set d = as_datetime(v, none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}
+{% set plan = states('@@PLAN@@') %}
+{% set nxt = states('@@NEXT@@') %}
+{% set start = states('@@START@@') %}
+{% set boost = states('@@BOOST@@') %}
+{% set why = states('@@WHY@@') %}
+{% set last = states('@@LAST@@') %}
+{% set reqs = states('@@REQS@@') %}
+- **Plan** {{ plan if plan not in bad else '—' }}
+- **Next action** {{ nice(nxt) if nxt not in bad else '—' }}
+- **Next heating start** {{ hhmm(start) if start not in bad else 'none planned' }}
+- **Solar boost** {{ nice(boost) if boost not in bad else '—' }}
+- **Why this decision** {{ nice(why) if why not in bad else '—' }}
+- **Last command** {{ nice(last) if last not in bad else '—' }}
+- **Cloud requests in 24 h** {{ reqs if reqs not in bad else '—' }}
+"""
+
+
+def diagnostics_summary(ent, columns=12):
+    text = (
+        DIAGNOSTICS_TEMPLATE.replace("@@BAD@@", BAD)
+        .replace("@@PLAN@@", ent.thermowatt("sensor", "Current heating plan"))
+        .replace("@@NEXT@@", ent.thermowatt("sensor", "Next intended action"))
+        .replace("@@START@@", ent.thermowatt("sensor", "Next heating start"))
+        .replace("@@BOOST@@", ent.thermowatt("sensor", "Solar boost status"))
+        .replace("@@WHY@@", ent.thermowatt("sensor", "Why Thermowatt made this decision"))
+        .replace("@@LAST@@", ent.thermowatt("sensor", "Last command result"))
+        .replace("@@REQS@@", ent.thermowatt("sensor", "Cloud requests in last 24 hours"))
+    )
+    return note(text, columns)
+
+
 # ------------------------------------------------------------------ views
 def view(title, path, icon, sections, max_columns=4):
     return {
@@ -800,30 +834,7 @@ def build_views(ent, custom):
             ),
             section(
                 heading("Plan and diagnostics", "mdi:text-box-search-outline", "subtitle"),
-                {
-                    "type": "entities",
-                    "show_header_toggle": False,
-                    "entities": [
-                        sensor_row(ent.thermowatt("sensor", "Current heating plan"), "Plan"),
-                        sensor_row(ent.thermowatt("sensor", "Next intended action"), "Next action"),
-                        sensor_row(
-                            ent.thermowatt("sensor", "Next heating start"), "Next heating start"
-                        ),
-                        sensor_row(ent.thermowatt("sensor", "Solar boost status"), "Solar boost"),
-                        sensor_row(
-                            ent.thermowatt("sensor", "Why Thermowatt made this decision"),
-                            "Decision evidence",
-                        ),
-                        sensor_row(
-                            ent.thermowatt("sensor", "Last command result"), "Last command outcome"
-                        ),
-                        sensor_row(
-                            ent.thermowatt("sensor", "Cloud requests in last 24 hours"),
-                            "Cloud requests (24 h)",
-                        ),
-                    ],
-                    **span(12),
-                },
+                diagnostics_summary(ent),
             ),
             section(
                 history(

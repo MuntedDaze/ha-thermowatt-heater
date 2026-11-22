@@ -1,94 +1,126 @@
 # Unified Home dashboard
 
-A separate, optional dashboard that combines solar/grid/house power flow, weather, hot water,
-lights, doors and both bathrooms. It does **not** touch the existing Thermowatt or Tapo
-dashboards: install it as a **new** dashboard, check it, and only then (if you want) retire the others.
+A separate, optional dashboard that combines solar/grid/house power flow, weather, hot water, lights, doors
+and both bathrooms. It does **not** touch the existing Thermowatt or Tapo dashboards.
 
-Canonical source: `homeowner/home_mapping.yaml` (entity IDs) + `tools/build_home_dashboard.py`
-(generator). Outputs are committed and checked in CI: `homeowner/home.yaml`,
-`homeowner/home_no_custom_card.yaml`, `homeowner/home_energy_package.yaml`.
-Regenerate: `python tools/build_home_dashboard.py`; verify: `--check`; list entities and
-unresolved mappings: `--report`.
+Screenshots of the real rendered dashboard (a real Home Assistant frontend, synthetic data) are in
+[`screenshots/`](screenshots/): Home at 1920, 1366, 1280 and 390 px (light and dark) and every view at 1920
+and 390 px.
+
+## Files and profiles
+
+| File | Purpose |
+| --- | --- |
+| `homeowner/home_mapping.yaml` | **This household's verified profile** (entity IDs, `battery_present: false`, weather, lights, original bathroom devices, door contacts) |
+| `homeowner/generic/home_mapping.yaml` | **Assumption-free defaults** for anyone else: no battery assumed, no weather, no lights, no device names |
+| `tools/build_home_dashboard.py` | Generator. `--check` (CI), `--report`, or `--mapping FILE --out-dir DIR` for your own profile |
+| `homeowner/home.yaml` | Dashboard (uses `homeowner/www/thermowatt-power-flow-card.js`) |
+| `homeowner/home_no_custom_card.yaml` | Same dashboard with a native power-flow fallback |
+| `homeowner/home_energy_package.yaml` | Optional package: kW sensors, daily energy, status |
+| `homeowner/generic/home.yaml`, `home_energy_package.yaml` | Generic-profile outputs (kept current by CI) |
+
+The committed outputs are generated from the mapping files and checked in CI, so **nothing has to be searched
+and replaced by hand and the generator never needs to be run on your Home Assistant**. Verified owner mappings:
+GoodWe power and energy entities, `weather.home`, `light.dining_room_light`, `light.living_room_light` (both
+dimmable), the original bathroom entities (`sensor.main_temp_humidity`, `sensor.main_temp_temperature`,
+`switch.main_fan`, `switch.main_towel_rail`, and the Ensuite equivalents) and the door contacts
+`binary_sensor.garage_door` / `binary_sensor.front_door_door`. `status` marks each as `verified` (checked against
+this installation's recorder history/registry) or `owner-confirmed` (supplied by the owner).
 
 ## Views
 
 | View | Contents |
 | --- | --- |
-| Home | Power-flow diagram, today's energy, Rokeby weather, compact hot water + 12 h override toggle, dining/living room lights, garage and front-door status, Main Bathroom and Ensuite cards |
-| Energy | Power flow, today's figures, retroactive long-term statistics, 24 h power history |
-| Hot water | Status, hold/resume/override controls (each confirmed), tank history |
-| Bathrooms | Both bathroom cards plus humidity/temperature history; link to the tuning options |
-| Doors | Garage and front-door **monitoring only** |
-| System | Tapo and Thermowatt health and settings links |
+| Home | One screen at 1920x1080: power flow, today's energy, compact hot water + 12 h override, weather, both bathrooms, lights and doors |
+| Energy | Power flow, today's figures, retroactive statistics, raw meters, 24 h power history |
+| Hot water | Same summary, one override control, one hold/resume control, plan and diagnostics, tank history |
+| Bathrooms | Both bathroom cards plus charts of humidity and temperature **and the physical fan and towel relays** (original sensors, so history is not limited to the v0.3.x install date) |
+| Doors | Garage and front door **monitoring only**, plain-English status, contact history |
+| System | Plain-English status of Thermowatt and the Tapo controller, settings links |
 
-Grey = off or inactive, blue = on or active. Tapping a toggle never acts on a stale guess: the
-colour shows the **confirmed** state, and starting heating (towel rail, 12 h override) asks first.
+Grey = off or inactive, blue = on or active. The colour of a control always follows the **observed** state;
+a manual request, a queued request waiting for off-peak and an unknown status each have their own label
+(`Fan: manual / automatic / off / status unknown`) and an unknown status is inert.
 
-## What you must supply once (not guessed)
+## Layout
 
-`python tools/build_home_dashboard.py --report` lists these. Open `homeowner/home_mapping.yaml`:
+Native sections views, no HACS, no theme changes. On a 4-column screen (1920 px) Home is
+`[power flow | energy | hot water | weather]` over `[Main Bathroom | Ensuite | lights and doors (2 columns)]` and
+fills about 57 % of the viewport. At 1366 px it needs a little scrolling (1.14x the viewport), at 1280 px about
+1.4x, and on a phone it is a single readable column. Measured in a real frontend on every CI run (no overlap, no
+horizontal overflow, readable text).
 
-| Key | Why | Find it |
-| --- | --- | --- |
-| `weather.entity` | Rokeby TAS weather | Developer Tools -> States, filter `weather.` (Bureau of Meteorology or Met.no integration) |
-| `lights.dining_room.entity`, `lights.living_room.entity` | the two light toggles | Developer Tools -> States, filter `light.` |
-| `energy.battery_present` | shipped as `unknown`: "solar used directly" and self-consumption stay unavailable until you set `false` (no battery). `true` keeps them withheld (cannot be derived with a battery) | your inverter |
+## Install / upgrade (nothing is overwritten, no integration is reset)
 
-Until set, the card is replaced by a "mapping needed" note. After editing run the generator and
-re-paste the YAML. All GoodWe entities in the file are marked `verified` (live registry, 12 Nov 2026).
+Existing configuration entries, entity IDs, learned baselines, towel schedules and saved options are untouched.
 
-## Install (nothing is overwritten, Home Assistant is not restarted)
+1. **Tapo Smart Controller v0.3.1** (from `MuntedDaze/tapo-smart-controller`): replace the whole
+   `/config/custom_components/tapo_smart_controller/` directory, then **restart Home Assistant** (required).
+   Saved options are kept; open the integration's *Configure* to see the new plain-English screens.
+2. **Power-flow card:** replace `/config/www/thermowatt/thermowatt-power-flow-card.js` with
+   `homeowner/www/thermowatt-power-flow-card.js`. To bypass the browser cache, edit the dashboard resource URL
+   (Settings -> Dashboards -> ⋮ -> Resources) to `/local/thermowatt/thermowatt-power-flow-card.js?v=2`, then
+   hard-refresh. No restart.
+3. **Energy package:** replace `/config/packages/thermowatt_home_energy.yaml` with
+   `homeowner/home_energy_package.yaml`. Run **Developer Tools -> YAML -> Check configuration**, then
+   **Reload template entities**. The daily utility meters and the integration sensor are defined exactly as
+   before, so **no restart is needed** and their accumulated data is kept (unique IDs are unchanged).
+4. **Dashboard:** open `/home-control/` -> ⋮ -> Edit -> ⋮ -> **Raw configuration editor**, replace the content with
+   `homeowner/home.yaml`, save. Only that dashboard changes.
 
-1. **Custom card (recommended, no HACS):** copy `homeowner/www/thermowatt-power-flow-card.js` to
-   `/config/www/thermowatt/`. In **Settings -> Dashboards -> ⋮ -> Resources -> Add resource** use URL
-   `/local/thermowatt/thermowatt-power-flow-card.js`, type **JavaScript module**. Hard-refresh the browser.
-   Without it, use `home_no_custom_card.yaml` (native tiles, no animation).
-2. **New dashboard:** Settings -> Dashboards -> Add dashboard -> *New dashboard from scratch*, title
-   **Home (new)**. Open it -> ⋮ -> Edit -> ⋮ -> **Raw configuration editor**. Paste the contents of
-   `homeowner/home.yaml` (or the no-custom-card file) over the *empty* new dashboard and save.
-3. **Optional energy package** (daily import/export/household/self-consumption figures): save
-   `homeowner/home_energy_package.yaml` as `/config/packages/thermowatt_home_energy.yaml` (packages must
-   already be enabled in `configuration.yaml`: `homeassistant: packages: !include_dir_named packages`), run
-   **Developer Tools -> YAML -> Check configuration**, then reload or restart at a time you choose. Daily meters
-   start counting when installed; the **statistics** cards on the Energy view are retroactive.
-4. Existing integrations and entities are unchanged: do not reinstall or reset either integration. The
-   dashboard needs **Tapo Smart Controller v0.3.0** (entity contract `homeowner/tapo_entity_contract.json`,
-   copied from the Tapo repo `dashboards/home_entity_contract.json`).
-
-Dependencies: Home Assistant 2024.8 or newer (sections view, tile `state_content`, `perform-action`).
-HACS is **not** required. No third-party card is used.
+Dependencies: Home Assistant 2024.8 or newer, Tapo Smart Controller 0.3.1. No HACS cards.
 
 ## Power-flow card
 
-SEMS+-style three nodes: solar top, house bottom left, grid bottom right. Green chevrons = solar supply
-and grid export, orange = grid import, grey and stationary = inactive. Chevron speed is proportional to
-power (3 / kW seconds, limited to 0.5-8 s). The grid label changes between **Grid Import**, **Grid Export**,
-**Grid Idle** and **Grid Unavailable**; values are kW to three decimals. Unavailable, unknown or stale
-(> 15 min) readings show `--`, never zero, and their lines stay grey. Simultaneous solar and import,
-night-time consumption and zero flow are handled; a path is animated only when every measurement it needs is present and the three readings agree (house = solar - export + import within a tolerance), otherwise it stays grey with a "Readings not in sync" note; units must be W or kW; reduced-motion shows static arrows that still point in the flow direction (see `tests/js/power_flow_card.test.mjs`). It is a single
-dependency-free file using SVG, redraws only when a value changes, honours `prefers-reduced-motion`, and
-uses theme variables for light and dark.
+SEMS+-style three nodes: solar top, house bottom left, grid bottom right; green = solar supply and export,
+orange = import, grey and stationary = inactive; chevron speed proportional to power (3 / kW seconds, 0.5-8 s);
+label **Grid Import / Export / Idle / Unavailable**; kW to three decimals. Unavailable, unknown or stale
+(> 15 min) readings show `--`, never zero. A line is drawn only when every measurement it needs is present and the
+three readings agree (house = solar - export + import within a tolerance); otherwise it stays grey with a
+"Readings not in sync" note. Units must be W or kW. Reduced-motion mode shows static arrows that still point in the
+flow direction. Dependency-free SVG, redraws only when a value changes, theme-aware (light and dark).
 
-## Energy calculations
+## Energy: how the figures are obtained, and what was investigated
 
-| Figure | Source |
+| Figure | Source and rule |
 | --- | --- |
 | Live solar / house / grid | measured GoodWe entities (W) -> kW |
-| Today's solar | inverter's own daily generation |
-| Grid import / export today | daily `utility_meter` on the lifetime counters, shown only once the meter covers a **full day** |
-| Household today | integration of measured house power (`max_sub_interval`), full-day only |
-| Solar used directly | solar today - export today; needs confirmed no battery, a full-day export meter, fresh sources and export <= generation (otherwise unavailable, never clamped) |
-| Self-consumption % | the same conditions plus >= 1 kWh generated |
+| Solar today | the inverter's own daily generation |
+| Grid import / export today (Home tiles) | Home Assistant **long-term statistics** (`statistic` card, change over the local day) on the verified lifetime counters: retroactive, available from day one, no new metering |
+| Household today | energy balance **solar + import - export** from the inverter counters (a measured figure; battery-free only) |
+| Solar used directly / self-consumption % | solar - export, and that divided by solar (>= 1 kWh generated) |
+| Integrated household estimate | `sensor.home_consumption_estimate_today`: integration of sampled house power; **labelled an estimate** because outages leave gaps |
 
-Daily meters start when the package is installed, so on the **first day** these figures are unavailable (the
-Energy view shows the raw meters as "partial on the day installed"; its statistics cards are retroactive).
-From the first midnight onward they are exact. A meter is trusted only if its `last_reset` is at or before
-00:05 today; sources must have reported within 30 minutes (house power 15). EMHASS forecasts are never shown
-as measurements, and an unavailable source gives `unavailable`, not a guessed zero.
+**Status sensor** `sensor.home_energy_status` (`ready`, `collecting_first_day`, `sources_unavailable`,
+`inconsistent`, `battery_unconfirmed`) drives the dashboard. While it is not `ready` the Home screen shows
+"Collecting daily data" (or the specific reason) instead of unavailable tiles; nothing is ever turned into zero.
 
-## Limitations (need supervised testing)
+Rules for `ready`: battery confirmed absent; solar, import and export counters are kWh, total-class,
+non-negative and reported within 30 min; the daily meters have a valid first reading and were reset at **this
+local midnight (+/-10 minutes)**, so a meter created mid-day, a missed midnight reset or a stale previous-day
+reset is rejected; and export does not exceed generation (strict, no tolerance, never clamped). Midnight uses
+`now()` in local time, so Hobart's daylight-saving changes (2 am) do not matter.
 
-* Rendering: the card was rendered in a real browser (desktop/phone widths, light/dark, reduced motion) and the full dashboard is rendered by a real Home Assistant frontend in CI (`.github/workflows/home-dashboard-frontend.yml`, synthetic states, service calls recorded not executed). It has not been viewed on YOUR Home Assistant.
-* Weather, lights and battery presence are unmapped/unconfirmed until you fill the mapping file.
-* No physical hardware testing has occurred; towel-rail and fan behaviour is simulated (Tapo v0.3.0).
-* The package's daily meters start at installation.
+Findings on the readings you reported:
+
+* The two raw import/export utility meters showing `unknown` with `last_valid_state: None` immediately after
+  installation is **expected Home Assistant behaviour, not a mapping error**: a utility meter takes its first
+  reading from the next change of its source counter after start-up. The GoodWe lifetime counters only change in
+  0.1 kWh steps, so import/export meters can wait minutes or (for export at night) hours. The package now reports
+  this as `collecting_first_day`, and a wrong unit, missing `state_class` or stale counter as `sources_unavailable`.
+  If a meter is still `unknown` hours after a counter has visibly changed, check Developer Tools -> States on the
+  source counter for `unit_of_measurement: kWh` and `state_class: total_increasing`.
+* Counter resets (a counter decreasing) are handled by the utility meter as a new cycle; restart persistence is
+  provided by HA's own state restore for utility meters and the integration sensor.
+* The historical long-term statistics are used directly on the Home screen. The daily meters are only needed for the
+  derived figures, which Home Assistant cannot compute from statistics inside a template.
+* I could not read your live entity registry from here; the unit/state-class checks above are therefore enforced
+  by the package at run time rather than assumed.
+
+## Limitations (need supervised testing on your system)
+
+* The dashboard was rendered by a real Home Assistant frontend (Home Assistant 2026.11) with synthetic entities;
+  it has not been viewed on your own instance.
+* No physical device was operated; towel, fan and humidity behaviour is simulated or replayed.
+* Home needs a little vertical scrolling below about 1400 px width; first-day energy figures appear after the first
+  midnight following installation.

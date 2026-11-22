@@ -443,6 +443,29 @@ def test_missing_values_show_a_dash_never_a_guess():
     assert "age unknown" in text and "last poll —" in text and "**Control** —" in text
 
 
+def test_hot_water_diagnostics_show_plain_english_not_internal_codes():
+    card = [
+        c
+        for c in walk(view(build.build_dashboard()[0], "hot-water"))
+        if c.get("type") == "markdown" and "Why this decision" in c["content"]
+    ][0]
+    states = {
+        "sensor.thermann_shadow_current_heating_plan": "Heat to 62 °C before 16:00",
+        "sensor.thermann_shadow_next_intended_action": "wait_for_off_peak",
+        "sensor.thermann_shadow_next_heating_start": "2026-11-22T23:00:00+11:00",
+        "sensor.thermann_shadow_solar_boost_status": "no_qualified_session",
+        "sensor.thermann_shadow_why_thermowatt_made_this_decision": "peak_no_grid_heating",
+        "sensor.thermann_shadow_last_command_result": "confirmed",
+        "sensor.thermann_shadow_cloud_requests_in_last_24_hours": "31",
+    }
+    text = render(card["content"], states, NOW)
+    assert "_" not in text  # no internal identifiers
+    assert "**Next action** Wait for off peak" in text and "**Next heating start** 23:00" in text
+    assert "**Why this decision** Peak no grid heating" in text
+    blank = render(card["content"], {}, NOW)
+    assert "—" in blank and "none planned" in blank  # missing values are dashes, not guesses
+
+
 def test_system_status_uses_plain_english_without_hiding_faults():
     card = [
         c for c in walk(view(build.build_dashboard()[0], "system")) if c.get("type") == "markdown"
