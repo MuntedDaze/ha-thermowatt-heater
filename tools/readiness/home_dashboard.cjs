@@ -29,6 +29,8 @@ async function main() {
   const hassCall = (method, path, body) =>
     page.evaluate(([m, p, b]) => document.querySelector("home-assistant").hass.callApi(m, p, b), [method, path, body]);
   const setState = (entity_id, state, attributes = {}) => hassCall("POST", "home_ui_state", { entity_id, state, attributes });
+  // The power-flow card requires a W/kW unit, exactly like the real GoodWe entities provide.
+  const power = (entity_id, state) => setState(entity_id, state, { unit_of_measurement: "W" });
   const calls = () => hassCall("GET", "home_ui_calls");
   const clearCalls = () => hassCall("DELETE", "home_ui_calls");
   const confirmIfAsked = async () => {
@@ -77,15 +79,15 @@ async function main() {
       });
       expect(moved.chevrons).toBeGreaterThan(0);
       expect(moved.moved).toBeGreaterThan(0);
-      await setState("sensor.goodwe_inverter_meter_active_power", "-2200");
-      await setState("sensor.goodwe_inverter_pv_power", "800");
-      await setState("sensor.goodwe_inverter_house_consumption", "3000");
+      await power("sensor.goodwe_inverter_meter_active_power", "-2200");
+      await power("sensor.goodwe_inverter_pv_power", "800");
+      await power("sensor.goodwe_inverter_house_consumption", "3000");
       await expect(page.getByText("Grid Import", { exact: true })).toBeVisible();
-      await setState("sensor.goodwe_inverter_meter_active_power", "unavailable");
+      await power("sensor.goodwe_inverter_meter_active_power", "unavailable");
       await expect(page.getByText("Grid Unavailable", { exact: true })).toBeVisible();
-      await setState("sensor.goodwe_inverter_meter_active_power", "2923");
-      await setState("sensor.goodwe_inverter_pv_power", "4123");
-      await setState("sensor.goodwe_inverter_house_consumption", "1200");
+      await power("sensor.goodwe_inverter_meter_active_power", "2923");
+      await power("sensor.goodwe_inverter_pv_power", "4123");
+      await power("sensor.goodwe_inverter_house_consumption", "1200");
 
       // 12 h override: ON / OFF / unknown, with the existing buttons only.
       await setState(MODE, "automatic");
