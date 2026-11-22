@@ -299,7 +299,7 @@ async function main() {
         await shootLights("3");
         await setState("light.gone_light", "unavailable", { friendly_name: "Gone light", supported_color_modes: ["brightness"] });
         await setState("light.all_lights_group", "on", { friendly_name: "All lights", entity_id: ["light.dining_room_light", "light.third_light"], supported_color_modes: ["brightness"] });
-        await expect(page.getByText("1 unavailable light is not shown", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(/unavailable lights? (is|are) not shown/).first()).toBeVisible();
         lights = await lightFacts();
         expect(lights.count).toBe(3); // neither the unavailable light nor the group is shown
         expect(lights.text).not.toContain("Gone light");

@@ -21,8 +21,7 @@ and 390 px.
 
 The committed outputs are generated from the mapping files and checked in CI, so **nothing has to be searched
 and replaced by hand and the generator never needs to be run on your Home Assistant**. Verified owner mappings:
-GoodWe power and energy entities, `weather.home`, `light.dining_room_light`, `light.living_room_light` (both
-dimmable), the original bathroom entities (`sensor.main_temp_humidity`, `sensor.main_temp_temperature`,
+GoodWe power and energy entities, `weather.home`, the original bathroom entities (`sensor.main_temp_humidity`, `sensor.main_temp_temperature`,
 `switch.main_fan`, `switch.main_towel_rail`, and the Ensuite equivalents) and the door contacts
 `binary_sensor.garage_door` / `binary_sensor.front_door_door`. `status` marks each as `verified` (checked against
 this installation's recorder history/registry) or `owner-confirmed` (supplied by the owner).
@@ -31,25 +30,62 @@ this installation's recorder history/registry) or `owner-confirmed` (supplied by
 
 | View | Contents |
 | --- | --- |
-| Home | One screen at 1920x1080: power flow, today's energy, compact hot water + 12 h override, weather, both bathrooms, lights and doors |
-| Energy | Power flow, today's figures, retroactive statistics, raw meters, 24 h power history |
-| Hot water | Same summary, one override control, one hold/resume control, plan and diagnostics, tank history |
-| Bathrooms | Both bathroom cards plus charts of humidity and temperature **and the physical fan and towel relays** (original sensors, so history is not limited to the v0.3.x install date) |
-| Doors | Garage and front door **monitoring only**, plain-English status, contact history |
-| System | Plain-English status of Thermowatt and the Tapo controller, settings links |
-| Device Energy | Whole-house energy balance (Sankey and ten figures), per-device energy and estimated tariff-valued costs for Tapo devices, daily and monthly tables, history (see [DEVICE_ENERGY.md](DEVICE_ENERGY.md)) |
+| Home | One screen at 1920x1080: energy now with today's figures, hot water with the 12 h override, weather and doors, both bathrooms, and every light |
+| Energy | Power flow with today's figures, the "Today's energy" panel, 24 h power history |
+| Hot water | The hot-water panel, one override control, one hold/resume control, plan and diagnostics, tank history |
+| Bathrooms | Both bathrooms side by side: large humidity and temperature, shower status, the fan and towel controls, and charts of humidity and temperature **and the physical fan and towel relays** (original sensors, so history is not limited to the v0.3.x install date) |
+| Doors | Garage and front door **monitoring only**, plain-English status, 7-day contact history and a recent-activity list |
+| System | Plain-English status of Thermowatt and the Tapo controller with a coloured dot per line, buttons to both integrations' settings |
+| Device energy | Whole-house energy balance (Sankey and ten figures), per-device energy and estimated tariff-valued costs for Tapo devices, daily and monthly tables, history (see [DEVICE_ENERGY.md](DEVICE_ENERGY.md)) |
 
 Grey = off or inactive, blue = on or active. The colour of a control always follows the **observed** state;
 a manual request, a queued request waiting for off-peak and an unknown status each have their own label
 (`Fan: manual / automatic / off / status unknown`) and an unknown status is inert.
 
-## Layout
+## Design
 
-Native sections views, no HACS, no theme changes. On a 4-column screen (1920 px) Home is
-`[power flow | energy | hot water | weather]` over `[Main Bathroom | Ensuite | lights and doors (2 columns)]` and
-fills about 57 % of the viewport. At 1366 px it needs a little scrolling (1.14x the viewport), at 1280 px about
-1.4x, and on a phone it is a single readable column. Measured in a real frontend on every CI run (no overlap, no
-horizontal overflow, readable text).
+The dashboard is designed for 1920x1080 at 100 % zoom and stays responsive down to a phone. No HACS, no theme
+changes: everything follows your theme's own colours (dark and light).
+
+* **Text tabs.** Each view shows its name, not an icon (Home Assistant shows only the icon when one is set).
+* **Large type, clear hierarchy.** Display cards use a 15 px small-caps title, 40-68 px hero numbers, 20 px
+  figures and 15-17 px body text. Statuses use colour tones (green = verified good, amber = waiting or
+  attention, red = fault, grey = unknown); a fault or an unknown reading is never shown as healthy.
+* **Display versus control.** Read-only information is shown by the Thermowatt cards (`thermowatt-panel-card`,
+  the power-flow, lights and Device energy cards). **Every control is still a native tile with its original
+  state-aware logic** (override, hold/resume, fan and towel rail: confirmations kept, inert when the status is
+  unknown). The plain-English wording still comes from Home Assistant templates that return JSON for the card
+  to lay out, so it is the same wording that was tested before.
+* **Layout.** Home is three columns: `[energy now | hot water | weather and doors]` over
+  `[Main Bathroom | Ensuite | lights]` and fits 1920x1080 (measured in a real frontend on every CI run: no
+  overlap, no horizontal overflow). Energy, Hot water and Device energy are three columns, Bathrooms, Doors and
+  System two. Device energy is one full-width page card (a panel view) that arranges the balance hero, the
+  summary column, the Today table and the monthly history itself. On a phone every view is a single column.
+* **No custom-card fallback.** `homeowner/home_no_custom_card.yaml` keeps the previous native composition for
+  anyone who cannot load a card resource.
+
+## Lights (automatic)
+
+The Lights card **discovers every eligible light at run time**: a light you add to Home Assistant appears on the
+next update, with nothing to regenerate or paste. Each light shows its friendly name and state, a tap switches
+it, and a brightness slider appears **only for lights that can dim** (any colour mode other than plain on/off)
+and are on. The layout steps down in density from 2 to 10 or more lights.
+
+Not shown, automatically: lights that are **hidden** or **configuration/diagnostic** entities in the registry,
+**unavailable** lights (the card says how many are not shown), **light groups** (their members are shown
+instead) and **duplicates** (same device and name). Disabled entities have no state, so they never appear.
+
+To hide a light you do not want:
+
+1. **Easiest, no YAML:** give it the Home Assistant **label** `hide_from_dashboard` (Settings -> Areas, labels &
+   zones -> Labels: create a label with that name, then add it to the light's entity settings). It disappears
+   at once.
+2. Or list its entity ID under `lights.exclude` in `homeowner/home_mapping.yaml`, regenerate, and paste the
+   dashboard again.
+
+`lights.names` only renames (for example `light.dining_room_light: Dining room`). The card never changes a light
+automation or device configuration: it only calls `light.toggle` when you tap and `light.turn_on` with a
+brightness when you move a slider.
 
 ## Install / upgrade (nothing is overwritten, no integration is reset)
 
@@ -58,16 +94,18 @@ Existing configuration entries, entity IDs, learned baselines, towel schedules a
 1. **Tapo Smart Controller v0.3.1** (from `MuntedDaze/tapo-smart-controller`): replace the whole
    `/config/custom_components/tapo_smart_controller/` directory, then **restart Home Assistant** (required).
    Saved options are kept; open the integration's *Configure* to see the new plain-English screens.
-2. **Power-flow card:** replace `/config/www/thermowatt/thermowatt-power-flow-card.js` with
-   `homeowner/www/thermowatt-power-flow-card.js`. To bypass the browser cache, edit the dashboard resource URL
-   (Settings -> Dashboards -> ⋮ -> Resources) to `/local/thermowatt/thermowatt-power-flow-card.js?v=2`, then
-   hard-refresh. No restart.
+2. **Cards (one file):** replace `/config/www/thermowatt/thermowatt-power-flow-card.js` with
+   `homeowner/www/thermowatt-power-flow-card.js`. It now contains the power-flow, panel, lights and Device energy
+   cards. To bypass the browser cache, edit the dashboard resource URL (Settings -> Dashboards -> ⋮ -> Resources)
+   to `/local/thermowatt/thermowatt-power-flow-card.js?v=5` (any new number), then hard-refresh. No restart.
 3. **Energy package:** replace `/config/packages/thermowatt_home_energy.yaml` with
    `homeowner/home_energy_package.yaml`. Run **Developer Tools -> YAML -> Check configuration**, then
    **Reload template entities**. The daily utility meters and the integration sensor are defined exactly as
    before, so **no restart is needed** and their accumulated data is kept (unique IDs are unchanged).
-4. **Dashboard:** open `/home-control/` -> ⋮ -> Edit -> ⋮ -> **Raw configuration editor**, replace the content with
-   `homeowner/home.yaml`, save. Only that dashboard changes.
+4. **Dashboard (required for the redesign):** open `/home-control/` -> ⋮ -> Edit -> ⋮ -> **Raw configuration
+   editor**, replace the content with `homeowner/home.yaml`, save. Only that dashboard changes. The card file and the
+   dashboard go together: an old dashboard still works with the new card file, but a new dashboard needs the new
+   card file.
 
 Dependencies: Home Assistant 2024.8 or newer, Tapo Smart Controller 0.3.1. No HACS cards.
 
