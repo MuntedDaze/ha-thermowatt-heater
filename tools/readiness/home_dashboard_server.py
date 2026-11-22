@@ -122,7 +122,6 @@ def seed(hass):
 async def seed_device_energy(hass):
     """Synthetic Tapo devices (registry entries, states and long-term statistics) for Device Energy."""
     from homeassistant.components.recorder import get_instance
-    from homeassistant.components.recorder.db_schema import StatisticsShortTerm
     from homeassistant.components.recorder.models import (
         StatisticData,
         StatisticMeanType,
@@ -262,13 +261,6 @@ async def seed_device_energy(hass):
             meta(entity_id, "kWh", False, True),
             energy_rows(hourly_start, timedelta(hours=1), 24 * 70, per_hour, 100.0),
         )
-        short_start = hour_floor(now) - timedelta(days=3)
-        async_import_statistics(
-            hass,
-            meta(entity_id, "kWh", False, True),
-            energy_rows(short_start, timedelta(minutes=5), 12 * 24 * 3, per_hour / 12, 500.0),
-            table=StatisticsShortTerm,
-        )
     # power-only device: mean statistics (its energy is estimated from them)
     hourly = [
         StatisticData(start=last_hour - timedelta(hours=i), mean=45.0 + (i % 5), min=40.0, max=60.0)
@@ -276,18 +268,6 @@ async def seed_device_energy(hass):
     ]
     async_import_statistics(
         hass, meta("sensor.server_current_consumption", "W", True, False), hourly
-    )
-    short = [
-        StatisticData(
-            start=hour_floor(now) - timedelta(minutes=5 * i), mean=46.0, min=40.0, max=60.0
-        )
-        for i in range(12 * 24 * 3)
-    ]
-    async_import_statistics(
-        hass,
-        meta("sensor.server_current_consumption", "W", True, False),
-        short,
-        table=StatisticsShortTerm,
     )
     await get_instance(hass).async_block_till_done()
 

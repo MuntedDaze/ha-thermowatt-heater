@@ -663,11 +663,22 @@ class ThermowattDeviceEnergyCard extends BaseElement {
     for (const kind of ["energy", "power"]) {
       const group = devices.filter((d) => d.source.kind === kind);
       const ids = group.map((d) => d.source.entityId);
-      const calls = [];
-      if (from < split) calls.push(this._statistics(ids, kind, from, Math.min(to, split), "hour"));
-      if (to > split) calls.push(this._statistics(ids, kind, split, to, "5minute"));
-      for (const response of await Promise.all(calls)) {
+      const recent = [];
+      if (from < split) {
+        const response = await this._statistics(ids, kind, from, Math.min(to, split), "hour");
         for (const d of group) out.get(d.deviceId).push(...toBuckets(response[d.source.entityId], d.source));
+      }
+      if (to > split) {
+        const response = await this._statistics(ids, kind, split, to, "5minute");
+        for (const d of group) {
+          const rows = toBuckets(response[d.source.entityId], d.source);
+          if (rows.length) out.get(d.deviceId).push(...rows);
+          else recent.push(d); // no 5-minute statistics kept for it: fall back to the hourly ones
+        }
+      }
+      if (recent.length) {
+        const response = await this._statistics(recent.map((d) => d.source.entityId), kind, split, to, "hour");
+        for (const d of recent) out.get(d.deviceId).push(...toBuckets(response[d.source.entityId], d.source));
       }
     }
     return out;
