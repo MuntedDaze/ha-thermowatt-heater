@@ -1402,6 +1402,8 @@ views:
       grid_options:
         columns: 12
     - type: tile
+      entity: sensor.thermann_shadow_automatic_control_state
+      hide_state: true
       name: Hot water settings
       icon: mdi:cog-outline
       vertical: false
@@ -2036,6 +2038,8 @@ views:
   - type: grid
     cards:
     - type: tile
+      entity: binary_sensor.tapo_smart_controller_controller_health_problem
+      hide_state: true
       name: Bathroom tuning (Tapo settings)
       icon: mdi:cog-outline
       vertical: false
@@ -2251,6 +2255,8 @@ views:
   - type: grid
     cards:
     - type: tile
+      entity: sensor.thermann_shadow_automatic_control_state
+      hide_state: true
       name: Thermowatt settings and diagnostic report
       icon: mdi:cog-outline
       vertical: false
@@ -2263,6 +2269,8 @@ views:
       grid_options:
         columns: 12
     - type: tile
+      entity: binary_sensor.tapo_smart_controller_controller_health_problem
+      hide_state: true
       name: Tapo Smart Controller settings
       icon: mdi:cog-outline
       vertical: false

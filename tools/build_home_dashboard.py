@@ -225,9 +225,13 @@ def sensor_row(ent, name):
     return {"entity": ent, "name": name}
 
 
-def settings_tile(label, path, columns=6):
+def settings_tile(entity, label, path, columns=6):
+    """A compact navigation tile. A tile card requires an entity, so each integration's own
+    always-present status entity anchors it (its state is hidden; the tile only navigates)."""
     return {
         "type": "tile",
+        "entity": entity,
+        "hide_state": True,
         "name": label,
         "icon": "mdi:cog-outline",
         "vertical": False,
@@ -787,7 +791,12 @@ def build_views(ent, custom):
                 hot_water_summary(ent),
                 *override_toggle(ent),
                 *hold_toggle(ent),
-                settings_tile("Hot water settings", THERMOWATT_SETTINGS_PATH, 12),
+                settings_tile(
+                    ent.thermowatt("sensor", "Automatic control state"),
+                    "Hot water settings",
+                    THERMOWATT_SETTINGS_PATH,
+                    12,
+                ),
             ),
             section(
                 heading("Plan and diagnostics", "mdi:text-box-search-outline", "subtitle"),
@@ -838,7 +847,12 @@ def build_views(ent, custom):
         [
             *bath_sections,
             section(
-                settings_tile("Bathroom tuning (Tapo settings)", TAPO_SETTINGS_PATH, 12),
+                settings_tile(
+                    ent.tapo("binary_sensor", "Controller Health Problem"),
+                    "Bathroom tuning (Tapo settings)",
+                    TAPO_SETTINGS_PATH,
+                    12,
+                ),
                 note(
                     "Towel drying hours, the manual fan request length and the humidity tuning are "
                     "integration settings, not dashboard controls.",
@@ -890,9 +904,17 @@ def build_views(ent, custom):
             ),
             section(
                 settings_tile(
-                    "Thermowatt settings and diagnostic report", THERMOWATT_SETTINGS_PATH, 12
+                    ent.thermowatt("sensor", "Automatic control state"),
+                    "Thermowatt settings and diagnostic report",
+                    THERMOWATT_SETTINGS_PATH,
+                    12,
                 ),
-                settings_tile("Tapo Smart Controller settings", TAPO_SETTINGS_PATH, 12),
+                settings_tile(
+                    ent.tapo("binary_sensor", "Controller Health Problem"),
+                    "Tapo Smart Controller settings",
+                    TAPO_SETTINGS_PATH,
+                    12,
+                ),
             ),
         ],
         max_columns=3,

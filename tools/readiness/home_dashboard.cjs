@@ -159,6 +159,9 @@ async function main() {
     await dismissHttpDialog();
     await page.waitForFunction(() => !!document.querySelector("home-assistant")?.hass?.callApi);
     await expect(page.locator("hui-error-card")).toHaveCount(0);
+    await page.waitForTimeout(1200);
+    // No card on ANY view may show a configuration error (a tile without an entity, a bad option...).
+    await expect(page.getByText("Configuration error", { exact: false })).toHaveCount(0);
   };
   const report = [];
 
@@ -309,6 +312,8 @@ async function main() {
         expect(result.calls).toEqual([]);
         await setState(CONTROL, "observing");
         await expect(page.locator("hui-history-graph-card").first()).toBeVisible();
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(600);
         await page.screenshot({ path: `${output}/hot-water-${size.name}.png`, fullPage: true });
 
         // Bathrooms view: charts built from the original sensors and the physical relays.

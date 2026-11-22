@@ -118,7 +118,7 @@ def test_every_card_is_a_supported_native_or_declared_card(home, native, generic
             if kind == "conditional":
                 assert item["conditions"] and item["card"]["type"] in SUPPORTED
             if kind == "tile":
-                assert item.get("entity") or item.get("tap_action")
+                assert item.get("entity"), item  # a tile card without an entity is a config error
 
 
 def test_home_layout_is_compact_and_follows_the_preferred_arrangement(home):
