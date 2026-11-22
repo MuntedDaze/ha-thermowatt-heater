@@ -68,12 +68,22 @@ test("a battery that is not confirmed absent withholds the whole balance", () =>
 
 test("a source with an interior gap, a late start or no statistics withholds the balance with the reason", () => {
   const gap = hours(FROM, 10, 1).filter((_, i) => i !== 4);
-  const late = hours(FROM, 10, 1).slice(2);
-  for (const bad of [gap, late]) {
+  for (const bad of [gap]) {
     const b = balance({ sources: { solar: { buckets: bad }, import: { buckets: hours(FROM, 10, 0.6) }, export: { buckets: hours(FROM, 10, 0.2) } } });
     assert.equal(b.status, "withheld");
     assert.match(b.reason, /solar generation statistics are incomplete/);
   }
+  // a source whose statistics only START part-way through the period: the balance covers the window every source covers
+  const late = balance({ sources: { solar: { buckets: hours(FROM, 10, 1).slice(2) }, import: { buckets: hours(FROM, 10, 0.6) }, export: { buckets: hours(FROM, 10, 0.2) } } });
+  assert.equal(late.status, "ok");
+  assert.equal(late.partial, true);
+  assert.equal(late.requestedFrom, FROM);
+  assert.equal(late.from, FROM + 2 * HOUR);
+  near(late.G, 8, 1e-9); // 8 whole hours, every source over the same hours
+  near(late.I, 4.8, 1e-9);
+  near(late.E, 1.6, 1e-9);
+  near(late.M, 4, 1e-9);
+  assert.match(late.notes.join(" "), /solar generation statistics start part-way through the period/);
   const none = balance({ sources: { solar: { buckets: [] }, import: { buckets: hours(FROM, 10, 0.6) }, export: { buckets: hours(FROM, 10, 0.2) } } });
   assert.match(none.reason, /solar generation has no statistics/);
   const unconfigured = balance({ sources: { solar: { buckets: hours(FROM, 10, 1) }, import: { buckets: hours(FROM, 10, 0.6) } } });
@@ -460,7 +470,12 @@ test("the household label fits between the columns and links never exceed their 
   assert.match(svg, />14\.0 kWh<\/text>/);
   for (const [, height] of svg.matchAll(/height="(-?[\d.]+)"/g)) assert.ok(Number(height) > 0, `non-positive height ${height}`);
   const month = mod.sankeySvg(balance({ sources: { solar: { buckets: hours(FROM, 10, 130) }, import: { buckets: hours(FROM, 10, 90) }, export: { buckets: hours(FROM, 10, 20) } }, devices: [] }));
-  for (const [, x] of month.matchAll(/<text x="([\d.]+)" y="[\d.]+" text-anchor="start"/g)) assert.ok(Number(x) < 480, "label starts inside the viewBox");
+  // every label fits inside the 760-wide canvas (about 8.6 units per character at 16 px)
+  for (const [, x, label] of month.matchAll(/<text x="([\d.]+)" y="[\d.]+" text-anchor="start"[^>]*>([^<]+)<\/text>/g)) assert.ok(Number(x) + label.length * 8.6 < 760, `label "${label}" overflows`);
+  for (const [, x, label] of month.matchAll(/<text x="([\d.]+)" y="[\d.]+" text-anchor="end"[^>]*>([^<]+)<\/text>/g)) assert.ok(Number(x) - label.length * 8.6 > 0, `label "${label}" overflows`);
+  const phone = mod.sankeySvg(balance(), { compact: true });
+  assert.equal(phone.includes("<text"), false); // no unreadably small text on a phone
+  assert.match(phone, /class="legend"/);
 });
 
 test("the cross-check note compares the same devices over the same window", async () => {

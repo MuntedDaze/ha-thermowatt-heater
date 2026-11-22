@@ -117,3 +117,6 @@ export async function atTime(ms, fn) {
 export function click(card, selector, dataset) {
   card.sr.listeners.click({ target: { closest: (query) => (query.includes(selector) ? { dataset } : null) } });
 }
+
+export const Lights = registry.get("thermowatt-lights-card");
+export const Panel = registry.get("thermowatt-panel-card");

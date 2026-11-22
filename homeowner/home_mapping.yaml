@@ -25,9 +25,18 @@ energy:
 weather:
   entity: weather.home                  # Open-Meteo (Rokeby, TAS)
   status: verified
+# Lights are DISCOVERED at run time, so a new light appears by itself: nothing to add or regenerate.
+# Not shown automatically: hidden or diagnostic entities, unavailable lights, light groups and duplicates.
+# To hide a light you do not want: give it the Home Assistant LABEL below (Settings -> Areas, labels & zones
+# -> Labels, then add the label to the light), or list its entity ID in `exclude` and regenerate.
+# `names` only renames; its keys are also the lights the no-custom-card fallback shows.
 lights:
-  dining_room: {entity: light.dining_room_light, status: verified}   # dimmable
-  living_room: {entity: light.living_room_light, status: verified}   # dimmable
+  discover: true
+  exclude: []
+  exclude_label: hide_from_dashboard
+  names:
+    light.dining_room_light: Dining room
+    light.living_room_light: Living room
 # Bathrooms: `name` is the display name used by the Tapo Smart Controller (its entity IDs derive from it).
 # `original` are the ORIGINAL device entities the controller reads. Their recorded history is used for the
 # charts, so history is not limited to the v0.3.x installation date.

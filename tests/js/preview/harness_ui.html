@@ -1,0 +1,101 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Thermowatt display cards: visual harness</title>
+<!-- Visual harness for the display cards (not part of the install). Serve the repo root and open
+     /tests/js/preview/harness_ui.html?theme=dark&w=520 . It instantiates the REAL custom elements with mock
+     states; native Home Assistant cards are not available here (they are covered by the real-frontend CI). -->
+<style>
+  :root { --card-background-color:#fff; --primary-text-color:#212121; --secondary-text-color:#727272; --divider-color:#e0e0e0;
+    --primary-color:#03a9f4; --success-color:#43a047; --warning-color:#fb8c00; --error-color:#e53935; --ha-card-border-radius:12px; --secondary-background-color:#e5e5e5; }
+  :root[data-theme="dark"] { --card-background-color:#1c1c1c; --primary-text-color:#e1e1e1; --secondary-text-color:#9b9b9b;
+    --divider-color:#3a3a3a; --secondary-background-color:#282828; }
+  body { margin:0; padding:16px; font-family:Roboto,system-ui,sans-serif; background:#f4f4f4; }
+  :root[data-theme="dark"] body { background:#111; color:#e1e1e1; }
+  .grid { display:grid; gap:16px; align-items:stretch; }
+  .col { display:flex; flex-direction:column; gap:16px; }
+  ha-card { display:block; background:var(--card-background-color); border-radius:var(--ha-card-border-radius); overflow:hidden; }
+  ha-icon { display:inline-block; width:var(--mdc-icon-size,24px); height:var(--mdc-icon-size,24px); border-radius:50%; background:currentColor; opacity:.35; }
+</style>
+<div class="grid" id="grid"></div>
+<script type="module">
+  const q = new URLSearchParams(location.search);
+  if (q.get("theme") === "dark") document.documentElement.dataset.theme = "dark";
+  const width = Number(q.get("w") || 520);
+  const grid = document.getElementById("grid");
+  grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${width}px, ${width}px))`;
+  customElements.define("ha-card", class extends HTMLElement {});
+  await import("/homeowner/www/thermowatt-power-flow-card.js");
+  const now = new Date().toISOString();
+  const col = (...cards) => {
+    const c = document.createElement("div");
+    c.className = "col";
+    for (const card of cards) c.appendChild(card);
+    grid.appendChild(c);
+  };
+  const make = (tag, config, hass) => {
+    const el = document.createElement(tag);
+    el.setConfig(config);
+    el.hass = hass;
+    if (el.connectedCallback) el.connectedCallback();
+    return el;
+  };
+  const sub = (json) => ({
+    connection: { subscribeMessage: async (cb) => { setTimeout(() => cb({ result: JSON.stringify(json) }), 0); return () => {}; } },
+    states: {},
+  });
+  const hotWater = {
+    title: "Hot water", icon: "mdi:water-boiler", badge: { text: "Automatic", tone: "info" },
+    hero: { label: "Tank bottom", value: "44.0", unit: "°C", caption: "Updated 23 min ago · last poll 20:24" },
+    stats: [
+      { label: "Heater", value: "Manual", detail: "Target 45 °C" },
+      { label: "Tariff", value: "Off-peak", tone: "ok" },
+      { label: "Solar boost", value: "Waiting" },
+      { label: "Next", value: "Baseline", detail: "Next poll 21:54" },
+    ],
+  };
+  const bath = (name, h, t, shower) => ({
+    title: name, icon: "mdi:shower-head", badge: shower ? { text: "Shower detected", tone: "info", icon: "mdi:shower" } : { text: "No shower", tone: "idle" },
+    heroes: [{ label: "Humidity", value: h, unit: "%", tone: shower ? "info" : "idle" }, { label: "Temperature", value: t, unit: "°C" }],
+  });
+  const system = {
+    title: "System status", icon: "mdi:stethoscope",
+    groups: [
+      { title: "Thermowatt", rows: [
+        { label: "Cloud connection", value: "Connected", tone: "ok" },
+        { label: "Heating control problem", value: "No problems detected", tone: "ok" },
+        { label: "Supervision", value: "Holding the 45 °C baseline", tone: "ok" } ] },
+      { title: "Tapo Smart Controller", rows: [
+        { label: "Health", value: "No problems detected (0 active warnings)", tone: "ok" },
+        { label: "Mode", value: "Live control", tone: "ok" },
+        { label: "Tariff read by the controller", value: "Off-peak" } ] },
+    ],
+  };
+  const doors = {
+    title: "Doors", icon: "mdi:shield-home", badge: { text: "Monitoring only", tone: "idle" },
+    stats: [{ label: "Garage door", value: "Closed", tone: "ok", detail: "Closed-position contact is made" }, { label: "Front door", value: "Closed", tone: "ok", detail: "Lock status not available" }],
+  };
+  col(make("thermowatt-panel-card", { template: "x" }, sub(hotWater)));
+  col(make("thermowatt-panel-card", { template: "x" }, sub(bath("Main Bathroom", "67", "24.8", true))), make("thermowatt-panel-card", { template: "x" }, sub(bath("Ensuite", "61", "24.4", false))));
+  col(make("thermowatt-panel-card", { template: "x", actions: [
+    { label: "Thermowatt settings", detail: "Hot water settings and diagnostic report", icon: "mdi:water-boiler", path: "/config" },
+    { label: "Tapo Smart Controller settings", detail: "Bathroom tuning and schedules", icon: "mdi:cog-outline", path: "/config" } ] }, sub(system)), make("thermowatt-panel-card", { template: "x" }, sub(doors)));
+
+  const light = (name, state, bri) => ({ state, attributes: { friendly_name: name, supported_color_modes: ["brightness"], brightness: bri } });
+  const lightHass = {
+    states: { "light.dining": light("Dining room", "on", 255), "light.living": light("Living room", "on", 128), "light.kitchen": light("Kitchen", "off") },
+    entities: { "light.dining": {}, "light.living": {}, "light.kitchen": {} },
+    callService() {},
+  };
+  col(make("thermowatt-lights-card", { lights: [{ entity: "light.dining", name: "Dining room" }, { entity: "light.living", name: "Living room" }], discover: true }, lightHass));
+
+  const s = (state, unit = "W") => ({ state: String(state), attributes: { unit_of_measurement: unit }, last_reported: now });
+  const flowHass = {
+    states: { "s.pv": s(0), "s.house": s(1516), "s.grid": s(-1516), "s.day": s(19.6, "kWh") },
+    callWS: async (m) => m.type.endsWith("metadata")
+      ? m.statistic_ids.map((id) => ({ statistic_id: id, statistics_unit_of_measurement: "kWh", has_sum: true }))
+      : Object.fromEntries(m.statistic_ids.map((id) => [id, m.period === "hour" ? [{ start: Date.now() - 7200e3, end: Date.now() - 3600e3, change: id === "s.imp" ? 28.9 : 3.7 }] : []])),
+  };
+  col(make("thermowatt-power-flow-card", { solar_entity: "s.pv", house_entity: "s.house", grid_entity: "s.grid", today: { solar: "s.day", import: "s.imp", export: "s.exp" } }, flowHass));
+  document.body.dataset.ready = "1";
+</script>

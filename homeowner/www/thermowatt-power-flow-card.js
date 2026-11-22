@@ -1,5 +1,6 @@
 /*
- * Thermowatt cards (one resource): <thermowatt-power-flow-card> and <thermowatt-device-energy-card>.
+ * Thermowatt cards (one resource): <thermowatt-power-flow-card>, <thermowatt-panel-card>,
+ * <thermowatt-lights-card> and <thermowatt-device-energy-card>.
  * Power-flow card: a lightweight, dependency-free, SEMS+-inspired three-node view.
  *   solar (top), house (bottom left), grid (bottom right)
  * Reads three MEASURED power entities (W or kW). Nothing is estimated or guessed: an unavailable,
@@ -166,10 +167,10 @@ export function renderSvg(model, reduceMotion = false) {
   const gridColour = { import: ORANGE, export: GREEN }[model.gridState] || GREY;
   const solarColour = model.solarW > 5 ? GREEN : GREY;
   const node = (cx, cy, colour, icon, title, value) =>
-    `<circle cx="${cx}" cy="${cy}" r="38" fill="var(--card-background-color,#fff)" stroke="${colour}" stroke-width="3"/>` +
+    `<circle cx="${cx}" cy="${cy}" r="40" fill="var(--card-background-color,#fff)" stroke="${colour}" stroke-width="3"/>` +
     `<g transform="translate(${cx} ${cy - 10})" fill="none" stroke="${colour}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${icon}</g>` +
-    `<text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--primary-text-color,#212121)">${value}</text>` +
-    `<text x="${cx}" y="${cy + 53}" text-anchor="middle" font-size="12.5" fill="var(--secondary-text-color,#727272)">${title}</text>`;
+    `<text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="15.5" font-weight="600" fill="var(--primary-text-color,#212121)">${value}</text>` +
+    `<text x="${cx}" y="${cy + 58}" text-anchor="middle" font-size="15" fill="var(--secondary-text-color,#727272)">${title}</text>`;
   const sun = '<circle r="7"/><path d="M0 -14V-11M0 11V14M-14 0H-11M11 0H14M-10 -10l2 2M8 8l2 2M-10 10l2 -2M8 -8l2 -2"/>';
   const house = '<path d="M-13 3L0 -9L13 3M-9 0V12H9V0"/>';
   const grid = '<path d="M0 -13V13M-9 -6H9M-6 1H6M-11 13L0 -13L11 13"/>';
@@ -180,7 +181,7 @@ export function renderSvg(model, reduceMotion = false) {
     node(66, 190, model.lines.solarToHouse || model.lines.gridToHouse ? (model.lines.gridToHouse ? ORANGE : GREEN) : GREY, house, "House", formatKw(model.houseW)) +
     node(334, 190, gridColour, grid, model.gridLabel, formatKw(model.gridW)) +
     (model.inconsistent
-      ? '<text x="200" y="254" text-anchor="middle" font-size="12" fill="var(--secondary-text-color,#727272)">Readings not in sync</text>'
+      ? '<text x="200" y="258" text-anchor="middle" font-size="13.5" fill="var(--secondary-text-color,#727272)">Readings not in sync</text>'
       : "") +
     "</svg>"
   );
@@ -193,6 +194,58 @@ function ariaLabel(model) {
 
 const Base = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 
+/* Today's energy for the strip under the flow diagram: solar from the inverter's own daily counter, import and
+ * export from the recorder's long-term statistics (the same pipeline as Device Energy). Read only, cached,
+ * refreshed every few minutes; an unreadable figure is a dash, never zero, and an incomplete one is a lower bound. */
+const TODAY_CACHE = new Map();
+const TODAY_REFRESH_MS = 3 * 60e3;
+
+function liveKwh(state) {
+  if (!state) return null;
+  const value = Number(state.state);
+  const unit = String((state.attributes || {}).unit_of_measurement || "").toLowerCase();
+  return Number.isFinite(value) && value >= 0 && Object.hasOwn(ENERGY_UNITS, unit) ? value * ENERGY_UNITS[unit] : null;
+}
+
+export async function loadTodayEnergy(hass, today, timeZone = DEFAULT_TIMEZONE, now = Date.now()) {
+  const result = { solar: liveKwh((hass.states || {})[today.solar]), import: null, export: null };
+  const dayStart = startOfLocalDay(now, timeZone);
+  const hourEnd = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const ids = ["import", "export"].map((k) => today[k]).filter(Boolean);
+  if (!ids.length) return result;
+  const metadata = await withTimeout(hass.callWS({ type: "recorder/get_statistics_metadata", statistic_ids: ids }));
+  const factors = {};
+  for (const m of Array.isArray(metadata) ? metadata : []) {
+    const unit = String(m.statistics_unit_of_measurement || "").toLowerCase();
+    if (Object.hasOwn(ENERGY_UNITS, unit) && m.has_sum !== false) factors[m.statistic_id] = ENERGY_UNITS[unit];
+  }
+  const usable = ids.filter((id) => factors[id] !== undefined);
+  if (!usable.length) return result;
+  const ask = (from, to, period) =>
+    withTimeout(
+      hass.callWS({
+        type: "recorder/statistics_during_period",
+        start_time: new Date(from).toISOString(),
+        end_time: new Date(to).toISOString(),
+        statistic_ids: usable,
+        period,
+        types: ["change"],
+      })
+    );
+  const hourly = hourEnd > dayStart ? await ask(dayStart, hourEnd, "hour") : {};
+  const fine = await ask(Math.max(dayStart, hourEnd - 3 * HOUR_MS), now + HOUR_MS, "5minute");
+  for (const key of ["import", "export"]) {
+    const id = today[key];
+    if (!id || factors[id] === undefined) continue;
+    const source = { kind: "energy", factor: factors[id] };
+    const buckets = mergeBuckets(toBuckets((hourly || {})[id], source), toBuckets((fine || {})[id], source));
+    const total = sumKwh(buckets, dayStart, now + HOUR_MS);
+    const cov = coverage(buckets, dayStart, now + HOUR_MS, now);
+    result[key] = total ? { kwh: total.kwh, incomplete: cov.leading > 0 || cov.missing > 0 } : null;
+  }
+  return result;
+}
+
 class ThermowattPowerFlowCard extends Base {
   setConfig(config) {
     for (const key of ["solar_entity", "house_entity", "grid_entity"]) {
@@ -202,14 +255,22 @@ class ThermowattPowerFlowCard extends Base {
       grid_export_positive: true,
       idle_threshold_w: 5,
       stale_seconds: 900,
+      title: "Energy now",
       ...config,
     };
     this._key = null;
+    this._today = null;
+  }
+
+  connectedCallback() {
+    this._refreshToday();
   }
 
   set hass(hass) {
+    this._hass = hass;
     const c = this._config;
     if (!c) return;
+    this._refreshToday();
     const stale = c.stale_seconds;
     const model = computeFlows({
       solarW: readWatts(hass.states[c.solar_entity], stale),
@@ -219,19 +280,76 @@ class ThermowattPowerFlowCard extends Base {
       idleW: c.idle_threshold_w,
     });
     const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const key = JSON.stringify([model, reduce]);
+    const today = c.today ? { ...this._today, solar: liveKwh(hass.states[c.today.solar]) } : null;
+    const key = JSON.stringify([model, reduce, today]);
     if (key === this._key) return; // nothing changed: keep animations running, no DOM work
     this._key = key;
     if (!this._root) {
       this._root = this.attachShadow({ mode: "open" });
     }
+    const gridTone = { import: "warn", export: "ok", idle: "idle", unavailable: "bad" }[model.gridState];
+    const kpi = (label, value, tone) => {
+      if (value === null || value === undefined) return `<div class="kpi t-${tone}"><div class="lab">${label}</div><div class="val">—</div></div>`;
+      const kwh = typeof value === "number" ? value : value.kwh;
+      const lower = typeof value === "object" && value.incomplete ? "≥ " : "";
+      return `<div class="kpi t-${tone}"><div class="lab">${label}</div><div class="val">${lower}${kwh.toFixed(kwh < 10 ? 2 : 1)}<span class="unit">kWh</span></div></div>`;
+    };
+    const strip = today
+      ? `<div class="kpis">${kpi("Solar today", today.solar, "ok")}${kpi("Imported today", today.import, "warn")}${kpi("Exported today", today.export, "info")}</div>`
+      : "";
     this._root.innerHTML =
-      `<ha-card><style>:host{display:block}.wrap{padding:8px 12px 12px;max-width:520px;margin:0 auto}</style>` +
-      `<div class="wrap">${renderSvg(model, reduce)}</div></ha-card>`;
+      `<ha-card><style>${UI_CSS}
+        .flow{max-width:460px;width:100%;margin:0 auto}
+        .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:auto}
+        .kpi{padding:10px 12px;border-radius:14px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}
+        .kpi .lab{font-size:12.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--secondary-text-color)}
+        .kpi .val{font-size:clamp(20px,6cqw,28px);font-weight:600;margin-top:2px;color:var(--tw-tone)}
+        .kpi .unit{font-size:.55em;font-weight:400;margin-left:.2em;color:var(--secondary-text-color)}
+      </style>` +
+      `<div class="head">${iconHtml("mdi:flash")}<div class="title">${escapeHtml(c.title)}</div><span class="chip t-${gridTone}">${escapeHtml(model.gridLabel)}</span></div>` +
+      `<div class="flow">${renderSvg(model, reduce)}</div>${strip}</ha-card>`;
+  }
+
+  _refreshToday() {
+    const c = this._config;
+    if (!c || !c.today || !this._hass || typeof this._hass.callWS !== "function") return;
+    const cacheKey = JSON.stringify([c.today, c.timezone]);
+    const entry = TODAY_CACHE.get(cacheKey) || { value: null, loadedAt: 0, loading: false, retryAt: 0, listeners: new Set() };
+    TODAY_CACHE.set(cacheKey, entry);
+    entry.listeners.add(this);
+    if (entry.value) this._today = entry.value;
+    const due = !entry.loadedAt || Date.now() - entry.loadedAt > TODAY_REFRESH_MS;
+    if (!due || entry.loading || Date.now() < entry.retryAt) return;
+    entry.loading = true;
+    loadTodayEnergy(this._hass, c.today, c.timezone || DEFAULT_TIMEZONE)
+      .then((value) => {
+        entry.value = value;
+        entry.loadedAt = Date.now();
+        entry.retryAt = 0;
+      })
+      .catch(() => {
+        entry.retryAt = Date.now() + 60e3; // keep the last good figures; try again in a minute
+      })
+      .finally(() => {
+        entry.loading = false;
+        for (const card of entry.listeners) {
+          if (entry.value) card._today = entry.value;
+          card._key = null;
+          if (card._hass) card.hass = card._hass;
+        }
+      });
+  }
+
+  disconnectedCallback() {
+    const c = this._config;
+    if (c && c.today) {
+      const entry = TODAY_CACHE.get(JSON.stringify([c.today, c.timezone]));
+      if (entry) entry.listeners.delete(this);
+    }
   }
 
   getCardSize() {
-    return 5;
+    return 6;
   }
 
   static getStubConfig() {
@@ -251,6 +369,369 @@ if (typeof customElements !== "undefined" && !customElements.get("thermowatt-pow
     name: "Thermowatt power flow",
     description: "Solar, house and grid power flow (measured values only)",
   });
+}
+
+/* ================================================================================================
+ * Shared design system for the display cards below (panel, lights, power flow, device energy).
+ * Everything is themed with Home Assistant's own CSS variables, so it follows the dark and light themes.
+ * Typography scale: 15 px small caps titles, 40-68 px hero numbers, 20 px stat values, 15-17 px body.
+ * ============================================================================================== */
+const TONES = ["ok", "warn", "bad", "info", "idle"];
+
+const UI_CSS = `
+  :host{display:block;height:100%}
+  *{box-sizing:border-box}
+  ha-card{height:100%;display:flex;flex-direction:column;gap:16px;padding:20px 22px 22px;container-type:inline-size;overflow:hidden;
+    --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);
+    --tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
+  .t-ok{--tw-tone:var(--tw-ok)}.t-warn{--tw-tone:var(--tw-warn)}.t-bad{--tw-tone:var(--tw-bad)}
+  .t-info{--tw-tone:var(--tw-info)}.t-idle{--tw-tone:var(--tw-idle)}
+  .head{display:flex;align-items:center;gap:12px;min-height:30px}
+  .head ha-icon{--mdc-icon-size:24px;color:var(--primary-color);flex:none}
+  .title{flex:1;min-width:0;font-size:15px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 13px;border-radius:999px;font-size:14px;font-weight:500;white-space:nowrap;
+    color:var(--tw-tone,var(--tw-idle));background:color-mix(in srgb,var(--tw-tone,var(--tw-idle)) 16%,transparent)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .heroes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 20px}
+  .hero .lab{font-size:15px;color:var(--secondary-text-color)}
+  .hero .val{font-size:clamp(40px,13cqw,68px);font-weight:500;line-height:1.05;letter-spacing:-.02em;color:var(--primary-text-color)}
+  .heroes.multi .val{font-size:clamp(34px,10cqw,58px)}
+  .hero .unit{font-size:.4em;font-weight:400;color:var(--secondary-text-color);margin-left:.18em;letter-spacing:0}
+  .hero .cap{font-size:15px;color:var(--secondary-text-color);margin-top:2px}
+  .hero.t-ok .val,.hero.t-warn .val,.hero.t-bad .val,.hero.t-info .val{color:var(--tw-tone)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+  .stats.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.stats.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.stats.cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  @container (max-width:360px){.stats.cols-3,.stats.cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .stat{padding:12px 15px;border-radius:14px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}
+  .stat .lab{font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .stat .val{font-size:20px;font-weight:600;margin-top:4px;color:var(--primary-text-color)}
+  .stat.t-ok .val,.stat.t-warn .val,.stat.t-bad .val,.stat.t-info .val{color:var(--tw-tone)}
+  .stat .det{font-size:14.5px;color:var(--secondary-text-color);margin-top:2px}
+  .group+.group{margin-top:6px}
+  .group h4{margin:0 0 4px;font-size:13px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:12px 0;border-top:1px solid var(--divider-color,#444)}
+  .row:first-of-type{border-top:0}
+  .row .k{font-size:16px;color:var(--secondary-text-color)}
+  .row .v{font-size:17px;font-weight:500;text-align:right;display:flex;align-items:center;gap:9px;color:var(--primary-text-color)}
+  .dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--tw-tone,var(--tw-idle))}
+  .note{margin:0;font-size:15px;line-height:1.5;color:var(--secondary-text-color)}
+  .note b,.note strong{color:var(--primary-text-color)}
+  .actions{display:grid;gap:12px}
+  .action{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:14px;
+    background:color-mix(in srgb,var(--primary-text-color) 6%,transparent);color:var(--primary-text-color)}
+  .action:hover{background:color-mix(in srgb,var(--primary-color) 16%,transparent)}
+  .action:focus-visible{outline:2px solid var(--primary-color)}
+  .action ha-icon{--mdc-icon-size:26px;color:var(--primary-color);flex:none}
+  .action .t{font-size:17px;font-weight:500}.action .d{font-size:14.5px;color:var(--secondary-text-color)}
+`;
+
+const ICON_PATTERN = /^[a-z0-9-]+:[a-z0-9-]+$/;
+const iconHtml = (name) => (ICON_PATTERN.test(String(name || "")) ? `<ha-icon icon="${name}"></ha-icon>` : "");
+const toneClass = (tone) => ` t-${TONES.includes(tone) ? tone : "idle"}`;
+const chipHtml = (chip) =>
+  chip && chip.text ? `<span class="chip${toneClass(chip.tone)}">${chip.icon ? iconHtml(chip.icon) : ""}${escapeHtml(chip.text)}</span>` : "";
+
+/** Render one panel model (see thermowatt-panel-card). Every dynamic string is escaped; a missing value is a dash, never 0. */
+export function renderPanel(model, actions = []) {
+  const m = model && typeof model === "object" && !Array.isArray(model) ? model : {};
+  const show = (v) => (v === null || v === undefined || v === "" ? "—" : String(v));
+  let html = `<div class="head">${iconHtml(m.icon)}<div class="title">${escapeHtml(m.title || "")}</div>${chipHtml(m.badge)}</div>`;
+  const heroes = Array.isArray(m.heroes) ? m.heroes : m.hero ? [m.hero] : [];
+  if (heroes.length) {
+    html += `<div class="heroes${heroes.length > 1 ? " multi" : ""}">`;
+    for (const h of heroes) {
+      html +=
+        `<div class="hero${toneClass(h.tone)}">` +
+        (h.label ? `<div class="lab">${escapeHtml(h.label)}</div>` : "") +
+        `<div class="val">${escapeHtml(show(h.value))}${h.unit && h.value !== null && h.value !== undefined && h.value !== "" ? `<span class="unit">${escapeHtml(h.unit)}</span>` : ""}</div>` +
+        (h.caption ? `<div class="cap">${escapeHtml(h.caption)}</div>` : "") +
+        "</div>";
+    }
+    html += "</div>";
+  }
+  if (Array.isArray(m.chips) && m.chips.length) html += `<div class="chips">${m.chips.map(chipHtml).join("")}</div>`;
+  if (Array.isArray(m.stats) && m.stats.length) {
+    html += `<div class="stats${[2, 3, 4].includes(m.columns) ? ` cols-${m.columns}` : ""}">`;
+    for (const s of m.stats) {
+      html += `<div class="stat${toneClass(s.tone)}"><div class="lab">${escapeHtml(s.label || "")}</div><div class="val">${escapeHtml(show(s.value))}</div>${s.detail ? `<div class="det">${escapeHtml(s.detail)}</div>` : ""}</div>`;
+    }
+    html += "</div>";
+  }
+  const groups = Array.isArray(m.groups) ? m.groups : Array.isArray(m.rows) ? [{ rows: m.rows }] : [];
+  for (const g of groups) {
+    html += `<div class="group">${g.title ? `<h4>${escapeHtml(g.title)}</h4>` : ""}`;
+    for (const r of g.rows || []) {
+      html += `<div class="row"><span class="k">${escapeHtml(r.label || "")}</span><span class="v${toneClass(r.tone)}">${r.tone ? '<span class="dot"></span>' : ""}${escapeHtml(show(r.value))}</span></div>`;
+    }
+    html += "</div>";
+  }
+  for (const line of Array.isArray(m.lines) ? m.lines : []) html += `<p class="note">${escapeHtml(line)}</p>`;
+  if (actions.length) {
+    html += '<div class="actions">';
+    actions.forEach((a, i) => {
+      html += `<button class="action" data-action="${i}">${iconHtml(a.icon || "mdi:cog-outline")}<span><span class="t">${escapeHtml(a.label || "")}</span>${a.detail ? `<br><span class="d">${escapeHtml(a.detail)}</span>` : ""}</span></button>`;
+    });
+    html += "</div>";
+  }
+  return html;
+}
+
+/** Parse what a rendered template returned: a JSON string, or the object Home Assistant already parsed. */
+export function parsePanelResult(result) {
+  if (result && typeof result === "object") return result;
+  const text = String(result === undefined || result === null ? "" : result).trim();
+  const parsed = JSON.parse(text);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("the template must return a JSON object");
+  return parsed;
+}
+
+function navigateTo(path) {
+  window.history.pushState(null, "", path);
+  window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+}
+
+const BaseUi = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
+
+/**
+ * <thermowatt-panel-card>: a large-type read-only information card. The plain-English text is produced by a
+ * Home Assistant TEMPLATE (rendered server-side through the same render_template subscription the markdown
+ * card uses) that returns a JSON object {title, icon, badge, hero|heroes, chips, stats, groups|rows, lines};
+ * this card only lays it out. `model` may be given instead of `template` for static content. `actions` are
+ * navigation buttons ({label, detail, icon, path}). It never calls a service.
+ */
+class ThermowattPanelCard extends BaseUi {
+  setConfig(config) {
+    if (!config || (!config.template && !config.model)) throw new Error("template or model is required");
+    for (const a of config.actions || []) {
+      if (typeof a.path !== "string" || !a.path.startsWith("/")) throw new Error("an action path must start with /");
+    }
+    this._config = { ...config };
+    this._model = config.model || null;
+    this._error = null;
+    this._key = null;
+  }
+
+  connectedCallback() {
+    this._subscribe();
+  }
+
+  disconnectedCallback() {
+    if (this._unsub) {
+      this._unsub();
+      this._unsub = null;
+    }
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._subscribe();
+    this._render();
+  }
+
+  async _subscribe() {
+    const c = this._config;
+    if (!c || !c.template || !this._hass || this._unsub || this._subscribing) return;
+    if (!this._hass.connection || !this._hass.connection.subscribeMessage) return;
+    this._subscribing = true;
+    try {
+      this._unsub = await this._hass.connection.subscribeMessage((message) => this._onMessage(message), {
+        type: "render_template",
+        template: c.template,
+        report_errors: true,
+      });
+    } catch (error) {
+      this._error = String(error && error.message ? error.message : error);
+      this._render();
+    } finally {
+      this._subscribing = false;
+    }
+  }
+
+  _onMessage(message) {
+    try {
+      if (message.error) throw new Error(message.error);
+      this._model = parsePanelResult(message.result);
+      this._error = null;
+    } catch (error) {
+      this._error = String(error && error.message ? error.message : error);
+    }
+    this._render();
+  }
+
+  getCardSize() {
+    return this._config && this._config.size ? this._config.size : 4;
+  }
+
+  _render() {
+    if (!this._config) return;
+    if (!this._root) {
+      this._root = this.attachShadow({ mode: "open" });
+      this._root.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-action]");
+        if (!button) return;
+        const action = (this._config.actions || [])[Number(button.dataset.action)];
+        if (action) navigateTo(action.path);
+      });
+    }
+    const body = this._error
+      ? `<div class="head"><div class="title">${escapeHtml((this._model && this._model.title) || this._config.title || "Unavailable")}</div></div><p class="note">This card could not be shown (${escapeHtml(this._error)}). The rest of the dashboard is unaffected.</p>`
+      : this._model
+        ? renderPanel(this._model, this._config.actions || [])
+        : `<div class="head"><div class="title">${escapeHtml(this._config.title || "")}</div></div><p class="note">Loading…</p>`;
+    const key = body;
+    if (key === this._key) return; // unchanged: no DOM work, focus and hover survive
+    this._key = key;
+    this._root.innerHTML = `<ha-card><style>${UI_CSS}</style>${body}</ha-card>`;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * <thermowatt-lights-card>: every eligible light, discovered at run time (nothing to regenerate when a light is
+ * added). Each light shows its friendly name and state, a tap to switch it, and a brightness slider only when it
+ * can dim. A light is NOT shown when it is: excluded (the `exclude` list, or a Home Assistant label named by
+ * `exclude_label`), hidden or a configuration/diagnostic entity in the registry, unavailable, a light GROUP
+ * (its members are shown instead) or a duplicate (same device and name as one already shown).
+ * `lights` (entity + optional name) may still pin an order or a display name; `names` renames by entity ID.
+ * ---------------------------------------------------------------------------------------------- */
+export function discoverLights(hass, config) {
+  const exclude = new Set((config.exclude || []).map(String));
+  const label = config.exclude_label ? String(config.exclude_label) : "";
+  const names = config.names || {};
+  const states = hass.states || {};
+  const registry = hass.entities || {};
+  const out = [];
+  const seen = new Set();
+  const seenDevice = new Set();
+  let unavailable = 0;
+  const consider = (entityId, pinnedName) => {
+    if (seen.has(entityId) || exclude.has(entityId)) return;
+    const state = states[entityId];
+    if (!state) return; // disabled, removed or not loaded: nothing to show
+    const entry = registry[entityId] || {};
+    if (entry.hidden || entry.hb) return;
+    if (entry.entity_category || entry.ec) return;
+    if (label && (entry.labels || entry.lb || []).includes(label)) return;
+    const attrs = state.attributes || {};
+    if (config.exclude_groups !== false && Array.isArray(attrs.entity_id) && attrs.entity_id.length) return; // a group: its members are shown
+    const name = names[entityId] || pinnedName || attrs.friendly_name || entityId;
+    const deviceId = entry.device_id || entry.di;
+    const duplicate = deviceId ? `${deviceId}|${String(name).toLowerCase()}` : null;
+    if (duplicate && seenDevice.has(duplicate)) return;
+    if (state.state === "unavailable" || state.state === "unknown") {
+      if (!config.show_unavailable) {
+        unavailable += 1;
+        seen.add(entityId);
+        return;
+      }
+    }
+    seen.add(entityId);
+    if (duplicate) seenDevice.add(duplicate);
+    out.push({ entityId, name, state });
+  };
+  for (const l of config.lights || []) consider(l.entity, l.name); // pinned first, in the configured order
+  const rest = Object.keys(states).filter((id) => id.startsWith("light.") && !seen.has(id));
+  const shownName = (id) => String(names[id] || (states[id].attributes || {}).friendly_name || id);
+  rest.sort((a, b) => shownName(a).localeCompare(shownName(b), undefined, { numeric: true }));
+  for (const id of rest) consider(id, null);
+  return { lights: out, unavailable };
+}
+
+/** Brightness 1-100 for a dimmable light that is on, else null. */
+export function brightnessPct(state) {
+  if (!state || state.state !== "on") return null;
+  const b = Number((state.attributes || {}).brightness);
+  return Number.isFinite(b) ? Math.max(1, Math.round((b / 255) * 100)) : null;
+}
+
+/** A light dims when it supports any colour mode other than plain on/off. */
+export function isDimmable(state) {
+  const modes = (state && state.attributes && state.attributes.supported_color_modes) || [];
+  return modes.length > 0 && modes.some((m) => m !== "onoff");
+}
+
+class ThermowattLightsCard extends BaseUi {
+  setConfig(config) {
+    this._config = { title: "Lights", discover: true, exclude_label: "hide_from_dashboard", ...config };
+    for (const l of this._config.lights || []) if (!l || typeof l.entity !== "string" || !l.entity.startsWith("light.")) throw new Error("every pinned light needs a light entity");
+    this._key = null;
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  getCardSize() {
+    return 3;
+  }
+
+  _render() {
+    if (!this._config || !this._hass) return;
+    const found = discoverLights(this._hass, this._config);
+    const lights = found.lights;
+    const key = JSON.stringify([found.unavailable, lights.map((l) => [l.entityId, l.name, l.state.state, l.state.attributes.brightness, isDimmable(l.state)])]);
+    if (key === this._key) return;
+    this._key = key;
+    if (!this._root) {
+      this._root = this.attachShadow({ mode: "open" });
+      this._root.addEventListener("click", (event) => {
+        const tile = event.target.closest("button[data-toggle]");
+        if (!tile || tile.disabled) return;
+        this._hass.callService("light", "toggle", { entity_id: tile.dataset.toggle });
+      });
+      this._root.addEventListener("change", (event) => {
+        const slider = event.target.closest("input[data-brightness]");
+        if (slider) this._hass.callService("light", "turn_on", { entity_id: slider.dataset.brightness, brightness_pct: Number(slider.value) });
+      });
+    }
+    const on = lights.filter((l) => l.state.state === "on").length;
+    const density = lights.length > 8 ? "dense" : lights.length > 4 ? "medium" : "roomy";
+    let body = `<div class="head">${iconHtml("mdi:lightbulb-group")}<div class="title">${escapeHtml(this._config.title)}</div>${lights.length ? `<span class="chip${on ? " t-warn" : " t-idle"}">${on} of ${lights.length} on</span>` : ""}</div>`;
+    if (!lights.length) body += '<p class="note">No lights were found. Lights appear here automatically when Home Assistant has them.</p>';
+    body += `<div class="lights ${density}">`;
+    for (const l of lights) {
+      const s = l.state.state;
+      const pct = brightnessPct(l.state);
+      const dim = isDimmable(l.state) && s === "on";
+      const label = s === "on" ? (pct === null ? "On" : `On · ${pct}%`) : s === "off" ? "Off" : "Unavailable";
+      const usable = s === "on" || s === "off";
+      body +=
+        `<div class="light${s === "on" ? " on" : ""}${usable ? "" : " off-line"}">` +
+        `<button class="lt" data-toggle="${escapeHtml(l.entityId)}"${usable ? "" : " disabled"} aria-label="${escapeHtml(l.name)}: ${escapeHtml(label)}">${iconHtml(s === "on" ? "mdi:lightbulb-on" : "mdi:lightbulb-outline")}<span class="n">${escapeHtml(l.name)}</span><span class="s">${escapeHtml(label)}</span></button>` +
+        (dim ? `<input type="range" min="1" max="100" value="${pct === null ? 100 : pct}" data-brightness="${escapeHtml(l.entityId)}" aria-label="${escapeHtml(l.name)} brightness">` : "") +
+        "</div>";
+    }
+    body += "</div>";
+    if (found.unavailable) body += `<p class="note small">${found.unavailable} unavailable light${found.unavailable === 1 ? " is" : "s are"} not shown.</p>`;
+    this._root.innerHTML = `<ha-card><style>${UI_CSS}
+      .lights{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
+      .lights.medium{gap:10px;grid-template-columns:repeat(auto-fill,minmax(148px,1fr))}
+      .lights.dense{gap:8px;grid-template-columns:repeat(auto-fill,minmax(128px,1fr))}
+      .light{display:flex;flex-direction:column;justify-content:center;gap:8px;padding:12px;border-radius:16px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent);min-width:0}
+      .light.on{background:color-mix(in srgb,var(--state-light-active-color,#ffc107) 20%,transparent)}
+      .light.off-line{opacity:.55}
+      .lt{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:10px;align-items:center}
+      .lt[disabled]{cursor:default}
+      .lt ha-icon{--mdc-icon-size:30px;grid-row:1 / span 2;color:var(--secondary-text-color)}
+      .light.on .lt ha-icon{color:var(--state-light-active-color,#ffc107)}
+      .lt .n{font-size:16.5px;font-weight:600;color:var(--primary-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .lt .s{font-size:14.5px;color:var(--secondary-text-color)}
+      .dense .lt .n{font-size:15px}.dense .lt ha-icon{--mdc-icon-size:24px}.dense .light{padding:10px}
+      .lt:focus-visible{outline:2px solid var(--primary-color);border-radius:8px}
+      input[type=range]{width:100%;accent-color:var(--state-light-active-color,#ffc107);margin:2px 0 0}
+      .small{font-size:13.5px}
+      </style>${body}</ha-card>`;
+  }
+}
+
+if (typeof customElements !== "undefined") {
+  if (!customElements.get("thermowatt-panel-card")) customElements.define("thermowatt-panel-card", ThermowattPanelCard);
+  if (!customElements.get("thermowatt-lights-card")) customElements.define("thermowatt-lights-card", ThermowattLightsCard);
+  window.customCards = window.customCards || [];
+  window.customCards.push(
+    { type: "thermowatt-panel-card", name: "Thermowatt panel", description: "Large-type status panel from a template (read only)" },
+    { type: "thermowatt-lights-card", name: "Thermowatt lights", description: "Any number of lights with brightness" }
+  );
 }
 
 /* ================================================================================================
@@ -658,7 +1139,7 @@ const COMPILE_LAG_MS = 10 * 60e3; // hourly statistics are compiled a few minute
  *   (export above generation, monitored above household) are WITHHELD with the reason, never clamped.
  * - Incomplete device statistics make M a lower bound and U an upper bound (never a confirmed figure).
  */
-export function energyBalance({ sources, devices, from, to, now, battery, unusableDevices = 0 }) {
+export function energyBalance({ sources, devices, from, to, now, battery, unusableDevices = 0, timeZone = DEFAULT_TIMEZONE }) {
   // the newest hour is only trusted once Home Assistant has had time to compile its hourly row
   const end = Math.min(to, Math.floor((now - COMPILE_LAG_MS) / HOUR_MS) * HOUR_MS);
   const base = { from, end, notes: [] };
@@ -669,14 +1150,32 @@ export function energyBalance({ sources, devices, from, to, now, battery, unusab
   if (end <= from) return { ...base, status: "pending", reason: "no complete hour in this period yet" };
   const labels = { solar: "solar generation", import: "grid import", export: "grid export" };
   const values = {};
+  let start = from;
+  const lateSources = [];
   for (const key of ["solar", "import", "export"]) {
     const src = (sources || {})[key];
     if (!src || !src.buckets) return withheld(`${labels[key]}: ${(src && src.reason) || "not configured"}`);
-    const total = sumKwh(src.buckets, from, end);
-    if (!total) return withheld(`${labels[key]} has no statistics in this period`);
+    if (!sumKwh(src.buckets, from, end)) return withheld(`${labels[key]} has no statistics in this period`);
     const cov = coverage(src.buckets, from, end, end);
-    if (cov.leading || cov.missing) return withheld(`${labels[key]} statistics are incomplete (${cov.leading + cov.missing} h without data)`);
+    if (cov.firstPresent === null) return withheld(`${labels[key]} has no complete hour of statistics in this period`);
+    if (cov.leading > 0) {
+      lateSources.push(labels[key]);
+      start = Math.max(start, cov.firstPresent); // statistics begin part-way through: use the window every source covers
+    }
+  }
+  for (const key of ["solar", "import", "export"]) {
+    const src = sources[key];
+    const total = sumKwh(src.buckets, start, end);
+    const cov = coverage(src.buckets, start, end, end);
+    if (!total || cov.leading || cov.missing) return withheld(`${labels[key]} statistics are incomplete (${cov.leading + cov.missing} h without data)`);
     values[key] = total.kwh;
+  }
+  base.requestedFrom = from;
+  base.from = start;
+  base.partial = start > from;
+  if (base.partial) {
+    const when = new Date(start).toLocaleString("en-AU", { timeZone, day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+    base.notes.push(`The ${lateSources.join(" and ")} statistics start part-way through the period, so this balance covers ${when} onwards.`);
   }
   const G = values.solar;
   const I = values.import;
@@ -697,12 +1196,12 @@ export function energyBalance({ sources, devices, from, to, now, battery, unusab
   let withData = 0;
   if (unusableDevices > 0) incomplete = true; // monitored devices whose statistics cannot be used
   for (const d of devices || []) {
-    const total = sumKwh(d.buckets, from, end);
+    const total = sumKwh(d.buckets, start, end);
     if (!total) {
       incomplete = true;
       continue;
     }
-    const cov = coverage(d.buckets, from, end, end);
+    const cov = coverage(d.buckets, start, end, end);
     if (cov.leading || cov.missing) incomplete = true;
     if (d.estimated) estimated = true;
     withData += 1;
@@ -828,68 +1327,115 @@ export function monthLabel(ms, timeZone = DEFAULT_TIMEZONE) {
 const escapeHtml = (text) =>
   String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+const DE_CSS = `
+  .toggle{display:flex;gap:6px}
+  .toggle button{all:unset;cursor:pointer;font-size:14px;padding:5px 14px;border:1px solid var(--divider-color,#555);border-radius:999px;color:var(--primary-text-color)}
+  .toggle button.on{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}
+  .toggle button:focus-visible,th button:focus-visible{outline:2px solid var(--primary-color)}
+  .scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:15.5px}
+  th{padding:10px 12px;text-align:right;font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color);white-space:nowrap}
+  td{padding:11px 12px;text-align:right;white-space:nowrap;color:var(--primary-text-color)}
+  th:first-child,td:first-child{text-align:left;white-space:normal;padding-left:2px}
+  th button{all:unset;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit}
+  tbody tr{border-top:1px solid var(--divider-color,#444)}
+  tr.total td{font-weight:700;border-top:2px solid var(--divider-color,#555);background:color-mix(in srgb,var(--primary-text-color) 5%,transparent)}
+  .none{color:var(--secondary-text-color);font-size:14px}
+  .est,.part{display:inline-block;font-size:12px;font-weight:500;color:var(--secondary-text-color);border:1px solid var(--divider-color,#666);border-radius:999px;padding:1px 8px;margin-left:6px;white-space:nowrap}
+  .kpis3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .kbox{padding:14px 16px;border-radius:16px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}
+  .kbox .lab{font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .kbox .val{font-size:clamp(30px,9cqw,44px);font-weight:500;line-height:1.1;margin-top:4px;color:var(--primary-text-color)}
+  .kbox .unit{font-size:.4em;color:var(--secondary-text-color);margin-left:.2em}
+  .kbox .sub{font-size:14.5px;color:var(--secondary-text-color);margin-top:2px}
+  .sankey{display:block;width:100%;max-width:900px;margin:0 auto}
+  .sankey text{fill:var(--primary-text-color)}
+  .sankey .halo{paint-order:stroke;stroke:var(--card-background-color,#1c1c1c);stroke-width:3px;stroke-linejoin:round}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;color:var(--secondary-text-color)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .bars{display:block;width:100%;max-width:640px;margin:0 auto}
+  .bars text{fill:var(--secondary-text-color)}.bars .v{fill:var(--primary-text-color)}
+  details summary{cursor:pointer;font-size:14px;color:var(--secondary-text-color)}
+  details p{margin:8px 0 0}
+  h3{margin:6px 0 -4px;font-size:15px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--secondary-text-color)}
+  @container (max-width:520px){
+    .c-off,.c-peak{display:none}
+    table{font-size:14.5px}
+    td,th{padding-left:8px;padding-right:8px}
+  }
+`;
+
+const STYLE = UI_CSS + DE_CSS;
+
 function tableHtml(id, rows, total, sort, partialNote) {
   const arrow = (key) => (sort.key === key ? (sort.direction === "asc" ? " ▲" : " ▼") : "");
   const head = [
-    ["name", "Device"],
-    ["kwh", "kWh"],
-    ["offCost", "Off-peak $"],
-    ["peakCost", "Peak $"],
-    ["cost", "Total $"],
+    ["name", "Device", ""],
+    ["kwh", "kWh", ""],
+    ["offCost", "Off-peak $", "c-off"],
+    ["peakCost", "Peak $", "c-peak"],
+    ["cost", "Total $", ""],
   ]
-    .map(([key, text]) => `<th><button data-table="${id}" data-sort="${key}">${text}${arrow(key)}</button></th>`)
+    .map(([key, text, klass]) => `<th class="${klass}"><button data-table="${id}" data-sort="${key}">${text}${arrow(key)}</button></th>`)
     .join("");
   const body = sortRows(rows, sort.key, sort.direction)
     .map(
       (r) =>
         `<tr><td>${escapeHtml(r.name)}${r.estimated ? ' <span class="est" title="Estimated from measured power">est.</span>' : ""}${r.partialFrom ? ` <span class="part" title="Statistics for this period start later than the period">from ${escapeHtml(r.partialFrom)}</span>` : ""}${r.missingHours ? ` <span class="part" title="Hours inside this period with no recorded statistics (not counted as zero)">${r.missingHours} h missing</span>` : ""}${r.check && r.check.differs ? ` <span class="part" title="Statistics say ${r.check.stats.toFixed(3)} kWh but the device's own counter says ${r.check.counter.toFixed(3)} kWh">≠ device counter</span>` : ""}</td>` +
         (r.data
-          ? `<td>${fmtKwh(r.data.kwh)}</td><td>${fmtMoney(r.data.offCost, r.data.assumed)}</td><td>${fmtMoney(r.data.peakCost, r.data.assumed)}</td><td>${fmtMoney(r.data.cost, r.data.assumed)}</td>`
+          ? `<td>${fmtKwh(r.data.kwh)}</td><td class="c-off">${fmtMoney(r.data.offCost, r.data.assumed)}</td><td class="c-peak">${fmtMoney(r.data.peakCost, r.data.assumed)}</td><td>${fmtMoney(r.data.cost, r.data.assumed)}</td>`
           : '<td colspan="4" class="none">no statistics (not zero)</td>') +
         "</tr>"
     )
     .join("");
   const foot = total
-    ? `<tr class="total"><td>Total (${total.devices} device${total.devices === 1 ? "" : "s"}${total.missing ? `, ${total.missing} without data` : ""})${total.incomplete ? ' <span class="part" title="At least one device has missing or late-starting statistics in this period">incomplete</span>' : ""}</td><td>${fmtKwh(total.kwh)}</td><td>${fmtMoney(total.offCost, total.assumed)}</td><td>${fmtMoney(total.peakCost, total.assumed)}</td><td>${fmtMoney(total.cost, total.assumed)}</td></tr>`
+    ? `<tr class="total"><td>Total (${total.devices} device${total.devices === 1 ? "" : "s"}${total.missing ? `, ${total.missing} without data` : ""})${total.incomplete ? ' <span class="part" title="At least one device has missing or late-starting statistics in this period">incomplete</span>' : ""}</td><td>${fmtKwh(total.kwh)}</td><td class="c-off">${fmtMoney(total.offCost, total.assumed)}</td><td class="c-peak">${fmtMoney(total.peakCost, total.assumed)}</td><td>${fmtMoney(total.cost, total.assumed)}</td></tr>`
     : '<tr class="total"><td colspan="5" class="none">No data yet</td></tr>';
   return `<div class="scroll"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>${partialNote ? `<p class="note">${partialNote}</p>` : ""}`;
 }
 
-function barsSvg(items, key, unit) {
+/** Bar chart (dependency-free). `narrow` uses a taller, smaller canvas so the text stays readable on a phone. */
+function barsSvg(items, key, unit, narrow = false) {
   if (!items.length) return "";
+  const W = narrow ? 340 : 560;
+  const H = narrow ? 210 : 220;
+  const base = H - 30;
+  const room = base - 34;
   const max = Math.max(...items.map((i) => i[key] || 0), 1e-9);
-  const w = 56;
-  const gap = 10;
-  const height = 124;
+  const slot = W / items.length;
+  const bw = Math.min(64, slot * 0.64);
   const bars = items
     .map((item, index) => {
       const value = item[key];
-      const h = value ? Math.max(2, (value / max) * 80) : 0;
-      const x = index * (w + gap) + gap;
+      const h = value ? Math.max(3, (value / max) * room) : 0;
+      const x = index * slot + (slot - bw) / 2;
+      const label = value === null || value === undefined ? "—" : unit === "$" ? fmtMoney(value, item.assumed) : value.toFixed(value < 10 ? 1 : 0);
       return (
-        `<g><rect x="${x}" y="${height - 22 - h}" width="${w}" height="${h}" rx="3" fill="var(--primary-color,#03a9f4)" opacity="${item.partial ? 0.55 : 0.95}"/>` +
-        `<text x="${x + w / 2}" y="${height - 26 - h}" text-anchor="middle" font-size="10" fill="var(--primary-text-color)">${value === null ? "—" : unit === "$" ? fmtMoney(value, item.assumed) : value.toFixed(value < 10 ? 1 : 0)}</text>` +
-        `<text x="${x + w / 2}" y="${height - 6}" text-anchor="middle" font-size="10" fill="var(--secondary-text-color)">${escapeHtml(item.label)}</text></g>`
+        `<g><rect x="${x.toFixed(1)}" y="${(base - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="4" fill="var(--primary-color,#03a9f4)" opacity="${item.partial ? 0.5 : 0.95}"/>` +
+        `<text class="v" x="${(x + bw / 2).toFixed(1)}" y="${(base - h - 8).toFixed(1)}" text-anchor="middle" font-size="${narrow ? 13 : 14}" font-weight="600">${escapeHtml(label)}</text>` +
+        `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="${narrow ? 13 : 14}">${escapeHtml(item.label)}</text></g>`
       );
     })
     .join("");
-  const width = items.length * (w + gap) + gap;
-  return `<svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width * 1.4}px" role="img" aria-label="Bar chart">${bars}</svg>`;
+  return `<svg class="bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="Bar chart">${bars}</svg>`;
 }
 
 /**
  * A dependency-free Sankey-style diagram of one balance: Solar -> Household / Export, Grid import -> Household,
  * Household -> Monitored devices / Unmeasured. Widths are proportional to kWh. Only drawn for a valid balance.
+ * `compact` (phones) drops the in-diagram labels, which would be unreadable, and adds a legend instead.
  */
-export function sankeySvg(b) {
+export function sankeySvg(b, { compact = false } = {}) {
   if (!b || b.status !== "ok") return "";
-  const W = 480;
-  const Ht = 214;
-  const nodeW = 12;
-  const gap = 12;
-  const pad = 8;
-  const x0 = 104;
-  const x2 = W - 150 - nodeW;
+  const W = compact ? 360 : 760;
+  const Ht = compact ? 250 : 300;
+  const nodeW = compact ? 12 : 14;
+  const gap = 14;
+  const pad = 10;
+  const left = compact ? 12 : 150;
+  const right = compact ? 12 : 214;
+  const x0 = left;
+  const x2 = W - right - nodeW;
   const x1 = (x0 + x2) / 2;
   const total = b.G + b.I;
   if (!(total > 0)) return "";
@@ -933,25 +1479,31 @@ export function sankeySvg(b) {
     z.inn += thick;
     const xa = a.x + nodeW;
     const xm = (xa + z.x) / 2;
-    paths += `<path d="M${xa} ${ya} C${xm} ${ya} ${xm} ${yz} ${z.x} ${yz} L${z.x} ${yz + thick} C${xm} ${yz + thick} ${xm} ${ya + thick} ${xa} ${ya + thick} Z" fill="${color}" opacity="0.35"/>`;
+    paths += `<path d="M${xa} ${ya} C${xm} ${ya} ${xm} ${yz} ${z.x} ${yz} L${z.x} ${yz + thick} C${xm} ${yz + thick} ${xm} ${ya + thick} ${xa} ${ya + thick} Z" fill="${color}" opacity="0.38"/>`;
   }
+  const fs = compact ? 12 : 16;
   let drawn = "";
   for (const node of Object.values(nodes)) {
     if (!(node.value > 0)) continue;
     const fill = node.id === "other" && b.uStatus === "upper_bound" ? 0.55 : 1;
-    drawn += `<rect x="${node.x}" y="${node.y}" width="${nodeW}" height="${node.h}" rx="2" fill="${node.color}" opacity="${fill}"/>`;
+    drawn += `<rect x="${node.x}" y="${node.y}" width="${nodeW}" height="${node.h}" rx="3" fill="${node.color}" opacity="${fill}"/>`;
+    if (compact) continue;
     if (node.id === "house") {
-      // between the columns there is room for two short lines only
       const ty = node.y + node.h / 2;
-      drawn += `<text x="${node.x + nodeW + 5}" y="${ty - 2}" font-size="11" class="halo">Household</text><text x="${node.x + nodeW + 5}" y="${ty + 11}" font-size="11" class="halo">${escapeHtml(kwh(node.value))}</text>`;
+      drawn += `<text x="${node.x + nodeW + 7}" y="${ty - 3}" font-size="${fs}" font-weight="600" class="halo">Household</text><text x="${node.x + nodeW + 7}" y="${ty + 15}" font-size="${fs}" class="halo">${escapeHtml(kwh(node.value))}</text>`;
       continue;
     }
-    const tx = node.anchor === "end" ? node.x - 5 : node.x + nodeW + 5;
-    const ty = node.y + Math.min(node.h / 2, 14) + 4;
-    drawn += `<text x="${tx}" y="${ty}" text-anchor="${node.anchor === "end" ? "end" : "start"}" font-size="11" class="halo">${escapeHtml(node.label)}</text>`;
+    const tx = node.anchor === "end" ? node.x - 8 : node.x + nodeW + 8;
+    const ty = node.y + Math.min(node.h / 2, 16) + 5;
+    drawn += `<text x="${tx}" y="${ty}" text-anchor="${node.anchor === "end" ? "end" : "start"}" font-size="${fs}" class="halo">${escapeHtml(node.label)}</text>`;
   }
   const summary = `Energy balance: solar ${kwh(b.G)}, grid import ${kwh(b.I)}, grid export ${kwh(b.E)}, household ${kwh(b.H)}`;
-  return `<svg class="sankey" viewBox="0 0 ${W} ${Ht}" width="100%" role="img" aria-label="${escapeHtml(summary)}">${paths}${drawn}</svg>`;
+  const legend = compact
+    ? `<div class="legend">${[["Solar", colors.solar], ["Import", colors.grid], ["Export", colors.export], ["Household", colors.house], ...(itemised ? [["Devices", colors.devices], ["Unmeasured", colors.other]] : [])]
+        .map(([name, color]) => `<span><i style="background:${color}"></i>${name}</span>`)
+        .join("")}</div>`
+    : "";
+  return `<svg class="sankey" viewBox="0 0 ${W} ${Ht}" role="img" aria-label="${escapeHtml(summary)}">${paths}${drawn}</svg>${legend}`;
 }
 
 const pctText = (v, prefix = "") => (v === null || v === undefined ? "—" : `${prefix}${v.toFixed(0)}%`);
@@ -985,18 +1537,38 @@ function balanceCell(b, row) {
   }
 }
 
-function balanceHtml(s, view, asOfText) {
-  if (s.balanceReason) return `<h3>Whole-house energy balance</h3><p class="warn">Not available: ${escapeHtml(s.balanceReason)}.</p>`;
+/** The three large numbers above the diagram, for the period being shown. */
+function balanceHeroes(b) {
+  if (!b || b.status !== "ok") return "";
+  const num = (v, digits = 1) => (v === null || v === undefined ? "—" : v.toFixed(digits));
+  const lower = b.deviceIncomplete ? "≥ " : b.estimated ? "≈ " : "";
+  const unmeasured =
+    b.uStatus === "withheld" || b.U === null
+      ? { value: null, caption: b.uStatus === "withheld" ? "withheld, see below" : "no device data" }
+      : { value: `${b.uStatus === "upper_bound" ? "≤ " : b.estimated ? "≈ " : ""}${num(b.U)}`, caption: b.monPct === null ? "" : `${lower}${b.monPct.toFixed(0)}% of the household is monitored` };
+  return (
+    '<div class="heroes multi">' +
+    `<div class="hero t-info"><div class="lab">Household used</div><div class="val">${num(b.H)}<span class="unit">kWh</span></div><div class="cap">${b.indepPct === null ? "" : `${b.indepPct.toFixed(0)}% of it from solar`}</div></div>` +
+    `<div class="hero t-ok"><div class="lab">Solar used directly</div><div class="val">${num(b.S)}<span class="unit">kWh</span></div><div class="cap">${b.selfPct === null ? "" : `${b.selfPct.toFixed(0)}% of generation`}</div></div>` +
+    `<div class="hero t-idle"><div class="lab">Unmeasured</div><div class="val">${unmeasured.value === null ? "—" : unmeasured.value}<span class="unit">${unmeasured.value === null ? "" : "kWh"}</span></div><div class="cap">${escapeHtml(unmeasured.caption)}</div></div>` +
+    "</div>"
+  );
+}
+
+function balanceHtml(s, view, compact) {
+  if (s.balanceReason) return `<div class="head">${iconHtml("mdi:scale-balance")}<div class="title">Whole-house energy balance</div></div><p class="note">Not available: ${escapeHtml(s.balanceReason)}.</p>`;
   const day = s.balance.day;
   const month = s.balance.month;
   const shown = view === "month" ? month : day;
   const endText = (b) => new Date(b.end).toLocaleTimeString("en-AU", { timeZone: s.tz, hour: "numeric", minute: "2-digit" });
-  let html = `<h3>Whole-house energy balance</h3>`;
-  html += `<div class="toggle" role="group" aria-label="Balance period"><button data-balance="day" class="${view === "month" ? "" : "on"}">Today</button><button data-balance="month" class="${view === "month" ? "on" : ""}">${escapeHtml(monthLabel(s.generatedAt || Date.now(), s.tz))}</button></div>`;
-  const drawing = sankeySvg(shown);
+  const fromText = (b) => new Date(b.from).toLocaleString("en-AU", { timeZone: s.tz, day: "numeric", month: "short" });
+  let html = `<div class="head">${iconHtml("mdi:scale-balance")}<div class="title">Whole-house energy balance</div>`;
+  html += `<div class="toggle" role="group" aria-label="Balance period"><button data-balance="day" class="${view === "month" ? "" : "on"}">Today</button><button data-balance="month" class="${view === "month" ? "on" : ""}">${escapeHtml(monthLabel(s.generatedAt || Date.now(), s.tz))}</button></div></div>`;
+  html += balanceHeroes(shown);
+  const drawing = sankeySvg(shown, { compact });
   if (drawing) html += drawing;
   else if (shown.status === "ok") html += '<p class="note">No energy flowed in this period, so there is nothing to draw.</p>';
-  else html += `<p class="warn">${escapeHtml(shown.status === "pending" ? "Collecting: " : "Balance withheld: ")}${escapeHtml(shown.reason)}.</p>`;
+  else html += `<p class="note"><b>${escapeHtml(shown.status === "pending" ? "Collecting: " : "Balance withheld: ")}</b>${escapeHtml(shown.reason)}.</p>`;
   const rows = [
     ["G", "Solar generation"],
     ["I", "Grid import"],
@@ -1015,12 +1587,13 @@ function balanceHtml(s, view, asOfText) {
   const ended = day.end > day.from ? endText(day) : null;
   html += `<p class="note">Battery-free balance from the inverter's generation, import and export statistics and the monitored devices, over the same complete hours${ended ? ` (to ${escapeHtml(ended)})` : ""}. Energy only: device costs elsewhere are tariff-valued estimates, not grid spending, and no solar is attributed to individual devices.</p>`;
   for (const [name, b] of [["Today", day], ["Month", month]]) {
-    if (b.status === "withheld") html += `<p class="warn"><b>${name}:</b> withheld, ${escapeHtml(b.reason)}.</p>`;
+    if (b.status === "withheld") html += `<p class="note"><b>${name}:</b> withheld, ${escapeHtml(b.reason)}.</p>`;
     else if (b.status === "pending") html += `<p class="note"><b>${name}:</b> collecting, ${escapeHtml(b.reason)}.</p>`;
     else {
+      if (b.partial) html += `<p class="note"><b>${name}:</b> covers ${escapeHtml(fromText(b))} onwards: some statistics start later than the period.</p>`;
       for (const note of b.notes) html += `<p class="note"><b>${name}:</b> ${escapeHtml(note)}</p>`;
-      if (b.uStatus === "withheld") html += `<p class="warn"><b>${name}:</b> ${escapeHtml(b.uReason)}.</p>`;
-      if (b.deviceIncomplete) html += `<p class="warn"><b>${name}:</b> ${b.devicesWithData} of ${b.devicesTotal} devices have complete statistics, so monitored energy is a lower bound (≥) and unmeasured consumption an upper bound (≤), not a confirmed figure.</p>`;
+      if (b.uStatus === "withheld") html += `<p class="note"><b>${name}:</b> ${escapeHtml(b.uReason)}.</p>`;
+      if (b.deviceIncomplete) html += `<p class="note"><b>${name}:</b> ${b.devicesWithData} of ${b.devicesTotal} devices have complete statistics, so monitored energy is a lower bound (≥) and unmeasured consumption an upper bound (≤), not a confirmed figure.</p>`;
       if (b.estimated) html += `<p class="note"><b>${name}:</b> includes energy estimated from power (≈).</p>`;
     }
   }
@@ -1032,34 +1605,6 @@ function balanceHtml(s, view, asOfText) {
   html += '<p class="note">Monitored devices here use complete hours only, so they can be slightly below the Today and month tables, which include the hour in progress.</p>';
   return html;
 }
-
-const STYLE = `
-  :host{display:block}
-  ha-card{padding:12px 14px}
-  h3{margin:10px 0 6px;font-size:14px;font-weight:600}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
-  .box{border:1px solid var(--divider-color,#ddd);border-radius:10px;padding:8px 10px}
-  .box b{display:block;font-size:20px}.box span{font-size:12px;color:var(--secondary-text-color)}
-  .scroll{overflow-x:auto}
-  table{border-collapse:collapse;width:100%;font-size:13px}
-  th,td{padding:5px 8px;text-align:right;white-space:nowrap}
-  th:first-child,td:first-child{text-align:left;white-space:normal}
-  th button{all:unset;cursor:pointer;font-weight:600;color:var(--primary-text-color)}
-  th button:focus-visible{outline:2px solid var(--primary-color)}
-  tbody tr{border-top:1px solid var(--divider-color,#ddd)}
-  tr.total{border-top:2px solid var(--divider-color,#bbb);font-weight:600}
-  .none,.note{color:var(--secondary-text-color);font-size:12px}
-  .est,.part{font-size:11px;color:var(--secondary-text-color);border:1px solid var(--divider-color,#ccc);border-radius:8px;padding:0 5px}
-  .warn{font-size:12px;color:var(--secondary-text-color);margin:6px 0}
-  .sankey{display:block;margin:4px 0 8px;max-width:640px}
-  .sankey text{fill:var(--primary-text-color)}
-  .sankey .halo{paint-order:stroke;stroke:var(--card-background-color,#fff);stroke-width:3px;stroke-linejoin:round}
-  .toggle{display:flex;gap:6px;margin:4px 0}
-  .toggle button{all:unset;cursor:pointer;font-size:12px;padding:3px 10px;border:1px solid var(--divider-color,#ccc);border-radius:12px;color:var(--primary-text-color)}
-  .toggle button.on{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}
-  .toggle button:focus-visible{outline:2px solid var(--primary-color)}
-  @media (max-width:520px){th,td{padding:4px 5px;font-size:12px}}
-`;
 
 const BaseElement = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 
@@ -1208,7 +1753,7 @@ export async function computeState(hass, c) {
   const deviceBuckets = devices.map((d) => ({ name: d.name, estimated: d.estimated, buckets: buckets.get(d.deviceId) }));
   const balance = {};
   for (const [name, from, to] of [["day", dayStart, dayEnd], ["month", monthStart, monthEnd]]) {
-    balance[name] = energyBalance({ sources, devices: deviceBuckets, from, to, now, battery: house ? house.battery_present : undefined, unusableDevices: unsupported });
+    balance[name] = energyBalance({ sources, devices: deviceBuckets, from, to, now, battery: house ? house.battery_present : undefined, unusableDevices: unsupported, timeZone: tz });
   }
   return {
     devices,
@@ -1274,6 +1819,10 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
 
   disconnectedCallback() {
     if (this._config) sharedFor(this._config).listeners.delete(this);
+    if (this._resize) {
+      this._resize.disconnect();
+      this._resize = null;
+    }
   }
 
   set hass(hass) {
@@ -1281,6 +1830,18 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
     if (!this._config) return;
     if (!this._root) {
       this._root = this.attachShadow({ mode: "open" });
+      if (typeof ResizeObserver !== "undefined") {
+        // phones get a smaller chart canvas and fewer table columns: redraw when the width class changes
+        this._resize = new ResizeObserver(() => {
+          const w = this.clientWidth || 0;
+          const cls = `${w > 0 && w < 480}|${w > 0 && w < 640}`;
+          if (cls !== this._widthClass) {
+            this._widthClass = cls;
+            this._render();
+          }
+        });
+        this._resize.observe(this);
+      }
       this._root.addEventListener("click", (event) => {
         const toggle = event.target.closest("button[data-balance]");
         if (toggle) {
@@ -1306,7 +1867,7 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
   }
 
   getCardSize() {
-    return { summary: 3, balance: 9, daily: 4, monthly: 6, history: 8 }[this._config && this._config.part] || 12;
+    return { summary: 4, balance: 12, week: 4, daily: 7, monthly: 9, history: 9 }[this._config && this._config.part] || 14;
   }
 
   async _load(shared) {
@@ -1330,17 +1891,21 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
     const shared = sharedFor(this._config);
     const s = shared.state;
     const part = this._config.part;
+    const width = this.clientWidth || 0;
+    const narrow = width > 0 && width < 480;
+    const compact = width > 0 && width < 640;
     const stale = !!(s && s.generatedAt && !s.error && Date.now() - s.generatedAt > 3 * this._config.refresh_minutes * 60e3);
-    const key = `${shared.version || 0}|${JSON.stringify(this._sort)}|${this._balanceView}|${s ? 1 : 0}|${stale ? 1 : 0}`;
+    const key = `${shared.version || 0}|${JSON.stringify(this._sort)}|${this._balanceView}|${s ? 1 : 0}|${stale ? 1 : 0}|${narrow ? 1 : 0}|${compact ? 1 : 0}`;
     if (key === this._renderKey) return; // nothing changed: keep focus, scroll position and in-flight clicks
     this._renderKey = key;
-    let html = `<ha-card><style>${STYLE}</style>`;
+    const open = `<ha-card><style>${STYLE}</style>`;
+    const head = (icon, title, extra = "") => `<div class="head">${iconHtml(icon)}<div class="title">${escapeHtml(title)}</div>${extra}</div>`;
     if (!s) {
-      this._root.innerHTML = html + '<p class="note">Loading device energy…</p></ha-card>';
+      this._root.innerHTML = open + '<p class="note">Loading device energy…</p></ha-card>';
       return;
     }
     if (s.error && !s.devices) {
-      this._root.innerHTML = html + `<p class="warn">Device energy statistics are unavailable (${escapeHtml(s.error)}). The rest of the dashboard is unaffected.</p></ha-card>`;
+      this._root.innerHTML = open + `<p class="note">Device energy statistics are unavailable (${escapeHtml(s.error)}). The rest of the dashboard is unaffected.</p></ha-card>`;
       return;
     }
     const dailyTotal = combine(s.daily);
@@ -1350,50 +1915,68 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
     const label = monthLabel(s.generatedAt || Date.now(), s.tz);
     const want = (name) => part === "all" || part === name;
     const asOf = s.generatedAt ? new Date(s.generatedAt).toLocaleTimeString("en-AU", { timeZone: s.tz, hour: "numeric", minute: "2-digit" }) : "";
-    if (s.error) html += `<p class="warn">Latest refresh failed (${escapeHtml(s.error)}). Showing statistics last loaded at ${escapeHtml(asOf)}.</p>`;
-    else if (stale) html += `<p class="warn">Statistics were last refreshed at ${escapeHtml(asOf)} and may be out of date.</p>`;
+    let html = open;
+    if (s.error) html += `<p class="note">Latest refresh failed (${escapeHtml(s.error)}). Showing statistics last loaded at ${escapeHtml(asOf)}.</p>`;
+    else if (stale) html += `<p class="note">Statistics were last refreshed at ${escapeHtml(asOf)} and may be out of date.</p>`;
+    const sections = [];
     if (want("summary")) {
-      html += '<div class="cards">';
-      html += `<div class="box"><span>Today</span><b>${fmtKwh(dailyTotal && dailyTotal.kwh)}</b><span>${fmtMoney(dailyTotal && dailyTotal.cost)} est. operating cost</span></div>`;
-      html += `<div class="box"><span>${escapeHtml(label)} so far${partialMonth ? " (partial)" : ""}</span><b>${fmtKwh(monthTotal && monthTotal.kwh)}</b><span>${fmtMoney(monthTotal && monthTotal.cost)} est. operating cost</span></div>`;
-      html += `<div class="box"><span>Devices monitored</span><b>${s.devices.length}</b><span>${[s.withoutMonitoring ? `${s.withoutMonitoring} without energy monitoring (not shown)` : "", s.unsupported ? `${s.unsupported} with unsupported statistics units (not shown)` : ""].filter(Boolean).join("; ") || "all with energy monitoring"}</span></div>`;
-      html += "</div>";
-      html += '<p class="warn">Costs are <b>estimated tariff-valued operating costs</b> (consumption × the peak/off-peak rate in force when it was used). They are not Aurora charges: no supply charge, no solar feed-in credit, and no assumption that the energy came from the grid.' + (estimated ? " Devices marked <i>est.</i> only report power, so their energy is estimated." : "") + (s.assumed ? " <b>≈</b> marks costs valued at an <b>assumed</b> rate: the price start date is unconfirmed or earlier than the first dated rate, so they are not verified historical costs." : "") + ` Statistics as of ${escapeHtml(asOf)}.</p>`;
+      const kbox = (lab, value, unit, sub) => `<div class="kbox"><div class="lab">${lab}</div><div class="val">${value}${unit ? `<span class="unit">${unit}</span>` : ""}</div><div class="sub">${sub}</div></div>`;
+      const kwhParts = (v) => (v === null || v === undefined ? ["—", ""] : [v.toFixed(v < 10 ? 2 : 1), "kWh"]);
+      const [dv, du] = kwhParts(dailyTotal && dailyTotal.kwh);
+      const [mv, mu] = kwhParts(monthTotal && monthTotal.kwh);
+      const devicesSub = [s.withoutMonitoring ? `${s.withoutMonitoring} without energy monitoring (not shown)` : "", s.unsupported ? `${s.unsupported} with unsupported statistics units (not shown)` : ""].filter(Boolean).join("; ") || "all with energy monitoring";
+      sections.push(
+        head("mdi:meter-electric", "Device energy", `<span class="chip t-idle">As of ${escapeHtml(asOf)}</span>`) +
+          '<div class="kpis3">' +
+          kbox("Today", dv, du, `${fmtMoney(dailyTotal && dailyTotal.cost)} est. operating cost`) +
+          kbox(`${escapeHtml(label)} so far${partialMonth ? " (partial)" : ""}`, mv, mu, `${fmtMoney(monthTotal && monthTotal.cost)} est. operating cost`) +
+          kbox("Devices monitored", String(s.devices.length), "", escapeHtml(devicesSub)) +
+          "</div>" +
+          '<details><summary>How these costs are estimated</summary><p class="note">Costs are <b>estimated tariff-valued operating costs</b> (consumption × the peak/off-peak rate in force when it was used). They are not Aurora charges: no supply charge, no solar feed-in credit, and no assumption that the energy came from the grid.' +
+          (estimated ? " Devices marked <i>est.</i> only report power, so their energy is estimated." : "") +
+          (s.assumed ? " <b>≈</b> marks costs valued at an <b>assumed</b> rate: the price start date is unconfirmed or earlier than the first dated rate, so they are not verified historical costs." : "") +
+          ` Statistics as of ${escapeHtml(asOf)}.</p></details>`
+      );
     }
-    if (want("balance")) html += balanceHtml(s, this._balanceView, asOf);
+    if (want("balance")) sections.push(balanceHtml(s, this._balanceView, compact));
+    if (want("week")) sections.push(head("mdi:chart-bar", "Last seven days (kWh)") + barsSvg(s.week, "kwh", "kWh", narrow));
     if (want("daily")) {
-      html += `<h3>Today (midnight ${escapeHtml(s.tz.split("/")[1] || s.tz)} time)</h3>` + tableHtml("daily", s.daily, dailyTotal, this._sort.daily, "");
+      sections.push(head("mdi:calendar-today", `Today (midnight ${s.tz.split("/")[1] || s.tz} time)`) + tableHtml("daily", s.daily, dailyTotal, this._sort.daily, ""));
     }
     if (want("monthly")) {
-      html +=
-        `<h3>${escapeHtml(label)} month to date</h3>` +
+      let block =
+        head("mdi:calendar-month", `${label} month to date`) +
         tableHtml("monthly", s.monthly, monthTotal, this._sort.monthly, partialMonth ? `Monitoring began partway through ${escapeHtml(label)}: totals cover the recorded part of the month only.` : "");
       if (s.months.length) {
-        html += "<h3>Previous completed months</h3>";
-        html += '<p class="note">Reconstructed from long-term statistics for the devices and energy sources found today; these are not archived monthly totals, so a device removed or disabled since drops out of earlier months.</p>';
-        html += '<div class="scroll"><table><thead><tr><th>Month</th><th>kWh</th><th>Off-peak $</th><th>Peak $</th><th>Total $</th></tr></thead><tbody>';
+        block += "<h3>Previous completed months</h3>";
+        block += '<p class="note">Reconstructed from long-term statistics for the devices and energy sources found today; these are not archived monthly totals, so a device removed or disabled since drops out of earlier months.</p>';
+        block += '<div class="scroll"><table><thead><tr><th>Month</th><th>kWh</th><th class="c-off">Off-peak $</th><th class="c-peak">Peak $</th><th>Total $</th></tr></thead><tbody>';
         for (const m of [...s.months].reverse()) {
-          html += `<tr><td>${escapeHtml(m.full)}${m.partial ? ' <span class="part">partial</span>' : ""}</td><td>${fmtKwh(m.total.kwh)}</td><td>${fmtMoney(m.total.offCost, m.total.assumed)}</td><td>${fmtMoney(m.total.peakCost, m.total.assumed)}</td><td>${fmtMoney(m.total.cost, m.total.assumed)}</td></tr>`;
+          block += `<tr><td>${escapeHtml(m.full)}${m.partial ? ' <span class="part">partial</span>' : ""}</td><td>${fmtKwh(m.total.kwh)}</td><td class="c-off">${fmtMoney(m.total.offCost, m.total.assumed)}</td><td class="c-peak">${fmtMoney(m.total.peakCost, m.total.assumed)}</td><td>${fmtMoney(m.total.cost, m.total.assumed)}</td></tr>`;
         }
-        html += "</tbody></table></div>";
+        block += "</tbody></table></div>";
       } else {
-        html += '<p class="note">No completed month of statistics yet: history appears after the first month rollover (or as soon as earlier statistics exist).</p>';
+        block += '<p class="note">No completed month of statistics yet: history appears after the first month rollover (or as soon as earlier statistics exist).</p>';
       }
+      sections.push(block);
     }
     if (want("history")) {
+      let block = head("mdi:chart-timeline-variant", "Monthly history");
       if (s.months.length) {
-        html += "<h3>Monthly comparison (kWh)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, kwh: m.total.kwh, partial: m.partial })), "kwh", "kWh");
-        html += "<h3>Monthly comparison (est. cost)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, cost: m.total.cost, partial: m.partial, assumed: m.total.assumed })), "cost", "$");
-        html += "<h3>By device (kWh per month)</h3>";
-        html += '<div class="scroll"><table><thead><tr><th>Device</th>' + s.months.map((m) => `<th>${escapeHtml(m.label)}</th>`).join("") + "</tr></thead><tbody>";
+        block += "<h3>Monthly comparison (kWh)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, kwh: m.total.kwh, partial: m.partial })), "kwh", "kWh", narrow);
+        block += "<h3>Monthly comparison (est. cost)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, cost: m.total.cost, partial: m.partial, assumed: m.total.assumed })), "cost", "$", narrow);
+        block += "<h3>By device (kWh per month)</h3>";
+        block += '<div class="scroll"><table><thead><tr><th>Device</th>' + s.months.map((m) => `<th>${escapeHtml(m.label)}</th>`).join("") + "</tr></thead><tbody>";
         for (const d of s.devices) {
-          html += `<tr><td>${escapeHtml(d.name)}</td>` + s.months.map((m) => { const row = m.rows.find((r) => r.deviceId === d.deviceId); return `<td>${row && row.data ? row.data.kwh.toFixed(row.data.kwh < 1 ? 3 : 2) : "—"}</td>`; }).join("") + "</tr>";
+          block += `<tr><td>${escapeHtml(d.name)}</td>` + s.months.map((m) => { const row = m.rows.find((r) => r.deviceId === d.deviceId); return `<td>${row && row.data ? row.data.kwh.toFixed(row.data.kwh < 1 ? 3 : 2) : "—"}</td>`; }).join("") + "</tr>";
         }
-        html += "</tbody></table></div>";
+        block += "</tbody></table></div>";
+      } else {
+        block += '<p class="note">No completed month of statistics yet.</p>';
       }
-      html += "<h3>Last seven days (kWh)</h3>" + barsSvg(s.week, "kwh", "kWh");
+      sections.push(block);
     }
-    this._root.innerHTML = html + "</ha-card>";
+    this._root.innerHTML = html + sections.join('<div style="height:6px"></div>') + "</ha-card>";
   }
 }
 

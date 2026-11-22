@@ -3,7 +3,6 @@ title: Home
 views:
 - title: Home
   path: home
-  icon: mdi:home
   type: sections
   max_columns: 4
   dense_section_placement: true
@@ -1068,7 +1067,6 @@ views:
     column_span: 2
 - title: Energy
   path: energy
-  icon: mdi:solar-power
   type: sections
   max_columns: 3
   dense_section_placement: true
@@ -1304,7 +1302,6 @@ views:
     column_span: 3
 - title: Hot water
   path: hot-water
-  icon: mdi:water-boiler
   type: sections
   max_columns: 4
   dense_section_placement: true
@@ -1695,7 +1692,6 @@ views:
     column_span: 2
 - title: Bathrooms
   path: bathrooms
-  icon: mdi:shower-head
   type: sections
   max_columns: 4
   dense_section_placement: true
@@ -2302,7 +2298,6 @@ views:
     column_span: 2
 - title: Doors
   path: doors
-  icon: mdi:door
   type: sections
   max_columns: 3
   dense_section_placement: true
@@ -2437,7 +2432,6 @@ views:
     column_span: 2
 - title: System
   path: system
-  icon: mdi:stethoscope
   type: sections
   max_columns: 3
   dense_section_placement: true
@@ -2536,9 +2530,8 @@ views:
         navigation_path: /config/integrations/integration/tapo_smart_controller
       grid_options:
         columns: 12
-- title: Device Energy
+- title: Device energy
   path: device-energy
-  icon: mdi:meter-electric
   type: sections
   max_columns: 3
   dense_section_placement: true

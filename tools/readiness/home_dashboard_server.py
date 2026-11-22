@@ -348,6 +348,7 @@ async def main():
             "frontend": {},
             "recorder": {"db_url": "sqlite:////tmp/home-ui/recorder.db"},
             "history": {},
+            "logbook": {},
             "demo": {},
             "lovelace": {
                 "dashboards": {
