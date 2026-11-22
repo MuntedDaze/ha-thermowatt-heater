@@ -14,8 +14,10 @@ builds your own profile.
 """
 
 import argparse
+import datetime
 import importlib
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -45,6 +47,8 @@ TAPO_SETTINGS_PATH = "/config/integrations/integration/tapo_smart_controller"
 THERMOWATT_SETTINGS_PATH = "/config/integrations/integration/thermann_shadow"
 POWER_FRESH_SECONDS = 900
 COUNTER_FRESH_SECONDS = 1800
+RESET_EARLY_SECONDS = 30  # a scheduled utility-meter reset fires at 00:00:00; allow clock skew only
+RESET_LATE_SECONDS = 120
 DAILY_CAP_KWH = 500
 BAD = "['unknown', 'unavailable', 'none', '']"
 
@@ -760,10 +764,37 @@ def device_energy_fallback():
     )
 
 
-def _required_rate(rate, key):
-    if key not in rate:
-        raise ValueError(f"device_energy.rates entry {rate} is missing '{key}'")
-    return rate[key]
+def _rate_entry(rate):
+    """One validated price entry: finite non-negative prices and a real ISO date (or null = start unconfirmed)."""
+    prices = {}
+    for key in ("offpeak", "peak"):
+        value = rate.get(key) if isinstance(rate, dict) else None
+        if isinstance(value, bool) or value is None:
+            raise ValueError(f"device_energy.rates entry {rate} needs a numeric '{key}'")
+        number = float(value)
+        if not math.isfinite(number) or number < 0:
+            raise ValueError(
+                f"device_energy.rates entry {rate}: '{key}' must be finite and not negative"
+            )
+        prices[key] = number
+    start = rate.get("effective_from")
+    if start is not None:
+        try:
+            parsed = datetime.date.fromisoformat(str(start))
+        except ValueError as error:
+            raise ValueError(
+                f"device_energy.rates effective_from must be YYYY-MM-DD or null, got {start!r}"
+            ) from error
+        start = parsed.isoformat()
+    return {"effective_from": start, **prices}
+
+
+def _validated_rates(raw):
+    rates = [_rate_entry(r) for r in raw or []]
+    starts = [r["effective_from"] for r in rates]
+    if len(set(starts)) != len(starts):
+        raise ValueError("device_energy.rates has two entries with the same effective_from")
+    return rates
 
 
 def device_energy_sections(ent, custom):
@@ -779,14 +810,7 @@ def device_energy_sections(ent, custom):
 
 def device_energy_card(ent):
     cfg = ent.mapping.get("device_energy") or {}
-    rates = [
-        {
-            "effective_from": str(r["effective_from"]),
-            "offpeak": float(_required_rate(r, "offpeak")),
-            "peak": float(_required_rate(r, "peak")),
-        }
-        for r in cfg.get("rates") or []
-    ]
+    rates = _validated_rates(cfg.get("rates"))
     if not rates:
         ent.unresolved.append("device_energy.rates")
         return mapping_needed("Device energy rates", "device_energy.rates", 12)
@@ -1141,15 +1165,18 @@ def build_package(mapping=None):
     midnight = "now().replace(hour=0, minute=0, second=0, microsecond=0)"
 
     def covers_today(meter):
-        """The meter was reset at THIS local midnight (+/-10 min), so it holds the whole local day.
+        """The meter was reset at THIS local midnight, so it holds the whole local day.
 
-        A meter created mid-day, a missed midnight reset (stale previous-day reset) or a clock jump
-        all fail this test. ``now()`` is local time, so DST changes do not matter at midnight.
+        The reset must fall between RESET_EARLY_SECONDS before and RESET_LATE_SECONDS after local midnight
+        (a scheduled reset fires at 00:00:00). A meter created at 00:09, one last reset at 23:55 the
+        previous day, a missed midnight reset or a clock jump all fail this test. ``now()`` is local time,
+        so DST changes do not matter at midnight. It cannot tell whether the SOURCE was available through
+        the rollover; that limitation is stated in the status attributes and the docs.
         """
         last = f"(state_attr('{meter}', 'last_reset') | as_datetime(none))"
         return (
-            f"({last} is not none and {last} >= {midnight} - timedelta(minutes=10) "
-            f"and {last} <= {midnight} + timedelta(minutes=10))"
+            f"({last} is not none and {last} >= {midnight} - timedelta(seconds={RESET_EARLY_SECONDS}) "
+            f"and {last} <= {midnight} + timedelta(seconds={RESET_LATE_SECONDS}))"
         )
 
     def fresh(entity, seconds):
@@ -1159,10 +1186,13 @@ def build_package(mapping=None):
         )
 
     def counter_ok(entity):
-        """A genuine, current kWh counter: numeric, kWh, total class, non-negative and fresh."""
+        """A genuine, current kWh lifetime counter: numeric, kWh, non-negative, fresh and not declared as a
+        non-cumulative (``measurement``) quantity. A missing state class is accepted because utility_meter
+        does not need one."""
         return (
             f"(is_number(states('{entity}')) "
             f"and state_attr('{entity}', 'unit_of_measurement') == 'kWh' "
+            f"and state_attr('{entity}', 'state_class') not in ['measurement'] "
             f"and states('{entity}') | float >= 0 and {fresh(entity, COUNTER_FRESH_SECONDS)})"
         )
 
@@ -1210,7 +1240,12 @@ def build_package(mapping=None):
                     "yet cover a whole local day; sources_unavailable = an inverter counter is "
                     "missing, stale or not kWh; inconsistent = export exceeds generation; "
                     "battery_unconfirmed = battery_present is not confirmed false in the mapping"
-                )
+                ),
+                "limitation": (
+                    "ready means the daily meters were reset at this local midnight and the counters are "
+                    "current. Home Assistant cannot show whether an inverter counter was available through "
+                    "midnight: if it was offline, its gap lands in the first reading after it returns."
+                ),
             },
         ),
         tmpl(

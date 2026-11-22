@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 import importlib.util
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -743,7 +744,12 @@ def test_first_day_collecting_withholds_figures_with_an_explanation_state():
 def test_midnight_rollover_and_stale_previous_day_resets():
     just_reset = MIDNIGHT + timedelta(seconds=5)
     assert status_of(day(reset=just_reset)) == "ready"
-    assert status_of(day(reset=MIDNIGHT - timedelta(minutes=5))) == "ready"  # within +/-10 min
+    assert status_of(day(reset=MIDNIGHT + timedelta(seconds=90))) == "ready"  # late scheduler
+    assert status_of(day(reset=MIDNIGHT - timedelta(seconds=20))) == "ready"  # clock skew
+    # a meter first installed at 00:09, or last reset at 23:55 the day before, does NOT hold a whole day
+    assert status_of(day(reset=MIDNIGHT + timedelta(minutes=9))) == "collecting_first_day"
+    assert status_of(day(reset=MIDNIGHT - timedelta(minutes=5))) == "collecting_first_day"
+    assert status_of(day(reset=MIDNIGHT + timedelta(minutes=3))) == "collecting_first_day"
     # a missed midnight reset leaves yesterday's reset time: NOT today's coverage
     assert status_of(day(reset=MIDNIGHT - timedelta(days=1))) == "collecting_first_day"
     assert status_of(day(reset=MIDNIGHT - timedelta(hours=2))) == "collecting_first_day"
@@ -822,6 +828,21 @@ def test_invalid_or_stale_sources_are_unavailable_not_zero(broken):
         "home_grid_export_today",
     ):
         assert value(unique, states)[0] is False
+
+
+def test_a_counter_declared_as_a_non_cumulative_measurement_is_rejected():
+    for lifetime in (IMPORT_TOTAL, EXPORT_TOTAL):
+        states = day(**{lifetime: counter("500", klass="measurement")})
+        assert status_of(states) == "sources_unavailable"
+    for klass in ("total", "total_increasing"):
+        assert status_of(day(**{EXPORT_TOTAL: counter("500", klass=klass)})) == "ready"
+    # the inverter's daily generation counter keeps its legitimate characteristics (no class required)
+    assert status_of(day(**{SOLAR_TODAY: counter("20.0", klass="total_increasing")})) == "ready"
+
+
+def test_status_states_the_availability_limitation_it_cannot_detect():
+    attrs = owner_package()["home_energy_status"]["attributes"]
+    assert "offline" in attrs["limitation"] and "gap" in attrs["limitation"]
 
 
 def test_a_counter_without_a_state_class_is_still_accepted():
@@ -965,7 +986,8 @@ def test_device_energy_is_the_seventh_view_with_an_energy_icon(home):
 def test_rates_live_in_one_central_place_and_are_not_hardcoded_elsewhere(home):
     data, _ = home
     card = device_card(data)
-    assert card["rates"] == [{"effective_from": "2000-01-01", "offpeak": 0.1419, "peak": 0.1907}]
+    # the start date of the current prices is not confirmed: null, so history is labelled as assumed
+    assert card["rates"] == [{"effective_from": None, "offpeak": 0.1419, "peak": 0.1907}]
     mapping = build.load_mapping()
     assert mapping["device_energy"]["rates"][0]["offpeak"] == 0.1419
     for path in (
@@ -1055,7 +1077,9 @@ def test_device_energy_card_has_no_services_polling_or_cloud_calls():
     block = js[js.index("Device energy: <thermowatt-device-energy-card>") :]
     for forbidden in ("callService", "fetch(", "XMLHttpRequest", "WebSocket(", "setInterval"):
         assert forbidden not in block, forbidden
-    assert block.count("callWS") == 1 and "recorder/statistics_during_period" in block
+    requests = set(re.findall(r'type: "(recorder/[a-z_]+)"', block))
+    assert requests == {"recorder/get_statistics_metadata", "recorder/statistics_during_period"}
+    assert "callWS" in block and block.count("hass.callWS(") == 2
 
 
 def test_device_energy_javascript_unit_tests():
@@ -1063,9 +1087,46 @@ def test_device_energy_javascript_unit_tests():
     if node is None:
         pytest.skip("node is not installed")
     result = subprocess.run(
-        [node, "--test", str(ROOT / "tests/js/device_energy.test.mjs")],
+        [
+            node,
+            "--test",
+            str(ROOT / "tests/js/device_energy.test.mjs"),
+            str(ROOT / "tests/js/device_energy_card.test.mjs"),
+        ],
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"effective_from": None, "offpeak": -0.1, "peak": 0.2},
+        {"effective_from": None, "offpeak": float("nan"), "peak": 0.2},
+        {"effective_from": None, "offpeak": float("inf"), "peak": 0.2},
+        {"effective_from": None, "offpeak": 0.1},
+        {"effective_from": None, "offpeak": "cheap", "peak": 0.2},
+        {"effective_from": "2026-02-30", "offpeak": 0.1, "peak": 0.2},
+        {"effective_from": "July 2026", "offpeak": 0.1, "peak": 0.2},
+    ],
+)
+def test_invalid_rate_entries_are_rejected_by_the_generator(bad):
+    with pytest.raises(ValueError):
+        build._validated_rates([bad])
+
+
+def test_duplicate_rate_dates_are_rejected_and_valid_schedules_are_kept_as_given():
+    with pytest.raises(ValueError):
+        build._validated_rates(
+            [
+                {"effective_from": "2026-07-01", "offpeak": 0.1, "peak": 0.2},
+                {"effective_from": "2026-07-01", "offpeak": 0.2, "peak": 0.3},
+            ]
+        )
+    schedule = [
+        {"effective_from": None, "offpeak": 0.1419, "peak": 0.1907},
+        {"effective_from": "2027-07-01", "offpeak": 0.2, "peak": 0.3},
+    ]
+    assert build._validated_rates(schedule) == schedule

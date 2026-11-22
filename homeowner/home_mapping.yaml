@@ -59,5 +59,9 @@ device_energy:
   exclude_label: ""                 # or: any Home Assistant label ID that marks a device as excluded
   history_months: 6
   timezone: Australia/Hobart
-  rates:                            # AUD per kWh (owner's current Aurora usage rates)
-    - {effective_from: "2000-01-01", offpeak: 0.1419, peak: 0.1907}
+  # AUD per kWh. These are the owner's CURRENT Aurora usage rates; the date they started has not been
+  # confirmed, so effective_from is null and costs for ALL periods are valued at these prices and shown with
+  # "≈" (assumed rate). When a price changes, ADD an entry with its effective_from date (never edit an old one);
+  # once the start date of the current prices is known, put it here to make history after that date verified.
+  rates:
+    - {effective_from: null, offpeak: 0.1419, peak: 0.1907}

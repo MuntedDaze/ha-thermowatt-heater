@@ -2447,7 +2447,7 @@ views:
           start: '16:00'
           end: '21:00'
       rates:
-      - effective_from: '2000-01-01'
+      - effective_from: null
         offpeak: 0.1419
         peak: 0.1907
       platforms:
@@ -2480,7 +2480,7 @@ views:
           start: '16:00'
           end: '21:00'
       rates:
-      - effective_from: '2000-01-01'
+      - effective_from: null
         offpeak: 0.1419
         peak: 0.1907
       platforms:
@@ -2515,7 +2515,7 @@ views:
           start: '16:00'
           end: '21:00'
       rates:
-      - effective_from: '2000-01-01'
+      - effective_from: null
         offpeak: 0.1419
         peak: 0.1907
       platforms:
@@ -2550,7 +2550,7 @@ views:
           start: '16:00'
           end: '21:00'
       rates:
-      - effective_from: '2000-01-01'
+      - effective_from: null
         offpeak: 0.1419
         peak: 0.1907
       platforms:

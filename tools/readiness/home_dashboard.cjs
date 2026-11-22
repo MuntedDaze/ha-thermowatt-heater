@@ -362,6 +362,9 @@ async function main() {
         expect(energyText).toMatch(/\$\d+\.\d\d/);
         expect(energyText).toContain("Previous completed months");
         expect(energyText).toContain("Last seven days");
+        expect(energyText).toContain("Reconstructed from long-term statistics"); // history is not an archive
+        expect(energyText).toContain("≈$"); // current prices applied to history are labelled as assumed
+        expect(energyText).toContain("Statistics as of");
         const sorted = await page.evaluate(`(() => {
           const cards = ${FIND_ALL};
           const root = cards.map((c) => c.shadowRoot).find((r) => r && r.querySelector('button[data-table="daily"]'));

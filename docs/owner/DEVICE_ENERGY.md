@@ -52,22 +52,56 @@ device** needs nothing: new energy-capable Tapo devices appear automatically.
   so allocation is exact at these resolutions.
 * **Rates in one place:** `device_energy.rates` in `homeowner/home_mapping.yaml` (currently off-peak **$0.1419** and
   peak **$0.1907** per kWh). The list is **append-only**: when prices change, add an entry with its `effective_from`
-  date; earlier periods keep the rate that applied then, so history is never silently recalculated.
+  date; earlier periods keep the rate that applied then, so history is never silently recalculated. Every entry
+  is validated (finite, non-negative prices; a real `YYYY-MM-DD` date; no duplicate dates), by the generator and again by
+  the card.
+* **Assumed historical rates:** only the *current* prices are confirmed, not the date they started, so the owner
+  entry has `effective_from: null`. Costs for any period before a dated entry (here: all of them) are valued at the
+  earliest listed price and marked **≈** with an explanatory note; they are **not verified historical costs**. kWh
+  are never affected. If no rate is configured the card shows kWh and withholds cost (never $0). Once the start date
+  of the current prices is known, put it in the entry: periods from that date become verified.
 * **Estimated tariff-valued operating costs, not Aurora charges.** No daily supply charge, no solar feed-in credit,
   and no assumption that device energy came from the grid (there is no device-level solar attribution). Household
   grid spending remains separate on the Energy view.
 
+## Statistics, units and completeness
+
+* **Hourly for history, 5-minute only for the last hours.** Hourly long-term statistics cover the whole period (they
+  are kept indefinitely). 5-minute statistics are used only for the last three hours, and only for an hour that has
+  no hourly row yet, so no hour is counted twice and no retained history is skipped, whatever your recorder's
+  short-term retention is. Day and month boundaries are whole hours, so allocation to the tariff is exact.
+* **Units come from the statistics metadata** (`recorder/get_statistics_metadata`), not from the live sensor: Wh,
+  kWh and MWh energy and W, kW and MW power are normalised to kWh. A source whose statistics unit is not recognised
+  (or that lacks a sum or mean) is **not shown or guessed**; the summary says how many were left out.
+* **Coverage is explicit.** For each row the card checks every *completed* hour of the period (the running hour is
+  never expected). A recorded **zero** shows `0.000 kWh`; a device with no statistics shows "no statistics (not
+  zero)" and is excluded from the total (which then says "N without data"); **`from <time>`** means statistics begin
+  after the period starts; **`N h missing`** means hours inside the period have no statistics (a gap); and a
+  total with any of these is marked **incomplete** (previous months: **partial**). Periods are bounded by their
+  real calendar day or month.
+* **Staleness:** the summary shows when the statistics were loaded. If a refresh fails, the last good figures stay on
+  screen with "Latest refresh failed ... showing statistics last loaded at HH:MM"; after three refresh intervals
+  without a refresh a "may be out of date" note appears. Failed loads are retried at most once a minute.
+
+## Previous months are reconstructed, not archived
+
+There is no ledger and no background job. Completed months are **recomputed on every load** from long-term
+statistics for the devices and energy sources discovered **today**. So a device removed or disabled since, or a
+device whose chosen source changed, drops out of (or changes) earlier months; the card says so under the table. If
+you need frozen monthly totals, export them (for example Home Assistant's Energy dashboard statistics export, or a
+copy of the table each month); that is intentionally not built here.
+
 ## Day and month boundaries
 
 Days and months roll over at **midnight Australia/Hobart** (daylight-saving aware: a 23-hour and a 25-hour day are
-handled), independent of the browser's time zone. Completed months are never deleted: they are recomputed from
-the persistent statistics, so history survives month and year rollovers. The active month is labelled, and when
-monitoring began partway through a day or month the row shows *from 11 Nov* and the total says "partial".
+handled), independent of the browser's time zone. The card deletes nothing, so history survives month and year
+rollovers (subject to the reconstruction note above). The active month is labelled. This assumes a zone whose
+midnight falls on a whole hour (Hobart does).
 
 ## Accuracy limits (read this)
 
-* Resolution is the statistics resolution (5 minutes recent, 1 hour older). A device that reports slowly, or a
-  gap in reporting, is attributed to when Home Assistant recorded it; a missing bucket is **skipped, never zero**.
+* Resolution is one hour (5 minutes for the last few hours). A device that reports slowly, or a gap in
+  reporting, is attributed to when Home Assistant recorded it; a missing hour is **skipped and flagged, never zero**.
 * Power-only devices are estimates (mean power over each bucket).
 * Counter resets are handled by Home Assistant's statistics; a device that is unavailable simply has no data for
   that time.

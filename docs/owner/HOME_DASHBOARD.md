@@ -96,11 +96,19 @@ flow direction. Dependency-free SVG, redraws only when a value changes, theme-aw
 `inconsistent`, `battery_unconfirmed`) drives the dashboard. While it is not `ready` the Home screen shows
 "Collecting daily data" (or the specific reason) instead of unavailable tiles; nothing is ever turned into zero.
 
-Rules for `ready`: battery confirmed absent; solar, import and export counters are kWh, total-class,
-non-negative and reported within 30 min; the daily meters have a valid first reading and were reset at **this
-local midnight (+/-10 minutes)**, so a meter created mid-day, a missed midnight reset or a stale previous-day
-reset is rejected; and export does not exceed generation (strict, no tolerance, never clamped). Midnight uses
-`now()` in local time, so Hobart's daylight-saving changes (2 am) do not matter.
+Rules for `ready`: battery confirmed absent; solar, import and export counters are numeric kWh, non-negative and
+reported within 30 min; the lifetime import/export counters are **not declared as a non-cumulative
+`measurement`** (`total` and `total_increasing` are accepted, and a missing state class is accepted because
+`utility_meter` does not need one; the inverter's daily generation counter is not required to have any particular
+class); the daily meters have a valid first reading and their `last_reset` falls from **30 seconds before to 2
+minutes after this local midnight** (a scheduled reset fires at 00:00:00), so a meter created at 00:09, one last
+reset at 23:55 the day before, a missed midnight reset or a stale previous-day reset is rejected; and export does
+not exceed generation (strict, no tolerance, never clamped). Midnight uses `now()` in local time, so Hobart's
+daylight-saving changes (2 am) do not matter.
+
+**What `ready` cannot prove:** Home Assistant cannot show whether an inverter counter was available through
+midnight. If it was offline, the gap is added to the first reading after it returns, so that day can be
+overstated. The status sensor's `limitation` attribute says so; check the morning figures after any outage.
 
 Findings on the readings you reported:
 

@@ -361,17 +361,50 @@ export function tariffAt(ms, tariff, timeZone = DEFAULT_TIMEZONE) {
 }
 
 /**
- * The rates in force at an instant. `rates` is an append-only schedule:
- * [{effective_from:"2026-07-01", offpeak:0.15, peak:0.20}]; each entry applies from its local date
- * until the next entry, so adding a new price never recalculates earlier history.
+ * Reject a rate schedule that could produce nonsense costs: every entry needs finite, non-negative
+ * `offpeak` and `peak` prices and an `effective_from` that is a real YYYY-MM-DD date, or null when the date
+ * the price started is not confirmed. At most one entry may be undated and dates must be unique.
+ */
+export function validateRates(rates) {
+  if (!Array.isArray(rates) || !rates.length) throw new Error("rates are required");
+  const seen = new Set();
+  for (const r of rates) {
+    for (const key of ["offpeak", "peak"]) {
+      const value = r[key];
+      if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) || Number(value) < 0) {
+        throw new Error(`every rate needs a finite, non-negative ${key} price`);
+      }
+    }
+    const from = r.effective_from;
+    if (from !== null && from !== undefined) {
+      const text = String(from);
+      const valid = /^\d{4}-\d{2}-\d{2}$/.test(text) && !Number.isNaN(Date.parse(`${text}T00:00:00Z`)) && new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) === text;
+      if (!valid) throw new Error(`rate effective_from must be a real YYYY-MM-DD date or null, got ${text}`);
+    }
+    const key = from === null || from === undefined ? "" : String(from);
+    if (seen.has(key)) throw new Error(`duplicate rate effective_from ${key || "(undated)"}`);
+    seen.add(key);
+  }
+}
+
+/**
+ * The rates in force at an instant, or null when no rate is configured (cost is then withheld, never
+ * zero). `rates` is an append-only schedule: [{effective_from:"2026-07-01", offpeak:0.15, peak:0.20}].
+ * An entry applies from its local date until the next dated entry, so adding a new price never recalculates
+ * earlier history. `assumed` is true when the price is NOT verified for that date: the entry has no start
+ * date (`effective_from: null`) or the date precedes the earliest dated entry. Such costs are valued at the
+ * earliest listed price and labelled as assumed, never presented as verified historical costs.
  */
 export function ratesAt(ms, rates, timeZone = DEFAULT_TIMEZONE) {
+  if (!Array.isArray(rates) || !rates.length) return null;
   const p = zonedParts(ms, timeZone);
   const day = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
-  const ordered = [...rates].sort((a, b) => String(a.effective_from).localeCompare(String(b.effective_from)));
+  const dateOf = (r) => (r.effective_from === null || r.effective_from === undefined ? "" : String(r.effective_from));
+  const ordered = [...rates].sort((a, b) => dateOf(a).localeCompare(dateOf(b)));
   let chosen = null;
-  for (const r of ordered) if (String(r.effective_from) <= day) chosen = r;
-  return chosen || ordered[0] || { offpeak: 0, peak: 0 };
+  for (const r of ordered) if (dateOf(r) === "" || dateOf(r) <= day) chosen = r;
+  if (!chosen) return { ...ordered[0], assumed: true }; // before the earliest dated price
+  return { ...chosen, assumed: dateOf(chosen) === "" };
 }
 
 const ENERGY_UNITS = { kwh: 1, wh: 0.001, mwh: 1000 };
@@ -413,9 +446,9 @@ export function discoverDevices(hass, config = {}) {
     byDevice.set(deviceId, group);
     group.entities.push(entityId);
     for (const l of entry.labels || entry.lb || []) group.labels.add(l);
-    if (attrs.device_class === "energy" && unit in ENERGY_UNITS && ["total", "total_increasing"].includes(attrs.state_class)) {
+    if (attrs.device_class === "energy" && Object.hasOwn(ENERGY_UNITS, unit) && ["total", "total_increasing"].includes(attrs.state_class)) {
       group.energy.push({ entityId, factor: ENERGY_UNITS[unit], score: energyScore(entityId, entry, state) });
-    } else if (attrs.device_class === "power" && unit in POWER_UNITS) {
+    } else if (attrs.device_class === "power" && Object.hasOwn(POWER_UNITS, unit)) {
       group.power.push({ entityId, factor: POWER_UNITS[unit] });
     }
   }
@@ -473,31 +506,81 @@ export function toBuckets(rows, source) {
   return out;
 }
 
+/**
+ * Combine whole-hour statistics with 5-minute statistics without counting any hour twice: a 5-minute bucket
+ * is used only for an hour that has no hourly row (the hour that has just ended or is still running).
+ */
+export function mergeBuckets(hourly, fine) {
+  const covered = new Set(hourly.map((b) => Math.floor(b.start / HOUR_MS) * HOUR_MS));
+  return [...hourly, ...fine.filter((b) => !covered.has(Math.floor(b.start / HOUR_MS) * HOUR_MS))];
+}
+
+/**
+ * How completely the statistics cover the COMPLETED hours of [from, to) (the running hour is never expected).
+ * An hour counts as recorded when it has an hourly row or all twelve 5-minute rows. `leading` = hours before
+ * the first recorded one (monitoring began partway), `missing` = hours without statistics after that (a gap).
+ * A recorded zero is data; an hour with no row is NOT zero.
+ */
+export function coverage(buckets, from, to, now) {
+  const hours = new Map();
+  for (const b of buckets) {
+    const h = Math.floor(b.start / HOUR_MS) * HOUR_MS;
+    const entry = hours.get(h) || { whole: false, fine: 0 };
+    if (b.end - b.start >= HOUR_MS) entry.whole = true;
+    else entry.fine += 1;
+    hours.set(h, entry);
+  }
+  const end = Math.min(to, Math.floor(now / HOUR_MS) * HOUR_MS);
+  const result = { expected: 0, present: 0, leading: 0, missing: 0, firstPresent: null };
+  for (let h = Math.ceil(from / HOUR_MS) * HOUR_MS; h < end; h += HOUR_MS) {
+    result.expected += 1;
+    const entry = hours.get(h);
+    if (entry && (entry.whole || entry.fine >= 12)) {
+      result.present += 1;
+      if (result.firstPresent === null) result.firstPresent = h;
+    } else if (result.firstPresent === null) {
+      result.leading += 1;
+    } else {
+      result.missing += 1;
+    }
+  }
+  return result;
+}
+
 /** Sum buckets in [from, to) into energy and tariff-valued cost, each allocated at its own start time. */
 export function accumulate(buckets, { from, to, tariff, rates, timeZone = DEFAULT_TIMEZONE }) {
-  const result = { kwh: 0, offKwh: 0, peakKwh: 0, offCost: 0, peakCost: 0, cost: 0, count: 0, firstStart: null };
+  const result = { kwh: 0, offKwh: 0, peakKwh: 0, offCost: 0, peakCost: 0, cost: 0, count: 0, firstStart: null, assumedKwh: 0, unpricedKwh: 0 };
   for (const b of buckets) {
     if (b.start < from || b.start >= to) continue;
     const period = tariffAt(b.start, tariff, timeZone);
-    const rate = ratesAt(b.start, rates, timeZone)[period];
+    const rate = ratesAt(b.start, rates, timeZone);
     result.count += 1;
     result.firstStart = result.firstStart === null ? b.start : Math.min(result.firstStart, b.start);
     result.kwh += b.kwh;
-    if (period === "peak") {
-      result.peakKwh += b.kwh;
-      result.peakCost += b.kwh * rate;
-    } else {
-      result.offKwh += b.kwh;
-      result.offCost += b.kwh * rate;
+    if (period === "peak") result.peakKwh += b.kwh;
+    else result.offKwh += b.kwh;
+    if (!rate) {
+      result.unpricedKwh += b.kwh;
+      continue;
     }
+    if (rate.assumed) result.assumedKwh += b.kwh;
+    if (period === "peak") result.peakCost += b.kwh * rate.peak;
+    else result.offCost += b.kwh * rate.offpeak;
   }
-  result.cost = result.offCost + result.peakCost;
+  if (result.unpricedKwh > 0) {
+    result.offCost = null; // no rate configured: cost withheld, never zero
+    result.peakCost = null;
+    result.cost = null;
+  } else {
+    result.cost = result.offCost + result.peakCost;
+  }
+  result.assumed = result.assumedKwh > 0;
   return result.count ? result : null; // null = no data (never zero)
 }
 
 /** Combined totals over device rows; devices without data are counted, not treated as zero. */
 export function combine(rows) {
-  const total = { kwh: 0, offCost: 0, peakCost: 0, cost: 0, devices: 0, missing: 0, estimated: false };
+  const total = { kwh: 0, offCost: 0, peakCost: 0, cost: 0, devices: 0, missing: 0, estimated: false, assumed: false, incomplete: false };
   for (const row of rows) {
     if (!row.data) {
       total.missing += 1;
@@ -505,16 +588,23 @@ export function combine(rows) {
     }
     total.devices += 1;
     total.kwh += row.data.kwh;
-    total.offCost += row.data.offCost;
-    total.peakCost += row.data.peakCost;
-    total.cost += row.data.cost;
+    if (row.data.cost === null || total.cost === null) {
+      total.offCost = total.peakCost = total.cost = null;
+    } else {
+      total.offCost += row.data.offCost;
+      total.peakCost += row.data.peakCost;
+      total.cost += row.data.cost;
+    }
     if (row.estimated) total.estimated = true;
+    if (row.data.assumed) total.assumed = true;
+    if (row.partialFrom || row.missingHours) total.incomplete = true;
   }
+  if (total.missing && total.devices) total.incomplete = true;
   return total.devices ? total : null;
 }
 
 export const fmtKwh = (v) => (v === null || v === undefined ? "—" : `${v.toFixed(v < 1 ? 3 : 2)} kWh`);
-export const fmtMoney = (v) => (v === null || v === undefined ? "—" : `$${v.toFixed(2)}`);
+export const fmtMoney = (v, assumed = false) => (v === null || v === undefined ? "—" : `${assumed ? "≈" : ""}$${v.toFixed(2)}`);
 
 export function sortRows(rows, key, direction) {
   const value = (r) => (key === "name" ? r.name.toLowerCase() : r.data ? r.data[key] : null);
@@ -553,15 +643,15 @@ function tableHtml(id, rows, total, sort, partialNote) {
   const body = sortRows(rows, sort.key, sort.direction)
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(r.name)}${r.estimated ? ' <span class="est" title="Estimated from measured power">est.</span>' : ""}${r.partialFrom ? ` <span class="part" title="Monitoring began partway through the period">from ${escapeHtml(r.partialFrom)}</span>` : ""}</td>` +
+        `<tr><td>${escapeHtml(r.name)}${r.estimated ? ' <span class="est" title="Estimated from measured power">est.</span>' : ""}${r.partialFrom ? ` <span class="part" title="Statistics for this period start later than the period">from ${escapeHtml(r.partialFrom)}</span>` : ""}${r.missingHours ? ` <span class="part" title="Hours inside this period with no recorded statistics (not counted as zero)">${r.missingHours} h missing</span>` : ""}</td>` +
         (r.data
-          ? `<td>${fmtKwh(r.data.kwh)}</td><td>${fmtMoney(r.data.offCost)}</td><td>${fmtMoney(r.data.peakCost)}</td><td>${fmtMoney(r.data.cost)}</td>`
-          : '<td colspan="4" class="none">no statistics yet</td>') +
+          ? `<td>${fmtKwh(r.data.kwh)}</td><td>${fmtMoney(r.data.offCost, r.data.assumed)}</td><td>${fmtMoney(r.data.peakCost, r.data.assumed)}</td><td>${fmtMoney(r.data.cost, r.data.assumed)}</td>`
+          : '<td colspan="4" class="none">no statistics (not zero)</td>') +
         "</tr>"
     )
     .join("");
   const foot = total
-    ? `<tr class="total"><td>Total (${total.devices} device${total.devices === 1 ? "" : "s"}${total.missing ? `, ${total.missing} without data` : ""})</td><td>${fmtKwh(total.kwh)}</td><td>${fmtMoney(total.offCost)}</td><td>${fmtMoney(total.peakCost)}</td><td>${fmtMoney(total.cost)}</td></tr>`
+    ? `<tr class="total"><td>Total (${total.devices} device${total.devices === 1 ? "" : "s"}${total.missing ? `, ${total.missing} without data` : ""})${total.incomplete ? ' <span class="part" title="At least one device has missing or late-starting statistics in this period">incomplete</span>' : ""}</td><td>${fmtKwh(total.kwh)}</td><td>${fmtMoney(total.offCost, total.assumed)}</td><td>${fmtMoney(total.peakCost, total.assumed)}</td><td>${fmtMoney(total.cost, total.assumed)}</td></tr>`
     : '<tr class="total"><td colspan="5" class="none">No data yet</td></tr>';
   return `<div class="scroll"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>${partialNote ? `<p class="note">${partialNote}</p>` : ""}`;
 }
@@ -579,7 +669,7 @@ function barsSvg(items, key, unit) {
       const x = index * (w + gap) + gap;
       return (
         `<g><rect x="${x}" y="${height - 22 - h}" width="${w}" height="${h}" rx="3" fill="var(--primary-color,#03a9f4)" opacity="${item.partial ? 0.55 : 0.95}"/>` +
-        `<text x="${x + w / 2}" y="${height - 26 - h}" text-anchor="middle" font-size="10" fill="var(--primary-text-color)">${value === null ? "—" : unit === "$" ? fmtMoney(value) : value.toFixed(value < 10 ? 1 : 0)}</text>` +
+        `<text x="${x + w / 2}" y="${height - 26 - h}" text-anchor="middle" font-size="10" fill="var(--primary-text-color)">${value === null ? "—" : unit === "$" ? fmtMoney(value, item.assumed) : value.toFixed(value < 10 ? 1 : 0)}</text>` +
         `<text x="${x + w / 2}" y="${height - 6}" text-anchor="middle" font-size="10" fill="var(--secondary-text-color)">${escapeHtml(item.label)}</text></g>`
       );
     })
@@ -614,80 +704,117 @@ const BaseElement = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 // One load per configuration, shared by every card part on the page (summary, daily, monthly, history).
 const SHARED = new Map();
 
+const withTimeout = (promise) =>
+  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("statistics request timed out")), 60e3))]);
+
+/**
+ * Load and value the statistics. Units come from the RECORDER'S statistics metadata (the unit the statistics
+ * are stored in), not from the live sensor. Hourly statistics cover the whole history; 5-minute statistics are
+ * used only for the last few hours that have no hourly row yet, so no hour is ever counted twice and no
+ * retained history is skipped, whatever the recorder's short-term retention is.
+ */
 export async function computeState(hass, c) {
-  const { devices, withoutMonitoring } = discoverDevices(hass, c);
+  const found = discoverDevices(hass, c);
   const now = Date.now();
   const tz = c.timezone;
   const dayStart = startOfLocalDay(now, tz);
+  const dayEnd = shiftDay(now, 1, tz);
   const monthStart = startOfLocalMonth(now, tz);
+  const monthEnd = shiftMonth(now, 1, tz);
   const months = c.history_months ?? 6;
   const historyStart = shiftMonth(now, -months, tz);
-  const split = Math.max(historyStart, Math.ceil((now - SHORT_TERM_MS) / HOUR_MS) * HOUR_MS); // hour-aligned: no overlap
+  const hourEnd = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const fineFrom = hourEnd - 3 * HOUR_MS;
+
+  const meta = new Map();
+  if (found.devices.length) {
+    const list = await withTimeout(hass.callWS({ type: "recorder/get_statistics_metadata", statistic_ids: found.devices.map((d) => d.source.entityId) }));
+    for (const m of Array.isArray(list) ? list : []) meta.set(m.statistic_id, m);
+  }
+  const devices = [];
+  let unsupported = 0;
+  for (const d of found.devices) {
+    const m = meta.get(d.source.entityId);
+    if (!m) {
+      devices.push({ ...d, noStatistics: true }); // no statistics recorded yet: shown as "no statistics", not zero
+      continue;
+    }
+    const unit = String(m.statistics_unit_of_measurement || "").toLowerCase();
+    const table = d.source.kind === "energy" ? ENERGY_UNITS : POWER_UNITS;
+    const capable = d.source.kind === "energy" ? m.has_sum !== false : m.has_mean !== false;
+    if (!Object.hasOwn(table, unit) || !capable) {
+      unsupported += 1;
+      continue;
+    }
+    devices.push({ ...d, source: { ...d.source, factor: table[unit] } });
+  }
+
   const buckets = new Map(devices.map((d) => [d.deviceId, []]));
-  const withTimeout = (promise) =>
-    Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("statistics request timed out")), 60e3))]);
   const query = (ids, kind, from, to, period) =>
     ids.length
-      ? withTimeout(hass.callWS({
-          type: "recorder/statistics_during_period",
-          start_time: new Date(from).toISOString(),
-          end_time: new Date(to).toISOString(),
-          statistic_ids: ids,
-          period,
-          types: kind === "energy" ? ["change"] : ["mean"],
-        }))
+      ? withTimeout(
+          hass.callWS({
+            type: "recorder/statistics_during_period",
+            start_time: new Date(from).toISOString(),
+            end_time: new Date(to).toISOString(),
+            statistic_ids: ids,
+            period,
+            types: kind === "energy" ? ["change"] : ["mean"],
+          })
+        )
       : Promise.resolve({});
   for (const kind of ["energy", "power"]) {
-    const group = devices.filter((d) => d.source.kind === kind);
+    const group = devices.filter((d) => !d.noStatistics && d.source.kind === kind);
     const ids = group.map((d) => d.source.entityId);
-    const fallback = [];
-    if (historyStart < split) {
-      const response = await query(ids, kind, historyStart, split, "hour");
-      for (const d of group) buckets.get(d.deviceId).push(...toBuckets(response[d.source.entityId], d.source));
-    }
-    const recent = await query(ids, kind, split, now + HOUR_MS, "5minute");
+    const hourly = await query(ids, kind, historyStart, hourEnd, "hour");
+    const fine = await query(ids, kind, fineFrom, now + HOUR_MS, "5minute");
     for (const d of group) {
-      const rows = toBuckets(recent[d.source.entityId], d.source);
-      if (rows.length) buckets.get(d.deviceId).push(...rows);
-      else fallback.push(d); // no 5-minute statistics kept: use the hourly ones for this range
-    }
-    if (fallback.length) {
-      const response = await query(fallback.map((d) => d.source.entityId), kind, split, now + HOUR_MS, "hour");
-      for (const d of fallback) buckets.get(d.deviceId).push(...toBuckets(response[d.source.entityId], d.source));
+      const id = d.source.entityId;
+      buckets.set(d.deviceId, mergeBuckets(toBuckets((hourly || {})[id], d.source), toBuckets((fine || {})[id], d.source)));
     }
   }
+
   const ctx = { tariff: c.tariff, rates: c.rates, timeZone: tz };
+  const dateLabel = (ms) => new Date(ms).toLocaleString("en-AU", { timeZone: tz, day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
   const rowsFor = (from, to) =>
     devices.map((d) => {
       const own = buckets.get(d.deviceId);
       const data = accumulate(own, { from, to, ...ctx });
-      const earliest = own.reduce((m, b) => Math.min(m, b.start), Infinity);
-      const partial = data && Number.isFinite(earliest) && earliest > from + HOUR_MS;
+      const cov = coverage(own, from, to, now);
       return {
         deviceId: d.deviceId,
         name: d.name,
         estimated: d.estimated,
         data,
-        partialFrom: partial ? new Date(earliest).toLocaleDateString("en-AU", { timeZone: tz, day: "numeric", month: "short" }) : null,
+        partialFrom: data && cov.leading > 0 && cov.firstPresent !== null ? dateLabel(cov.firstPresent) : null,
+        missingHours: data ? cov.missing : 0,
       };
     });
-  const daily = rowsFor(dayStart, now + HOUR_MS);
-  const monthly = rowsFor(monthStart, now + HOUR_MS);
+  const isPartial = (rows, total) => !!total && (total.incomplete || rows.some((r) => r.partialFrom || r.missingHours));
+  const daily = rowsFor(dayStart, dayEnd);
+  const monthly = rowsFor(monthStart, monthEnd);
   const past = [];
   for (let delta = -1; delta >= -months; delta -= 1) {
     const from = shiftMonth(now, delta, tz);
     const rows = rowsFor(from, shiftMonth(now, delta + 1, tz));
     const total = combine(rows);
-    if (total) past.push({ label: monthLabel(from, tz).slice(0, 3), full: monthLabel(from, tz), rows, total, partial: rows.some((r) => r.partialFrom) });
+    if (total) past.push({ label: monthLabel(from, tz).slice(0, 3), full: monthLabel(from, tz), rows, total, partial: isPartial(rows, total) });
   }
   past.reverse();
   const week = [];
   for (let delta = -6; delta <= 0; delta += 1) {
     const from = shiftDay(now, delta, tz);
-    const total = combine(rowsFor(from, shiftDay(now, delta + 1, tz)));
-    week.push({ label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][zonedParts(from, tz).weekday], kwh: total ? total.kwh : null, cost: total ? total.cost : null });
+    const rows = rowsFor(from, shiftDay(now, delta + 1, tz));
+    const total = combine(rows);
+    week.push({
+      label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][zonedParts(from, tz).weekday],
+      kwh: total ? total.kwh : null,
+      cost: total ? total.cost : null,
+      partial: isPartial(rows, total),
+    });
   }
-  return { devices, withoutMonitoring, daily, monthly, months: past, week, tz, error: null, generatedAt: now };
+  const assumed = [daily, monthly, ...past.map((m) => m.rows)].some((rows) => rows.some((r) => r.data && r.data.assumed));
+  return { devices, withoutMonitoring: found.withoutMonitoring, unsupported, daily, monthly, months: past, week, tz, assumed, error: null, generatedAt: now };
 }
 
 function sharedFor(config) {
@@ -701,9 +828,7 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
   setConfig(config) {
     if (!config || !Array.isArray(config.rates) || !config.rates.length) throw new Error("rates are required");
     if (!config.tariff) throw new Error("tariff is required");
-    for (const rate of config.rates) {
-      if (!Number.isFinite(Number(rate.peak)) || !Number.isFinite(Number(rate.offpeak))) throw new Error("every rate needs numeric peak and offpeak");
-    }
+    validateRates(config.rates);
     if (this._config) sharedFor(this._config).listeners.delete(this);
     this._config = { timezone: DEFAULT_TIMEZONE, refresh_minutes: 5, part: "all", ...config };
     this._renderKey = null;
@@ -766,7 +891,8 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
     const shared = sharedFor(this._config);
     const s = shared.state;
     const part = this._config.part;
-    const key = `${shared.version || 0}|${JSON.stringify(this._sort)}|${s ? 1 : 0}`;
+    const stale = !!(s && s.generatedAt && !s.error && Date.now() - s.generatedAt > 3 * this._config.refresh_minutes * 60e3);
+    const key = `${shared.version || 0}|${JSON.stringify(this._sort)}|${s ? 1 : 0}|${stale ? 1 : 0}`;
     if (key === this._renderKey) return; // nothing changed: keep focus, scroll position and in-flight clicks
     this._renderKey = key;
     let html = `<ha-card><style>${STYLE}</style>`;
@@ -784,14 +910,16 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
     const estimated = s.devices.some((d) => d.estimated);
     const label = monthLabel(s.generatedAt || Date.now(), s.tz);
     const want = (name) => part === "all" || part === name;
-    if (s.error) html += `<p class="warn">Latest refresh failed (${escapeHtml(s.error)}); showing the last data loaded.</p>`;
+    const asOf = s.generatedAt ? new Date(s.generatedAt).toLocaleTimeString("en-AU", { timeZone: s.tz, hour: "numeric", minute: "2-digit" }) : "";
+    if (s.error) html += `<p class="warn">Latest refresh failed (${escapeHtml(s.error)}). Showing statistics last loaded at ${escapeHtml(asOf)}.</p>`;
+    else if (stale) html += `<p class="warn">Statistics were last refreshed at ${escapeHtml(asOf)} and may be out of date.</p>`;
     if (want("summary")) {
       html += '<div class="cards">';
       html += `<div class="box"><span>Today</span><b>${fmtKwh(dailyTotal && dailyTotal.kwh)}</b><span>${fmtMoney(dailyTotal && dailyTotal.cost)} est. operating cost</span></div>`;
       html += `<div class="box"><span>${escapeHtml(label)} so far${partialMonth ? " (partial)" : ""}</span><b>${fmtKwh(monthTotal && monthTotal.kwh)}</b><span>${fmtMoney(monthTotal && monthTotal.cost)} est. operating cost</span></div>`;
-      html += `<div class="box"><span>Devices monitored</span><b>${s.devices.length}</b><span>${s.withoutMonitoring ? `${s.withoutMonitoring} without energy monitoring (not shown)` : "all with energy monitoring"}</span></div>`;
+      html += `<div class="box"><span>Devices monitored</span><b>${s.devices.length}</b><span>${[s.withoutMonitoring ? `${s.withoutMonitoring} without energy monitoring (not shown)` : "", s.unsupported ? `${s.unsupported} with unsupported statistics units (not shown)` : ""].filter(Boolean).join("; ") || "all with energy monitoring"}</span></div>`;
       html += "</div>";
-      html += '<p class="warn">Costs are <b>estimated tariff-valued operating costs</b> (consumption × the peak/off-peak rate in force when it was used). They are not Aurora charges: no supply charge, no solar feed-in credit, and no assumption that the energy came from the grid.' + (estimated ? " Devices marked <i>est.</i> only report power, so their energy is estimated." : "") + "</p>";
+      html += '<p class="warn">Costs are <b>estimated tariff-valued operating costs</b> (consumption × the peak/off-peak rate in force when it was used). They are not Aurora charges: no supply charge, no solar feed-in credit, and no assumption that the energy came from the grid.' + (estimated ? " Devices marked <i>est.</i> only report power, so their energy is estimated." : "") + (s.assumed ? " <b>≈</b> marks costs valued at an <b>assumed</b> rate: the price start date is unconfirmed or earlier than the first dated rate, so they are not verified historical costs." : "") + ` Statistics as of ${escapeHtml(asOf)}.</p>`;
     }
     if (want("daily")) {
       html += `<h3>Today (midnight ${escapeHtml(s.tz.split("/")[1] || s.tz)} time)</h3>` + tableHtml("daily", s.daily, dailyTotal, this._sort.daily, "");
@@ -802,9 +930,10 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
         tableHtml("monthly", s.monthly, monthTotal, this._sort.monthly, partialMonth ? `Monitoring began partway through ${escapeHtml(label)}: totals cover the recorded part of the month only.` : "");
       if (s.months.length) {
         html += "<h3>Previous completed months</h3>";
+        html += '<p class="note">Reconstructed from long-term statistics for the devices and energy sources found today; these are not archived monthly totals, so a device removed or disabled since drops out of earlier months.</p>';
         html += '<div class="scroll"><table><thead><tr><th>Month</th><th>kWh</th><th>Off-peak $</th><th>Peak $</th><th>Total $</th></tr></thead><tbody>';
         for (const m of [...s.months].reverse()) {
-          html += `<tr><td>${escapeHtml(m.full)}${m.partial ? ' <span class="part">partial</span>' : ""}</td><td>${fmtKwh(m.total.kwh)}</td><td>${fmtMoney(m.total.offCost)}</td><td>${fmtMoney(m.total.peakCost)}</td><td>${fmtMoney(m.total.cost)}</td></tr>`;
+          html += `<tr><td>${escapeHtml(m.full)}${m.partial ? ' <span class="part">partial</span>' : ""}</td><td>${fmtKwh(m.total.kwh)}</td><td>${fmtMoney(m.total.offCost, m.total.assumed)}</td><td>${fmtMoney(m.total.peakCost, m.total.assumed)}</td><td>${fmtMoney(m.total.cost, m.total.assumed)}</td></tr>`;
         }
         html += "</tbody></table></div>";
       } else {
@@ -814,7 +943,7 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
     if (want("history")) {
       if (s.months.length) {
         html += "<h3>Monthly comparison (kWh)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, kwh: m.total.kwh, partial: m.partial })), "kwh", "kWh");
-        html += "<h3>Monthly comparison (est. cost)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, cost: m.total.cost, partial: m.partial })), "cost", "$");
+        html += "<h3>Monthly comparison (est. cost)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, cost: m.total.cost, partial: m.partial, assumed: m.total.assumed })), "cost", "$");
         html += "<h3>By device (kWh per month)</h3>";
         html += '<div class="scroll"><table><thead><tr><th>Device</th>' + s.months.map((m) => `<th>${escapeHtml(m.label)}</th>`).join("") + "</tr></thead><tbody>";
         for (const d of s.devices) {
