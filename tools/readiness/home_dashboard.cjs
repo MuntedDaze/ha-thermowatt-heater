@@ -46,7 +46,8 @@ async function main() {
     const target = first ? page.getByText(text).first() : page.getByText(text);
     let confirmationShown = false;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      await target.scrollIntoViewIfNeeded().catch(() => {});
+      // Centre it so the sticky phone toolbar can never sit on top of the tile being pressed.
+      await target.evaluate((el) => el.scrollIntoView({ block: "center" })).catch(() => {});
       await page.waitForTimeout(700); // let the card finish its layout before pressing
       await target.click({ force: true });
       await page.waitForTimeout(1200);
