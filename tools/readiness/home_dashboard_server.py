@@ -179,7 +179,7 @@ async def main():
             },
             "http": {"server_host": ["127.0.0.1"], "server_port": 8123},
             "frontend": {},
-            "recorder": {"db_url": "sqlite:///:memory:"},
+            "recorder": {"db_url": "sqlite:////tmp/home-ui/recorder.db"},
             "history": {},
             "demo": {},
             "lovelace": {
