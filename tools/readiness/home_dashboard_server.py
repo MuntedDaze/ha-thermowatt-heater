@@ -35,7 +35,9 @@ async def record_service(self, domain, service, service_data=None, *args, **kwar
     CALLS.append(
         {"service": f"{domain}.{service}", "data": service_data, "target": kwargs.get("target")}
     )
-    print(json.dumps({"recorded_call": f"{domain}.{service}", "data": str(service_data)}), flush=True)
+    print(
+        json.dumps({"recorded_call": f"{domain}.{service}", "data": str(service_data)}), flush=True
+    )
     return None
 
 
