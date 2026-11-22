@@ -123,7 +123,11 @@ async def seed_device_energy(hass):
     """Synthetic Tapo devices (registry entries, states and long-term statistics) for Device Energy."""
     from homeassistant.components.recorder import get_instance
     from homeassistant.components.recorder.db_schema import StatisticsShortTerm
-    from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+    from homeassistant.components.recorder.models import (
+        StatisticData,
+        StatisticMeanType,
+        StatisticMetaData,
+    )
     from homeassistant.components.recorder.statistics import async_import_statistics
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
@@ -239,7 +243,7 @@ async def seed_device_energy(hass):
 
     def meta(entity_id, unit, mean, total):
         return StatisticMetaData(
-            has_mean=mean,
+            mean_type=StatisticMeanType.ARITHMETIC if mean else StatisticMeanType.NONE,
             has_sum=total,
             name=None,
             source="recorder",
