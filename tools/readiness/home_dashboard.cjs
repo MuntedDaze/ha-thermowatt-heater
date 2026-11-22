@@ -34,8 +34,21 @@ async function main() {
   const calls = () => hassCall("GET", "home_ui_calls");
   const clearCalls = () => hassCall("DELETE", "home_ui_calls");
   const confirmIfAsked = async () => {
-    const yes = page.getByRole("button", { name: /^(yes|ok|confirm)$/i });
-    if (await yes.first().isVisible({ timeout: 3000 }).catch(() => false)) await yes.first().click({ force: true });
+    // HA shows its own confirmation dialog for tap actions with `confirmation`.
+    for (const name of ["Yes", "OK", "Confirm", "Continue"]) {
+      const byRole = page.getByRole("button", { name, exact: true }).filter({ visible: true });
+      const byText = page.getByText(name, { exact: true }).filter({ visible: true });
+      for (const candidate of [byRole, byText]) {
+        if (await candidate.first().isVisible({ timeout: 1500 }).catch(() => false)) {
+          await candidate.first().click({ force: true });
+          return true;
+        }
+      }
+    }
+    const dialogs = await page.locator("ha-dialog, ha-wa-dialog, dialog-box").allInnerTexts().catch(() => []);
+    console.log("no confirmation button found; dialogs:", JSON.stringify(dialogs));
+    await page.screenshot({ path: `${output}/no-confirm.png` }).catch(() => {});
+    return false;
   };
   let httpConfirmed = false;
   const report = [];
