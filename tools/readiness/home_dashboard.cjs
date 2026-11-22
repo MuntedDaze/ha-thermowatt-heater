@@ -329,6 +329,72 @@ async function main() {
         for (const forbidden of [/open garage/i, /close garage/i, /unlock/i]) expect(body).not.toMatch(forbidden);
         await page.screenshot({ path: `${output}/doors-${size.name}.png`, fullPage: true });
 
+
+        // Device Energy: discovery from the registries, tables, totals, sorting, history, no zeros.
+        await goHome("device-energy");
+        const deepCard = () =>
+          page.evaluate(() => {
+            const find = (root) => {
+              for (const el of root.querySelectorAll("*")) {
+                if (el.tagName === "THERMOWATT-DEVICE-ENERGY-CARD") return el;
+                if (el.shadowRoot) {
+                  const hit = find(el.shadowRoot);
+                  if (hit) return hit;
+                }
+              }
+              return null;
+            };
+            const card = find(document);
+            return card && card.shadowRoot ? card.shadowRoot.querySelectorAll("table").length : 0;
+          });
+        await expect.poll(deepCard, { timeout: 30000 }).toBeGreaterThanOrEqual(2);
+        const deviceText = () =>
+          page.evaluate(() => {
+            const find = (root) => {
+              for (const el of root.querySelectorAll("*")) {
+                if (el.tagName === "THERMOWATT-DEVICE-ENERGY-CARD") return el;
+                if (el.shadowRoot) {
+                  const hit = find(el.shadowRoot);
+                  if (hit) return hit;
+                }
+              }
+              return null;
+            };
+            return find(document).shadowRoot.textContent.replace(/\s+/g, " ");
+          });
+        const energyText = await deviceText();
+        console.log("device energy text:", energyText.slice(0, 600));
+        for (const device of ["Dryer", "Fridge plug", "Server plug"]) expect(energyText).toContain(device);
+        expect(energyText).not.toContain("Hall light"); // no energy capability: never listed as zero
+        expect(energyText).not.toContain("Tapo P110"); // the configured (user) name is used
+        expect(energyText).toContain("1 without energy monitoring");
+        expect(energyText).toContain("estimated tariff-valued operating costs");
+        expect(energyText).toContain("est."); // the power-only device is flagged as an estimate
+        expect(energyText).toMatch(/Total \(3 devices/);
+        expect(energyText).toMatch(/\$\d+\.\d\d/);
+        expect(energyText).toContain("Previous completed months");
+        expect(energyText).toContain("Last seven days");
+        const sorted = await page.evaluate(() => {
+          const find = (root) => {
+            for (const el of root.querySelectorAll("*")) {
+              if (el.tagName === "THERMOWATT-DEVICE-ENERGY-CARD") return el;
+              if (el.shadowRoot) {
+                const hit = find(el.shadowRoot);
+                if (hit) return hit;
+              }
+            }
+            return null;
+          };
+          const root = find(document).shadowRoot;
+          const names = () => [...root.querySelectorAll("table")[0].querySelectorAll("tbody tr td:first-child")].map((td) => td.textContent.trim().split(" ")[0]);
+          root.querySelector('button[data-table="daily"][data-sort="name"]').click();
+          return names();
+        });
+        expect(sorted).toEqual([...sorted].sort((a, b) => a.localeCompare(b)));
+        const overflowDevice = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        expect(overflowDevice).toBeLessThanOrEqual(2);
+        await page.screenshot({ path: `${output}/device-energy-${size.name}.png`, fullPage: true });
+
         // System and Energy views.
         await goHome("system");
         await expect(page.getByText("No problems detected").first()).toBeVisible();

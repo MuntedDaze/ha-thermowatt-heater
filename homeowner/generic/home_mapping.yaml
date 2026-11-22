@@ -27,3 +27,14 @@ bathrooms:
 doors:
   garage_contact: {entity: "", status: unmapped}
   front_contact: {entity: "", status: unmapped}
+
+# Individual device energy. Devices are discovered at run time. Rates are NOT assumed: add your own.
+# rates (append-only; older periods keep the rate in force then), AUD or your currency per kWh:
+#   - {effective_from: "2026-07-01", offpeak: 0.15, peak: 0.20}
+device_energy:
+  platforms: [tplink, tapo]
+  exclude: []
+  include_only: []
+  exclude_label: ""
+  history_months: 6
+  rates: []

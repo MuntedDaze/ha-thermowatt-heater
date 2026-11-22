@@ -88,6 +88,7 @@ def test_outputs_are_valid_yaml_with_the_required_views(home):
         "bathrooms",
         "doors",
         "system",
+        "device-energy",
     ]
 
 
@@ -104,6 +105,7 @@ SUPPORTED = {
     "history-graph",
     "statistic",
     "custom:thermowatt-power-flow-card",
+    "custom:thermowatt-device-energy-card",
 }
 
 
@@ -261,14 +263,26 @@ def test_dashboard_never_commands_a_physical_relay_or_the_original_devices(home)
 
 def test_hot_water_override_toggle_is_state_driven_and_confirmed(home):
     data, _ = home
-    on, off, unknown = [
+    on, off, unknown, unavailable_now = [
         c for c in view(data, "home")["sections"][2]["cards"] if c["type"] == "conditional"
     ]
+    # holiday / disabled: the controller would refuse, so the tile is inert instead of misleading
+    assert unavailable_now["card"]["tap_action"] == {"action": "more-info"}
+    assert {c["state"] for c in unavailable_now["conditions"][0]["conditions"]} == {
+        "holiday",
+        "disabled",
+    }
     assert on["conditions"] == [{"condition": "state", "entity": MODE, "state": "guest"}]
     assert on["card"]["color"] == "blue" and off["card"]["color"] == "grey"
     assert on["card"]["tap_action"]["target"]["entity_id"] == CANCEL
     assert off["card"]["tap_action"]["target"]["entity_id"] == START
-    assert {c["state_not"] for c in off["conditions"]} == {"guest", "unavailable", "unknown"}
+    assert {c["state_not"] for c in off["conditions"]} == {
+        "guest",
+        "unavailable",
+        "unknown",
+        "holiday",
+        "disabled",
+    }
     assert on["card"]["tap_action"]["confirmation"] and off["card"]["tap_action"]["confirmation"]
     assert unknown["card"]["tap_action"] == {"action": "more-info"}
     assert unknown["card"]["color"] == "grey"
@@ -558,7 +572,12 @@ def test_generic_profile_assumes_nothing_about_this_household(generic):
     assert mapping["profile"] == "generic"
     assert mapping["energy"]["battery_present"] == "unknown"
     assert mapping["weather"]["entity"] == "" and mapping["lights"]["dining_room"]["entity"] == ""
-    assert sorted(set(ent.unresolved)) == ["lights.dining_room", "lights.living_room", "weather"]
+    assert sorted(set(ent.unresolved)) == [
+        "device_energy.rates",
+        "lights.dining_room",
+        "lights.living_room",
+        "weather",
+    ]
     text = json.dumps(data)
     assert "weather.home" not in text and "light.dining_room_light" not in text
     assert "binary_sensor.garage_door" not in text
@@ -786,7 +805,6 @@ def test_too_little_generation_withholds_the_percentage_only():
         {IMPORT_TOTAL: counter("unavailable")},
         {EXPORT_TOTAL: counter("unknown")},
         {IMPORT_TOTAL: counter("1000", unit="Wh")},  # wrong unit: not a kWh counter
-        {EXPORT_TOTAL: counter("500", klass=None)},  # not a total counter
         {EXPORT_TOTAL: counter("-3")},  # a counter cannot be negative
         {IMPORT_TOTAL: counter("1000", age=7200)},  # not recently reported
         {EXPORT_TOTAL: counter("500", age=7200)},
@@ -804,6 +822,23 @@ def test_invalid_or_stale_sources_are_unavailable_not_zero(broken):
         "home_grid_export_today",
     ):
         assert value(unique, states)[0] is False
+
+
+def test_a_counter_without_a_state_class_is_still_accepted():
+    """utility_meter does not need a state class, so the package must not lock out such a counter."""
+    assert status_of(day(**{EXPORT_TOTAL: counter("500", klass=None)})) == "ready"
+
+
+def test_meter_that_reports_the_string_none_is_not_initialised():
+    states = day(
+        **{
+            EXPORT_METER: {
+                "state": "0",
+                "attributes": {"last_reset": MIDNIGHT.isoformat(), "last_valid_state": "None"},
+            }
+        }
+    )
+    assert status_of(states) == "collecting_first_day"
 
 
 def test_a_missing_inverter_entity_is_handled():
@@ -908,3 +943,128 @@ def test_card_resource_path_and_documentation_match():
     js = ROOT / "homeowner/www/thermowatt-power-flow-card.js"
     assert js.is_file() and "thermowatt-power-flow-card" in js.read_text(encoding="utf-8")
     assert build.CARD_RESOURCE.endswith(js.name)
+
+
+# ------------------------------------------------------------------ device energy view
+def device_card(data):
+    return next(
+        c
+        for c in walk(view(data, "device-energy"))
+        if c.get("type") == "custom:thermowatt-device-energy-card"
+    )
+
+
+def test_device_energy_is_the_seventh_view_with_an_energy_icon(home):
+    data, _ = home
+    v = data["views"][-1]
+    assert v["path"] == "device-energy" and v["title"] == "Device Energy"
+    assert v["icon"] == "mdi:meter-electric"
+    assert len(data["views"]) == 7
+
+
+def test_rates_live_in_one_central_place_and_are_not_hardcoded_elsewhere(home):
+    data, _ = home
+    card = device_card(data)
+    assert card["rates"] == [{"effective_from": "2000-01-01", "offpeak": 0.1419, "peak": 0.1907}]
+    mapping = build.load_mapping()
+    assert mapping["device_energy"]["rates"][0]["offpeak"] == 0.1419
+    for path in (
+        ROOT / "homeowner/www/thermowatt-power-flow-card.js",
+        ROOT / "tools/build_home_dashboard.py",
+        ROOT / "tests/js/device_energy.test.mjs",
+    ):
+        text = path.read_text(encoding="utf-8")
+        if (
+            path.name != "device_energy.test.mjs"
+        ):  # the unit tests use the owner's rates as fixtures
+            assert "0.1419" not in text and "0.1907" not in text, path
+
+
+def test_tariff_windows_come_from_the_existing_energy_map_not_a_second_schedule(home):
+    data, _ = home
+    source = yaml.safe_load(
+        (ROOT / "energy_monitoring/entity_map.yaml").read_text(encoding="utf-8")
+    )["tariff"]
+    tariff = device_card(data)["tariff"]
+    assert (
+        tariff["clock"] == source["clock"]
+        and tariff["utc_offset_hours"] == source["utc_offset_hours"]
+    )
+    assert tariff["peak_windows"] == [
+        {"days": w["days"], "start": w["start"], "end": w["end"]} for w in source["peak_windows"]
+    ]
+    assert device_card(data)["timezone"] == "Australia/Hobart"
+
+
+def test_no_device_list_or_device_entity_is_hardcoded(home):
+    data, ent = home
+    card = device_card(data)
+    assert set(card) == {
+        "type",
+        "tariff",
+        "rates",
+        "platforms",
+        "history_months",
+        "grid_options",
+        "timezone",
+    }
+    assert card["platforms"] == [
+        "tplink",
+        "tapo",
+    ]  # discovery scope only: devices come from the registries
+    assert "exclude" not in card and "include_only" not in card
+    text = json.dumps(view(data, "device-energy"))
+    assert "sensor." not in text and "switch." not in text
+    assert not [e for e, s in ent.used.items() if "device" in s]
+
+
+def test_device_energy_view_sends_no_commands(home):
+    data, _ = home
+    assert not list(actions(view(data, "device-energy")))
+
+
+def test_exclusions_flow_from_the_mapping_into_the_card():
+    mapping = build.load_mapping()
+    mapping["device_energy"]["exclude"] = ["Dryer"]
+    mapping["device_energy"]["exclude_label"] = "no_energy_report"
+    data, _ = build.build_dashboard(True, mapping)
+    card = device_card(data)
+    assert card["exclude"] == ["Dryer"] and card["exclude_label"] == "no_energy_report"
+
+
+def test_generic_profile_needs_rates_before_showing_costs(generic):
+    data, ent = generic
+    assert "device_energy.rates" in ent.unresolved
+    assert not [
+        c
+        for c in walk(view(data, "device-energy"))
+        if c.get("type") == "custom:thermowatt-device-energy-card"
+    ]
+    assert "mapping needed" in json.dumps(view(data, "device-energy"))
+
+
+def test_native_fallback_explains_that_the_card_is_required(native):
+    data, _ = native
+    text = json.dumps(view(data, "device-energy"))
+    assert "needs the Thermowatt card" in text and "custom:" not in text
+
+
+def test_device_energy_card_has_no_services_polling_or_cloud_calls():
+    js = (ROOT / "homeowner/www/thermowatt-power-flow-card.js").read_text(encoding="utf-8")
+    block = js[js.index("Device energy: <thermowatt-device-energy-card>") :]
+    for forbidden in ("callService", "fetch(", "XMLHttpRequest", "WebSocket(", "setInterval"):
+        assert forbidden not in block, forbidden
+    assert block.count("callWS") == 1 and "recorder/statistics_during_period" in block
+
+
+def test_device_energy_javascript_unit_tests():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    result = subprocess.run(
+        [node, "--test", str(ROOT / "tests/js/device_energy.test.mjs")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

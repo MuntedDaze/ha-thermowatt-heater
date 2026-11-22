@@ -30,6 +30,7 @@ sys.modules[package.__name__] = package
 naming = importlib.import_module(f"{package.__name__}.naming")
 integration_config = importlib.import_module(f"{package.__name__}.config")
 
+ENERGY_MAP = ROOT / "energy_monitoring/entity_map.yaml"
 MAPPING = ROOT / "homeowner/home_mapping.yaml"
 GENERIC_MAPPING = ROOT / "homeowner/generic/home_mapping.yaml"
 TAPO_CONTRACT = ROOT / "homeowner/tapo_entity_contract.json"
@@ -458,8 +459,23 @@ def override_toggle(ent, columns=12):
     )
     return [
         conditional(when(mode, "guest"), on_card, columns),
-        conditional(when(mode, not_states=("guest", "unavailable", "unknown")), off_card, columns),
+        conditional(
+            when(mode, not_states=("guest", "unavailable", "unknown", "holiday", "disabled")),
+            off_card,
+            columns,
+        ),
         conditional([any_state(mode, ("unavailable", "unknown"))], unknown, columns),
+        conditional(
+            [any_state(mode, ("holiday", "disabled"))],
+            tile(
+                mode,
+                "12 h override: not available now",
+                "mdi:water-boiler-off",
+                "grey",
+                hide_state=True,
+            ),
+            columns,
+        ),
     ]
 
 
@@ -718,6 +734,63 @@ def diagnostics_summary(ent, columns=12):
     return note(text, columns)
 
 
+# ------------------------------------------------------------------ device energy
+DEVICE_ENERGY_CARD = "custom:thermowatt-device-energy-card"
+
+
+def tariff_from_energy_map():
+    """The authoritative peak/off-peak windows: the same file the Thermowatt energy package uses."""
+    tariff = yaml.safe_load(ENERGY_MAP.read_text(encoding="utf-8"))["tariff"]
+    windows = [
+        {"days": list(w["days"]), "start": str(w["start"]), "end": str(w["end"])}
+        for w in tariff["peak_windows"]
+    ]
+    return {
+        "clock": tariff.get("clock", "standard"),
+        "utc_offset_hours": tariff.get("utc_offset_hours", 10),
+        "peak_windows": windows,
+    }
+
+
+def device_energy_fallback():
+    return note(
+        "**Device Energy needs the Thermowatt card.** Use `home.yaml` with the "
+        f"`{CARD_RESOURCE}` resource installed; this native fallback has no per-device tables.",
+        12,
+    )
+
+
+def device_energy_card(ent):
+    cfg = ent.mapping.get("device_energy") or {}
+    rates = [
+        {
+            "effective_from": str(r["effective_from"]),
+            "offpeak": float(r["offpeak"]),
+            "peak": float(r["peak"]),
+        }
+        for r in cfg.get("rates") or []
+    ]
+    if not rates:
+        ent.unresolved.append("device_energy.rates")
+        return mapping_needed("Device energy rates", "device_energy.rates", 12)
+    card = {
+        "type": DEVICE_ENERGY_CARD,
+        "tariff": tariff_from_energy_map(),
+        "rates": rates,
+        "platforms": list(cfg.get("platforms") or ["tplink", "tapo"]),
+        "history_months": int(cfg.get("history_months", 6)),
+        **span(12),
+    }
+    if cfg.get("timezone"):
+        card["timezone"] = str(cfg["timezone"])
+    for key in ("exclude", "include_only"):
+        if cfg.get(key):
+            card[key] = [str(x) for x in cfg[key]]
+    if cfg.get("exclude_label"):
+        card["exclude_label"] = str(cfg["exclude_label"])
+    return card
+
+
 # ------------------------------------------------------------------ views
 def view(title, path, icon, sections, max_columns=4):
     return {
@@ -930,7 +1003,14 @@ def build_views(ent, custom):
         ],
         max_columns=3,
     )
-    return [home, energy, hot_water, bath_view, doors_view, system]
+    device_energy = view(
+        "Device Energy",
+        "device-energy",
+        "mdi:meter-electric",
+        [section(device_energy_card(ent) if custom else device_energy_fallback(), span_columns=3)],
+        max_columns=3,
+    )
+    return [home, energy, hot_water, bath_view, doors_view, system, device_energy]
 
 
 def build_dashboard(custom=True, mapping=None):
@@ -1066,7 +1146,6 @@ def build_package(mapping=None):
         return (
             f"(is_number(states('{entity}')) "
             f"and state_attr('{entity}', 'unit_of_measurement') == 'kWh' "
-            f"and state_attr('{entity}', 'state_class') in ['total', 'total_increasing'] "
             f"and states('{entity}') | float >= 0 and {fresh(entity, COUNTER_FRESH_SECONDS)})"
         )
 
@@ -1074,7 +1153,7 @@ def build_package(mapping=None):
         return (
             f"(is_number(states('{meter}')) and states('{meter}') | float >= 0 "
             f"and states('{meter}') | float < {DAILY_CAP_KWH} "
-            f"and state_attr('{meter}', 'last_valid_state') is not none)"
+            f"and state_attr('{meter}', 'last_valid_state') not in [none, 'None'])"
         )
 
     solar_ok = (
@@ -1125,7 +1204,9 @@ def build_package(mapping=None):
             "kWh",
             "energy",
             icon="mdi:transmission-tower-import",
-            attributes={"basis": "daily utility meter on the inverter import counter (measured)"},
+            attributes={
+                "basis": "daily utility meter on the inverter import counter (measured). If the inverter is offline overnight, the gap is added to the day its counter returns."
+            },
         ),
         tmpl(
             "Home grid export today",
@@ -1135,7 +1216,9 @@ def build_package(mapping=None):
             "kWh",
             "energy",
             icon="mdi:transmission-tower-export",
-            attributes={"basis": "daily utility meter on the inverter export counter (measured)"},
+            attributes={
+                "basis": "daily utility meter on the inverter export counter (measured). If the inverter is offline overnight, the gap is added to the day its counter returns."
+            },
         ),
         tmpl(
             "Home consumption today",
@@ -1241,6 +1324,15 @@ class _PlainDumper(yaml.SafeDumper):
 
     def ignore_aliases(self, data):
         return True
+
+
+def _quote_clock_times(dumper, data):
+    """Always quote HH:MM so no YAML parser can read a time as a number (sexagesimal)."""
+    style = "'" if re.fullmatch(r"\d{1,2}:\d{2}", data) else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
+
+
+_PlainDumper.add_representer(str, _quote_clock_times)
 
 
 def dump(data, key):

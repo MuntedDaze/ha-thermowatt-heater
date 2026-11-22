@@ -76,31 +76,30 @@ template:
       | float < 500 and (states[''sensor.goodwe_inverter_today_s_pv_generation''] is not none and
       (now() - states[''sensor.goodwe_inverter_today_s_pv_generation''].last_reported).total_seconds()
       < 1800)) and (is_number(states(''sensor.goodwe_inverter_meter_total_energy_import'')) and state_attr(''sensor.goodwe_inverter_meter_total_energy_import'',
-      ''unit_of_measurement'') == ''kWh'' and state_attr(''sensor.goodwe_inverter_meter_total_energy_import'',
-      ''state_class'') in [''total'', ''total_increasing''] and states(''sensor.goodwe_inverter_meter_total_energy_import'')
+      ''unit_of_measurement'') == ''kWh'' and states(''sensor.goodwe_inverter_meter_total_energy_import'')
       | float >= 0 and (states[''sensor.goodwe_inverter_meter_total_energy_import''] is not none
       and (now() - states[''sensor.goodwe_inverter_meter_total_energy_import''].last_reported).total_seconds()
       < 1800)) and (is_number(states(''sensor.goodwe_inverter_meter_total_energy_export'')) and state_attr(''sensor.goodwe_inverter_meter_total_energy_export'',
-      ''unit_of_measurement'') == ''kWh'' and state_attr(''sensor.goodwe_inverter_meter_total_energy_export'',
-      ''state_class'') in [''total'', ''total_increasing''] and states(''sensor.goodwe_inverter_meter_total_energy_export'')
+      ''unit_of_measurement'') == ''kWh'' and states(''sensor.goodwe_inverter_meter_total_energy_export'')
       | float >= 0 and (states[''sensor.goodwe_inverter_meter_total_energy_export''] is not none
       and (now() - states[''sensor.goodwe_inverter_meter_total_energy_export''].last_reported).total_seconds()
       < 1800))) %}sources_unavailable{% elif not ((is_number(states(''sensor.home_grid_import_meter''))
       and states(''sensor.home_grid_import_meter'') | float >= 0 and states(''sensor.home_grid_import_meter'')
-      | float < 500 and state_attr(''sensor.home_grid_import_meter'', ''last_valid_state'') is not
-      none) and (is_number(states(''sensor.home_grid_export_meter'')) and states(''sensor.home_grid_export_meter'')
+      | float < 500 and state_attr(''sensor.home_grid_import_meter'', ''last_valid_state'') not in
+      [none, ''None'']) and (is_number(states(''sensor.home_grid_export_meter'')) and states(''sensor.home_grid_export_meter'')
       | float >= 0 and states(''sensor.home_grid_export_meter'') | float < 500 and state_attr(''sensor.home_grid_export_meter'',
-      ''last_valid_state'') is not none) and ((state_attr(''sensor.home_grid_import_meter'', ''last_reset'')
-      | as_datetime(none)) is not none and (state_attr(''sensor.home_grid_import_meter'', ''last_reset'')
-      | as_datetime(none)) >= now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(minutes=10)
-      and (state_attr(''sensor.home_grid_import_meter'', ''last_reset'') | as_datetime(none)) <=
-      now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=10)) and ((state_attr(''sensor.home_grid_export_meter'',
-      ''last_reset'') | as_datetime(none)) is not none and (state_attr(''sensor.home_grid_export_meter'',
+      ''last_valid_state'') not in [none, ''None'']) and ((state_attr(''sensor.home_grid_import_meter'',
+      ''last_reset'') | as_datetime(none)) is not none and (state_attr(''sensor.home_grid_import_meter'',
       ''last_reset'') | as_datetime(none)) >= now().replace(hour=0, minute=0, second=0, microsecond=0)
-      - timedelta(minutes=10) and (state_attr(''sensor.home_grid_export_meter'', ''last_reset'')
-      | as_datetime(none)) <= now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=10)))
-      %}collecting_first_day{% elif not (states(''sensor.home_grid_export_meter'') | float <= states(''sensor.goodwe_inverter_today_s_pv_generation'')
-      | float) %}inconsistent{% else %}ready{% endif %}'
+      - timedelta(minutes=10) and (state_attr(''sensor.home_grid_import_meter'', ''last_reset'')
+      | as_datetime(none)) <= now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=10))
+      and ((state_attr(''sensor.home_grid_export_meter'', ''last_reset'') | as_datetime(none)) is
+      not none and (state_attr(''sensor.home_grid_export_meter'', ''last_reset'') | as_datetime(none))
+      >= now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(minutes=10) and (state_attr(''sensor.home_grid_export_meter'',
+      ''last_reset'') | as_datetime(none)) <= now().replace(hour=0, minute=0, second=0, microsecond=0)
+      + timedelta(minutes=10))) %}collecting_first_day{% elif not (states(''sensor.home_grid_export_meter'')
+      | float <= states(''sensor.goodwe_inverter_today_s_pv_generation'') | float) %}inconsistent{%
+      else %}ready{% endif %}'
     icon: mdi:chart-timeline-variant
     attributes:
       meaning: ready = full-day figures valid; collecting_first_day = the daily meters do not yet
@@ -115,7 +114,8 @@ template:
     device_class: energy
     icon: mdi:transmission-tower-import
     attributes:
-      basis: daily utility meter on the inverter import counter (measured)
+      basis: daily utility meter on the inverter import counter (measured). If the inverter is offline
+        overnight, the gap is added to the day its counter returns.
   - name: Home grid export today
     unique_id: home_grid_export_today
     state: '{{ states(''sensor.home_grid_export_meter'') | float | round(3) }}'
@@ -124,7 +124,8 @@ template:
     device_class: energy
     icon: mdi:transmission-tower-export
     attributes:
-      basis: daily utility meter on the inverter export counter (measured)
+      basis: daily utility meter on the inverter export counter (measured). If the inverter is offline
+        overnight, the gap is added to the day its counter returns.
   - name: Home consumption today
     unique_id: home_consumption_today
     state: '{{ (states(''sensor.goodwe_inverter_today_s_pv_generation'') | float + states(''sensor.home_grid_import_meter'')
@@ -140,12 +141,12 @@ template:
     state: '{{ states(''sensor.home_consumption_meter'') | float | round(3) }}'
     availability: '{{ (is_number(states(''sensor.home_consumption_meter'')) and states(''sensor.home_consumption_meter'')
       | float >= 0 and states(''sensor.home_consumption_meter'') | float < 500 and state_attr(''sensor.home_consumption_meter'',
-      ''last_valid_state'') is not none) and ((state_attr(''sensor.home_consumption_meter'', ''last_reset'')
-      | as_datetime(none)) is not none and (state_attr(''sensor.home_consumption_meter'', ''last_reset'')
-      | as_datetime(none)) >= now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(minutes=10)
-      and (state_attr(''sensor.home_consumption_meter'', ''last_reset'') | as_datetime(none)) <=
-      now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=10)) and (states[''sensor.goodwe_inverter_house_consumption'']
-      is not none and (now() - states[''sensor.goodwe_inverter_house_consumption''].last_reported).total_seconds()
+      ''last_valid_state'') not in [none, ''None'']) and ((state_attr(''sensor.home_consumption_meter'',
+      ''last_reset'') | as_datetime(none)) is not none and (state_attr(''sensor.home_consumption_meter'',
+      ''last_reset'') | as_datetime(none)) >= now().replace(hour=0, minute=0, second=0, microsecond=0)
+      - timedelta(minutes=10) and (state_attr(''sensor.home_consumption_meter'', ''last_reset'')
+      | as_datetime(none)) <= now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=10))
+      and (states[''sensor.goodwe_inverter_house_consumption''] is not none and (now() - states[''sensor.goodwe_inverter_house_consumption''].last_reported).total_seconds()
       < 900) }}'
     unit_of_measurement: kWh
     device_class: energy

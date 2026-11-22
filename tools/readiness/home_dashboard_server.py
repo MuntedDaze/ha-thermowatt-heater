@@ -119,6 +119,174 @@ def seed(hass):
     return sorted(values)
 
 
+async def seed_device_energy(hass):
+    """Synthetic Tapo devices (registry entries, states and long-term statistics) for Device Energy."""
+    from homeassistant.components.recorder import get_instance
+    from homeassistant.components.recorder.db_schema import StatisticsShortTerm
+    from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+    from homeassistant.components.recorder.statistics import async_import_statistics
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    entry = hass.config_entries.async_entries("demo")[
+        0
+    ]  # any real config entry can own test devices
+    devices = dr.async_get(hass)
+    entities = er.async_get(hass)
+
+    def device(key, name, user_name=None):
+        dev = devices.async_get_or_create(
+            config_entry_id=entry.entry_id, identifiers={("tplink", key)}, name=name
+        )
+        if user_name:
+            devices.async_update_device(dev.id, name_by_user=user_name)
+        return dev
+
+    def entity(dev, uid, object_id, translation_key, device_class, klass, unit, state):
+        entities.async_get_or_create(
+            "sensor",
+            "tplink",
+            uid,
+            config_entry=entry,
+            device_id=dev.id,
+            suggested_object_id=object_id,
+            translation_key=translation_key,
+            original_device_class=device_class,
+        )
+        hass.states.async_set(
+            f"sensor.{object_id}",
+            state,
+            {"device_class": device_class, "state_class": klass, "unit_of_measurement": unit},
+        )
+
+    dryer = device("dryer", "Tapo P110", "Dryer")
+    entity(
+        dryer,
+        "dryer-total",
+        "dryer_total_consumption",
+        "total_consumption",
+        "energy",
+        "total_increasing",
+        "kWh",
+        "420.5",
+    )
+    entity(
+        dryer,
+        "dryer-today",
+        "dryer_today_s_consumption",
+        "today_s_consumption",
+        "energy",
+        "total_increasing",
+        "kWh",
+        "1.2",
+    )
+    entity(
+        dryer,
+        "dryer-power",
+        "dryer_current_consumption",
+        "current_consumption",
+        "power",
+        "measurement",
+        "W",
+        "0",
+    )
+    server = device("server", "Server plug")
+    entity(
+        server,
+        "server-power",
+        "server_current_consumption",
+        "current_consumption",
+        "power",
+        "measurement",
+        "W",
+        "45",
+    )
+    fridge = device("fridge", "Fridge plug")
+    entity(
+        fridge,
+        "fridge-total",
+        "fridge_total_energy",
+        "total_consumption",
+        "energy",
+        "total_increasing",
+        "kWh",
+        "88.0",
+    )
+    bulb = device("hall", "Hall light")
+    entities.async_get_or_create(
+        "light",
+        "tplink",
+        "hall",
+        config_entry=entry,
+        device_id=bulb.id,
+        suggested_object_id="hall_light",
+    )
+    hass.states.async_set("light.hall_light", "on", {})
+
+    def hour_floor(moment):
+        return moment.replace(minute=0, second=0, microsecond=0)
+
+    now = datetime.now(timezone.utc)
+    last_hour = hour_floor(now) - timedelta(hours=1)
+
+    def energy_rows(start, step, count, per_step_kwh, base):
+        total = base
+        rows = []
+        for i in range(count):
+            total += per_step_kwh * (1 + (i % 7) / 10)
+            rows.append(StatisticData(start=start + step * i, state=total, sum=total))
+        return rows
+
+    def meta(entity_id, unit, mean, total):
+        return StatisticMetaData(
+            has_mean=mean,
+            has_sum=total,
+            name=None,
+            source="recorder",
+            statistic_id=entity_id,
+            unit_of_measurement=unit,
+        )
+
+    for entity_id, per_hour in (
+        ("sensor.dryer_total_consumption", 0.15),
+        ("sensor.fridge_total_energy", 0.05),
+    ):
+        hourly_start = last_hour - timedelta(hours=24 * 70)
+        async_import_statistics(
+            hass,
+            meta(entity_id, "kWh", False, True),
+            energy_rows(hourly_start, timedelta(hours=1), 24 * 70, per_hour, 100.0),
+        )
+        short_start = hour_floor(now) - timedelta(days=3)
+        async_import_statistics(
+            hass,
+            meta(entity_id, "kWh", False, True),
+            energy_rows(short_start, timedelta(minutes=5), 12 * 24 * 3, per_hour / 12, 500.0),
+            table=StatisticsShortTerm,
+        )
+    # power-only device: mean statistics (its energy is estimated from them)
+    hourly = [
+        StatisticData(start=last_hour - timedelta(hours=i), mean=45.0 + (i % 5), min=40.0, max=60.0)
+        for i in range(24 * 70)
+    ]
+    async_import_statistics(
+        hass, meta("sensor.server_current_consumption", "W", True, False), hourly
+    )
+    short = [
+        StatisticData(
+            start=hour_floor(now) - timedelta(minutes=5 * i), mean=46.0, min=40.0, max=60.0
+        )
+        for i in range(12 * 24 * 3)
+    ]
+    async_import_statistics(
+        hass,
+        meta("sensor.server_current_consumption", "W", True, False),
+        short,
+        table=StatisticsShortTerm,
+    )
+    await get_instance(hass).async_block_till_done()
+
+
 async def main():
     socket.socket.connect = loopback_connect
     ServiceRegistry.async_call = record_service
@@ -232,6 +400,7 @@ async def main():
         "expires": int(datetime.now(timezone.utc).timestamp() * 1000) + 1800000,
     }
     await hass.async_start()
+    await seed_device_energy(hass)
     (PRIVATE / "browser.json").write_text(json.dumps({"auth": auth}))
     print(json.dumps({"ready": True, "seeded": len(seeded)}), flush=True)
     await asyncio.Event().wait()

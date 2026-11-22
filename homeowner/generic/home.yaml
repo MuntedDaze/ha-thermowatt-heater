@@ -236,6 +236,12 @@ views:
       - condition: state
         entity: sensor.thermann_shadow_hot_water_operating_mode
         state_not: unknown
+      - condition: state
+        entity: sensor.thermann_shadow_hot_water_operating_mode
+        state_not: holiday
+      - condition: state
+        entity: sensor.thermann_shadow_hot_water_operating_mode
+        state_not: disabled
       card:
         type: tile
         entity: sensor.thermann_shadow_hot_water_operating_mode
@@ -279,6 +285,32 @@ views:
         entity: sensor.thermann_shadow_hot_water_operating_mode
         name: '12 h override: status unknown'
         icon: mdi:water-boiler-alert
+        color: grey
+        hide_state: true
+        tap_action:
+          action: more-info
+        icon_tap_action:
+          action: more-info
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: or
+        conditions:
+        - condition: state
+          entity: sensor.thermann_shadow_hot_water_operating_mode
+          state: holiday
+        - condition: state
+          entity: sensor.thermann_shadow_hot_water_operating_mode
+          state: disabled
+      card:
+        type: tile
+        entity: sensor.thermann_shadow_hot_water_operating_mode
+        name: '12 h override: not available now'
+        icon: mdi:water-boiler-off
         color: grey
         hide_state: true
         tap_action:
@@ -1223,6 +1255,12 @@ views:
       - condition: state
         entity: sensor.thermann_shadow_hot_water_operating_mode
         state_not: unknown
+      - condition: state
+        entity: sensor.thermann_shadow_hot_water_operating_mode
+        state_not: holiday
+      - condition: state
+        entity: sensor.thermann_shadow_hot_water_operating_mode
+        state_not: disabled
       card:
         type: tile
         entity: sensor.thermann_shadow_hot_water_operating_mode
@@ -1266,6 +1304,32 @@ views:
         entity: sensor.thermann_shadow_hot_water_operating_mode
         name: '12 h override: status unknown'
         icon: mdi:water-boiler-alert
+        color: grey
+        hide_state: true
+        tap_action:
+          action: more-info
+        icon_tap_action:
+          action: more-info
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: or
+        conditions:
+        - condition: state
+          entity: sensor.thermann_shadow_hot_water_operating_mode
+          state: holiday
+        - condition: state
+          entity: sensor.thermann_shadow_hot_water_operating_mode
+          state: disabled
+      card:
+        type: tile
+        entity: sensor.thermann_shadow_hot_water_operating_mode
+        name: '12 h override: not available now'
+        icon: mdi:water-boiler-off
         color: grey
         hide_state: true
         tap_action:
@@ -2302,3 +2366,18 @@ views:
         navigation_path: /config/integrations/integration/tapo_smart_controller
       grid_options:
         columns: 12
+- title: Device Energy
+  path: device-energy
+  icon: mdi:meter-electric
+  type: sections
+  max_columns: 3
+  dense_section_placement: true
+  sections:
+  - type: grid
+    cards:
+    - type: markdown
+      content: '**Device energy rates: mapping needed.** Set `device_energy.rates` in the mapping
+        file to the real entity ID (Developer Tools -> States), then run `python tools/build_home_dashboard.py`.'
+      grid_options:
+        columns: 12
+    column_span: 3

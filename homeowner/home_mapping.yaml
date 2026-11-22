@@ -47,3 +47,17 @@ bathrooms:
 doors:
   garage_contact: {entity: binary_sensor.garage_door, status: owner-confirmed}
   front_contact: {entity: binary_sensor.front_door_door, status: owner-confirmed}
+
+# Individual device energy (the Device Energy view). Devices are DISCOVERED from Home Assistant's
+# registries at run time (no device list here). Costs are estimated tariff-valued operating costs: the
+# peak/off-peak windows come from energy_monitoring/entity_map.yaml (the same source as the energy package).
+# `rates` is append-only: add a new entry when prices change; older periods keep the rate in force then.
+device_energy:
+  platforms: [tplink, tapo]         # integrations whose devices are considered
+  exclude: []                       # device names or entity IDs to leave out
+  include_only: []                  # if set, only these devices
+  exclude_label: ""                 # or: any Home Assistant label ID that marks a device as excluded
+  history_months: 6
+  timezone: Australia/Hobart
+  rates:                            # AUD per kWh (owner's current Aurora usage rates)
+    - {effective_from: "2000-01-01", offpeak: 0.1419, peak: 0.1907}
