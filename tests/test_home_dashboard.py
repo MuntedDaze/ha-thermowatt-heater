@@ -1165,19 +1165,34 @@ def test_whole_house_sources_come_from_the_mapping_not_from_code(home):
 def test_house_battery_presence_is_passed_through_exactly():
     assert (
         build._house_sources(
-            {"energy": {"battery_present": False, "grid_import_total": {"entity": "sensor.i"}}}
+            {
+                "energy": {
+                    "battery_present": False,
+                    "grid_import_total": {"entity": "sensor.i", "status": "verified"},
+                }
+            }
         )["battery_present"]
         is False
     )
     assert (
         build._house_sources(
-            {"energy": {"battery_present": "unknown", "grid_import_total": {"entity": "sensor.i"}}}
+            {
+                "energy": {
+                    "battery_present": "unknown",
+                    "grid_import_total": {"entity": "sensor.i", "status": "verified"},
+                }
+            }
         )["battery_present"]
         == "unknown"
     )
     assert (
         build._house_sources(
-            {"energy": {"battery_present": True, "grid_import_total": {"entity": "sensor.i"}}}
+            {
+                "energy": {
+                    "battery_present": True,
+                    "grid_import_total": {"entity": "sensor.i", "status": "verified"},
+                }
+            }
         )["battery_present"]
         is True
     )

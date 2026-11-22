@@ -1026,8 +1026,8 @@ function balanceHtml(s, view, asOfText) {
   }
   const cross = s.crossCheck || {};
   const parts = [];
-  if (cross.day) parts.push(`today the ${cross.day.count} devices' own daily counters total ${fmtKwh(cross.day.counter)} (statistics: ${fmtKwh(cross.day.stats)})`);
-  if (cross.month) parts.push(`this month their own monthly counters total ${fmtKwh(cross.month.counter)} (statistics: ${fmtKwh(cross.month.stats)})`);
+  if (cross.day) parts.push(`today the daily counters of ${cross.day.count} device${cross.day.count === 1 ? "" : "s"} total ${fmtKwh(cross.day.counter)} (statistics: ${fmtKwh(cross.day.stats)})`);
+  if (cross.month) parts.push(`this month the monthly counters of ${cross.month.count} device${cross.month.count === 1 ? "" : "s"} total ${fmtKwh(cross.month.counter)} (statistics: ${fmtKwh(cross.month.stats)})`);
   if (parts.length) html += `<p class="note">Cross-check: ${parts.join("; ")}. A device whose statistics disagree with its own counter is marked ≠ device counter. The counters are a check only and are never added to the statistics.</p>`;
   html += '<p class="note">Monitored devices here use complete hours only, so they can be slightly below the Today and month tables, which include the hour in progress.</p>';
   return html;
