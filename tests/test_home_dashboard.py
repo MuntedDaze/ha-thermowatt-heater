@@ -967,6 +967,9 @@ def test_card_resource_path_and_documentation_match():
 
 
 # ------------------------------------------------------------------ device energy view
+DEVICE_ENERGY_TYPE = "custom:thermowatt-device-energy-card"
+
+
 def device_card(data):
     return next(
         c
@@ -1030,6 +1033,7 @@ def test_no_device_list_or_device_entity_is_hardcoded(home):
         "grid_options",
         "timezone",
         "part",
+        "house",
     }
     assert card["platforms"] == [
         "tplink",
@@ -1037,6 +1041,9 @@ def test_no_device_list_or_device_entity_is_hardcoded(home):
     ]  # discovery scope only: devices come from the registries
     assert "exclude" not in card and "include_only" not in card
     text = json.dumps(view(data, "device-energy"))
+    # the only entity IDs are the inverter's verified whole-house sources, taken from the mapping
+    for entity in ("solar", "import", "export"):
+        text = text.replace(card["house"][entity], "")
     assert "sensor." not in text and "switch." not in text
     assert not [e for e, s in ent.used.items() if "device" in s]
 
@@ -1090,8 +1097,7 @@ def test_device_energy_javascript_unit_tests():
         [
             node,
             "--test",
-            str(ROOT / "tests/js/device_energy.test.mjs"),
-            str(ROOT / "tests/js/device_energy_card.test.mjs"),
+            *sorted(str(path) for path in (ROOT / "tests/js").glob("*.test.mjs")),
         ],
         capture_output=True,
         text=True,
@@ -1130,3 +1136,72 @@ def test_duplicate_rate_dates_are_rejected_and_valid_schedules_are_kept_as_given
         {"effective_from": "2027-07-01", "offpeak": 0.2, "peak": 0.3},
     ]
     assert build._validated_rates(schedule) == schedule
+
+
+def test_device_energy_is_split_into_parts_that_use_the_screen_width(home):
+    data, _ = home
+    sections = view(data, "device-energy")["sections"]
+    parts = [[c["part"] for c in section["cards"]] for section in sections]
+    assert parts == [["summary", "balance"], ["daily", "monthly"], ["history"]]
+
+
+def test_whole_house_sources_come_from_the_mapping_not_from_code(home):
+    data, _ = home
+    energy = build.load_mapping()["energy"]
+    house = device_card(data)["house"]
+    assert house == {
+        "solar": energy["solar_today_energy"]["entity"],
+        "import": energy["grid_import_total"]["entity"],
+        "export": energy["grid_export_total"]["entity"],
+        "battery_present": False,  # the owner's confirmed battery-free installation
+    }
+    # every part of the view shares one configuration (one statistics load)
+    parts = [c for c in walk(view(data, "device-energy")) if c.get("type") == DEVICE_ENERGY_TYPE]
+    assert {
+        json.dumps({k: v for k, v in c.items() if k != "part"}, sort_keys=True) for c in parts
+    } == {json.dumps({k: v for k, v in parts[0].items() if k != "part"}, sort_keys=True)}
+
+
+def test_house_battery_presence_is_passed_through_exactly():
+    assert (
+        build._house_sources(
+            {"energy": {"battery_present": False, "grid_import_total": {"entity": "sensor.i"}}}
+        )["battery_present"]
+        is False
+    )
+    assert (
+        build._house_sources(
+            {"energy": {"battery_present": "unknown", "grid_import_total": {"entity": "sensor.i"}}}
+        )["battery_present"]
+        == "unknown"
+    )
+    assert (
+        build._house_sources(
+            {"energy": {"battery_present": True, "grid_import_total": {"entity": "sensor.i"}}}
+        )["battery_present"]
+        is True
+    )
+    assert build._house_sources({"energy": {}}) is None  # nothing mapped: nothing invented
+
+
+def test_the_balance_never_creates_helpers_pollers_or_new_meters(home):
+    """The balance reuses recorder statistics: the energy package is unchanged by it."""
+    package = build.build_package(build.load_mapping())
+    unique_ids = {i["unique_id"] for i in package["template"][0]["sensor"]}
+    assert not any("balance" in unique for unique in unique_ids)
+    assert "recorder/statistics_during_period" in (
+        ROOT / "homeowner/www/thermowatt-power-flow-card.js"
+    ).read_text(encoding="utf-8")
+
+
+def test_unverified_inverter_mappings_are_never_used_for_the_balance():
+    mapping = {
+        "energy": {
+            "battery_present": False,
+            "solar_today_energy": {"entity": "sensor.solar", "status": "verified"},
+            "grid_import_total": {"entity": "sensor.import", "status": "owner-confirmed"},
+            "grid_export_total": {"entity": "sensor.export", "status": "unverified"},
+        }
+    }
+    house = build._house_sources(mapping)
+    assert house == {"solar": "sensor.solar", "import": "sensor.import", "battery_present": False}

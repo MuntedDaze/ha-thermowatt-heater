@@ -798,14 +798,44 @@ def _validated_rates(raw):
 
 
 def device_energy_sections(ent, custom):
-    """Three columns of card parts sharing one statistics load: summary+daily | monthly | history."""
+    """Three columns of card parts sharing one statistics load: summary+balance | daily+monthly | history."""
     if not custom:
         return [section(device_energy_fallback())]
     base = device_energy_card(ent)
     if base.get("type") != DEVICE_ENERGY_CARD:  # rates missing: just the mapping note
         return [section(base)]
-    parts = [("summary", "daily"), ("monthly",), ("history",)]
+    parts = [("summary", "balance"), ("daily", "monthly"), ("history",)]
     return [section(*[{**base, "part": name} for name in group]) for group in parts]
+
+
+def _house_sources(mapping):
+    """The inverter's verified energy sources for the whole-house balance (read from the mapping, never invented).
+
+    `battery_present` is passed through as written (true / false / unknown): the card only derives household
+    energy when it is exactly false, because with a battery generation, import and export do not balance.
+    """
+    energy = mapping.get("energy") or {}
+
+    def entity(key):
+        value = energy.get(key)
+        if not isinstance(value, dict) or value.get("status") not in (
+            "verified",
+            "owner-confirmed",
+        ):
+            return ""  # an unverified mapping is never used for the balance
+        return str(value.get("entity") or "")
+
+    sources = {
+        "solar": entity("solar_today_energy"),
+        "import": entity("grid_import_total"),
+        "export": entity("grid_export_total"),
+    }
+    if not any(sources.values()):
+        return None
+    house = {key: value for key, value in sources.items() if value}
+    battery = energy.get("battery_present")
+    house["battery_present"] = battery if isinstance(battery, bool) else "unknown"
+    return house
 
 
 def device_energy_card(ent):
@@ -822,6 +852,9 @@ def device_energy_card(ent):
         "history_months": int(cfg.get("history_months", 6)),
         **span(12),
     }
+    house = _house_sources(ent.mapping)
+    if house:
+        card["house"] = house
     if cfg.get("timezone"):
         card["timezone"] = str(cfg["timezone"])
     for key in ("exclude", "include_only"):

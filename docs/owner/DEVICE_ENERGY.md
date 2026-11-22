@@ -18,10 +18,10 @@ whole-house Energy view and **read-only**: it never sends a command and never po
 
 ## Layout
 
-On a wide screen the view is three columns (summary and today | month to date and previous months | charts,
-per-device history and the last seven days); on a phone it is one column. These are three instances of the same
-card with a `part` option (`summary`, `daily`, `monthly`, `history`; default `all`), and they **share one
-statistics load**, so the page makes the same number of queries as a single card would.
+On a wide screen the view is three columns (summary and whole-house balance | today, month to date and
+previous months | charts, per-device history and the last seven days); on a phone it is one column. These are three
+instances of the same card with a `part` option (`summary`, `balance`, `daily`, `monthly`, `history`; default
+`all`), and they **share one statistics load**, so the page makes the same number of queries as a single card would.
 
 ## Discovery (nothing hardcoded)
 
@@ -31,7 +31,7 @@ integration) that has energy-monitoring sensors:
 
 1. **One source per device**, so today / month / lifetime counters of the same device are never added together:
    the best cumulative counter (`device_class: energy`, state class `total` or `total_increasing`, unit kWh/Wh/MWh;
-   the lifetime "total consumption" is preferred over "today" or "this month"), otherwise its measured **power**
+   a lifetime "total consumption" is preferred, then the monthly, then the daily counter), otherwise its measured **power**
    (`device_class: power`, W/kW), whose energy is then an **estimate** (mean power x time) and is marked *est.*
 2. **Real names:** the device's name as you configured it in Home Assistant.
 3. A Tapo device without any energy or power sensor (a bulb, for example) is **not shown as zero**: it is counted
@@ -41,6 +41,71 @@ integration) that has energy-monitoring sensors:
 **Include / exclude.** In `homeowner/home_mapping.yaml` (`device_energy`): `exclude` (device names or entity IDs),
 `include_only`, or `exclude_label` (any Home Assistant label ID). Regenerate and paste the dashboard again. **Adding a
 device** needs nothing: new energy-capable Tapo devices appear automatically.
+
+## Whole-house energy balance
+
+A compact section (a Sankey-style diagram, a Today / month toggle and a table of ten figures) that relates the
+inverter's measurements to the individually monitored devices. It is **energy only**: device costs elsewhere in
+this view are tariff-valued estimates, not grid spending, and **no solar is attributed to individual devices**.
+
+| Figure | Definition (confirmed battery-free installation) |
+| --- | --- |
+| Solar generation, Grid import, Grid export | long-term statistics of the verified GoodWe counters in `homeowner/home_mapping.yaml` (`energy.solar_today_energy`, `grid_import_total`, `grid_export_total`) |
+| Solar used directly | generation − export |
+| Household consumption | generation + import − export |
+| Monitored devices | sum of the Tapo devices' statistics (one source per device) |
+| Unmeasured consumption | household − monitored |
+| Solar self-consumption | solar used ÷ generation (shown from 1 kWh generated) |
+| Solar independence | solar used ÷ household (shown from 0.5 kWh consumed) |
+| Monitored share | monitored ÷ household |
+
+* **Nothing new is measured or polled.** The balance reuses Home Assistant's recorder statistics for the existing
+  counters and the devices; there is no new meter, helper, package or background service. Daily-counter resets
+  (the inverter's daily generation counter, the Tapo daily and monthly counters) are handled by the statistics
+  themselves: each reset starts a new cycle, so the `change` over any period is the energy used.
+* **Same period for every figure.** All sources are summed over the same **complete hours** (to the last whole hour;
+  the running hour is excluded so reporting latency cannot distort the comparison), from local midnight (Today)
+  or the first of the month (Month, midnight Australia/Hobart, DST aware). Today shows "collecting" until the first
+  complete hour.
+* **Invalid results are withheld with the reason, never clamped.** Missing or incomplete statistics for any
+  inverter source, a source without long-term statistics, or export above generation by more than the counters'
+  resolution (3 × 0.1 kWh) withhold the whole balance. Within that resolution the result is rounded and a note says
+  so. If monitored devices exceed household consumption by more than measurement error (the larger of 0.3 kWh
+  and 5 %), only the unmeasured figure and monitored share are withheld, with an explanation (check for a device
+  measured upstream of another, or a wrong source).
+* **Incomplete is not unmeasured.** If a device has missing, late-starting or no statistics, monitored energy is
+  shown as a lower bound (**≥**) and unmeasured consumption as an upper bound (**≤**), with a warning; it is never
+  presented as confirmed. Energy estimated from power (**≈**) is flagged too.
+* **Latency.** The newest hour is only used once Home Assistant has had ten minutes to compile its hourly row, so
+  the balance may stop up to an hour and ten minutes behind the clock (the note says "to 6:00 pm"). Statistics are
+  attributed to when Home Assistant recorded a reading, so a device that reports a minute late shifts at most that
+  minute of its energy into the next hour; this can bias an hour's unmeasured figure slightly, and monthly totals
+  not at all. Monitored devices in the balance therefore use complete hours only and can be slightly below the
+  Today and month tables, which include the hour in progress.
+* **Devices that cannot be used.** A monitored device whose statistics unit is not recognised (or that has no
+  statistics) is counted as incomplete, so unmeasured consumption becomes an upper bound. A device with no energy
+  or power sensor at all (a bulb) is genuinely unmeasured: its consumption is part of the unmeasured figure.
+* **Solar counter.** Generation uses the inverter's daily generation counter through long-term statistics, which
+  treat each reset as a new cycle. A glitch in that counter (a dip that is not a reset) would be counted as one;
+  this has not been observed on the live entity and cannot be detected from statistics alone. Only mappings
+  marked `verified` or `owner-confirmed` are used.
+* **Battery.** The formulas only hold without a battery. The dashboard passes `battery_present` from the mapping
+  (`false` for this installation); anything else withholds the balance.
+
+## Tapo sources: daily and monthly counters
+
+The 12 live devices (Dishwasher, Fridge, Washing Machine, JRIG, Server, Dryer, Network Cupboard, Main Towel Rail,
+Main Fan, Garage, Ensuite Towel Rail, Ensuite Fan) each expose `sensor.<device>_current_consumption` (W),
+`sensor.<device>_today_s_consumption` and `sensor.<device>_this_month_s_consumption` (kWh, `total_increasing`) and
+**no lifetime counter**. Source selection is explicit: a lifetime counter if one exists, otherwise the **monthly**
+counter (the fewest resets), otherwise the daily one, otherwise power (an estimate); a "yesterday", weekly or yearly counter is
+never a source. A counter's kind is read from its translation key or the last words of its entity ID, never from the
+device's name. Exactly one counter per device is used, so the daily and monthly counters are **never added together**.
+
+**Cross-check.** The other counter is kept only as a check: the statistics-derived energy for today is compared with
+the device's own daily counter, and for the month with its monthly counter. A row that differs by more than rounding,
+5 %, or about a quarter of an hour at the device's present power is marked **≠ device counter**, and the balance
+section shows both totals. (A device whose own day does not start at Hobart midnight will show a difference.)
 
 ## Tariff and cost rules
 
@@ -108,6 +173,12 @@ midnight falls on a whole hour (Hobart does).
 * Existing history is reused: anything the recorder already holds is reported (the card fetches the last 6 months,
   `history_months`). Statistics begin when an entity first got a state class, so earlier periods show as partial.
 * Costs use the rate schedule's dates; if your actual rates differed in the past, add dated entries.
+
+## Source selection limits
+
+Nested devices (a Tapo plug measuring a circuit that also contains another monitored plug) cannot be detected, so
+their energy would be counted twice in "monitored"; the balance then reports the inconsistency only when monitored
+exceeds household consumption. Exclude the outer device in `device_energy.exclude` if that is the case.
 
 ## The one thing I could not check
 

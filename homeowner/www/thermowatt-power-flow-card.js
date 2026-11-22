@@ -410,13 +410,35 @@ export function ratesAt(ms, rates, timeZone = DEFAULT_TIMEZONE) {
 const ENERGY_UNITS = { kwh: 1, wh: 0.001, mwh: 1000 };
 const POWER_UNITS = { w: 0.001, kw: 1, mw: 1000 };
 
-/** Rank an energy sensor as the one cumulative lifetime source for its device (higher = better). */
-function energyScore(entityId, entry, state) {
-  const key = String(entry.translation_key || entry.tk || "").toLowerCase();
-  const text = `${entityId} ${(state.attributes || {}).friendly_name || ""} ${key}`.toLowerCase();
-  if (key === "total_consumption") return 100;
-  if (/\b(total|lifetime|cumulative)\b|_total|total_/.test(text)) return 80;
-  if (/today|daily|month|week|yesterday/.test(text)) return 10;
+/**
+ * What an energy counter is: `lifetime` (never resets), `month` (resets monthly), `day` (resets daily),
+ * `skip` (a finished past period such as yesterday: never a source) or `other`.
+ */
+export function counterKind(entityId, entry, state) {
+  const key = String((entry && (entry.translation_key || entry.tk)) || "").toLowerCase();
+  // the trailing words of the entity ID describe the counter; a device NAME earlier in the ID must not
+  const tail = String(entityId).split(".").pop().toLowerCase().split("_").slice(-3).join("_");
+  const text = `${tail} ${key}`;
+  if (/yesterday|last_(week|month|year)|previous|week|year|annual/.test(text)) return "skip";
+  if (key === "total_consumption") return "lifetime";
+  if (/month/.test(text)) return "month";
+  if (/today|daily/.test(text)) return "day";
+  if (/\b(total|lifetime|cumulative)\b|_total|total_/.test(text)) return "lifetime";
+  return "other";
+}
+
+/**
+ * Rank a cumulative counter as the one statistics source for its device (higher = better). A lifetime counter
+ * is best; a device that only has resetting counters uses its monthly one (fewest resets), then its daily one.
+ * Home Assistant's statistics turn each reset into a new cycle, so the `change` of any of them is the energy
+ * used; the other counters are never added on top (one source per device) and only serve as a cross-check.
+ */
+export function energyScore(entityId, entry, state) {
+  const key = String((entry && (entry.translation_key || entry.tk)) || "").toLowerCase();
+  const kind = counterKind(entityId, entry, state);
+  if (kind === "lifetime") return key === "total_consumption" ? 100 : 80;
+  if (kind === "month") return 30;
+  if (kind === "day") return 20;
   return 50;
 }
 
@@ -442,11 +464,14 @@ export function discoverDevices(hass, config = {}) {
     if (!state) continue;
     const attrs = state.attributes || {};
     const unit = String(attrs.unit_of_measurement || "").toLowerCase();
-    const group = byDevice.get(deviceId) || { energy: [], power: [], labels: new Set(), entities: [] };
+    const group = byDevice.get(deviceId) || { energy: [], power: [], labels: new Set(), entities: [], native: {} };
     byDevice.set(deviceId, group);
     group.entities.push(entityId);
     for (const l of entry.labels || entry.lb || []) group.labels.add(l);
     if (attrs.device_class === "energy" && Object.hasOwn(ENERGY_UNITS, unit) && ["total", "total_increasing"].includes(attrs.state_class)) {
+      const kind = counterKind(entityId, entry, state);
+      if (kind === "skip") continue; // yesterday's figure is a finished period, never a source
+      if (kind === "day" || kind === "month") group.native[kind] = { entityId, factor: ENERGY_UNITS[unit] };
       group.energy.push({ entityId, factor: ENERGY_UNITS[unit], score: energyScore(entityId, entry, state) });
     } else if (attrs.device_class === "power" && Object.hasOwn(POWER_UNITS, unit)) {
       group.power.push({ entityId, factor: POWER_UNITS[unit] });
@@ -455,7 +480,7 @@ export function discoverDevices(hass, config = {}) {
   const devices = [];
   let withoutMonitoring = 0;
   for (const deviceId of monitoredPlatform) {
-    const group = byDevice.get(deviceId) || { energy: [], power: [], labels: new Set(), entities: [] };
+    const group = byDevice.get(deviceId) || { energy: [], power: [], labels: new Set(), entities: [], native: {} };
     const device = (hass.devices || {})[deviceId] || {};
     const name = device.name_by_user || device.name || (group.entities[0] || deviceId);
     const keys = [name, ...group.entities].map((x) => String(x).toLowerCase());
@@ -464,10 +489,12 @@ export function discoverDevices(hass, config = {}) {
     if (only.size && !keys.some((k) => only.has(k))) continue;
     const energy = [...group.energy].sort((a, b) => b.score - a.score || a.entityId.localeCompare(b.entityId))[0];
     const power = [...group.power].sort((a, b) => a.entityId.localeCompare(b.entityId))[0];
+    const live = power ? Number(((hass.states || {})[power.entityId] || {}).state) * power.factor : NaN;
+    const powerKw = Number.isFinite(live) && live >= 0 ? live : null;
     if (energy) {
-      devices.push({ deviceId, name, source: { kind: "energy", entityId: energy.entityId, factor: energy.factor }, estimated: false });
+      devices.push({ deviceId, name, source: { kind: "energy", entityId: energy.entityId, factor: energy.factor }, estimated: false, native: group.native, powerKw });
     } else if (power) {
-      devices.push({ deviceId, name, source: { kind: "power", entityId: power.entityId, factor: power.factor }, estimated: true });
+      devices.push({ deviceId, name, source: { kind: "power", entityId: power.entityId, factor: power.factor }, estimated: true, native: group.native, powerKw });
     } else {
       withoutMonitoring += 1; // no energy capability: never shown as zero consumption
     }
@@ -603,6 +630,178 @@ export function combine(rows) {
   return total.devices ? total : null;
 }
 
+/** Sum bucket energy whose start is in [from, to); null when there is no bucket (never zero). */
+export function sumKwh(buckets, from, to) {
+  let kwh = 0;
+  let count = 0;
+  for (const b of buckets || []) {
+    if (b.start >= from && b.start < to) {
+      kwh += b.kwh;
+      count += 1;
+    }
+  }
+  return count ? { kwh, count } : null;
+}
+
+export const COUNTER_RESOLUTION_KWH = 0.1; // GoodWe lifetime and daily counters step in 0.1 kWh
+const BALANCE_TOLERANCE_KWH = 3 * COUNTER_RESOLUTION_KWH; // three counters are combined
+const COMPILE_LAG_MS = 10 * 60e3; // hourly statistics are compiled a few minutes after the hour
+
+/**
+ * Whole-house energy balance for a battery-free installation over [from, to), from the SAME complete hours of
+ * every source: solar generation G, grid import I, grid export E (long-term statistics) and the individually
+ * monitored devices M. Solar used S = G - E; household H = G + I - E; unmeasured U = H - M; self-consumption
+ * S / G; independence S / H; monitored share M / H.
+ * - Only completed hours are used (the running hour is excluded), so latency differences between sources cannot
+ *   distort the comparison; a source with a missing hour withholds the balance.
+ * - Differences within the counters' resolution are shown as rounded with a note; larger inconsistencies
+ *   (export above generation, monitored above household) are WITHHELD with the reason, never clamped.
+ * - Incomplete device statistics make M a lower bound and U an upper bound (never a confirmed figure).
+ */
+export function energyBalance({ sources, devices, from, to, now, battery, unusableDevices = 0 }) {
+  // the newest hour is only trusted once Home Assistant has had time to compile its hourly row
+  const end = Math.min(to, Math.floor((now - COMPILE_LAG_MS) / HOUR_MS) * HOUR_MS);
+  const base = { from, end, notes: [] };
+  const withheld = (reason) => ({ ...base, status: "withheld", reason });
+  if (battery !== false) {
+    return withheld("a battery is not confirmed absent, so household energy cannot be derived from generation, import and export");
+  }
+  if (end <= from) return { ...base, status: "pending", reason: "no complete hour in this period yet" };
+  const labels = { solar: "solar generation", import: "grid import", export: "grid export" };
+  const values = {};
+  for (const key of ["solar", "import", "export"]) {
+    const src = (sources || {})[key];
+    if (!src || !src.buckets) return withheld(`${labels[key]}: ${(src && src.reason) || "not configured"}`);
+    const total = sumKwh(src.buckets, from, end);
+    if (!total) return withheld(`${labels[key]} has no statistics in this period`);
+    const cov = coverage(src.buckets, from, end, end);
+    if (cov.leading || cov.missing) return withheld(`${labels[key]} statistics are incomplete (${cov.leading + cov.missing} h without data)`);
+    values[key] = total.kwh;
+  }
+  const G = values.solar;
+  const I = values.import;
+  const E = values.export;
+  const tol = BALANCE_TOLERANCE_KWH;
+  if (E > G + tol) {
+    return withheld(`grid export (${E.toFixed(2)} kWh) exceeds solar generation (${G.toFixed(2)} kWh) by more than the counter resolution`);
+  }
+  let S = G - E;
+  if (S < 0) {
+    base.notes.push(`Export exceeded generation by ${(-S).toFixed(2)} kWh, within counter resolution: solar used is shown as 0.`);
+    S = 0;
+  }
+  const H = S + I;
+  let M = null;
+  let incomplete = false;
+  let estimated = false;
+  let withData = 0;
+  if (unusableDevices > 0) incomplete = true; // monitored devices whose statistics cannot be used
+  for (const d of devices || []) {
+    const total = sumKwh(d.buckets, from, end);
+    if (!total) {
+      incomplete = true;
+      continue;
+    }
+    const cov = coverage(d.buckets, from, end, end);
+    if (cov.leading || cov.missing) incomplete = true;
+    if (d.estimated) estimated = true;
+    withData += 1;
+    M = (M === null ? 0 : M) + total.kwh;
+  }
+  const result = {
+    ...base,
+    status: "ok",
+    G,
+    I,
+    E,
+    S,
+    H,
+    M,
+    U: null,
+    uStatus: "none",
+    deviceIncomplete: incomplete,
+    estimated,
+    devicesWithData: withData,
+    devicesTotal: (devices || []).length + unusableDevices,
+    selfPct: G >= 1 ? (S / G) * 100 : null,
+    indepPct: H >= 0.5 ? (S / H) * 100 : null,
+    monPct: null,
+  };
+  if (M !== null) {
+    const U = H - M;
+    const allowance = Math.max(tol, 0.05 * H);
+    if (U < -allowance) {
+      result.uStatus = "withheld";
+      result.uReason = `monitored device energy (${M.toFixed(2)} kWh) exceeds household consumption (${H.toFixed(2)} kWh) by more than measurement error: unmeasured consumption is withheld (check for devices on the same circuit or a wrong source)`;
+    } else {
+      if (U < 0) result.notes.push(`Monitored devices exceed household consumption by ${(-U).toFixed(2)} kWh, within measurement error: unmeasured is shown as 0.`);
+      result.U = Math.max(U, 0);
+      result.uStatus = incomplete ? "upper_bound" : "confirmed";
+      if (H >= 0.5) result.monPct = (M / H) * 100;
+    }
+  }
+  return result;
+}
+
+/** The devices' own live daily and monthly counters and live power, summed (a cross-check, never a source). */
+export function nativeTotals(devices, hass) {
+  const live = (n) => {
+    const state = n && (hass.states || {})[n.entityId];
+    const value = state ? Number(state.state) : NaN;
+    return Number.isFinite(value) && value >= 0 ? value * n.factor : null;
+  };
+  const sum = (kind) => {
+    let total = 0;
+    let count = 0;
+    for (const d of devices) {
+      const v = live((d.native || {})[kind]);
+      if (v !== null) {
+        total += v;
+        count += 1;
+      }
+    }
+    return count ? { kwh: total, count } : null;
+  };
+  let power = 0;
+  let powerCount = 0;
+  for (const d of devices) {
+    if (d.powerKw !== null && d.powerKw !== undefined) {
+      power += d.powerKw;
+      powerCount += 1;
+    }
+  }
+  const day = sum("day");
+  const month = sum("month");
+  return { dailyKwh: day && day.kwh, dailyCount: day ? day.count : 0, monthlyKwh: month && month.kwh, monthlyCount: month ? month.count : 0, powerKw: powerCount ? power : null };
+}
+
+/** Totals of the cross-check pairs only (the same devices and the same window on both sides). */
+export function crossTotals(rows) {
+  let counter = 0;
+  let stats = 0;
+  let count = 0;
+  let differing = 0;
+  for (const row of rows) {
+    if (!row.check) continue;
+    counter += row.check.counter;
+    stats += row.check.stats;
+    count += 1;
+    if (row.check.differs) differing += 1;
+  }
+  return count ? { counter, stats, count, differing } : null;
+}
+
+/** Compare a device's statistics-derived energy with the device's own counter for the same period. */
+export function crossCheck(statsKwh, native, hass, powerKw) {
+  const state = native && (hass.states || {})[native.entityId];
+  const value = state ? Number(state.state) : NaN;
+  if (!Number.isFinite(value) || value < 0 || statsKwh === null || statsKwh === undefined) return null;
+  const counter = value * native.factor;
+  // allowance: rounding, 5 %, or about a quarter of an hour at the device's present power (reporting latency)
+  const allowance = Math.max(0.05, 0.05 * counter, (powerKw || 0) * 0.25);
+  return { counter, stats: statsKwh, differs: Math.abs(counter - statsKwh) > allowance };
+}
+
 export const fmtKwh = (v) => (v === null || v === undefined ? "—" : `${v.toFixed(v < 1 ? 3 : 2)} kWh`);
 export const fmtMoney = (v, assumed = false) => (v === null || v === undefined ? "—" : `${assumed ? "≈" : ""}$${v.toFixed(2)}`);
 
@@ -643,7 +842,7 @@ function tableHtml(id, rows, total, sort, partialNote) {
   const body = sortRows(rows, sort.key, sort.direction)
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(r.name)}${r.estimated ? ' <span class="est" title="Estimated from measured power">est.</span>' : ""}${r.partialFrom ? ` <span class="part" title="Statistics for this period start later than the period">from ${escapeHtml(r.partialFrom)}</span>` : ""}${r.missingHours ? ` <span class="part" title="Hours inside this period with no recorded statistics (not counted as zero)">${r.missingHours} h missing</span>` : ""}</td>` +
+        `<tr><td>${escapeHtml(r.name)}${r.estimated ? ' <span class="est" title="Estimated from measured power">est.</span>' : ""}${r.partialFrom ? ` <span class="part" title="Statistics for this period start later than the period">from ${escapeHtml(r.partialFrom)}</span>` : ""}${r.missingHours ? ` <span class="part" title="Hours inside this period with no recorded statistics (not counted as zero)">${r.missingHours} h missing</span>` : ""}${r.check && r.check.differs ? ` <span class="part" title="Statistics say ${r.check.stats.toFixed(3)} kWh but the device's own counter says ${r.check.counter.toFixed(3)} kWh">≠ device counter</span>` : ""}</td>` +
         (r.data
           ? `<td>${fmtKwh(r.data.kwh)}</td><td>${fmtMoney(r.data.offCost, r.data.assumed)}</td><td>${fmtMoney(r.data.peakCost, r.data.assumed)}</td><td>${fmtMoney(r.data.cost, r.data.assumed)}</td>`
           : '<td colspan="4" class="none">no statistics (not zero)</td>') +
@@ -678,6 +877,162 @@ function barsSvg(items, key, unit) {
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width * 1.4}px" role="img" aria-label="Bar chart">${bars}</svg>`;
 }
 
+/**
+ * A dependency-free Sankey-style diagram of one balance: Solar -> Household / Export, Grid import -> Household,
+ * Household -> Monitored devices / Unmeasured. Widths are proportional to kWh. Only drawn for a valid balance.
+ */
+export function sankeySvg(b) {
+  if (!b || b.status !== "ok") return "";
+  const W = 480;
+  const Ht = 214;
+  const nodeW = 12;
+  const gap = 12;
+  const pad = 8;
+  const x0 = 104;
+  const x2 = W - 150 - nodeW;
+  const x1 = (x0 + x2) / 2;
+  const total = b.G + b.I;
+  if (!(total > 0)) return "";
+  const k = (Ht - 2 * pad - 2 * gap) / total;
+  const itemised = b.uStatus === "confirmed" || b.uStatus === "upper_bound";
+  const kwh = (v) => `${v.toFixed(v < 10 ? 2 : 1)} kWh`;
+  const colors = {
+    solar: "var(--energy-solar-color,#ff9800)",
+    grid: "var(--energy-grid-consumption-color,#488fc2)",
+    export: "var(--energy-grid-return-color,#8353d1)",
+    house: "var(--primary-color,#03a9f4)",
+    devices: "var(--energy-battery-out-color,#4caf50)",
+    other: "var(--disabled-text-color,#9e9e9e)",
+  };
+  const nodes = {};
+  const place = (id, x, y, value, color, label, anchor) => {
+    nodes[id] = { id, x, y, h: Math.max(value * k, 2), value, color, label, anchor, out: 0, inn: 0 };
+  };
+  const y0 = pad;
+  place("solar", x0, y0, b.G, colors.solar, `Solar ${kwh(b.G)}`, "end");
+  place("import", x0, y0 + b.G * k + gap, b.I, colors.grid, `Import ${kwh(b.I)}`, "end");
+  place("house", x1, y0 + b.E * k, b.H, colors.house, `Household ${kwh(b.H)}`, "mid");
+  place("export", x2, y0, b.E, colors.export, `Export ${kwh(b.E)}`, "start");
+  if (itemised) {
+    const top = y0 + b.E * k + gap;
+    const mark = b.deviceIncomplete ? "≥ " : b.estimated ? "≈ " : "";
+    place("devices", x2, top, b.M, colors.devices, `Devices ${mark}${kwh(b.M)}`, "start");
+    place("other", x2, top + b.M * k + gap, b.U, colors.other, `Unmeasured ${b.uStatus === "upper_bound" ? "≤ " : ""}${kwh(b.U)}`, "start");
+  }
+  const links = [["solar", "export", b.E, colors.solar], ["solar", "house", b.S, colors.solar], ["import", "house", b.I, colors.grid]];
+  if (itemised) links.push(["house", "devices", b.M, colors.house], ["house", "other", b.U, colors.house]);
+  let paths = "";
+  for (const [from, to, value, color] of links) {
+    if (!(value > 0)) continue;
+    const a = nodes[from];
+    const z = nodes[to];
+    const thick = Math.max(Math.min(value * k, a.h - a.out, z.h - z.inn), 0.5);
+    const ya = a.y + a.out;
+    const yz = z.y + z.inn;
+    a.out += thick;
+    z.inn += thick;
+    const xa = a.x + nodeW;
+    const xm = (xa + z.x) / 2;
+    paths += `<path d="M${xa} ${ya} C${xm} ${ya} ${xm} ${yz} ${z.x} ${yz} L${z.x} ${yz + thick} C${xm} ${yz + thick} ${xm} ${ya + thick} ${xa} ${ya + thick} Z" fill="${color}" opacity="0.35"/>`;
+  }
+  let drawn = "";
+  for (const node of Object.values(nodes)) {
+    if (!(node.value > 0)) continue;
+    const fill = node.id === "other" && b.uStatus === "upper_bound" ? 0.55 : 1;
+    drawn += `<rect x="${node.x}" y="${node.y}" width="${nodeW}" height="${node.h}" rx="2" fill="${node.color}" opacity="${fill}"/>`;
+    if (node.id === "house") {
+      // between the columns there is room for two short lines only
+      const ty = node.y + node.h / 2;
+      drawn += `<text x="${node.x + nodeW + 5}" y="${ty - 2}" font-size="11" class="halo">Household</text><text x="${node.x + nodeW + 5}" y="${ty + 11}" font-size="11" class="halo">${escapeHtml(kwh(node.value))}</text>`;
+      continue;
+    }
+    const tx = node.anchor === "end" ? node.x - 5 : node.x + nodeW + 5;
+    const ty = node.y + Math.min(node.h / 2, 14) + 4;
+    drawn += `<text x="${tx}" y="${ty}" text-anchor="${node.anchor === "end" ? "end" : "start"}" font-size="11" class="halo">${escapeHtml(node.label)}</text>`;
+  }
+  const summary = `Energy balance: solar ${kwh(b.G)}, grid import ${kwh(b.I)}, grid export ${kwh(b.E)}, household ${kwh(b.H)}`;
+  return `<svg class="sankey" viewBox="0 0 ${W} ${Ht}" width="100%" role="img" aria-label="${escapeHtml(summary)}">${paths}${drawn}</svg>`;
+}
+
+const pctText = (v, prefix = "") => (v === null || v === undefined ? "—" : `${prefix}${v.toFixed(0)}%`);
+
+function balanceCell(b, row) {
+  if (b.status !== "ok") return `<td class="none" title="${escapeHtml(b.reason || "")}">${b.status === "pending" ? "collecting" : "withheld"}</td>`;
+  const lower = b.deviceIncomplete ? "≥ " : b.estimated ? "≈ " : "";
+  switch (row) {
+    case "G":
+      return `<td>${fmtKwh(b.G)}</td>`;
+    case "I":
+      return `<td>${fmtKwh(b.I)}</td>`;
+    case "E":
+      return `<td>${fmtKwh(b.E)}</td>`;
+    case "S":
+      return `<td>${fmtKwh(b.S)}</td>`;
+    case "H":
+      return `<td>${fmtKwh(b.H)}</td>`;
+    case "M":
+      return b.M === null ? '<td class="none">no device data</td>' : `<td>${lower}${fmtKwh(b.M)}</td>`;
+    case "U":
+      if (b.uStatus === "withheld") return `<td class="none" title="${escapeHtml(b.uReason)}">withheld</td>`;
+      if (b.U === null) return '<td class="none">—</td>';
+      return `<td>${b.uStatus === "upper_bound" ? "≤ " : b.estimated ? "≈ " : ""}${fmtKwh(b.U)}</td>`;
+    case "self":
+      return `<td${b.selfPct === null ? ' class="none" title="needs at least 1 kWh generated"' : ""}>${pctText(b.selfPct)}</td>`;
+    case "indep":
+      return `<td${b.indepPct === null ? ' class="none" title="needs at least 0.5 kWh of household consumption"' : ""}>${pctText(b.indepPct)}</td>`;
+    default:
+      return b.uStatus === "withheld" ? `<td class="none" title="${escapeHtml(b.uReason)}">withheld</td>` : `<td>${pctText(b.monPct, lower)}</td>`;
+  }
+}
+
+function balanceHtml(s, view, asOfText) {
+  if (s.balanceReason) return `<h3>Whole-house energy balance</h3><p class="warn">Not available: ${escapeHtml(s.balanceReason)}.</p>`;
+  const day = s.balance.day;
+  const month = s.balance.month;
+  const shown = view === "month" ? month : day;
+  const endText = (b) => new Date(b.end).toLocaleTimeString("en-AU", { timeZone: s.tz, hour: "numeric", minute: "2-digit" });
+  let html = `<h3>Whole-house energy balance</h3>`;
+  html += `<div class="toggle" role="group" aria-label="Balance period"><button data-balance="day" class="${view === "month" ? "" : "on"}">Today</button><button data-balance="month" class="${view === "month" ? "on" : ""}">${escapeHtml(monthLabel(s.generatedAt || Date.now(), s.tz))}</button></div>`;
+  const drawing = sankeySvg(shown);
+  if (drawing) html += drawing;
+  else if (shown.status === "ok") html += '<p class="note">No energy flowed in this period, so there is nothing to draw.</p>';
+  else html += `<p class="warn">${escapeHtml(shown.status === "pending" ? "Collecting: " : "Balance withheld: ")}${escapeHtml(shown.reason)}.</p>`;
+  const rows = [
+    ["G", "Solar generation"],
+    ["I", "Grid import"],
+    ["E", "Grid export"],
+    ["S", "Solar used directly"],
+    ["H", "Household consumption"],
+    ["M", "Monitored devices"],
+    ["U", "Unmeasured consumption"],
+    ["self", "Solar self-consumption"],
+    ["indep", "Solar independence"],
+    ["mon", "Monitored share of household"],
+  ];
+  html += '<div class="scroll"><table><thead><tr><th>Energy balance</th><th>Today</th><th>Month</th></tr></thead><tbody>';
+  for (const [key, text] of rows) html += `<tr><td>${text}</td>${balanceCell(day, key)}${balanceCell(month, key)}</tr>`;
+  html += "</tbody></table></div>";
+  const ended = day.end > day.from ? endText(day) : null;
+  html += `<p class="note">Battery-free balance from the inverter's generation, import and export statistics and the monitored devices, over the same complete hours${ended ? ` (to ${escapeHtml(ended)})` : ""}. Energy only: device costs elsewhere are tariff-valued estimates, not grid spending, and no solar is attributed to individual devices.</p>`;
+  for (const [name, b] of [["Today", day], ["Month", month]]) {
+    if (b.status === "withheld") html += `<p class="warn"><b>${name}:</b> withheld, ${escapeHtml(b.reason)}.</p>`;
+    else if (b.status === "pending") html += `<p class="note"><b>${name}:</b> collecting, ${escapeHtml(b.reason)}.</p>`;
+    else {
+      for (const note of b.notes) html += `<p class="note"><b>${name}:</b> ${escapeHtml(note)}</p>`;
+      if (b.uStatus === "withheld") html += `<p class="warn"><b>${name}:</b> ${escapeHtml(b.uReason)}.</p>`;
+      if (b.deviceIncomplete) html += `<p class="warn"><b>${name}:</b> ${b.devicesWithData} of ${b.devicesTotal} devices have complete statistics, so monitored energy is a lower bound (≥) and unmeasured consumption an upper bound (≤), not a confirmed figure.</p>`;
+      if (b.estimated) html += `<p class="note"><b>${name}:</b> includes energy estimated from power (≈).</p>`;
+    }
+  }
+  const cross = s.crossCheck || {};
+  const parts = [];
+  if (cross.day) parts.push(`today the ${cross.day.count} devices' own daily counters total ${fmtKwh(cross.day.counter)} (statistics: ${fmtKwh(cross.day.stats)})`);
+  if (cross.month) parts.push(`this month their own monthly counters total ${fmtKwh(cross.month.counter)} (statistics: ${fmtKwh(cross.month.stats)})`);
+  if (parts.length) html += `<p class="note">Cross-check: ${parts.join("; ")}. A device whose statistics disagree with its own counter is marked ≠ device counter. The counters are a check only and are never added to the statistics.</p>`;
+  html += '<p class="note">Monitored devices here use complete hours only, so they can be slightly below the Today and month tables, which include the hour in progress.</p>';
+  return html;
+}
+
 const STYLE = `
   :host{display:block}
   ha-card{padding:12px 14px}
@@ -696,6 +1051,13 @@ const STYLE = `
   .none,.note{color:var(--secondary-text-color);font-size:12px}
   .est,.part{font-size:11px;color:var(--secondary-text-color);border:1px solid var(--divider-color,#ccc);border-radius:8px;padding:0 5px}
   .warn{font-size:12px;color:var(--secondary-text-color);margin:6px 0}
+  .sankey{display:block;margin:4px 0 8px;max-width:640px}
+  .sankey text{fill:var(--primary-text-color)}
+  .sankey .halo{paint-order:stroke;stroke:var(--card-background-color,#fff);stroke-width:3px;stroke-linejoin:round}
+  .toggle{display:flex;gap:6px;margin:4px 0}
+  .toggle button{all:unset;cursor:pointer;font-size:12px;padding:3px 10px;border:1px solid var(--divider-color,#ccc);border-radius:12px;color:var(--primary-text-color)}
+  .toggle button.on{background:var(--primary-color);color:var(--text-primary-color,#fff);border-color:var(--primary-color)}
+  .toggle button:focus-visible{outline:2px solid var(--primary-color)}
   @media (max-width:520px){th,td{padding:4px 5px;font-size:12px}}
 `;
 
@@ -711,7 +1073,8 @@ const withTimeout = (promise) =>
  * Load and value the statistics. Units come from the RECORDER'S statistics metadata (the unit the statistics
  * are stored in), not from the live sensor. Hourly statistics cover the whole history; 5-minute statistics are
  * used only for the last few hours that have no hourly row yet, so no hour is ever counted twice and no
- * retained history is skipped, whatever the recorder's short-term retention is.
+ * retained history is skipped, whatever the recorder's short-term retention is. The whole-house sources
+ * (`config.house`) go through the same pipeline, so every balance figure covers the same complete hours.
  */
 export async function computeState(hass, c) {
   const found = discoverDevices(hass, c);
@@ -726,9 +1089,12 @@ export async function computeState(hass, c) {
   const hourEnd = Math.floor(now / HOUR_MS) * HOUR_MS;
   const fineFrom = hourEnd - 3 * HOUR_MS;
 
+  const house = c.house || null;
+  const houseDefs = house ? ["solar", "import", "export"].filter((key) => house[key]) : [];
   const meta = new Map();
-  if (found.devices.length) {
-    const list = await withTimeout(hass.callWS({ type: "recorder/get_statistics_metadata", statistic_ids: found.devices.map((d) => d.source.entityId) }));
+  const ids = [...found.devices.map((d) => d.source.entityId), ...houseDefs.map((key) => house[key])];
+  if (ids.length) {
+    const list = await withTimeout(hass.callWS({ type: "recorder/get_statistics_metadata", statistic_ids: ids }));
     for (const m of Array.isArray(list) ? list : []) meta.set(m.statistic_id, m);
   }
   const devices = [];
@@ -748,29 +1114,42 @@ export async function computeState(hass, c) {
     }
     devices.push({ ...d, source: { ...d.source, factor: table[unit] } });
   }
+  const houseItems = {};
+  for (const key of houseDefs) {
+    const entityId = house[key];
+    const m = meta.get(entityId);
+    const unit = m ? String(m.statistics_unit_of_measurement || "").toLowerCase() : "";
+    if (!m) houseItems[key] = { reason: `${entityId} has no long-term statistics (it needs a total or total_increasing state class)` };
+    else if (!Object.hasOwn(ENERGY_UNITS, unit) || m.has_sum === false) houseItems[key] = { reason: `${entityId} has an unsupported statistics unit or no cumulative statistics` };
+    else houseItems[key] = { source: { kind: "energy", entityId, factor: ENERGY_UNITS[unit] } };
+  }
 
-  const buckets = new Map(devices.map((d) => [d.deviceId, []]));
-  const query = (ids, kind, from, to, period) =>
-    ids.length
+  const fetchItems = [
+    ...devices.filter((d) => !d.noStatistics).map((d) => ({ id: d.deviceId, source: d.source })),
+    ...houseDefs.filter((key) => houseItems[key].source).map((key) => ({ id: `house:${key}`, source: houseItems[key].source })),
+  ];
+  const buckets = new Map([...devices.map((d) => [d.deviceId, []]), ...houseDefs.map((key) => [`house:${key}`, []])]);
+  const query = (queryIds, kind, from, to, period) =>
+    queryIds.length
       ? withTimeout(
           hass.callWS({
             type: "recorder/statistics_during_period",
             start_time: new Date(from).toISOString(),
             end_time: new Date(to).toISOString(),
-            statistic_ids: ids,
+            statistic_ids: queryIds,
             period,
             types: kind === "energy" ? ["change"] : ["mean"],
           })
         )
       : Promise.resolve({});
   for (const kind of ["energy", "power"]) {
-    const group = devices.filter((d) => !d.noStatistics && d.source.kind === kind);
-    const ids = group.map((d) => d.source.entityId);
-    const hourly = await query(ids, kind, historyStart, hourEnd, "hour");
-    const fine = await query(ids, kind, fineFrom, now + HOUR_MS, "5minute");
-    for (const d of group) {
-      const id = d.source.entityId;
-      buckets.set(d.deviceId, mergeBuckets(toBuckets((hourly || {})[id], d.source), toBuckets((fine || {})[id], d.source)));
+    const group = fetchItems.filter((item) => item.source.kind === kind);
+    const queryIds = group.map((item) => item.source.entityId);
+    const hourly = await query(queryIds, kind, historyStart, hourEnd, "hour");
+    const fine = await query(queryIds, kind, fineFrom, now + HOUR_MS, "5minute");
+    for (const item of group) {
+      const id = item.source.entityId;
+      buckets.set(item.id, mergeBuckets(toBuckets((hourly || {})[id], item.source), toBuckets((fine || {})[id], item.source)));
     }
   }
 
@@ -788,11 +1167,19 @@ export async function computeState(hass, c) {
         data,
         partialFrom: data && cov.leading > 0 && cov.firstPresent !== null ? dateLabel(cov.firstPresent) : null,
         missingHours: data ? cov.missing : 0,
+        check: null,
       };
     });
   const isPartial = (rows, total) => !!total && (total.incomplete || rows.some((r) => r.partialFrom || r.missingHours));
   const daily = rowsFor(dayStart, dayEnd);
   const monthly = rowsFor(monthStart, monthEnd);
+  // cross-check each device's statistics against the device's OWN daily / monthly counter (never added together)
+  for (const [rows, kind] of [[daily, "day"], [monthly, "month"]]) {
+    for (const row of rows) {
+      const device = devices.find((d) => d.deviceId === row.deviceId);
+      row.check = row.data && device ? crossCheck(row.data.kwh, (device.native || {})[kind], hass, device.powerKw) : null;
+    }
+  }
   const past = [];
   for (let delta = -1; delta >= -months; delta -= 1) {
     const from = shiftMonth(now, delta, tz);
@@ -814,7 +1201,35 @@ export async function computeState(hass, c) {
     });
   }
   const assumed = [daily, monthly, ...past.map((m) => m.rows)].some((rows) => rows.some((r) => r.data && r.data.assumed));
-  return { devices, withoutMonitoring: found.withoutMonitoring, unsupported, daily, monthly, months: past, week, tz, assumed, error: null, generatedAt: now };
+
+  // whole-house balance over the same complete hours of every source
+  const sources = {};
+  for (const key of houseDefs) sources[key] = houseItems[key].source ? { buckets: buckets.get(`house:${key}`) } : { reason: houseItems[key].reason };
+  const deviceBuckets = devices.map((d) => ({ name: d.name, estimated: d.estimated, buckets: buckets.get(d.deviceId) }));
+  const balance = {};
+  for (const [name, from, to] of [["day", dayStart, dayEnd], ["month", monthStart, monthEnd]]) {
+    balance[name] = energyBalance({ sources, devices: deviceBuckets, from, to, now, battery: house ? house.battery_present : undefined, unusableDevices: unsupported });
+  }
+  return {
+    devices,
+    withoutMonitoring: found.withoutMonitoring,
+    unsupported,
+    daily,
+    monthly,
+    months: past,
+    week,
+    tz,
+    assumed,
+    balance,
+    balanceReason: house ? null : c.house_problem ? `the whole-house configuration is invalid (${c.house_problem})` : "the whole-house energy mappings are not configured for this dashboard",
+    native: nativeTotals(devices, hass),
+    crossCheck: {
+      day: crossTotals(daily),
+      month: crossTotals(monthly),
+    },
+    error: null,
+    generatedAt: now,
+  };
 }
 
 function sharedFor(config) {
@@ -824,15 +1239,33 @@ function sharedFor(config) {
   return SHARED.get(key);
 }
 
+/**
+ * Validate the whole-house block. A bad block disables only the balance (with the reason); it never breaks
+ * the device tables. Entity IDs must be sensor entity IDs and `battery_present` a boolean or "unknown".
+ */
+export function normalizeHouse(house) {
+  if (house === undefined || house === null) return { house: null, problem: null };
+  if (typeof house !== "object" || Array.isArray(house)) return { house: null, problem: "house must be a mapping" };
+  const clean = { battery_present: house.battery_present === false ? false : house.battery_present === true ? true : "unknown" };
+  for (const key of ["solar", "import", "export"]) {
+    if (house[key] === undefined || house[key] === null || house[key] === "") continue;
+    if (typeof house[key] !== "string" || !/^sensor\.[a-z0-9_]+$/.test(house[key])) return { house: null, problem: `house.${key} is not a sensor entity ID` };
+    clean[key] = house[key];
+  }
+  return { house: clean, problem: null };
+}
+
 export class ThermowattDeviceEnergyCard extends BaseElement {
   setConfig(config) {
     if (!config || !Array.isArray(config.rates) || !config.rates.length) throw new Error("rates are required");
     if (!config.tariff) throw new Error("tariff is required");
     validateRates(config.rates);
     if (this._config) sharedFor(this._config).listeners.delete(this);
-    this._config = { timezone: DEFAULT_TIMEZONE, refresh_minutes: 5, part: "all", ...config };
+    const { house, problem } = normalizeHouse(config.house);
+    this._config = { timezone: DEFAULT_TIMEZONE, refresh_minutes: 5, part: "all", ...config, house, house_problem: problem };
     this._renderKey = null;
     this._sort = { daily: { key: "kwh", direction: "desc" }, monthly: { key: "kwh", direction: "desc" } };
+    this._balanceView = "day";
   }
 
   connectedCallback() {
@@ -849,6 +1282,12 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
     if (!this._root) {
       this._root = this.attachShadow({ mode: "open" });
       this._root.addEventListener("click", (event) => {
+        const toggle = event.target.closest("button[data-balance]");
+        if (toggle) {
+          this._balanceView = toggle.dataset.balance === "month" ? "month" : "day";
+          this._render();
+          return;
+        }
         const button = event.target.closest("button[data-sort]");
         if (!button) return;
         const table = button.dataset.table;
@@ -867,7 +1306,7 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
   }
 
   getCardSize() {
-    return { summary: 3, daily: 4, monthly: 6, history: 8 }[this._config && this._config.part] || 12;
+    return { summary: 3, balance: 9, daily: 4, monthly: 6, history: 8 }[this._config && this._config.part] || 12;
   }
 
   async _load(shared) {
@@ -892,7 +1331,7 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
     const s = shared.state;
     const part = this._config.part;
     const stale = !!(s && s.generatedAt && !s.error && Date.now() - s.generatedAt > 3 * this._config.refresh_minutes * 60e3);
-    const key = `${shared.version || 0}|${JSON.stringify(this._sort)}|${s ? 1 : 0}|${stale ? 1 : 0}`;
+    const key = `${shared.version || 0}|${JSON.stringify(this._sort)}|${this._balanceView}|${s ? 1 : 0}|${stale ? 1 : 0}`;
     if (key === this._renderKey) return; // nothing changed: keep focus, scroll position and in-flight clicks
     this._renderKey = key;
     let html = `<ha-card><style>${STYLE}</style>`;
@@ -921,6 +1360,7 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
       html += "</div>";
       html += '<p class="warn">Costs are <b>estimated tariff-valued operating costs</b> (consumption × the peak/off-peak rate in force when it was used). They are not Aurora charges: no supply charge, no solar feed-in credit, and no assumption that the energy came from the grid.' + (estimated ? " Devices marked <i>est.</i> only report power, so their energy is estimated." : "") + (s.assumed ? " <b>≈</b> marks costs valued at an <b>assumed</b> rate: the price start date is unconfirmed or earlier than the first dated rate, so they are not verified historical costs." : "") + ` Statistics as of ${escapeHtml(asOf)}.</p>`;
     }
+    if (want("balance")) html += balanceHtml(s, this._balanceView, asOf);
     if (want("daily")) {
       html += `<h3>Today (midnight ${escapeHtml(s.tz.split("/")[1] || s.tz)} time)</h3>` + tableHtml("daily", s.daily, dailyTotal, this._sort.daily, "");
     }

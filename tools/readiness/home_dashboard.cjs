@@ -365,6 +365,51 @@ async function main() {
         expect(energyText).toContain("Reconstructed from long-term statistics"); // history is not an archive
         expect(energyText).toContain("≈$"); // current prices applied to history are labelled as assumed
         expect(energyText).toContain("Statistics as of");
+        // Whole-house energy balance: the ten figures, a Sankey diagram, the period toggle, energy only.
+        for (const label of [
+          "Whole-house energy balance",
+          "Solar generation",
+          "Grid import",
+          "Grid export",
+          "Solar used directly",
+          "Household consumption",
+          "Monitored devices",
+          "Unmeasured consumption",
+          "Solar self-consumption",
+          "Solar independence",
+          "Monitored share of household",
+        ]) {
+          expect(energyText).toContain(label);
+        }
+        const sankey = () =>
+          page.evaluate(`(() => {
+            const card = ${FIND_ALL}.find((c) => c.shadowRoot && c.shadowRoot.querySelector("svg.sankey"));
+            if (!card) return null;
+            const svg = card.shadowRoot.querySelector("svg.sankey");
+            const box = svg.getBoundingClientRect();
+            return { width: Math.round(box.width), height: Math.round(box.height), paths: svg.querySelectorAll("path").length, text: svg.textContent };
+          })()`);
+        const diagram = await sankey();
+        if (diagram === null) {
+          // the first hour after local midnight has no complete hour yet: the balance says it is collecting
+          expect(energyText).toContain("collecting");
+        } else {
+          expect(diagram.paths).toBe(5);
+          expect(diagram.text).toContain("Solar");
+          expect(diagram.text).toContain("Household");
+          expect(diagram.text).toContain("Unmeasured");
+          expect(diagram.width).toBeGreaterThan(Math.min(size.width, 400) * 0.6);
+          expect(energyText).toMatch(/Monitored share of household\s*\d+%/);
+          expect(energyText).not.toMatch(/withheld|NaN|undefined/);
+          // the toggle redraws the diagram for the month
+          await page.evaluate(`(() => {
+            const card = ${FIND_ALL}.find((c) => c.shadowRoot && c.shadowRoot.querySelector("button[data-balance]"));
+            card.shadowRoot.querySelector('button[data-balance="month"]').click();
+          })()`);
+          await expect
+            .poll(async () => (await sankey()).text, { timeout: 5000 })
+            .not.toBe(diagram.text);
+        }
         const sorted = await page.evaluate(`(() => {
           const cards = ${FIND_ALL};
           const root = cards.map((c) => c.shadowRoot).find((r) => r && r.querySelector('button[data-table="daily"]'));

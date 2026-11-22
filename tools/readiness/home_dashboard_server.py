@@ -261,6 +261,19 @@ async def seed_device_energy(hass):
             meta(entity_id, "kWh", False, True),
             energy_rows(hourly_start, timedelta(hours=1), 24 * 70, per_hour, 100.0),
         )
+    # the inverter's whole-house sources (long-term statistics only): generation 0.5, import 0.4 and export
+    # 0.1 kWh per hour on average, so the balance is valid and the monitored devices are a fraction of it
+    for entity_id, per_hour in (
+        ("sensor.goodwe_inverter_today_s_pv_generation", 0.385),
+        ("sensor.goodwe_inverter_meter_total_energy_import", 0.31),
+        ("sensor.goodwe_inverter_meter_total_energy_export", 0.077),
+    ):
+        hourly_start = last_hour - timedelta(hours=24 * 70 - 1)
+        async_import_statistics(
+            hass,
+            meta(entity_id, "kWh", False, True),
+            energy_rows(hourly_start, timedelta(hours=1), 24 * 70, per_hour, 2000.0),
+        )
     # power-only device: mean statistics (its energy is estimated from them)
     hourly = [
         StatisticData(start=last_hour - timedelta(hours=i), mean=45.0 + (i % 5), min=40.0, max=60.0)
