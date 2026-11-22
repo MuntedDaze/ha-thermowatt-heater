@@ -100,11 +100,11 @@ export function computeFlows({ solarW, houseW, gridW, exportPositive = true, idl
   };
 }
 
-// Line geometry in a 400 x 322 viewBox; every path is drawn in its flow direction.
+// Line geometry in a 400 x 262 viewBox; every path is drawn in its flow direction.
 const GEOMETRY = {
-  solarToHouse: { p: [[178, 98], [140, 150], [100, 170], [88, 205]] },
-  solarToGrid: { p: [[222, 98], [260, 150], [300, 170], [312, 205]] },
-  gridToHouse: { p: [[285, 245], [115, 245]] },
+  solarToHouse: { p: [[178, 86], [140, 120], [100, 135], [82, 156]] },
+  solarToGrid: { p: [[222, 86], [260, 120], [300, 135], [318, 156]] },
+  gridToHouse: { p: [[296, 190], [104, 190]] },
 };
 const COLOURS = { solarToHouse: GREEN, solarToGrid: GREEN, gridToHouse: ORANGE };
 
@@ -165,21 +165,21 @@ export function renderSvg(model, reduceMotion = false) {
   const gridColour = { import: ORANGE, export: GREEN }[model.gridState] || GREY;
   const solarColour = model.solarW > 5 ? GREEN : GREY;
   const node = (cx, cy, colour, icon, title, value) =>
-    `<circle cx="${cx}" cy="${cy}" r="42" fill="var(--card-background-color,#fff)" stroke="${colour}" stroke-width="3"/>` +
-    `<g transform="translate(${cx} ${cy - 8})" fill="none" stroke="${colour}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${icon}</g>` +
-    `<text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--primary-text-color,#212121)">${value}</text>` +
-    `<text x="${cx}" y="${cy + 62}" text-anchor="middle" font-size="12.5" fill="var(--secondary-text-color,#727272)">${title}</text>`;
+    `<circle cx="${cx}" cy="${cy}" r="38" fill="var(--card-background-color,#fff)" stroke="${colour}" stroke-width="3"/>` +
+    `<g transform="translate(${cx} ${cy - 10})" fill="none" stroke="${colour}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${icon}</g>` +
+    `<text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--primary-text-color,#212121)">${value}</text>` +
+    `<text x="${cx}" y="${cy + 53}" text-anchor="middle" font-size="12.5" fill="var(--secondary-text-color,#727272)">${title}</text>`;
   const sun = '<circle r="7"/><path d="M0 -14V-11M0 11V14M-14 0H-11M11 0H14M-10 -10l2 2M8 8l2 2M-10 10l2 -2M8 -8l2 -2"/>';
   const house = '<path d="M-13 3L0 -9L13 3M-9 0V12H9V0"/>';
   const grid = '<path d="M0 -13V13M-9 -6H9M-6 1H6M-11 13L0 -13L11 13"/>';
   return (
-    `<svg viewBox="0 0 400 322" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-label="${ariaLabel(model)}">` +
+    `<svg viewBox="0 0 400 262" xmlns="http://www.w3.org/2000/svg" width="100%" role="img" aria-label="${ariaLabel(model)}">` +
     lines +
-    node(200, 62, solarColour, sun, "Solar", formatKw(model.solarW)) +
-    node(72, 245, model.lines.solarToHouse || model.lines.gridToHouse ? (model.lines.gridToHouse ? ORANGE : GREEN) : GREY, house, "House", formatKw(model.houseW)) +
-    node(328, 245, gridColour, grid, model.gridLabel, formatKw(model.gridW)) +
+    node(200, 46, solarColour, sun, "Solar", formatKw(model.solarW)) +
+    node(66, 190, model.lines.solarToHouse || model.lines.gridToHouse ? (model.lines.gridToHouse ? ORANGE : GREEN) : GREY, house, "House", formatKw(model.houseW)) +
+    node(334, 190, gridColour, grid, model.gridLabel, formatKw(model.gridW)) +
     (model.inconsistent
-      ? '<text x="200" y="316" text-anchor="middle" font-size="12" fill="var(--secondary-text-color,#727272)">Readings not in sync</text>'
+      ? '<text x="200" y="254" text-anchor="middle" font-size="12" fill="var(--secondary-text-color,#727272)">Readings not in sync</text>'
       : "") +
     "</svg>"
   );

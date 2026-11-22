@@ -1,0 +1,29 @@
+# GENERIC profile: assumption-free defaults for a household that is NOT this owner's. It assumes no
+# battery, no weather entity, no light entities and no particular device names. Copy this file, fill in
+# your own entity IDs, and run:  python tools/build_home_dashboard.py --mapping path/to/your_mapping.yaml
+# (status values: verified / owner-confirmed / unverified / unmapped; see homeowner/home_mapping.yaml).
+version: 2
+profile: generic
+place: ""
+energy:
+  grid_power: {entity: sensor.goodwe_inverter_meter_active_power, status: unverified}
+  grid_export_positive: true
+  solar_power: {entity: sensor.goodwe_inverter_pv_power, status: unverified}
+  house_power: {entity: sensor.goodwe_inverter_house_consumption, status: unverified}
+  solar_today_energy: {entity: sensor.goodwe_inverter_today_s_pv_generation, status: unverified}
+  grid_import_total: {entity: sensor.goodwe_inverter_meter_total_energy_import, status: unverified}
+  grid_export_total: {entity: sensor.goodwe_inverter_meter_total_energy_export, status: unverified}
+  # Unknown until you confirm: set false (no battery) to enable the derived daily figures.
+  battery_present: unknown
+weather: {entity: "", status: unmapped}
+lights:
+  dining_room: {entity: "", status: unmapped}
+  living_room: {entity: "", status: unmapped}
+bathrooms:
+  - name: Main Bathroom
+    original: {}      # leave empty to chart the Tapo controller's own sensors
+  - name: Ensuite
+    original: {}
+doors:
+  garage_contact: {entity: "", status: unmapped}
+  front_contact: {entity: "", status: unmapped}

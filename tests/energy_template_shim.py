@@ -33,8 +33,16 @@ def _float(value, default=_MISSING):
         return default
 
 
-def _as_datetime(value):
-    return value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+def _as_datetime(value, default=_MISSING):
+    """HA's ``as_datetime``: invalid input raises unless a default is given (then it is returned)."""
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        if default is _MISSING:
+            raise ValueError(f"as_datetime got invalid input {value!r}") from None
+        return default
 
 
 class States:
@@ -83,6 +91,9 @@ def render(template: str, states: dict | None = None, now: datetime | None = Non
         states=lookup,
         state_attr=lookup.attribute,
         is_number=is_number,
+        as_datetime=_as_datetime,
+        as_local=lambda value: value,
+        is_state=lambda entity, expected: lookup(entity) == expected,
         now=lambda: now,
         utcnow=lambda: now.astimezone(timezone.utc),
         timedelta=timedelta,
