@@ -178,7 +178,27 @@ async function main() {
       await expect(page.getByText("Collecting daily data", { exact: false })).toBeVisible();
       await expect(page.getByText("Override ends")).toHaveCount(0); // no Unknown while automatic
       await expect(page.getByText("Weather: mapping needed")).toHaveCount(0);
-      const weather = await page.locator("hui-weather-forecast-card").first().innerText().catch(() => "");
+      const weather = await page.evaluate(() => {
+        const deepText = (root) => {
+          let out = "";
+          for (const el of root.querySelectorAll("*")) {
+            if (el.shadowRoot) out += " " + deepText(el.shadowRoot);
+          }
+          return out + " " + (root.textContent || "");
+        };
+        const find = (root) => {
+          for (const el of root.querySelectorAll("*")) {
+            if (el.tagName === "HUI-WEATHER-FORECAST-CARD") return el;
+            if (el.shadowRoot) {
+              const hit = find(el.shadowRoot);
+              if (hit) return hit;
+            }
+          }
+          return null;
+        };
+        const card = find(document);
+        return card ? deepText(card.shadowRoot).replace(/\s+/g, " ") : "";
+      });
       console.log("weather card text:", JSON.stringify(weather.slice(0, 120)));
       expect(weather).toMatch(/°/);
       const motion = await flowMotion();
