@@ -729,7 +729,7 @@ def build_views(ent, custom):
             if light
             else mapping_needed(f"{label} light", f"lights.{key}.entity", 6)
         )
-    bathrooms = [bathroom_card(ent, name, 6) for name in names]
+    bathrooms = [bathroom_card(ent, name, 12) for name in names]  # one column wide each
 
     home = view(
         "Home",
@@ -740,9 +740,8 @@ def build_views(ent, custom):
             section(*energy_panel(ent, 6)),
             section(hot_water_summary(ent), *override_toggle(ent)),
             section(weather),
-            section(
-                heading("Bathrooms", "mdi:shower-head", "subtitle"), *bathrooms, span_columns=2
-            ),
+            # Row 2 on a 4-column screen: one bathroom per column, then lights and doors across two.
+            *[section(bathroom) for bathroom in bathrooms],
             section(
                 heading("Lights and doors", "mdi:home-switch", "subtitle"),
                 *lights,

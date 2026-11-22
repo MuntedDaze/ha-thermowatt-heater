@@ -126,19 +126,19 @@ def test_home_layout_is_compact_and_follows_the_preferred_arrangement(home):
     h = view(data, "home")
     assert h["type"] == "sections" and h["max_columns"] == 4 and h["dense_section_placement"]
     sections = h["sections"]
-    assert [s.get("column_span", 1) for s in sections] == [1, 1, 1, 1, 2, 2]
-    flow, energy, hot, weather, bathrooms, lights_doors = sections
-    # left: animated power flow; centre: energy figures; right: hot water
+    # 4 columns: [flow | energy | hot water | weather] then [Main | Ensuite | lights and doors x2]
+    assert [s.get("column_span", 1) for s in sections] == [1, 1, 1, 1, 1, 1, 2]
+    flow, energy, hot, weather, main, ensuite, lights_doors = sections
     assert flow["cards"][0]["type"] == "custom:thermowatt-power-flow-card"
     assert any(c.get("type") == "statistic" for c in energy["cards"])
     assert hot["cards"][0]["type"] == "markdown"
     assert weather["cards"][0]["type"] == "weather-forecast"
-    # both bathrooms side by side beneath the energy information, in one two-column section
-    names = [
-        c["cards"][0]["heading"] for c in bathrooms["cards"] if c.get("type") == "vertical-stack"
-    ]
+    # both bathrooms side by side beneath the energy information, one column each
+    names = [s["cards"][0]["cards"][0]["heading"] for s in (main, ensuite)]
     assert names == ["Main Bathroom", "Ensuite"]
-    assert all(c["grid_options"]["columns"] == 6 for c in bathrooms["cards"][1:])
+    assert all(s["cards"][0]["grid_options"]["columns"] == 12 for s in (main, ensuite))
+    headings = [c.get("heading") for c in lights_doors["cards"] if c.get("type") == "heading"]
+    assert headings == ["Lights and doors"]
     # no graphs or long explanations crowd the main screen
     assert not [c for c in walk(h) if c.get("type") == "history-graph"]
     assert not [c for c in walk(h) if c.get("type") == "entities"]

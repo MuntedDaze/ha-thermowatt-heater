@@ -299,13 +299,9 @@ views:
         columns: 12
   - type: grid
     cards:
-    - type: heading
-      heading: Bathrooms
-      heading_style: subtitle
-      icon: mdi:shower-head
     - type: vertical-stack
       grid_options:
-        columns: 6
+        columns: 12
       cards:
       - type: heading
         heading: Main Bathroom
@@ -573,9 +569,11 @@ views:
           hold_action:
             action: none
           vertical: false
+  - type: grid
+    cards:
     - type: vertical-stack
       grid_options:
-        columns: 6
+        columns: 12
       cards:
       - type: heading
         heading: Ensuite
@@ -843,7 +841,6 @@ views:
           hold_action:
             action: none
           vertical: false
-    column_span: 2
   - type: grid
     cards:
     - type: heading

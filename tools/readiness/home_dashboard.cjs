@@ -157,6 +157,7 @@ async function main() {
   const goHome = async (path = "home") => {
     await page.goto(`http://127.0.0.1:8123/home-test/${path}`);
     await dismissHttpDialog();
+    await page.waitForFunction(() => !!document.querySelector("home-assistant")?.hass?.callApi);
     await expect(page.locator("hui-error-card")).toHaveCount(0);
   };
   const report = [];
