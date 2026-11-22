@@ -422,7 +422,7 @@ async function main() {
         expect(sorted).toEqual([...sorted].sort((a, b) => a.localeCompare(b)));
         // Layout: the parts must use the available width (three columns on a wide screen, one on a phone).
         const boxes = await page.evaluate(`${FIND_ALL}.map((c) => { const r = c.getBoundingClientRect(); return { left: Math.round(r.left), width: Math.round(r.width) }; })`);
-        expect(boxes.length).toBe(4);
+        expect(boxes.length).toBe(5); // summary, balance, daily, monthly, history
         if (size.width >= 1280) {
           expect(new Set(boxes.map((b) => b.left)).size).toBeGreaterThanOrEqual(size.width >= 1900 ? 3 : 2);
           for (const b of boxes) expect(b.width).toBeGreaterThan(size.width / 5);
