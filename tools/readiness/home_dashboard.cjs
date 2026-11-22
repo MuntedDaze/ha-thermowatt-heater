@@ -58,18 +58,22 @@ async function main() {
     await page.screenshot({ path: `${output}/no-confirm.png` }).catch(() => {});
     return false;
   };
-  let httpConfirmed = false;
+  // A fresh disposable HA asks to confirm its loopback-only HTTP binding; it can appear late
+  // and would block every click, so dismiss it whenever it is present.
+  const dismissHttpDialog = async () => {
+    const confirm = page.locator("dialog-http-pending-config").getByRole("button", { name: "Confirm", exact: true });
+    if (await confirm.isVisible({ timeout: 4000 }).catch(() => false)) {
+      await confirm.click({ force: true });
+      await expect(confirm).not.toBeVisible();
+    }
+  };
   const report = [];
 
   try {
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 960 });
       await page.goto("http://127.0.0.1:8123/home-test/home");
-      if (!httpConfirmed) {
-        const confirm = page.locator("dialog-http-pending-config").getByRole("button", { name: "Confirm", exact: true });
-        if (await confirm.isVisible({ timeout: 8000 }).catch(() => false)) await confirm.click({ force: true });
-        httpConfirmed = true;
-      }
+      await dismissHttpDialog();
       // The dashboard itself must load: no configuration error cards.
       await expect(page.getByText("kW", { exact: false }).first()).toBeVisible();
       expect(await page.locator("hui-error-card").count()).toBe(0);
@@ -111,6 +115,7 @@ async function main() {
       await power("sensor.goodwe_inverter_house_consumption", "1200");
 
       // 12 h override: ON / OFF / unknown, with the existing buttons only.
+      await dismissHttpDialog();
       await setState(MODE, "automatic");
       await expect(page.getByText("12 h override: OFF")).toBeVisible();
       await clearCalls();
