@@ -4,8 +4,8 @@ A separate, optional dashboard that combines solar/grid/house power flow, weathe
 and both bathrooms. It does **not** touch the existing Thermowatt or Tapo dashboards.
 
 Screenshots of the real rendered dashboard (a real Home Assistant frontend, synthetic data) are in
-[`screenshots/`](screenshots/): Home at 1920, 1366, 1280 and 390 px (light and dark) and every view at 1920
-and 390 px.
+[`screenshots/`](screenshots/): Home at 1920, 1366, 1280 and 390 px (light and dark), every view at 1920 and
+390 px, and the Lights card with 2, 3, 5 and 10 lights (`lights-N-*.png`).
 
 ## Files and profiles
 
