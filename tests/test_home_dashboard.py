@@ -1007,6 +1007,7 @@ def test_no_device_list_or_device_entity_is_hardcoded(home):
         "history_months",
         "grid_options",
         "timezone",
+        "part",
     }
     assert card["platforms"] == [
         "tplink",

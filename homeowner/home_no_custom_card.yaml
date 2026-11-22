@@ -2550,4 +2550,3 @@ views:
         resource installed; this native fallback has no per-device tables.'
       grid_options:
         columns: 12
-    column_span: 3

@@ -760,6 +760,17 @@ def device_energy_fallback():
     )
 
 
+def device_energy_sections(ent, custom):
+    """Three columns of card parts sharing one statistics load: summary+daily | monthly | history."""
+    if not custom:
+        return [section(device_energy_fallback())]
+    base = device_energy_card(ent)
+    if base.get("type") != DEVICE_ENERGY_CARD:  # rates missing: just the mapping note
+        return [section(base)]
+    parts = [("summary", "daily"), ("monthly",), ("history",)]
+    return [section(*[{**base, "part": name} for name in group]) for group in parts]
+
+
 def device_energy_card(ent):
     cfg = ent.mapping.get("device_energy") or {}
     rates = [
@@ -1007,7 +1018,7 @@ def build_views(ent, custom):
         "Device Energy",
         "device-energy",
         "mdi:meter-electric",
-        [section(device_energy_card(ent) if custom else device_energy_fallback(), span_columns=3)],
+        device_energy_sections(ent, custom),
         max_columns=3,
     )
     return [home, energy, hot_water, bath_view, doors_view, system, device_energy]

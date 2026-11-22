@@ -2380,4 +2380,3 @@ views:
         file to the real entity ID (Developer Tools -> States), then run `python tools/build_home_dashboard.py`.'
       grid_options:
         columns: 12
-    column_span: 3

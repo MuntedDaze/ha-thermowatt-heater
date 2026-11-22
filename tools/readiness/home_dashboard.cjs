@@ -332,36 +332,26 @@ async function main() {
 
         // Device Energy: discovery from the registries, tables, totals, sorting, history, no zeros.
         await goHome("device-energy");
+        const FIND_ALL = `(() => {
+          const out = [];
+          const walk = (root) => {
+            for (const el of root.querySelectorAll("*")) {
+              if (el.tagName === "THERMOWATT-DEVICE-ENERGY-CARD") out.push(el);
+              if (el.shadowRoot) walk(el.shadowRoot);
+            }
+          };
+          walk(document);
+          return out;
+        })()`;
         const deepCard = () =>
-          page.evaluate(() => {
-            const find = (root) => {
-              for (const el of root.querySelectorAll("*")) {
-                if (el.tagName === "THERMOWATT-DEVICE-ENERGY-CARD") return el;
-                if (el.shadowRoot) {
-                  const hit = find(el.shadowRoot);
-                  if (hit) return hit;
-                }
-              }
-              return null;
-            };
-            const card = find(document);
-            return card && card.shadowRoot ? card.shadowRoot.querySelectorAll("table").length : 0;
-          });
-        await expect.poll(deepCard, { timeout: 30000 }).toBeGreaterThanOrEqual(2);
+          page.evaluate(
+            `${FIND_ALL}.reduce((n, c) => n + (c.shadowRoot ? c.shadowRoot.querySelectorAll("table").length : 0), 0)`
+          );
+        await expect.poll(deepCard, { timeout: 30000 }).toBeGreaterThanOrEqual(4);
         const deviceText = () =>
-          page.evaluate(() => {
-            const find = (root) => {
-              for (const el of root.querySelectorAll("*")) {
-                if (el.tagName === "THERMOWATT-DEVICE-ENERGY-CARD") return el;
-                if (el.shadowRoot) {
-                  const hit = find(el.shadowRoot);
-                  if (hit) return hit;
-                }
-              }
-              return null;
-            };
-            return find(document).shadowRoot.textContent.replace(/\s+/g, " ");
-          });
+          page.evaluate(
+            `${FIND_ALL}.map((c) => (c.shadowRoot ? c.shadowRoot.textContent : "")).join(" ").replace(/\s+/g, " ")`
+          );
         const energyText = await deviceText();
         console.log("device energy text:", energyText.slice(0, 600));
         for (const device of ["Dryer", "Fridge plug", "Server plug"]) expect(energyText).toContain(device);
@@ -374,23 +364,22 @@ async function main() {
         expect(energyText).toMatch(/\$\d+\.\d\d/);
         expect(energyText).toContain("Previous completed months");
         expect(energyText).toContain("Last seven days");
-        const sorted = await page.evaluate(() => {
-          const find = (root) => {
-            for (const el of root.querySelectorAll("*")) {
-              if (el.tagName === "THERMOWATT-DEVICE-ENERGY-CARD") return el;
-              if (el.shadowRoot) {
-                const hit = find(el.shadowRoot);
-                if (hit) return hit;
-              }
-            }
-            return null;
-          };
-          const root = find(document).shadowRoot;
-          const names = () => [...root.querySelectorAll("table")[0].querySelectorAll("tbody tr td:first-child")].map((td) => td.textContent.trim().split(" ")[0]);
+        const sorted = await page.evaluate(`(() => {
+          const cards = ${FIND_ALL};
+          const root = cards.map((c) => c.shadowRoot).find((r) => r && r.querySelector('button[data-table="daily"]'));
           root.querySelector('button[data-table="daily"][data-sort="name"]').click();
-          return names();
-        });
+          return [...root.querySelectorAll("table")[0].querySelectorAll("tbody tr td:first-child")].map((td) => td.textContent.trim().split(" ")[0]);
+        })()`);
         expect(sorted).toEqual([...sorted].sort((a, b) => a.localeCompare(b)));
+        // Layout: the parts must use the available width (three columns on a wide screen, one on a phone).
+        const boxes = await page.evaluate(`${FIND_ALL}.map((c) => { const r = c.getBoundingClientRect(); return { left: Math.round(r.left), width: Math.round(r.width) }; })`);
+        expect(boxes.length).toBe(4);
+        if (size.width >= 1280) {
+          expect(new Set(boxes.map((b) => b.left)).size).toBeGreaterThanOrEqual(size.width >= 1900 ? 3 : 2);
+          for (const b of boxes) expect(b.width).toBeGreaterThan(size.width / 5);
+        } else if (size.width <= 500) {
+          for (const b of boxes) expect(b.width).toBeGreaterThan(size.width * 0.8);
+        }
         const overflowDevice = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflowDevice).toBeLessThanOrEqual(2);
         await page.screenshot({ path: `${output}/device-energy-${size.name}.png`, fullPage: true });

@@ -611,13 +611,103 @@ const STYLE = `
 
 const BaseElement = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 
+// One load per configuration, shared by every card part on the page (summary, daily, monthly, history).
+const SHARED = new Map();
+
+async function computeState(hass, c) {
+  const { devices, withoutMonitoring } = discoverDevices(hass, c);
+  const now = Date.now();
+  const tz = c.timezone;
+  const dayStart = startOfLocalDay(now, tz);
+  const monthStart = startOfLocalMonth(now, tz);
+  const months = c.history_months ?? 6;
+  const historyStart = shiftMonth(now, -months, tz);
+  const split = Math.max(historyStart, now - SHORT_TERM_MS);
+  const buckets = new Map(devices.map((d) => [d.deviceId, []]));
+  const query = (ids, kind, from, to, period) =>
+    ids.length
+      ? hass.callWS({
+          type: "recorder/statistics_during_period",
+          start_time: new Date(from).toISOString(),
+          end_time: new Date(to).toISOString(),
+          statistic_ids: ids,
+          period,
+          types: kind === "energy" ? ["change"] : ["mean"],
+        })
+      : Promise.resolve({});
+  for (const kind of ["energy", "power"]) {
+    const group = devices.filter((d) => d.source.kind === kind);
+    const ids = group.map((d) => d.source.entityId);
+    const fallback = [];
+    if (historyStart < split) {
+      const response = await query(ids, kind, historyStart, split, "hour");
+      for (const d of group) buckets.get(d.deviceId).push(...toBuckets(response[d.source.entityId], d.source));
+    }
+    const recent = await query(ids, kind, split, now + HOUR_MS, "5minute");
+    for (const d of group) {
+      const rows = toBuckets(recent[d.source.entityId], d.source);
+      if (rows.length) buckets.get(d.deviceId).push(...rows);
+      else fallback.push(d); // no 5-minute statistics kept: use the hourly ones for this range
+    }
+    if (fallback.length) {
+      const response = await query(fallback.map((d) => d.source.entityId), kind, split, now + HOUR_MS, "hour");
+      for (const d of fallback) buckets.get(d.deviceId).push(...toBuckets(response[d.source.entityId], d.source));
+    }
+  }
+  const ctx = { tariff: c.tariff, rates: c.rates, timeZone: tz };
+  const rowsFor = (from, to) =>
+    devices.map((d) => {
+      const own = buckets.get(d.deviceId);
+      const data = accumulate(own, { from, to, ...ctx });
+      const earliest = own.reduce((m, b) => Math.min(m, b.start), Infinity);
+      const partial = data && Number.isFinite(earliest) && earliest > from + HOUR_MS;
+      return {
+        name: d.name,
+        estimated: d.estimated,
+        data,
+        partialFrom: partial ? new Date(earliest).toLocaleDateString("en-AU", { timeZone: tz, day: "numeric", month: "short" }) : null,
+      };
+    });
+  const daily = rowsFor(dayStart, now + HOUR_MS);
+  const monthly = rowsFor(monthStart, now + HOUR_MS);
+  const past = [];
+  for (let delta = -1; delta >= -months; delta -= 1) {
+    const from = shiftMonth(now, delta, tz);
+    const rows = rowsFor(from, shiftMonth(now, delta + 1, tz));
+    const total = combine(rows);
+    if (total) past.push({ label: monthLabel(from, tz).slice(0, 3), full: monthLabel(from, tz), rows, total, partial: rows.some((r) => r.partialFrom) });
+  }
+  past.reverse();
+  const week = [];
+  for (let delta = -6; delta <= 0; delta += 1) {
+    const from = shiftDay(now, delta, tz);
+    const total = combine(rowsFor(from, shiftDay(now, delta + 1, tz)));
+    week.push({ label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][zonedParts(from, tz).weekday], kwh: total ? total.kwh : null, cost: total ? total.cost : null });
+  }
+  return { devices, withoutMonitoring, daily, monthly, months: past, week, tz, error: null };
+}
+
+function sharedFor(config) {
+  const { part, ...rest } = config;
+  const key = JSON.stringify(rest);
+  if (!SHARED.has(key)) SHARED.set(key, { state: null, loadedAt: 0, loading: false, listeners: new Set() });
+  return SHARED.get(key);
+}
+
 class ThermowattDeviceEnergyCard extends BaseElement {
   setConfig(config) {
     if (!config || !Array.isArray(config.rates) || !config.rates.length) throw new Error("rates are required");
     if (!config.tariff) throw new Error("tariff is required");
-    this._config = { timezone: DEFAULT_TIMEZONE, refresh_minutes: 5, ...config };
+    this._config = { timezone: DEFAULT_TIMEZONE, refresh_minutes: 5, part: "all", ...config };
     this._sort = { daily: { key: "kwh", direction: "desc" }, monthly: { key: "kwh", direction: "desc" } };
-    this._state = null;
+  }
+
+  connectedCallback() {
+    if (this._config) sharedFor(this._config).listeners.add(this);
+  }
+
+  disconnectedCallback() {
+    if (this._config) sharedFor(this._config).listeners.delete(this);
   }
 
   set hass(hass) {
@@ -636,120 +726,41 @@ class ThermowattDeviceEnergyCard extends BaseElement {
         this._render();
       });
     }
-    const due = !this._loadedAt || Date.now() - this._loadedAt > this._config.refresh_minutes * 60e3;
-    if (due && !this._loading) this._load();
-    else if (!this._state) this._render();
+    const shared = sharedFor(this._config);
+    shared.listeners.add(this);
+    const due = !shared.loadedAt || Date.now() - shared.loadedAt > this._config.refresh_minutes * 60e3;
+    if (due && !shared.loading) this._load(shared);
+    this._render();
   }
 
   getCardSize() {
-    return 12;
+    return { summary: 3, daily: 4, monthly: 6, history: 8 }[this._config && this._config.part] || 12;
   }
 
-  async _statistics(ids, kind, from, to, period) {
-    if (!ids.length) return {};
-    return this._hass.callWS({
-      type: "recorder/statistics_during_period",
-      start_time: new Date(from).toISOString(),
-      end_time: new Date(to).toISOString(),
-      statistic_ids: ids,
-      period,
-      types: kind === "energy" ? ["change"] : ["mean"],
-    });
-  }
-
-  /** Statistics for [from, to): hourly for older data, 5-minute for the last ~10 days. */
-  async _collect(devices, from, to) {
-    const split = Math.max(from, Date.now() - SHORT_TERM_MS);
-    const out = new Map(devices.map((d) => [d.deviceId, []]));
-    for (const kind of ["energy", "power"]) {
-      const group = devices.filter((d) => d.source.kind === kind);
-      const ids = group.map((d) => d.source.entityId);
-      const recent = [];
-      if (from < split) {
-        const response = await this._statistics(ids, kind, from, Math.min(to, split), "hour");
-        for (const d of group) out.get(d.deviceId).push(...toBuckets(response[d.source.entityId], d.source));
-      }
-      if (to > split) {
-        const response = await this._statistics(ids, kind, split, to, "5minute");
-        for (const d of group) {
-          const rows = toBuckets(response[d.source.entityId], d.source);
-          if (rows.length) out.get(d.deviceId).push(...rows);
-          else recent.push(d); // no 5-minute statistics kept for it: fall back to the hourly ones
-        }
-      }
-      if (recent.length) {
-        const response = await this._statistics(recent.map((d) => d.source.entityId), kind, split, to, "hour");
-        for (const d of recent) out.get(d.deviceId).push(...toBuckets(response[d.source.entityId], d.source));
-      }
-    }
-    return out;
-  }
-
-  async _load() {
-    this._loading = true;
+  async _load(shared) {
+    shared.loading = true;
     try {
-      const c = this._config;
-      const { devices, withoutMonitoring } = discoverDevices(this._hass, c);
-      const now = Date.now();
-      const tz = c.timezone;
-      const dayStart = startOfLocalDay(now, tz);
-      const monthStart = startOfLocalMonth(now, tz);
-      const historyStart = shiftMonth(now, -(c.history_months ?? 6), tz);
-      const buckets = await this._collect(devices, historyStart, now + HOUR_MS);
-      const ctx = { tariff: c.tariff, rates: c.rates, timeZone: tz };
-      const rowsFor = (from, to) =>
-        devices.map((d) => {
-          const data = accumulate(buckets.get(d.deviceId), { from, to, ...ctx });
-          const earliest = buckets.get(d.deviceId).reduce((m, b) => Math.min(m, b.start), Infinity);
-          const partial = data && Number.isFinite(earliest) && earliest > from + HOUR_MS;
-          return {
-            name: d.name,
-            estimated: d.estimated,
-            data,
-            partialFrom: partial ? new Date(earliest).toLocaleDateString("en-AU", { timeZone: tz, day: "numeric", month: "short" }) : null,
-          };
-        });
-      const daily = rowsFor(dayStart, now + HOUR_MS);
-      const monthly = rowsFor(monthStart, now + HOUR_MS);
-      const months = [];
-      for (let delta = -1; delta >= -(c.history_months ?? 6); delta -= 1) {
-        const from = shiftMonth(now, delta, tz);
-        const to = shiftMonth(now, delta + 1, tz);
-        const rows = rowsFor(from, to);
-        const total = combine(rows);
-        if (total) months.push({ label: monthLabel(from, tz).slice(0, 3), full: monthLabel(from, tz), from, rows, total, partial: rows.some((r) => r.partialFrom) });
-      }
-      months.reverse();
-      const week = [];
-      for (let delta = -6; delta <= 0; delta += 1) {
-        const from = shiftDay(now, delta, tz);
-        const to = shiftDay(now, delta + 1, tz);
-        const total = combine(rowsFor(from, to));
-        const p = zonedParts(from, tz);
-        week.push({ label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][p.weekday], kwh: total ? total.kwh : null, cost: total ? total.cost : null });
-      }
-      this._state = { devices, withoutMonitoring, daily, monthly, months, week, monthStart, tz, error: null };
-      this._loadedAt = Date.now();
+      shared.state = await computeState(this._hass, this._config);
+      shared.loadedAt = Date.now();
     } catch (error) {
-      this._state = { ...(this._state || {}), error: String(error && error.message ? error.message : error) };
+      shared.state = { ...(shared.state || {}), error: String(error && error.message ? error.message : error) };
     } finally {
-      this._loading = false;
-      this._render();
+      shared.loading = false;
+      for (const card of shared.listeners) card._render();
     }
   }
 
   _render() {
     if (!this._root) return;
-    const s = this._state;
+    const s = sharedFor(this._config).state;
+    const part = this._config.part;
     let html = `<ha-card><style>${STYLE}</style>`;
     if (!s) {
-      html += '<p class="note">Loading device energy…</p></ha-card>';
-      this._root.innerHTML = html;
+      this._root.innerHTML = html + '<p class="note">Loading device energy…</p></ha-card>';
       return;
     }
     if (s.error && !s.devices) {
-      html += `<p class="warn">Device energy statistics are unavailable (${escapeHtml(s.error)}). The rest of the dashboard is unaffected.</p></ha-card>`;
-      this._root.innerHTML = html;
+      this._root.innerHTML = html + `<p class="warn">Device energy statistics are unavailable (${escapeHtml(s.error)}). The rest of the dashboard is unaffected.</p></ha-card>`;
       return;
     }
     const dailyTotal = combine(s.daily);
@@ -757,37 +768,47 @@ class ThermowattDeviceEnergyCard extends BaseElement {
     const partialMonth = s.monthly.some((r) => r.partialFrom);
     const estimated = s.devices.some((d) => d.estimated);
     const label = monthLabel(Date.now(), s.tz);
-    html += '<div class="cards">';
-    html += `<div class="box"><span>Today</span><b>${fmtKwh(dailyTotal && dailyTotal.kwh)}</b><span>${fmtMoney(dailyTotal && dailyTotal.cost)} est. operating cost</span></div>`;
-    html += `<div class="box"><span>${escapeHtml(label)} so far${partialMonth ? " (partial)" : ""}</span><b>${fmtKwh(monthTotal && monthTotal.kwh)}</b><span>${fmtMoney(monthTotal && monthTotal.cost)} est. operating cost</span></div>`;
-    html += `<div class="box"><span>Devices monitored</span><b>${s.devices.length}</b><span>${s.withoutMonitoring ? `${s.withoutMonitoring} without energy monitoring (not shown)` : "all with energy monitoring"}</span></div>`;
-    html += "</div>";
-    html += '<p class="warn">Costs are <b>estimated tariff-valued operating costs</b> (consumption × the peak/off-peak rate in force when it was used). They are not Aurora charges: no supply charge, no solar feed-in credit, and no assumption that the energy came from the grid.' + (estimated ? " Devices marked <i>est.</i> only report power, so their energy is estimated." : "") + "</p>";
-    html += `<h3>Today (midnight ${escapeHtml(s.tz.split("/")[1] || s.tz)} time)</h3>` + tableHtml("daily", s.daily, dailyTotal, this._sort.daily, "");
-    html +=
-      `<h3>${escapeHtml(label)} month to date</h3>` +
-      tableHtml("monthly", s.monthly, monthTotal, this._sort.monthly, partialMonth ? `Monitoring began partway through ${escapeHtml(label)}: totals cover the recorded part of the month only.` : "");
-    if (s.months.length) {
-      html += "<h3>Previous completed months</h3>";
-      html += '<div class="scroll"><table><thead><tr><th>Month</th><th>kWh</th><th>Off-peak $</th><th>Peak $</th><th>Total $</th></tr></thead><tbody>';
-      for (const m of [...s.months].reverse()) {
-        html += `<tr><td>${escapeHtml(m.full)}${m.partial ? ' <span class="part">partial</span>' : ""}</td><td>${fmtKwh(m.total.kwh)}</td><td>${fmtMoney(m.total.offCost)}</td><td>${fmtMoney(m.total.peakCost)}</td><td>${fmtMoney(m.total.cost)}</td></tr>`;
-      }
-      html += "</tbody></table></div>";
-      html += "<h3>Monthly comparison</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, kwh: m.total.kwh, cost: m.total.cost, partial: m.partial })), "kwh", "kWh");
-      html += barsSvg(s.months.map((m) => ({ label: m.label, cost: m.total.cost, partial: m.partial })), "cost", "$");
-      html += "<h3>By device (kWh per month)</h3>";
-      html += '<div class="scroll"><table><thead><tr><th>Device</th>' + s.months.map((m) => `<th>${escapeHtml(m.label)}</th>`).join("") + "</tr></thead><tbody>";
-      for (const d of s.devices) {
-        html += `<tr><td>${escapeHtml(d.name)}</td>` + s.months.map((m) => { const row = m.rows.find((r) => r.name === d.name); return `<td>${row && row.data ? row.data.kwh.toFixed(row.data.kwh < 1 ? 3 : 2) : "—"}</td>`; }).join("") + "</tr>";
-      }
-      html += "</tbody></table></div>";
-    } else {
-      html += '<p class="note">No completed month of statistics yet: history appears after the first month rollover (or as soon as earlier statistics exist).</p>';
+    const want = (name) => part === "all" || part === name;
+    if (want("summary")) {
+      html += '<div class="cards">';
+      html += `<div class="box"><span>Today</span><b>${fmtKwh(dailyTotal && dailyTotal.kwh)}</b><span>${fmtMoney(dailyTotal && dailyTotal.cost)} est. operating cost</span></div>`;
+      html += `<div class="box"><span>${escapeHtml(label)} so far${partialMonth ? " (partial)" : ""}</span><b>${fmtKwh(monthTotal && monthTotal.kwh)}</b><span>${fmtMoney(monthTotal && monthTotal.cost)} est. operating cost</span></div>`;
+      html += `<div class="box"><span>Devices monitored</span><b>${s.devices.length}</b><span>${s.withoutMonitoring ? `${s.withoutMonitoring} without energy monitoring (not shown)` : "all with energy monitoring"}</span></div>`;
+      html += "</div>";
+      html += '<p class="warn">Costs are <b>estimated tariff-valued operating costs</b> (consumption × the peak/off-peak rate in force when it was used). They are not Aurora charges: no supply charge, no solar feed-in credit, and no assumption that the energy came from the grid.' + (estimated ? " Devices marked <i>est.</i> only report power, so their energy is estimated." : "") + "</p>";
     }
-    html += "<h3>Last seven days</h3>" + barsSvg(s.week, "kwh", "kWh");
-    html += "</ha-card>";
-    this._root.innerHTML = html;
+    if (want("daily")) {
+      html += `<h3>Today (midnight ${escapeHtml(s.tz.split("/")[1] || s.tz)} time)</h3>` + tableHtml("daily", s.daily, dailyTotal, this._sort.daily, "");
+    }
+    if (want("monthly")) {
+      html +=
+        `<h3>${escapeHtml(label)} month to date</h3>` +
+        tableHtml("monthly", s.monthly, monthTotal, this._sort.monthly, partialMonth ? `Monitoring began partway through ${escapeHtml(label)}: totals cover the recorded part of the month only.` : "");
+      if (s.months.length) {
+        html += "<h3>Previous completed months</h3>";
+        html += '<div class="scroll"><table><thead><tr><th>Month</th><th>kWh</th><th>Off-peak $</th><th>Peak $</th><th>Total $</th></tr></thead><tbody>';
+        for (const m of [...s.months].reverse()) {
+          html += `<tr><td>${escapeHtml(m.full)}${m.partial ? ' <span class="part">partial</span>' : ""}</td><td>${fmtKwh(m.total.kwh)}</td><td>${fmtMoney(m.total.offCost)}</td><td>${fmtMoney(m.total.peakCost)}</td><td>${fmtMoney(m.total.cost)}</td></tr>`;
+        }
+        html += "</tbody></table></div>";
+      } else {
+        html += '<p class="note">No completed month of statistics yet: history appears after the first month rollover (or as soon as earlier statistics exist).</p>';
+      }
+    }
+    if (want("history")) {
+      if (s.months.length) {
+        html += "<h3>Monthly comparison (kWh)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, kwh: m.total.kwh, partial: m.partial })), "kwh", "kWh");
+        html += "<h3>Monthly comparison (est. cost)</h3>" + barsSvg(s.months.map((m) => ({ label: m.label, cost: m.total.cost, partial: m.partial })), "cost", "$");
+        html += "<h3>By device (kWh per month)</h3>";
+        html += '<div class="scroll"><table><thead><tr><th>Device</th>' + s.months.map((m) => `<th>${escapeHtml(m.label)}</th>`).join("") + "</tr></thead><tbody>";
+        for (const d of s.devices) {
+          html += `<tr><td>${escapeHtml(d.name)}</td>` + s.months.map((m) => { const row = m.rows.find((r) => r.name === d.name); return `<td>${row && row.data ? row.data.kwh.toFixed(row.data.kwh < 1 ? 3 : 2) : "—"}</td>`; }).join("") + "</tr>";
+        }
+        html += "</tbody></table></div>";
+      }
+      html += "<h3>Last seven days (kWh)</h3>" + barsSvg(s.week, "kwh", "kWh");
+    }
+    this._root.innerHTML = html + "</ha-card>";
   }
 }
 

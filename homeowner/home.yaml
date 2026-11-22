@@ -2457,4 +2457,107 @@ views:
       grid_options:
         columns: 12
       timezone: Australia/Hobart
-    column_span: 3
+      part: summary
+    - type: custom:thermowatt-device-energy-card
+      tariff:
+        clock: standard
+        utc_offset_hours: 10
+        peak_windows:
+        - days:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          start: '07:00'
+          end: '10:00'
+        - days:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          start: '16:00'
+          end: '21:00'
+      rates:
+      - effective_from: '2000-01-01'
+        offpeak: 0.1419
+        peak: 0.1907
+      platforms:
+      - tplink
+      - tapo
+      history_months: 6
+      grid_options:
+        columns: 12
+      timezone: Australia/Hobart
+      part: daily
+  - type: grid
+    cards:
+    - type: custom:thermowatt-device-energy-card
+      tariff:
+        clock: standard
+        utc_offset_hours: 10
+        peak_windows:
+        - days:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          start: '07:00'
+          end: '10:00'
+        - days:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          start: '16:00'
+          end: '21:00'
+      rates:
+      - effective_from: '2000-01-01'
+        offpeak: 0.1419
+        peak: 0.1907
+      platforms:
+      - tplink
+      - tapo
+      history_months: 6
+      grid_options:
+        columns: 12
+      timezone: Australia/Hobart
+      part: monthly
+  - type: grid
+    cards:
+    - type: custom:thermowatt-device-energy-card
+      tariff:
+        clock: standard
+        utc_offset_hours: 10
+        peak_windows:
+        - days:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          start: '07:00'
+          end: '10:00'
+        - days:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          start: '16:00'
+          end: '21:00'
+      rates:
+      - effective_from: '2000-01-01'
+        offpeak: 0.1419
+        peak: 0.1907
+      platforms:
+      - tplink
+      - tapo
+      history_months: 6
+      grid_options:
+        columns: 12
+      timezone: Australia/Hobart
+      part: history
