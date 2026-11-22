@@ -1,6 +1,6 @@
 {
   "integration": "tapo_smart_controller",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "note": "Entity IDs published for dashboards for the default two-bathroom setup (Main Bathroom, Ensuite). A different bathroom name changes only the name part. Verified against a real Home Assistant Core instance by tests/ha_compat/test_entity_contract.py.",
   "entities": {
     "sensor.tapo_smart_controller_main_bathroom_humidity": {

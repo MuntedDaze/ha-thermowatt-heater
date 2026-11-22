@@ -1,11 +1,16 @@
-# Single source of truth for every entity the unified Home dashboard reads that is NOT created by
-# the Thermann Controller (thermann_shadow) or the Tapo Smart Controller (tapo_smart_controller).
+# HOMEOWNER profile: this household's verified entity mapping (Rokeby, Tasmania; battery-free solar).
 # Edit this file, then regenerate:   python tools/build_home_dashboard.py
-# status: verified   = checked against the live entity registry (shadow_controller/DASHBOARD_CONTRACT.md)
-#         unverified = follows a documented pattern; confirm in Developer Tools -> States
-#         unmapped   = deliberately empty: the matching card is replaced by a "mapping needed" note
-#                      until you set the entity ID here (nothing is guessed).
-version: 1
+# The committed outputs (homeowner/home.yaml etc.) are generated from this file and checked in CI, so
+# upgrading never needs entity names to be searched and replaced by hand.
+# A reusable, assumption-free profile for other households is homeowner/generic/home_mapping.yaml.
+#
+# status: verified        = confirmed against this installation (live registry / recorder history)
+#         owner-confirmed = supplied by the owner on 2026-11-22; not independently checkable offline
+#         unverified      = follows a documented pattern; confirm in Developer Tools -> States
+#         unmapped        = empty on purpose: the matching card becomes a "mapping needed" note
+version: 2
+profile: homeowner
+place: Rokeby, TAS
 energy:
   grid_power: {entity: sensor.goodwe_inverter_meter_active_power, status: verified}   # W, signed
   grid_export_positive: true            # owner-verified HK1000 sign: positive = exporting
@@ -14,18 +19,49 @@ energy:
   solar_today_energy: {entity: sensor.goodwe_inverter_today_s_pv_generation, status: verified}   # kWh, resets daily
   grid_import_total: {entity: sensor.goodwe_inverter_meter_total_energy_import, status: verified}  # kWh lifetime
   grid_export_total: {entity: sensor.goodwe_inverter_meter_total_energy_export, status: verified}  # kWh lifetime
-  # Battery presence is NOT confirmed. "Solar used directly" and self-consumption cannot be derived
-  # with a battery, so they stay unavailable until you confirm there is none: set false (no battery),
-  # true (battery) or leave "unknown".
-  battery_present: unknown
+  # Owner-confirmed: battery-free solar. With a battery, derived household / direct-use / self-consumption
+  # cannot be calculated from import, export and generation, so the package withholds them.
+  battery_present: false
 weather:
-  # Rokeby TAS: set to the weather entity of your supported weather integration
-  # (e.g. Bureau of Meteorology or Met.no). Not guessed.
-  entity: ""
-  status: unmapped
+  entity: weather.home                  # Open-Meteo (Rokeby, TAS)
+  status: verified
 lights:
-  dining_room: {entity: "", status: unmapped}    # e.g. light.dining_room
-  living_room: {entity: "", status: unmapped}    # e.g. light.living_room
-bathrooms:            # display names used by the Tapo integration (entity IDs derive from them)
-  - Main Bathroom
-  - Ensuite
+  dining_room: {entity: light.dining_room_light, status: verified}   # dimmable
+  living_room: {entity: light.living_room_light, status: verified}   # dimmable
+# Bathrooms: `name` is the display name used by the Tapo Smart Controller (its entity IDs derive from it).
+# `original` are the ORIGINAL device entities the controller reads. Their recorded history is used for the
+# charts, so history is not limited to the v0.3.x installation date.
+bathrooms:
+  - name: Main Bathroom
+    original:
+      humidity: {entity: sensor.main_temp_humidity, status: verified}      # recorder history 2026-11-21
+      temperature: {entity: sensor.main_temp_temperature, status: verified}
+      fan: {entity: switch.main_fan, status: verified}
+      towel: {entity: switch.main_towel_rail, status: owner-confirmed}
+  - name: Ensuite
+    original:
+      humidity: {entity: sensor.ensuite_temp_humidity, status: verified}
+      temperature: {entity: sensor.ensuite_temp_temperature, status: verified}
+      fan: {entity: switch.ensuite_fan, status: verified}
+      towel: {entity: switch.ensuite_towel_rail, status: owner-confirmed}
+doors:
+  garage_contact: {entity: binary_sensor.garage_door, status: owner-confirmed}
+  front_contact: {entity: binary_sensor.front_door_door, status: owner-confirmed}
+
+# Individual device energy (the Device Energy view). Devices are DISCOVERED from Home Assistant's
+# registries at run time (no device list here). Costs are estimated tariff-valued operating costs: the
+# peak/off-peak windows come from energy_monitoring/entity_map.yaml (the same source as the energy package).
+# `rates` is append-only: add a new entry when prices change; older periods keep the rate in force then.
+device_energy:
+  platforms: [tplink, tapo]         # integrations whose devices are considered
+  exclude: []                       # device names or entity IDs to leave out
+  include_only: []                  # if set, only these devices
+  exclude_label: ""                 # or: any Home Assistant label ID that marks a device as excluded
+  history_months: 6
+  timezone: Australia/Hobart
+  # AUD per kWh. These are the owner's CURRENT Aurora usage rates; the date they started has not been
+  # confirmed, so effective_from is null and costs for ALL periods are valued at these prices and shown with
+  # "≈" (assumed rate). When a price changes, ADD an entry with its effective_from date (never edit an old one);
+  # once the start date of the current prices is known, put it here to make history after that date verified.
+  rates:
+    - {effective_from: null, offpeak: 0.1419, peak: 0.1907}

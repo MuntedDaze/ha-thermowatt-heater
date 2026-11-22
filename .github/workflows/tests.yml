@@ -23,7 +23,7 @@ jobs:
       - run: python tools/build_configuration_strings.py --check
       - run: python tools/build_homeowner_dashboard.py --check
       - run: python tools/build_home_dashboard.py --check
-      - run: node --test tests/js/power_flow_card.test.mjs
+      - run: node --test tests/js/*.test.mjs
       - run: python tools/build_owner_settings.py --check
       - run: python -m pytest
       - run: python -m ruff check .
