@@ -1544,13 +1544,17 @@ def build_views_designed(ent):
         ],
         max_columns=3,
     )
+    de_base = device_energy_card(ent)
+    energy_mini = (
+        [{**de_base, "part": "balancemini"}] if de_base.get("type") == DEVICE_ENERGY_CARD else []
+    )
     energy = view(
         "Energy",
         "energy",
         None,
         [
             section(flow),
-            section(energy_panel_card(ent)),
+            section(energy_panel_card(ent), *energy_mini),
             section(
                 history(
                     "Power, last 24 hours",
@@ -1625,17 +1629,19 @@ def build_views_designed(ent):
         "doors",
         None,
         [
-            section(doors_panel(ent, detailed=True)),
+            section(
+                doors_panel(ent, detailed=True),
+                *([history("Door contacts, last 7 days", contacts, 168, 12)] if contacts else []),
+            ),
             *(
                 [
                     section(
-                        history("Door contacts, last 7 days", contacts, 168, 12),
                         {
                             "type": "logbook",
                             "target": {"entity_id": contacts},
                             "hours_to_show": 168,
                             **span(12),
-                        },
+                        }
                     )
                 ]
                 if contacts

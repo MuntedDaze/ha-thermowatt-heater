@@ -527,6 +527,8 @@ async function main() {
         await page.screenshot({ path: `${output}/system-${size.name}.png`, fullPage: true });
         await goHome("energy");
         await expect(page.getByText("4.123 kW")).toBeVisible();
+        await expect(page.getByText("Whole-house balance").first()).toBeVisible(); // compact balance under today's energy
+        await expect(page.getByText("Household used").first()).toBeVisible();
         await page.screenshot({ path: `${output}/energy-${size.name}.png`, fullPage: true });
       }
       report.push({ size: size.name, ...facts, motion });

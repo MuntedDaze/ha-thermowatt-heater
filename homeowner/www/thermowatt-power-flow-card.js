@@ -1357,6 +1357,9 @@ const DE_CSS = `
   .sankey{display:block;width:100%;max-width:900px;margin:0 auto}
   .sankey text{fill:var(--primary-text-color)}
   .sankey .halo{paint-order:stroke;stroke:var(--card-background-color,#1c1c1c);stroke-width:3px;stroke-linejoin:round}
+  .heroes.mini{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .heroes.mini .val{font-size:clamp(24px,6.6cqw,36px)}
+  .heroes.mini .lab,.heroes.mini .cap{font-size:13px;line-height:1.25}
   .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;color:var(--secondary-text-color)}
   .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
   .bars{display:block;width:100%;max-width:640px;margin:0 auto}
@@ -1544,7 +1547,7 @@ function balanceCell(b, row) {
 }
 
 /** The three large numbers above the diagram, for the period being shown. */
-function balanceHeroes(b) {
+function balanceHeroes(b, mini = false) {
   if (!b || b.status !== "ok") return "";
   const num = (v, digits = 1) => (v === null || v === undefined ? "—" : v.toFixed(digits));
   const lower = b.deviceIncomplete ? "≥ " : b.estimated ? "≈ " : "";
@@ -1553,12 +1556,28 @@ function balanceHeroes(b) {
       ? { value: null, caption: b.uStatus === "withheld" ? "withheld, see below" : "no device data" }
       : { value: `${b.uStatus === "upper_bound" ? "≤ " : b.estimated ? "≈ " : ""}${num(b.U)}`, caption: b.monPct === null ? "" : `${lower}${b.monPct.toFixed(0)}% of the household is monitored` };
   return (
-    '<div class="heroes multi">' +
+    `<div class="heroes multi${mini ? " mini" : ""}">` +
     `<div class="hero t-info"><div class="lab">Household used</div><div class="val">${num(b.H)}<span class="unit">kWh</span></div><div class="cap">${b.indepPct === null ? "" : `${b.indepPct.toFixed(0)}% of it from solar`}</div></div>` +
     `<div class="hero t-ok"><div class="lab">Solar used directly</div><div class="val">${num(b.S)}<span class="unit">kWh</span></div><div class="cap">${b.selfPct === null ? "" : `${b.selfPct.toFixed(0)}% of generation`}</div></div>` +
     `<div class="hero t-idle"><div class="lab">Unmeasured</div><div class="val">${unmeasured.value === null ? "—" : unmeasured.value}<span class="unit">${unmeasured.value === null ? "" : "kWh"}</span></div><div class="cap">${escapeHtml(unmeasured.caption)}</div></div>` +
     "</div>"
   );
+}
+
+/** The balance without the table: three large numbers and the diagram (for the Energy page). */
+function balanceMiniHtml(s, view) {
+  const head = (toggle = "") => `<div class="head">${iconHtml("mdi:scale-balance")}<div class="title">Whole-house balance</div>${toggle}</div>`;
+  if (s.balanceReason) return head() + `<p class="note">Not available: ${escapeHtml(s.balanceReason)}.</p>`;
+  const shown = view === "month" ? s.balance.month : s.balance.day;
+  const toggle = `<div class="toggle" role="group" aria-label="Balance period"><button data-balance="day" class="${view === "month" ? "" : "on"}">Today</button><button data-balance="month" class="${view === "month" ? "on" : ""}">${escapeHtml(monthLabel(s.generatedAt || Date.now(), s.tz).split(" ")[0])}</button></div>`;
+  let html = head(toggle) + balanceHeroes(shown, true);
+  const drawing = sankeySvg(shown, { compact: true });
+  if (drawing) html += drawing;
+  else if (shown.status === "ok") html += '<p class="note">No energy flowed in this period.</p>';
+  else html += `<p class="note"><b>${escapeHtml(shown.status === "pending" ? "Collecting: " : "Balance withheld: ")}</b>${escapeHtml(shown.reason)}.</p>`;
+  const ended = shown.end > shown.from ? new Date(shown.end).toLocaleTimeString("en-AU", { timeZone: s.tz, hour: "numeric", minute: "2-digit" }) : null;
+  html += `<p class="note">Over the same complete hours${ended ? ` (to ${escapeHtml(ended)})` : ""}. Every figure, the table and the cross-check are on the Device energy page.</p>`;
+  return html;
 }
 
 function balanceHtml(s, view, compact) {
@@ -1873,7 +1892,7 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
   }
 
   getCardSize() {
-    return { summary: 4, balance: 12, week: 4, daily: 7, monthly: 9, history: 9 }[this._config && this._config.part] || 14;
+    return { summary: 4, balance: 12, balancemini: 7, week: 4, daily: 7, monthly: 9, history: 9 }[this._config && this._config.part] || 14;
   }
 
   async _load(shared) {
@@ -1945,6 +1964,7 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
       );
     }
     if (want("balance")) sections.push(balanceHtml(s, this._balanceView, compact));
+    if (part === "balancemini") sections.push(balanceMiniHtml(s, this._balanceView));
     if (want("week")) sections.push(head("mdi:chart-bar", "Last seven days (kWh)") + barsSvg(s.week, "kwh", "kWh", narrow));
     if (want("daily")) {
       sections.push(head("mdi:calendar-today", `Today (midnight ${s.tz.split("/")[1] || s.tz} time)`) + tableHtml("daily", s.daily, dailyTotal, this._sort.daily, ""));

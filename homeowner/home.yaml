@@ -819,6 +819,44 @@ views:
         \ if s == 'ready' else [{'title': 'Daily meters (partial on the day installed)', 'rows':\
         \ meters}],\n  'lines': [lines[s]] if s in lines else []\n} | tojson }}\n"
       model: 12
+    - type: custom:thermowatt-device-energy-card
+      tariff:
+        clock: standard
+        utc_offset_hours: 10
+        peak_windows:
+        - days:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          start: '07:00'
+          end: '10:00'
+        - days:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          start: '16:00'
+          end: '21:00'
+      rates:
+      - effective_from: null
+        offpeak: 0.1419
+        peak: 0.1907
+      platforms:
+      - tplink
+      - tapo
+      history_months: 6
+      grid_options:
+        columns: 12
+      house:
+        solar: sensor.goodwe_inverter_today_s_pv_generation
+        import: sensor.goodwe_inverter_meter_total_energy_import
+        export: sensor.goodwe_inverter_meter_total_energy_export
+        battery_present: false
+      timezone: Australia/Hobart
+      part: balancemini
   - type: grid
     cards:
     - type: history-graph
@@ -1804,8 +1842,6 @@ views:
         \ and no lock controls. The garage is operated by its physical Tapo button, and a closed\
         \ door contact does not mean the front door is locked.\"]\n} | tojson }}\n"
       model: 12
-  - type: grid
-    cards:
     - type: history-graph
       title: Door contacts, last 7 days
       hours_to_show: 168
@@ -1814,6 +1850,8 @@ views:
       - binary_sensor.front_door_door
       grid_options:
         columns: 12
+  - type: grid
+    cards:
     - type: logbook
       target:
         entity_id:

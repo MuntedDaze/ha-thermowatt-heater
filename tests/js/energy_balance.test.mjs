@@ -506,3 +506,22 @@ test("a malformed whole-house block disables only the balance, never the device 
   assert.match(html, /whole-house configuration is invalid/);
   assert.match(html, /Today \(midnight/); // the device tables still render
 });
+
+test("the compact balance for the Energy page has the three numbers and the diagram but no table", async () => {
+  const hass = hassFor({ ...inverter(), a: plug("A", 0.2), b: plug("B", 0.1) }, { now: NOW });
+  const card = new Card();
+  card.setConfig(withHouse({ part: "balancemini" }));
+  card.connectedCallback();
+  await atTime(NOW, async () => {
+    card.hass = hass;
+    await settle();
+  });
+  const html = text(card);
+  assert.match(html, /Whole-house balance/);
+  for (const label of ["Household used", "Solar used directly", "Unmeasured"]) assert.ok(html.includes(label), label);
+  assert.match(card.sr.innerHTML, /<svg class="sankey"/);
+  assert.equal(card.sr.innerHTML.includes("<table"), false);
+  assert.match(html, /Device energy page/);
+  click(card, "data-balance", { balance: "month" });
+  assert.match(text(card), /261\.0 kWh|417\.6|208\.8/);
+});
