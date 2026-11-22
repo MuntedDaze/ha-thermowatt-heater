@@ -16,6 +16,13 @@ whole-house Energy view and **read-only**: it never sends a command and never po
   (persistent, survives restarts, handles counter resets, keeps history indefinitely). Nothing is reset or
   recreated, so there is nothing to upgrade or migrate and no existing counter or statistic is touched.
 
+## Layout
+
+On a wide screen the view is three columns (summary and today | month to date and previous months | charts,
+per-device history and the last seven days); on a phone it is one column. These are three instances of the same
+card with a `part` option (`summary`, `daily`, `monthly`, `history`; default `all`), and they **share one
+statistics load**, so the page makes the same number of queries as a single card would.
+
 ## Discovery (nothing hardcoded)
 
 At run time the card reads Home Assistant's device and entity registries and finds every device of the configured

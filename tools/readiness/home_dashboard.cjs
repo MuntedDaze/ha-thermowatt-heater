@@ -348,10 +348,8 @@ async function main() {
             `${FIND_ALL}.reduce((n, c) => n + (c.shadowRoot ? c.shadowRoot.querySelectorAll("table").length : 0), 0)`
           );
         await expect.poll(deepCard, { timeout: 30000 }).toBeGreaterThanOrEqual(4);
-        const deviceText = () =>
-          page.evaluate(
-            `${FIND_ALL}.map((c) => (c.shadowRoot ? c.shadowRoot.textContent : "")).join(" ").replace(/\s+/g, " ")`
-          );
+        const deviceText = async () =>
+          (await page.evaluate(`${FIND_ALL}.map((c) => (c.shadowRoot ? c.shadowRoot.textContent : "")).join(" ")`)).replace(/\s+/g, " ");
         const energyText = await deviceText();
         console.log("device energy text:", energyText.slice(0, 600));
         for (const device of ["Dryer", "Fridge plug", "Server plug"]) expect(energyText).toContain(device);
