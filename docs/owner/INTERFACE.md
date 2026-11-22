@@ -6,6 +6,9 @@ responsive views: Home, Controls, Heating preferences, Electricity and optimisat
 and Advanced and diagnostics. No custom card, CSS override or core frontend patch
 is required. Long help is in full-width markdown/cards and native Configure forms.
 
+The optional unified **Home** dashboard (power flow, weather, hot water, lights, doors and both
+bathrooms) is documented separately in [HOME_DASHBOARD.md](HOME_DASHBOARD.md).
+
 ## Install a separate dashboard
 
 In **Settings → Dashboards → Add dashboard**, choose a new dashboard you manage,

@@ -1,0 +1,31 @@
+# Single source of truth for every entity the unified Home dashboard reads that is NOT created by
+# the Thermann Controller (thermann_shadow) or the Tapo Smart Controller (tapo_smart_controller).
+# Edit this file, then regenerate:   python tools/build_home_dashboard.py
+# status: verified   = checked against the live entity registry (shadow_controller/DASHBOARD_CONTRACT.md)
+#         unverified = follows a documented pattern; confirm in Developer Tools -> States
+#         unmapped   = deliberately empty: the matching card is replaced by a "mapping needed" note
+#                      until you set the entity ID here (nothing is guessed).
+version: 1
+energy:
+  grid_power: {entity: sensor.goodwe_inverter_meter_active_power, status: verified}   # W, signed
+  grid_export_positive: true            # owner-verified HK1000 sign: positive = exporting
+  solar_power: {entity: sensor.goodwe_inverter_pv_power, status: verified}            # W
+  house_power: {entity: sensor.goodwe_inverter_house_consumption, status: verified}   # W
+  solar_today_energy: {entity: sensor.goodwe_inverter_today_s_pv_generation, status: verified}   # kWh, resets daily
+  grid_import_total: {entity: sensor.goodwe_inverter_meter_total_energy_import, status: verified}  # kWh lifetime
+  grid_export_total: {entity: sensor.goodwe_inverter_meter_total_energy_export, status: verified}  # kWh lifetime
+  # Battery presence is NOT confirmed. "Solar used directly" and self-consumption cannot be derived
+  # with a battery, so they stay unavailable until you confirm there is none: set false (no battery),
+  # true (battery) or leave "unknown".
+  battery_present: unknown
+weather:
+  # Rokeby TAS: set to the weather entity of your supported weather integration
+  # (e.g. Bureau of Meteorology or Met.no). Not guessed.
+  entity: ""
+  status: unmapped
+lights:
+  dining_room: {entity: "", status: unmapped}    # e.g. light.dining_room
+  living_room: {entity: "", status: unmapped}    # e.g. light.living_room
+bathrooms:            # display names used by the Tapo integration (entity IDs derive from them)
+  - Main Bathroom
+  - Ensuite
