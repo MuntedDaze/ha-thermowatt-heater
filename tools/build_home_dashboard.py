@@ -1143,6 +1143,7 @@ def bathroom_toggles(ent, name):
 
 # ------------------------------------------------------------------ device energy
 DEVICE_ENERGY_CARD = "custom:thermowatt-device-energy-card"
+DEVICE_ENERGY_PAGE = "custom:thermowatt-device-energy-page"
 
 
 def tariff_from_energy_map():
@@ -1200,24 +1201,24 @@ def _validated_rates(raw):
     return rates
 
 
-def device_energy_sections(ent, custom):
-    """Card parts sharing one statistics load: balance (2 columns) | summary, week, month; today (2) | history."""
-    if not custom:
-        return [section(device_energy_fallback())]
+def device_energy_sections(ent, custom=False):
+    """The no-custom-card fallback: only an explanation (the designed view is :func:`device_energy_view`)."""
+    return [section(device_energy_fallback())]
+
+
+def device_energy_view(ent):
+    """Device energy as ONE full-width card in a panel view.
+
+    The page card arranges its own parts (balance hero beside a summary column, then the Today table and the
+    monthly history) with container queries, so the layout does not depend on how many columns Home
+    Assistant's sections grid offers (a wide section is not always honoured there).
+    """
     base = device_energy_card(ent)
     if base.get("type") != DEVICE_ENERGY_CARD:  # rates missing: just the mapping note
-        return [section(base)]
-
-    def part(name):
-        return {**base, "part": name}
-
-    # Hero balance and the summary column side by side; the Today table and the monthly history underneath.
-    return [
-        section(part("balance"), span_columns=2),
-        section(part("summary"), part("week"), part("monthly")),
-        section(part("daily"), span_columns=2),
-        section(part("history")),
-    ]
+        return view("Device energy", "device-energy", None, [section(base)], max_columns=2)
+    page = {k: v for k, v in base.items() if k != "grid_options"}
+    page["type"] = DEVICE_ENERGY_PAGE
+    return {"title": "Device energy", "path": "device-energy", "type": "panel", "cards": [page]}
 
 
 def _house_sources(mapping):
@@ -1650,9 +1651,7 @@ def build_views_designed(ent):
         [section(system_panel(ent)), section(settings_panel(ent))],
         max_columns=2,
     )
-    device_energy = view(
-        "Device energy", "device-energy", None, device_energy_sections(ent, True), max_columns=3
-    )
+    device_energy = device_energy_view(ent)
     return [home, energy, hot_water, bath_view, doors_view, system, device_energy]
 
 

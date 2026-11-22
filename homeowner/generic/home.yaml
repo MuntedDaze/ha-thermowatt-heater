@@ -1871,7 +1871,7 @@ views:
 - title: Device energy
   path: device-energy
   type: sections
-  max_columns: 3
+  max_columns: 2
   dense_section_placement: true
   sections:
   - type: grid

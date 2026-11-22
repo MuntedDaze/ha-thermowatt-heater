@@ -1896,245 +1896,40 @@ views:
         path: /config/integrations/integration/tapo_smart_controller
 - title: Device energy
   path: device-energy
-  type: sections
-  max_columns: 3
-  dense_section_placement: true
-  sections:
-  - type: grid
-    cards:
-    - type: custom:thermowatt-device-energy-card
-      tariff:
-        clock: standard
-        utc_offset_hours: 10
-        peak_windows:
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '07:00'
-          end: '10:00'
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '16:00'
-          end: '21:00'
-      rates:
-      - effective_from: null
-        offpeak: 0.1419
-        peak: 0.1907
-      platforms:
-      - tplink
-      - tapo
-      history_months: 6
-      grid_options:
-        columns: 12
-      house:
-        solar: sensor.goodwe_inverter_today_s_pv_generation
-        import: sensor.goodwe_inverter_meter_total_energy_import
-        export: sensor.goodwe_inverter_meter_total_energy_export
-        battery_present: false
-      timezone: Australia/Hobart
-      part: balance
-    column_span: 2
-  - type: grid
-    cards:
-    - type: custom:thermowatt-device-energy-card
-      tariff:
-        clock: standard
-        utc_offset_hours: 10
-        peak_windows:
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '07:00'
-          end: '10:00'
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '16:00'
-          end: '21:00'
-      rates:
-      - effective_from: null
-        offpeak: 0.1419
-        peak: 0.1907
-      platforms:
-      - tplink
-      - tapo
-      history_months: 6
-      grid_options:
-        columns: 12
-      house:
-        solar: sensor.goodwe_inverter_today_s_pv_generation
-        import: sensor.goodwe_inverter_meter_total_energy_import
-        export: sensor.goodwe_inverter_meter_total_energy_export
-        battery_present: false
-      timezone: Australia/Hobart
-      part: summary
-    - type: custom:thermowatt-device-energy-card
-      tariff:
-        clock: standard
-        utc_offset_hours: 10
-        peak_windows:
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '07:00'
-          end: '10:00'
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '16:00'
-          end: '21:00'
-      rates:
-      - effective_from: null
-        offpeak: 0.1419
-        peak: 0.1907
-      platforms:
-      - tplink
-      - tapo
-      history_months: 6
-      grid_options:
-        columns: 12
-      house:
-        solar: sensor.goodwe_inverter_today_s_pv_generation
-        import: sensor.goodwe_inverter_meter_total_energy_import
-        export: sensor.goodwe_inverter_meter_total_energy_export
-        battery_present: false
-      timezone: Australia/Hobart
-      part: week
-    - type: custom:thermowatt-device-energy-card
-      tariff:
-        clock: standard
-        utc_offset_hours: 10
-        peak_windows:
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '07:00'
-          end: '10:00'
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '16:00'
-          end: '21:00'
-      rates:
-      - effective_from: null
-        offpeak: 0.1419
-        peak: 0.1907
-      platforms:
-      - tplink
-      - tapo
-      history_months: 6
-      grid_options:
-        columns: 12
-      house:
-        solar: sensor.goodwe_inverter_today_s_pv_generation
-        import: sensor.goodwe_inverter_meter_total_energy_import
-        export: sensor.goodwe_inverter_meter_total_energy_export
-        battery_present: false
-      timezone: Australia/Hobart
-      part: monthly
-  - type: grid
-    cards:
-    - type: custom:thermowatt-device-energy-card
-      tariff:
-        clock: standard
-        utc_offset_hours: 10
-        peak_windows:
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '07:00'
-          end: '10:00'
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '16:00'
-          end: '21:00'
-      rates:
-      - effective_from: null
-        offpeak: 0.1419
-        peak: 0.1907
-      platforms:
-      - tplink
-      - tapo
-      history_months: 6
-      grid_options:
-        columns: 12
-      house:
-        solar: sensor.goodwe_inverter_today_s_pv_generation
-        import: sensor.goodwe_inverter_meter_total_energy_import
-        export: sensor.goodwe_inverter_meter_total_energy_export
-        battery_present: false
-      timezone: Australia/Hobart
-      part: daily
-    column_span: 2
-  - type: grid
-    cards:
-    - type: custom:thermowatt-device-energy-card
-      tariff:
-        clock: standard
-        utc_offset_hours: 10
-        peak_windows:
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '07:00'
-          end: '10:00'
-        - days:
-          - 0
-          - 1
-          - 2
-          - 3
-          - 4
-          start: '16:00'
-          end: '21:00'
-      rates:
-      - effective_from: null
-        offpeak: 0.1419
-        peak: 0.1907
-      platforms:
-      - tplink
-      - tapo
-      history_months: 6
-      grid_options:
-        columns: 12
-      house:
-        solar: sensor.goodwe_inverter_today_s_pv_generation
-        import: sensor.goodwe_inverter_meter_total_energy_import
-        export: sensor.goodwe_inverter_meter_total_energy_export
-        battery_present: false
-      timezone: Australia/Hobart
-      part: history
+  type: panel
+  cards:
+  - type: custom:thermowatt-device-energy-page
+    tariff:
+      clock: standard
+      utc_offset_hours: 10
+      peak_windows:
+      - days:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        start: '07:00'
+        end: '10:00'
+      - days:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        start: '16:00'
+        end: '21:00'
+    rates:
+    - effective_from: null
+      offpeak: 0.1419
+      peak: 0.1907
+    platforms:
+    - tplink
+    - tapo
+    history_months: 6
+    house:
+      solar: sensor.goodwe_inverter_today_s_pv_generation
+      import: sensor.goodwe_inverter_meter_total_energy_import
+      export: sensor.goodwe_inverter_meter_total_energy_export
+      battery_present: false
+    timezone: Australia/Hobart

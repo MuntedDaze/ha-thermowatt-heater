@@ -510,7 +510,8 @@ async function main() {
         const boxes = await page.evaluate(`${FIND_ALL}.map((c) => { const r = c.getBoundingClientRect(); return { left: Math.round(r.left), width: Math.round(r.width) }; })`);
         expect(boxes.length).toBe(6); // balance, summary, week, monthly, daily, history
         if (size.width >= 1280) {
-          expect(new Set(boxes.map((b) => b.left)).size).toBeGreaterThanOrEqual(size.width >= 1900 ? 3 : 2);
+          expect(new Set(boxes.map((b) => b.left)).size).toBeGreaterThanOrEqual(2); // columns side by side
+          expect(boxes[0].width).toBeGreaterThan(size.width * 0.45); // the balance hero spans two columns
           for (const b of boxes) expect(b.width).toBeGreaterThan(size.width / 5);
         } else if (size.width <= 500) {
           for (const b of boxes) expect(b.width).toBeGreaterThan(size.width * 0.8);

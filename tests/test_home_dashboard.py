@@ -107,6 +107,7 @@ SUPPORTED = {
     "statistic",
     "custom:thermowatt-power-flow-card",
     "custom:thermowatt-device-energy-card",
+    "custom:thermowatt-device-energy-page",
     "custom:thermowatt-panel-card",
     "custom:thermowatt-lights-card",
     "logbook",
@@ -120,7 +121,7 @@ def test_every_card_is_a_supported_native_or_declared_card(home, native, generic
             if kind and (
                 "entity" in item or "cards" in item or "card" in item or "content" in item
             ):
-                assert kind in SUPPORTED | {"sections"}, kind
+                assert kind in SUPPORTED | {"sections", "panel"}, kind
             if kind == "conditional":
                 assert item["conditions"] and item["card"]["type"] in SUPPORTED
             if kind == "tile":
@@ -177,7 +178,11 @@ def test_tabs_show_text_labels_because_icons_hide_the_title(home, native):
 def test_layout_is_responsive_and_uses_no_fixed_pixel_sizes(home):
     data, _ = home
     for v in data["views"]:
-        assert v["type"] == "sections" and v["max_columns"] in (2, 3, 4)
+        assert v["type"] in ("sections", "panel")
+        if v["type"] == "panel":
+            assert len(v["cards"]) == 1  # one full-width page card
+            continue
+        assert v["max_columns"] in (2, 3, 4)
         for sec in v["sections"]:
             assert sec.get("column_span", 1) <= v["max_columns"]
     text = (ROOT / "homeowner/home.yaml").read_text(encoding="utf-8")
@@ -1059,7 +1064,7 @@ def device_card(data):
     return next(
         c
         for c in walk(view(data, "device-energy"))
-        if c.get("type") == "custom:thermowatt-device-energy-card"
+        if c.get("type") == "custom:thermowatt-device-energy-page"
     )
 
 
@@ -1114,9 +1119,7 @@ def test_no_device_list_or_device_entity_is_hardcoded(home):
         "rates",
         "platforms",
         "history_months",
-        "grid_options",
         "timezone",
-        "part",
         "house",
     }
     assert card["platforms"] == [
@@ -1222,17 +1225,18 @@ def test_duplicate_rate_dates_are_rejected_and_valid_schedules_are_kept_as_given
     assert build._validated_rates(schedule) == schedule
 
 
-def test_device_energy_is_split_into_parts_that_use_the_screen_width(home):
+def test_device_energy_is_one_full_width_page_card_in_a_panel_view(home):
+    """A sections grid does not always honour a wide section, so the page lays its own parts out."""
     data, _ = home
-    sections = view(data, "device-energy")["sections"]
-    parts = [[c["part"] for c in section["cards"]] for section in sections]
-    assert parts == [["balance"], ["summary", "week", "monthly"], ["daily"], ["history"]]
-    assert [s.get("column_span", 1) for s in sections] == [
-        2,
-        1,
-        2,
-        1,
-    ]  # hero and today table are wide
+    v = view(data, "device-energy")
+    assert v["type"] == "panel" and "sections" not in v
+    assert [c["type"] for c in v["cards"]] == ["custom:thermowatt-device-energy-page"]
+    assert "part" not in v["cards"][0] and "grid_options" not in v["cards"][0]
+    js = (ROOT / "homeowner/www/thermowatt-power-flow-card.js").read_text(encoding="utf-8")
+    page = js[js.index("class ThermowattDeviceEnergyPage") :]
+    for part in ("balance", "summary", "week", "monthly", "daily", "history"):
+        assert f'["{part}"' in page  # every part is placed on the page
+    assert "@container" in page  # responsive by container query, not by the sections grid
 
 
 def test_whole_house_sources_come_from_the_mapping_not_from_code(home):
@@ -1245,11 +1249,6 @@ def test_whole_house_sources_come_from_the_mapping_not_from_code(home):
         "export": energy["grid_export_total"]["entity"],
         "battery_present": False,  # the owner's confirmed battery-free installation
     }
-    # every part of the view shares one configuration (one statistics load)
-    parts = [c for c in walk(view(data, "device-energy")) if c.get("type") == DEVICE_ENERGY_TYPE]
-    assert {
-        json.dumps({k: v for k, v in c.items() if k != "part"}, sort_keys=True) for c in parts
-    } == {json.dumps({k: v for k, v in parts[0].items() if k != "part"}, sort_keys=True)}
 
 
 def test_house_battery_presence_is_passed_through_exactly():

@@ -1348,10 +1348,10 @@ const DE_CSS = `
   tr.total td{font-weight:700;border-top:2px solid var(--divider-color,#555);background:color-mix(in srgb,var(--primary-text-color) 5%,transparent)}
   .none{color:var(--secondary-text-color);font-size:14px}
   .est,.part{display:inline-block;font-size:12px;font-weight:500;color:var(--secondary-text-color);border:1px solid var(--divider-color,#666);border-radius:999px;padding:1px 8px;margin-left:6px;white-space:nowrap}
-  .kpis3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .kpis3{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
   .kbox{padding:14px 16px;border-radius:16px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}
   .kbox .lab{font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color)}
-  .kbox .val{font-size:clamp(30px,9cqw,44px);font-weight:500;line-height:1.1;margin-top:4px;color:var(--primary-text-color)}
+  .kbox .val{font-size:clamp(26px,7.2cqw,42px);font-weight:500;line-height:1.1;margin-top:4px;color:var(--primary-text-color)}
   .kbox .unit{font-size:.4em;color:var(--secondary-text-color);margin-left:.2em}
   .kbox .sub{font-size:14.5px;color:var(--secondary-text-color);margin-top:2px}
   .sankey{display:block;width:100%;max-width:900px;margin:0 auto}
@@ -1986,8 +1986,73 @@ export class ThermowattDeviceEnergyCard extends BaseElement {
   }
 }
 
+/* ------------------------------------------------------------------------------------------------
+ * <thermowatt-device-energy-page>: the whole Device energy view as ONE card for a Home Assistant "panel" view.
+ * It lays the parts out itself (balance hero beside a summary column, the Today table and the monthly history
+ * underneath) with container queries, so the page does not depend on how many columns Home Assistant's sections
+ * grid gives it. The parts are ordinary <thermowatt-device-energy-card> elements sharing one statistics load.
+ * ---------------------------------------------------------------------------------------------- */
+class ThermowattDeviceEnergyPage extends BaseUi {
+  setConfig(config) {
+    if (!config || !Array.isArray(config.rates) || !config.rates.length) throw new Error("rates are required");
+    const { part, ...rest } = config;
+    this._config = rest;
+    this._children = null;
+    this._built = false;
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._config) return;
+    if (!this._built) this._build();
+    for (const child of this._children || []) child.hass = hass;
+  }
+
+  getCardSize() {
+    return 24;
+  }
+
+  _build() {
+    this._built = true;
+    const root = this.attachShadow({ mode: "open" });
+    root.innerHTML = `<style>
+      :host{display:block}
+      .wrap{container-type:inline-size;width:100%}
+      .page{display:grid;gap:16px;max-width:1680px;margin:0 auto;padding:0 0 16px;align-items:start;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        grid-template-areas:"balance balance stack" "daily daily history"}
+      .balance{grid-area:balance}.stack{grid-area:stack;display:flex;flex-direction:column;gap:16px}
+      .daily{grid-area:daily}.history{grid-area:history}
+      .page>*{min-width:0}
+      @container (max-width:1180px){
+        .page{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"balance balance" "stack daily" "history history"}
+      }
+      @container (max-width:760px){
+        .page{grid-template-columns:minmax(0,1fr);grid-template-areas:"balance" "stack" "daily" "history"}
+      }
+    </style><div class="wrap"><div class="page">
+      <div class="balance"></div><div class="stack"></div><div class="daily"></div><div class="history"></div>
+    </div></div>`;
+    const slots = { balance: root.querySelector(".balance"), stack: root.querySelector(".stack"), daily: root.querySelector(".daily"), history: root.querySelector(".history") };
+    const layout = [["balance", "balance"], ["summary", "stack"], ["week", "stack"], ["monthly", "stack"], ["daily", "daily"], ["history", "history"]];
+    this._children = [];
+    for (const [part, slot] of layout) {
+      const child = document.createElement("thermowatt-device-energy-card");
+      try {
+        child.setConfig({ ...this._config, part });
+      } catch (error) {
+        slots[slot].textContent = `Device energy could not be shown: ${error.message}`;
+        continue;
+      }
+      slots[slot].appendChild(child);
+      this._children.push(child);
+    }
+  }
+}
+
 if (typeof customElements !== "undefined" && !customElements.get("thermowatt-device-energy-card")) {
   customElements.define("thermowatt-device-energy-card", ThermowattDeviceEnergyCard);
+  if (!customElements.get("thermowatt-device-energy-page")) customElements.define("thermowatt-device-energy-page", ThermowattDeviceEnergyPage);
   window.customCards = window.customCards || [];
   window.customCards.push({
     type: "thermowatt-device-energy-card",
