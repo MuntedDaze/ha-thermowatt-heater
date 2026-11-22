@@ -52,9 +52,14 @@ async function main() {
   const power = (entity_id, state) => setState(entity_id, state, { unit_of_measurement: "W" });
   const calls = () => hassCall("GET", "home_ui_calls");
   const clearCalls = () => hassCall("DELETE", "home_ui_calls");
+  // A fresh disposable HA asks to confirm its loopback-only HTTP binding a few seconds after load; it
+  // blocks every click, so wait for it the first time and check for it again before each interaction.
+  let httpDialogSeen = false;
   const dismissHttpDialog = async () => {
     const confirm = page.locator("dialog-http-pending-config").getByRole("button", { name: "Confirm", exact: true });
-    if (await confirm.isVisible({ timeout: 4000 }).catch(() => false)) {
+    if (!httpDialogSeen) await confirm.waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+    if (await confirm.isVisible().catch(() => false)) {
+      httpDialogSeen = true;
       await confirm.click({ force: true });
       await expect(confirm).not.toBeVisible();
     }
@@ -72,6 +77,7 @@ async function main() {
     return false;
   };
   const tap = async (text, { first = false } = {}) => {
+    await dismissHttpDialog();
     await clearCalls();
     const target = first ? page.getByText(text).first() : page.getByText(text);
     let confirmationShown = false;
