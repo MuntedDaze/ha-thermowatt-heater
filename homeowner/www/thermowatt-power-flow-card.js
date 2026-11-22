@@ -631,7 +631,8 @@ class ThermowattDeviceEnergyCard extends BaseElement {
         const table = button.dataset.table;
         const key = button.dataset.sort;
         const current = this._sort[table];
-        this._sort[table] = { key, direction: current.key === key && current.direction === "desc" ? "asc" : "desc" };
+        const first = key === "name" ? "asc" : "desc"; // names A-Z first, numbers largest first
+        this._sort[table] = { key, direction: current.key === key ? (current.direction === "desc" ? "asc" : "desc") : first };
         this._render();
       });
     }
