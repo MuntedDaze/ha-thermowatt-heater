@@ -422,7 +422,7 @@ export function discoverDevices(hass, config = {}) {
   const devices = [];
   let withoutMonitoring = 0;
   for (const deviceId of monitoredPlatform) {
-    const group = byDevice.get(deviceId);
+    const group = byDevice.get(deviceId) || { energy: [], power: [], labels: new Set(), entities: [] };
     const device = (hass.devices || {})[deviceId] || {};
     const name = device.name_by_user || device.name || (group.entities[0] || deviceId);
     const keys = [name, ...group.entities].map((x) => String(x).toLowerCase());
@@ -614,7 +614,7 @@ const BaseElement = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 // One load per configuration, shared by every card part on the page (summary, daily, monthly, history).
 const SHARED = new Map();
 
-async function computeState(hass, c) {
+export async function computeState(hass, c) {
   const { devices, withoutMonitoring } = discoverDevices(hass, c);
   const now = Date.now();
   const tz = c.timezone;
@@ -622,18 +622,20 @@ async function computeState(hass, c) {
   const monthStart = startOfLocalMonth(now, tz);
   const months = c.history_months ?? 6;
   const historyStart = shiftMonth(now, -months, tz);
-  const split = Math.max(historyStart, now - SHORT_TERM_MS);
+  const split = Math.max(historyStart, Math.ceil((now - SHORT_TERM_MS) / HOUR_MS) * HOUR_MS); // hour-aligned: no overlap
   const buckets = new Map(devices.map((d) => [d.deviceId, []]));
+  const withTimeout = (promise) =>
+    Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("statistics request timed out")), 60e3))]);
   const query = (ids, kind, from, to, period) =>
     ids.length
-      ? hass.callWS({
+      ? withTimeout(hass.callWS({
           type: "recorder/statistics_during_period",
           start_time: new Date(from).toISOString(),
           end_time: new Date(to).toISOString(),
           statistic_ids: ids,
           period,
           types: kind === "energy" ? ["change"] : ["mean"],
-        })
+        }))
       : Promise.resolve({});
   for (const kind of ["energy", "power"]) {
     const group = devices.filter((d) => d.source.kind === kind);
@@ -662,6 +664,7 @@ async function computeState(hass, c) {
       const earliest = own.reduce((m, b) => Math.min(m, b.start), Infinity);
       const partial = data && Number.isFinite(earliest) && earliest > from + HOUR_MS;
       return {
+        deviceId: d.deviceId,
         name: d.name,
         estimated: d.estimated,
         data,
@@ -684,7 +687,7 @@ async function computeState(hass, c) {
     const total = combine(rowsFor(from, shiftDay(now, delta + 1, tz)));
     week.push({ label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][zonedParts(from, tz).weekday], kwh: total ? total.kwh : null, cost: total ? total.cost : null });
   }
-  return { devices, withoutMonitoring, daily, monthly, months: past, week, tz, error: null };
+  return { devices, withoutMonitoring, daily, monthly, months: past, week, tz, error: null, generatedAt: now };
 }
 
 function sharedFor(config) {
@@ -694,11 +697,16 @@ function sharedFor(config) {
   return SHARED.get(key);
 }
 
-class ThermowattDeviceEnergyCard extends BaseElement {
+export class ThermowattDeviceEnergyCard extends BaseElement {
   setConfig(config) {
     if (!config || !Array.isArray(config.rates) || !config.rates.length) throw new Error("rates are required");
     if (!config.tariff) throw new Error("tariff is required");
+    for (const rate of config.rates) {
+      if (!Number.isFinite(Number(rate.peak)) || !Number.isFinite(Number(rate.offpeak))) throw new Error("every rate needs numeric peak and offpeak");
+    }
+    if (this._config) sharedFor(this._config).listeners.delete(this);
     this._config = { timezone: DEFAULT_TIMEZONE, refresh_minutes: 5, part: "all", ...config };
+    this._renderKey = null;
     this._sort = { daily: { key: "kwh", direction: "desc" }, monthly: { key: "kwh", direction: "desc" } };
   }
 
@@ -727,9 +735,9 @@ class ThermowattDeviceEnergyCard extends BaseElement {
       });
     }
     const shared = sharedFor(this._config);
-    shared.listeners.add(this);
-    const due = !shared.loadedAt || Date.now() - shared.loadedAt > this._config.refresh_minutes * 60e3;
-    if (due && !shared.loading) this._load(shared);
+    if (this.isConnected !== false) shared.listeners.add(this);
+    const stale = !shared.loadedAt || Date.now() - shared.loadedAt > this._config.refresh_minutes * 60e3;
+    if (stale && !shared.loading && Date.now() >= (shared.retryAt || 0)) this._load(shared);
     this._render();
   }
 
@@ -742,9 +750,12 @@ class ThermowattDeviceEnergyCard extends BaseElement {
     try {
       shared.state = await computeState(this._hass, this._config);
       shared.loadedAt = Date.now();
+      shared.retryAt = 0;
     } catch (error) {
       shared.state = { ...(shared.state || {}), error: String(error && error.message ? error.message : error) };
+      shared.retryAt = Date.now() + 60e3;
     } finally {
+      shared.version = (shared.version || 0) + 1;
       shared.loading = false;
       for (const card of shared.listeners) card._render();
     }
@@ -752,8 +763,12 @@ class ThermowattDeviceEnergyCard extends BaseElement {
 
   _render() {
     if (!this._root) return;
-    const s = sharedFor(this._config).state;
+    const shared = sharedFor(this._config);
+    const s = shared.state;
     const part = this._config.part;
+    const key = `${shared.version || 0}|${JSON.stringify(this._sort)}|${s ? 1 : 0}`;
+    if (key === this._renderKey) return; // nothing changed: keep focus, scroll position and in-flight clicks
+    this._renderKey = key;
     let html = `<ha-card><style>${STYLE}</style>`;
     if (!s) {
       this._root.innerHTML = html + '<p class="note">Loading device energy…</p></ha-card>';
@@ -767,8 +782,9 @@ class ThermowattDeviceEnergyCard extends BaseElement {
     const monthTotal = combine(s.monthly);
     const partialMonth = s.monthly.some((r) => r.partialFrom);
     const estimated = s.devices.some((d) => d.estimated);
-    const label = monthLabel(Date.now(), s.tz);
+    const label = monthLabel(s.generatedAt || Date.now(), s.tz);
     const want = (name) => part === "all" || part === name;
+    if (s.error) html += `<p class="warn">Latest refresh failed (${escapeHtml(s.error)}); showing the last data loaded.</p>`;
     if (want("summary")) {
       html += '<div class="cards">';
       html += `<div class="box"><span>Today</span><b>${fmtKwh(dailyTotal && dailyTotal.kwh)}</b><span>${fmtMoney(dailyTotal && dailyTotal.cost)} est. operating cost</span></div>`;
@@ -802,7 +818,7 @@ class ThermowattDeviceEnergyCard extends BaseElement {
         html += "<h3>By device (kWh per month)</h3>";
         html += '<div class="scroll"><table><thead><tr><th>Device</th>' + s.months.map((m) => `<th>${escapeHtml(m.label)}</th>`).join("") + "</tr></thead><tbody>";
         for (const d of s.devices) {
-          html += `<tr><td>${escapeHtml(d.name)}</td>` + s.months.map((m) => { const row = m.rows.find((r) => r.name === d.name); return `<td>${row && row.data ? row.data.kwh.toFixed(row.data.kwh < 1 ? 3 : 2) : "—"}</td>`; }).join("") + "</tr>";
+          html += `<tr><td>${escapeHtml(d.name)}</td>` + s.months.map((m) => { const row = m.rows.find((r) => r.deviceId === d.deviceId); return `<td>${row && row.data ? row.data.kwh.toFixed(row.data.kwh < 1 ? 3 : 2) : "—"}</td>`; }).join("") + "</tr>";
         }
         html += "</tbody></table></div>";
       }

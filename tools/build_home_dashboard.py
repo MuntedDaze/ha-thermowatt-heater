@@ -760,6 +760,12 @@ def device_energy_fallback():
     )
 
 
+def _required_rate(rate, key):
+    if key not in rate:
+        raise ValueError(f"device_energy.rates entry {rate} is missing '{key}'")
+    return rate[key]
+
+
 def device_energy_sections(ent, custom):
     """Three columns of card parts sharing one statistics load: summary+daily | monthly | history."""
     if not custom:
@@ -776,8 +782,8 @@ def device_energy_card(ent):
     rates = [
         {
             "effective_from": str(r["effective_from"]),
-            "offpeak": float(r["offpeak"]),
-            "peak": float(r["peak"]),
+            "offpeak": float(_required_rate(r, "offpeak")),
+            "peak": float(_required_rate(r, "peak")),
         }
         for r in cfg.get("rates") or []
     ]
