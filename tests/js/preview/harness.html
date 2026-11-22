@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Thermowatt power-flow card harness</title>
+<!-- Manual/automated visual harness: serve the repo root and open /tests/js/preview/harness.html
+     (add ?theme=dark and/or ?reduce=1). It instantiates the REAL custom element with mock states. -->
+<style>
+  :root { --card-background-color:#fff; --primary-text-color:#212121; --secondary-text-color:#727272; --divider-color:#e0e0e0; }
+  :root[data-theme="dark"] { --card-background-color:#1c1c1c; --primary-text-color:#e1e1e1; --secondary-text-color:#9b9b9b; }
+  body { margin:0; padding:8px; font-family:system-ui,sans-serif; background:#f4f4f4; }
+  :root[data-theme="dark"] body { background:#111; color:#e1e1e1; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:8px; }
+  ha-card { display:block; background:var(--card-background-color); border-radius:12px; overflow:hidden; }
+  h4 { margin:6px 10px 0; font-size:13px; color:var(--secondary-text-color); }
+</style>
+<div class="grid" id="grid"></div>
+<script type="module">
+  const params = new URLSearchParams(location.search);
+  if (params.get("theme") === "dark") document.documentElement.dataset.theme = "dark";
+  if (params.get("reduce") === "1") window.matchMedia = (q) => ({ matches: q.includes("reduce"), addEventListener() {} });
+  // ha-card is a plain element in the harness
+  customElements.define("ha-card", class extends HTMLElement {});
+  await import("/homeowner/www/thermowatt-power-flow-card.js");
+  const now = new Date().toISOString();
+  const s = (state) => ({ state: String(state), attributes: { unit_of_measurement: "W" }, last_reported: now });
+  const cases = {
+    "Exporting 2.923 kW": { pv: 4123, house: 1200, grid: 2923 },
+    "Solar + import": { pv: 800, house: 3000, grid: -2200 },
+    "Night, import": { pv: 0, house: 450, grid: -450 },
+    "Idle": { pv: 0, house: 0, grid: 0 },
+    "Unavailable": { pv: "unavailable", house: "unknown", grid: "unavailable" },
+    "Readings not in sync": { pv: 4000, house: 1000, grid: 1000 },
+  };
+  for (const [title, v] of Object.entries(cases)) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<h4>${title}</h4>`;
+    const card = document.createElement("thermowatt-power-flow-card");
+    card.setConfig({ solar_entity: "s.pv", house_entity: "s.house", grid_entity: "s.grid" });
+    card.hass = { states: { "s.pv": s(v.pv), "s.house": s(v.house), "s.grid": s(v.grid) } };
+    card.id = "card-" + title.replace(/\W+/g, "-").toLowerCase();
+    wrap.appendChild(card);
+    document.getElementById("grid").appendChild(wrap);
+  }
+  document.body.dataset.ready = "1";
+</script>

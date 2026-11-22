@@ -1,0 +1,65 @@
+name: Home dashboard (real Lovelace, isolated)
+
+on:
+  pull_request:
+  push:
+    branches: ["codex/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  home-dashboard:
+    name: Home dashboard HA ${{ matrix.version }} (desktop/mobile)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["2026.11.1"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Prepare browser dependencies before isolating all test networking
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser" @playwright/test@1.64.1
+          docker pull mcr.microsoft.com/playwright:v1.64.1-noble
+          docker pull ghcr.io/home-assistant/home-assistant:${{ matrix.version }}
+          mkdir -p "$RUNNER_TEMP/private" home-results
+          chmod a+rwx "$RUNNER_TEMP/private" home-results
+      - name: Start a disposable HA serving the generated dashboard (no network)
+        run: |
+          docker run -d --name home-ui --network none --entrypoint python3 \
+            --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/private,dst=/private" \
+            ghcr.io/home-assistant/home-assistant:${{ matrix.version }} \
+            /workspace/tools/readiness/home_dashboard_server.py
+          for i in $(seq 1 90); do
+            test -f "$RUNNER_TEMP/private/browser.json" && exit 0
+            test "$(docker inspect -f '{{.State.Running}}' home-ui)" = true || break
+            sleep 1
+          done
+          docker logs home-ui
+          exit 1
+      - name: Render and exercise the dashboard on desktop and phone widths
+        run: |
+          docker run --rm --init --network container:home-ui --shm-size=512m \
+            -e NODE_PATH=/browser/node_modules \
+            --mount "type=bind,src=$RUNNER_TEMP/browser,dst=/browser,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/private,dst=/private,readonly" \
+            --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+            --mount "type=bind,src=$PWD/home-results,dst=/results" \
+            mcr.microsoft.com/playwright:v1.64.1-noble \
+            node /workspace/tools/readiness/home_dashboard.cjs
+      - name: Stop disposable test instance
+        if: always()
+        run: |
+          docker logs home-ui
+          docker rm -f home-ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: home-dashboard-${{ matrix.version }}
+          path: home-results/

@@ -29,7 +29,7 @@
     },
     "binary_sensor.tapo_smart_controller_main_bathroom_fan_running": {
       "name": "Main Bathroom Fan Running",
-      "purpose": "ACTUAL fan state (confirmed)"
+      "purpose": "OBSERVED fan relay state (confirmed)"
     },
     "switch.tapo_smart_controller_main_bathroom_fan_manual_override": {
       "name": "Main Bathroom Fan Manual Override",
@@ -45,7 +45,7 @@
     },
     "binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating": {
       "name": "Main Bathroom Towel Rail Heating",
-      "purpose": "ACTUAL heating (confirmed relay)"
+      "purpose": "OBSERVED towel relay state (on/off/unknown); attributes: summary, permitted_heating, relay_mismatch, control_origin, waiting_for_off_peak"
     },
     "switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override": {
       "name": "Main Bathroom Towel Rail Manual Override",
@@ -77,7 +77,7 @@
     },
     "binary_sensor.tapo_smart_controller_ensuite_fan_running": {
       "name": "Ensuite Fan Running",
-      "purpose": "ACTUAL fan state (confirmed)"
+      "purpose": "OBSERVED fan relay state (confirmed)"
     },
     "switch.tapo_smart_controller_ensuite_fan_manual_override": {
       "name": "Ensuite Fan Manual Override",
@@ -93,7 +93,7 @@
     },
     "binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating": {
       "name": "Ensuite Towel Rail Heating",
-      "purpose": "ACTUAL heating (confirmed relay)"
+      "purpose": "OBSERVED towel relay state (on/off/unknown); attributes: summary, permitted_heating, relay_mismatch, control_origin, waiting_for_off_peak"
     },
     "switch.tapo_smart_controller_ensuite_towel_rail_manual_override": {
       "name": "Ensuite Towel Rail Manual Override",

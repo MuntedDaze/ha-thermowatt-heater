@@ -14,9 +14,10 @@ energy:
   solar_today_energy: {entity: sensor.goodwe_inverter_today_s_pv_generation, status: verified}   # kWh, resets daily
   grid_import_total: {entity: sensor.goodwe_inverter_meter_total_energy_import, status: verified}  # kWh lifetime
   grid_export_total: {entity: sensor.goodwe_inverter_meter_total_energy_export, status: verified}  # kWh lifetime
-  # Battery presence is NOT confirmed. With a battery, "solar used directly" and self-consumption
-  # cannot be derived from import/export/solar, so they are withheld. Set true if a battery exists.
-  battery_present: false
+  # Battery presence is NOT confirmed. "Solar used directly" and self-consumption cannot be derived
+  # with a battery, so they stay unavailable until you confirm there is none: set false (no battery),
+  # true (battery) or leave "unknown".
+  battery_present: unknown
 weather:
   # Rokeby TAS: set to the weather entity of your supported weather integration
   # (e.g. Bureau of Meteorology or Met.no). Not guessed.

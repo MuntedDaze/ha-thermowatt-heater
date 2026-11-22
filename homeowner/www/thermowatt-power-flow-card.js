@@ -29,7 +29,8 @@ export function readWatts(stateObj, staleSeconds = 900, nowMs = Date.now()) {
     const age = (nowMs - new Date(stamp).getTime()) / 1000;
     if (Number.isFinite(age) && age > staleSeconds) return null;
   }
-  const unit = String((stateObj.attributes || {}).unit_of_measurement || "W").toLowerCase();
+  const unit = String((stateObj.attributes || {}).unit_of_measurement || "").trim().toLowerCase();
+  if (unit !== "w" && unit !== "kw") return null; // missing or unexpected unit: never assume
   return unit === "kw" ? value * 1000 : value;
 }
 
@@ -45,7 +46,9 @@ export function travelSeconds(kw) {
 
 /**
  * Pure flow model. solar/house/grid are watts or null; grid is signed.
- * Returns node values, the grid label and the three line flows (watts, direction fixed per line).
+ * A line is drawn only when every reading it depends on was measured AND the three readings
+ * agree with each other (house = solar - export + import, within a tolerance); otherwise it stays
+ * grey and stationary. Nothing is derived from a missing measurement.
  */
 export function computeFlows({ solarW, houseW, gridW, exportPositive = true, idleW = 5 }) {
   const solar = solarW === null ? null : Math.max(0, solarW);
@@ -59,14 +62,27 @@ export function computeFlows({ solarW, houseW, gridW, exportPositive = true, idl
     importW = toGrid < -idleW ? -toGrid : 0;
     gridState = exportW > 0 ? "export" : importW > 0 ? "import" : "idle";
   }
-  const solarActive = solar !== null && solar > idleW;
-  const solarExport = solarActive && exportW ? Math.min(exportW, solar) : 0;
-  let solarToHouse = 0;
-  if (solarActive) {
-    if (house !== null) solarToHouse = Math.min(solar, house);
-    else if (exportW !== null) solarToHouse = Math.max(0, solar - exportW);
+  const known = solar !== null && house !== null && gridState !== "unavailable";
+  let inconsistent = false;
+  if (known) {
+    const supply = solar + importW;
+    const demand = house + exportW;
+    inconsistent = Math.abs(supply - demand) > Math.max(300, 0.15 * Math.max(supply, demand));
   }
-  const gridToHouse = importW && importW > idleW ? importW : 0;
+  const lines = { solarToHouse: 0, solarToGrid: 0, gridToHouse: 0 };
+  const gridKnown = gridState !== "unavailable";
+  if (!inconsistent) {
+    // Each path needs only the readings it is made of.
+    if (gridKnown && house !== null) lines.gridToHouse = Math.min(importW, house);
+    if (gridKnown && solar !== null) lines.solarToGrid = Math.min(exportW, solar);
+    if (known) {
+      lines.solarToHouse = Math.max(
+        0,
+        Math.min(solar - lines.solarToGrid, house - lines.gridToHouse)
+      );
+    }
+    for (const key of Object.keys(lines)) if (lines[key] <= idleW) lines[key] = 0;
+  }
   const label = {
     import: "Grid Import",
     export: "Grid Export",
@@ -79,46 +95,71 @@ export function computeFlows({ solarW, houseW, gridW, exportPositive = true, idl
     gridW: gridState === "unavailable" ? null : exportW || importW || 0,
     gridState,
     gridLabel: label,
-    lines: {
-      solarToHouse: solarToHouse > idleW ? solarToHouse : 0,
-      solarToGrid: solarExport > idleW ? solarExport : 0,
-      gridToHouse,
-    },
+    inconsistent,
+    lines,
   };
 }
 
 // Line geometry in a 400 x 322 viewBox; every path is drawn in its flow direction.
-const PATHS = {
-  solarToHouse: "M178 98 C140 150 100 170 88 205",
-  solarToGrid: "M222 98 C260 150 300 170 312 205",
-  gridToHouse: "M285 245 L115 245",
+const GEOMETRY = {
+  solarToHouse: { p: [[178, 98], [140, 150], [100, 170], [88, 205]] },
+  solarToGrid: { p: [[222, 98], [260, 150], [300, 170], [312, 205]] },
+  gridToHouse: { p: [[285, 245], [115, 245]] },
 };
 const COLOURS = { solarToHouse: GREEN, solarToGrid: GREEN, gridToHouse: ORANGE };
 
-function chevrons(id, kw, colour, reduceMotion) {
-  const dur = travelSeconds(kw);
+function pathD(key) {
+  const p = GEOMETRY[key].p;
+  return p.length === 2
+    ? `M${p[0][0]} ${p[0][1]} L${p[1][0]} ${p[1][1]}`
+    : `M${p[0][0]} ${p[0][1]} C${p[1][0]} ${p[1][1]} ${p[2][0]} ${p[2][1]} ${p[3][0]} ${p[3][1]}`;
+}
+
+/** Point and heading (degrees) at t along a line, for static arrows. */
+export function pointAt(key, t) {
+  const p = GEOMETRY[key].p;
+  if (p.length === 2) {
+    const dx = p[1][0] - p[0][0];
+    const dy = p[1][1] - p[0][1];
+    return { x: p[0][0] + dx * t, y: p[0][1] + dy * t, angle: (Math.atan2(dy, dx) * 180) / Math.PI };
+  }
+  const u = 1 - t;
+  const at = (i) =>
+    u * u * u * p[0][i] + 3 * u * u * t * p[1][i] + 3 * u * t * t * p[2][i] + t * t * t * p[3][i];
+  const d = (i) =>
+    3 * u * u * (p[1][i] - p[0][i]) + 6 * u * t * (p[2][i] - p[1][i]) + 3 * t * t * (p[3][i] - p[2][i]);
+  return { x: at(0), y: at(1), angle: (Math.atan2(d(1), d(0)) * 180) / Math.PI };
+}
+
+function chevrons(key, kw, colour, reduceMotion) {
   const shape = `<path d="M-5 -5 L3 0 L-5 5" fill="none" stroke="${colour}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (reduceMotion) {
+    // Static arrows still show the direction of flow.
+    return [0.3, 0.5, 0.7]
+      .map((t) => {
+        const { x, y, angle } = pointAt(key, t);
+        return `<g class="static-arrow" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${angle.toFixed(1)})">${shape}</g>`;
+      })
+      .join("");
+  }
+  const dur = travelSeconds(kw);
   const items = [];
   for (let i = 0; i < 3; i += 1) {
-    if (reduceMotion) {
-      items.push(`<g transform="translate(${60 + i * 80} 0)">${shape}</g>`);
-    } else {
-      items.push(
-        `<g>${shape}<animateMotion dur="${dur.toFixed(2)}s" begin="-${((dur * i) / 3).toFixed(2)}s" repeatCount="indefinite" rotate="auto"><mpath href="#${id}"/></animateMotion></g>`
-      );
-    }
+    items.push(
+      `<g>${shape}<animateMotion dur="${dur.toFixed(2)}s" begin="-${((dur * i) / 3).toFixed(2)}s" repeatCount="indefinite" rotate="auto"><mpath href="#tw-${key}"/></animateMotion></g>`
+    );
   }
-  return reduceMotion ? "" : items.join("");
+  return items.join("");
 }
 
 export function renderSvg(model, reduceMotion = false) {
-  const lines = Object.keys(PATHS)
+  const lines = Object.keys(GEOMETRY)
     .map((key) => {
       const watts = model.lines[key];
       const active = watts > 0;
       const colour = active ? COLOURS[key] : GREY;
-      const moving = active ? chevrons(`tw-${key}`, watts / 1000, colour, reduceMotion) : "";
-      return `<path id="tw-${key}" d="${PATHS[key]}" fill="none" stroke="${colour}" stroke-width="${active ? 3 : 2}" stroke-linecap="round" opacity="${active ? 0.9 : 0.55}"/>${moving}`;
+      const moving = active ? chevrons(key, watts / 1000, colour, reduceMotion) : "";
+      return `<path id="tw-${key}" d="${pathD(key)}" fill="none" stroke="${colour}" stroke-width="${active ? 3 : 2}" stroke-linecap="round" opacity="${active ? 0.9 : 0.55}"/>${moving}`;
     })
     .join("");
   const gridColour = { import: ORANGE, export: GREEN }[model.gridState] || GREY;
@@ -137,12 +178,16 @@ export function renderSvg(model, reduceMotion = false) {
     node(200, 62, solarColour, sun, "Solar", formatKw(model.solarW)) +
     node(72, 245, model.lines.solarToHouse || model.lines.gridToHouse ? (model.lines.gridToHouse ? ORANGE : GREEN) : GREY, house, "House", formatKw(model.houseW)) +
     node(328, 245, gridColour, grid, model.gridLabel, formatKw(model.gridW)) +
+    (model.inconsistent
+      ? '<text x="200" y="316" text-anchor="middle" font-size="12" fill="var(--secondary-text-color,#727272)">Readings not in sync</text>'
+      : "") +
     "</svg>"
   );
 }
 
 function ariaLabel(model) {
-  return `Solar ${formatKw(model.solarW)}, house ${formatKw(model.houseW)}, ${model.gridLabel} ${formatKw(model.gridW)}`;
+  const sync = model.inconsistent ? ", readings not in sync" : "";
+  return `Solar ${formatKw(model.solarW)}, house ${formatKw(model.houseW)}, ${model.gridLabel} ${formatKw(model.gridW)}${sync}`;
 }
 
 const Base = typeof HTMLElement !== "undefined" ? HTMLElement : class {};

@@ -4,6 +4,7 @@ import {
   computeFlows,
   formatKw,
   readWatts,
+  pointAt,
   renderSvg,
   travelSeconds,
   GREEN,
@@ -13,7 +14,12 @@ import {
 
 const base = { exportPositive: true, idleW: 5 };
 const NOW = Date.parse("2026-11-22T10:00:00Z");
-const st = (state, extra = {}) => ({ state, attributes: {}, last_reported: "2026-11-22T10:00:00Z", ...extra });
+const st = (state, extra = {}) => ({
+  state,
+  attributes: { unit_of_measurement: "W" },
+  last_reported: "2026-11-22T10:00:00Z",
+  ...extra,
+});
 
 test("solar exporting to the grid", () => {
   const m = computeFlows({ ...base, solarW: 4000, houseW: 1200, gridW: 2800 });
@@ -67,10 +73,41 @@ test("unavailable readings are shown as -- and never as zero", () => {
   assert.ok(!svg.includes("animateMotion"));
 });
 
-test("missing house reading falls back to solar minus export, never invents consumption", () => {
+test("a missing house reading leaves every house path grey (nothing derived)", () => {
   const m = computeFlows({ ...base, solarW: 3000, houseW: null, gridW: 1000 });
-  assert.equal(m.lines.solarToHouse, 2000);
   assert.equal(m.houseW, null);
+  assert.equal(m.lines.solarToHouse, 0);
+  assert.equal(m.lines.gridToHouse, 0);
+  assert.equal(m.lines.solarToGrid, 1000); // solar -> grid needs only solar and grid, both measured
+});
+
+test("a missing solar reading cannot animate any solar line", () => {
+  const m = computeFlows({ ...base, solarW: null, houseW: 800, gridW: -800 });
+  assert.equal(m.lines.solarToHouse, 0);
+  assert.equal(m.lines.solarToGrid, 0);
+  assert.equal(m.lines.gridToHouse, 800);
+});
+
+test("readings that disagree are not animated and say so", () => {
+  // house 1 kW, solar 4 kW, grid exporting 1 kW: 3 kW unaccounted for
+  const m = computeFlows({ ...base, solarW: 4000, houseW: 1000, gridW: 1000 });
+  assert.equal(m.inconsistent, true);
+  assert.deepEqual(m.lines, { solarToHouse: 0, solarToGrid: 0, gridToHouse: 0 });
+  const svg = renderSvg(m);
+  assert.ok(svg.includes("Readings not in sync"));
+  assert.ok(!svg.includes("animateMotion"));
+});
+
+test("solar is never double counted into house and grid", () => {
+  const m = computeFlows({ ...base, solarW: 4000, houseW: 1200, gridW: 2800 });
+  assert.ok(m.lines.solarToHouse + m.lines.solarToGrid <= 4000 + 1e-9);
+  assert.ok(m.lines.gridToHouse <= 1200);
+});
+
+test("small meter timing differences are tolerated", () => {
+  const m = computeFlows({ ...base, solarW: 4000, houseW: 1250, gridW: 2900 });
+  assert.equal(m.inconsistent, false);
+  assert.ok(m.lines.solarToGrid > 0 && m.lines.solarToHouse > 0);
 });
 
 test("grid sign convention is configurable", () => {
@@ -101,9 +138,21 @@ test("active lines animate with the right colours and direction", () => {
   assert.ok(imp.includes(ORANGE) && !imp.includes(GREEN));
 });
 
-test("reduced motion renders no animation", () => {
+test("reduced motion shows static arrows pointing in the direction of flow", () => {
   const svg = renderSvg(computeFlows({ ...base, solarW: 4000, houseW: 1200, gridW: 2800 }), true);
   assert.ok(!svg.includes("animateMotion"));
+  assert.equal((svg.match(/static-arrow/g) || []).length, 6); // 2 active lines x 3 arrows
+  const imp = renderSvg(computeFlows({ ...base, solarW: 0, houseW: 900, gridW: -900 }), true);
+  assert.equal((imp.match(/static-arrow/g) || []).length, 3);
+  assert.ok(/rotate\((180|-180)\.0\)/.test(imp)); // grid -> house points left
+});
+
+test("static arrow headings follow each line's direction", () => {
+  assert.ok(Math.abs(Math.abs(pointAt("gridToHouse", 0.5).angle) - 180) < 1e-9); // leftwards
+  const toHouse = pointAt("solarToHouse", 0.5).angle;
+  assert.ok(toHouse > 90 && toHouse < 180); // down and to the left
+  const toGrid = pointAt("solarToGrid", 0.5).angle;
+  assert.ok(toGrid > 0 && toGrid < 90); // down and to the right
 });
 
 test("readWatts handles units, unavailable and stale values", () => {
@@ -112,6 +161,9 @@ test("readWatts handles units, unavailable and stale values", () => {
   assert.equal(readWatts(st("unavailable"), 900, NOW), null);
   assert.equal(readWatts(st("unknown"), 900, NOW), null);
   assert.equal(readWatts(st("abc"), 900, NOW), null);
+  assert.equal(readWatts(st("5", { attributes: {} }), 900, NOW), null); // missing unit
+  assert.equal(readWatts(st("5", { attributes: { unit_of_measurement: "MW" } }), 900, NOW), null);
+  assert.equal(readWatts(st("5", { attributes: { unit_of_measurement: "%" } }), 900, NOW), null);
   assert.equal(readWatts(undefined, 900, NOW), null);
   assert.equal(readWatts(st("100", { last_reported: "2026-11-22T09:00:00Z" }), 900, NOW), null);
 });

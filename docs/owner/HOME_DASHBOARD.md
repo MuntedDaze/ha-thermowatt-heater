@@ -32,7 +32,7 @@ colour shows the **confirmed** state, and starting heating (towel rail, 12 h ove
 | --- | --- | --- |
 | `weather.entity` | Rokeby TAS weather | Developer Tools -> States, filter `weather.` (Bureau of Meteorology or Met.no integration) |
 | `lights.dining_room.entity`, `lights.living_room.entity` | the two light toggles | Developer Tools -> States, filter `light.` |
-| `energy.battery_present` | `true` withholds "solar used directly" and self-consumption (cannot be derived with a battery) | your inverter |
+| `energy.battery_present` | shipped as `unknown`: "solar used directly" and self-consumption stay unavailable until you set `false` (no battery). `true` keeps them withheld (cannot be derived with a battery) | your inverter |
 
 Until set, the card is replaced by a "mapping needed" note. After editing run the generator and
 re-paste the YAML. All GoodWe entities in the file are marked `verified` (live registry, 12 Nov 2026).
@@ -65,7 +65,7 @@ and grid export, orange = grid import, grey and stationary = inactive. Chevron s
 power (3 / kW seconds, limited to 0.5-8 s). The grid label changes between **Grid Import**, **Grid Export**,
 **Grid Idle** and **Grid Unavailable**; values are kW to three decimals. Unavailable, unknown or stale
 (> 15 min) readings show `--`, never zero, and their lines stay grey. Simultaneous solar and import,
-night-time consumption and zero flow are handled (see `tests/js/power_flow_card.test.mjs`). It is a single
+night-time consumption and zero flow are handled; a path is animated only when every measurement it needs is present and the three readings agree (house = solar - export + import within a tolerance), otherwise it stays grey with a "Readings not in sync" note; units must be W or kW; reduced-motion shows static arrows that still point in the flow direction (see `tests/js/power_flow_card.test.mjs`). It is a single
 dependency-free file using SVG, redraws only when a value changes, honours `prefers-reduced-motion`, and
 uses theme variables for light and dark.
 
@@ -75,16 +75,20 @@ uses theme variables for light and dark.
 | --- | --- |
 | Live solar / house / grid | measured GoodWe entities (W) -> kW |
 | Today's solar | inverter's own daily generation |
-| Grid import / export today | daily `utility_meter` on the lifetime import/export counters (counter resets handled) |
-| Household today | integration of measured house power (`max_sub_interval` so steady zero still accrues) |
-| Solar used directly | solar today - export today (not below 0) |
-| Self-consumption % | only when no battery, >= 1 kWh generated, and counters agree; otherwise unavailable |
+| Grid import / export today | daily `utility_meter` on the lifetime counters, shown only once the meter covers a **full day** |
+| Household today | integration of measured house power (`max_sub_interval`), full-day only |
+| Solar used directly | solar today - export today; needs confirmed no battery, a full-day export meter, fresh sources and export <= generation (otherwise unavailable, never clamped) |
+| Self-consumption % | the same conditions plus >= 1 kWh generated |
 
-EMHASS forecasts are never shown as measurements. Missing sensors give `unavailable`, not guessed zeros.
+Daily meters start when the package is installed, so on the **first day** these figures are unavailable (the
+Energy view shows the raw meters as "partial on the day installed"; its statistics cards are retroactive).
+From the first midnight onward they are exact. A meter is trusted only if its `last_reset` is at or before
+00:05 today; sources must have reported within 30 minutes (house power 15). EMHASS forecasts are never shown
+as measurements, and an unavailable source gives `unavailable`, not a guessed zero.
 
 ## Limitations (need supervised testing)
 
-* Rendering was validated structurally and by unit tests; it has not been viewed on your Home Assistant.
+* Rendering: the card was rendered in a real browser (desktop/phone widths, light/dark, reduced motion) and the full dashboard is rendered by a real Home Assistant frontend in CI (`.github/workflows/home-dashboard-frontend.yml`, synthetic states, service calls recorded not executed). It has not been viewed on YOUR Home Assistant.
 * Weather, lights and battery presence are unmapped/unconfirmed until you fill the mapping file.
 * No physical hardware testing has occurred; towel-rail and fan behaviour is simulated (Tapo v0.3.0).
 * The package's daily meters start at installation.

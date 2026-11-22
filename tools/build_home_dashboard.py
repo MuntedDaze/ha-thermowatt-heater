@@ -184,6 +184,9 @@ def package_ids():
         "import_kw": "sensor.home_grid_import_kw",
         "export_kw": "sensor.home_grid_export_kw",
         "grid_state": "sensor.home_grid_state",
+        "import_meter": "sensor.home_grid_import_meter",
+        "export_meter": "sensor.home_grid_export_meter",
+        "consumption_meter": "sensor.home_consumption_meter",
         "import_today": "sensor.home_grid_import_today",
         "export_today": "sensor.home_grid_export_today",
         "consumption_today": "sensor.home_consumption_today",
@@ -242,6 +245,24 @@ def energy_tiles(ent):
     }
 
 
+def partial_meters(ent):
+    ids = package_ids()
+    rows = []
+    for key, label in (
+        ("import_meter", "Grid import since installed"),
+        ("export_meter", "Grid export since installed"),
+        ("consumption_meter", "Household since installed"),
+    ):
+        ent.used[ids[key]] = "home_energy_package"
+        rows.append(sensor_row(ids[key], label))
+    return {
+        "type": "entities",
+        "title": "Raw daily meters (partial on the day installed)",
+        "show_header_toggle": False,
+        "entities": rows,
+    }
+
+
 def statistics_cards(ent):
     cards = []
     for key, name in (
@@ -271,7 +292,10 @@ def hot_water_card(ent):
     rows = [
         sensor_row(ent.thermowatt("sensor", "Bottom temperature"), "Tank bottom temperature"),
         sensor_row(ent.thermowatt("sensor", "Status age"), "Reading age (min)"),
-        sensor_row(mode, "Mode"),
+        sensor_row(ent.thermowatt("sensor", "Thermann mode"), "Reported mode"),
+        sensor_row(ent.thermowatt("sensor", "Thermann target"), "Reported target"),
+        sensor_row(ent.thermowatt("sensor", "Desired thermostat temperature"), "Desired target"),
+        sensor_row(mode, "Controller mode"),
         sensor_row(ent.thermowatt("sensor", "Current heating plan"), "Plan"),
         sensor_row(ent.thermowatt("sensor", "Next intended action"), "Next action"),
         sensor_row(ent.thermowatt("sensor", "Current tariff"), "Tariff"),
@@ -358,23 +382,67 @@ def bathroom_card(ent, name):
     towel_status = ent.tapo("sensor", name, "Towel Rail Status")
     ent.used[towel_status] = "tapo_smart_controller"
 
-    def toggle(entity, switch, label, icon, on_text, off_text, question=None):
-        # Colour follows the ACTUAL state (blue running/heating, grey not); the tap acts on the
-        # separate manual-request switch, so request state is never mistaken for physical state.
-        cancel = tile(
-            entity, label, icon, "blue", content="summary", tap=call("switch.turn_off", switch)
-        )
-        request = tile(
-            entity,
-            label,
-            icon,
-            "blue",
-            content="summary",
-            tap=call("switch.turn_on", switch, question),
-        )
+    def toggle(entity, switch, label, icons, question=None):
+        """Four mutually exclusive states; colour follows the OBSERVED state (entity).
+
+        manual request  -> blue, tap cancels (also cancels a queued request still waiting)
+        automatic/on    -> blue, tap requests a manual run
+        off             -> grey, tap requests a manual run
+        status unknown  -> grey and inert (never a command on an unknown state)
+        """
+        unknown_any = {
+            "condition": "or",
+            "conditions": [
+                {"condition": "state", "entity": e, "state": st}
+                for e in (switch, entity)
+                for st in ("unavailable", "unknown")
+            ],
+        }
+        manual, auto, off, unknown = icons
         return [
-            conditional(when(switch, "on"), cancel),
-            conditional(when(switch, not_states=("on",)), request),
+            conditional(
+                when(switch, "on"),
+                tile(
+                    entity,
+                    f"{label}: manual",
+                    manual,
+                    "blue",
+                    content="summary",
+                    tap=call("switch.turn_off", switch),
+                ),
+            ),
+            conditional(
+                [
+                    *when(switch, "off"),
+                    {"condition": "state", "entity": entity, "state": "on"},
+                ],
+                tile(
+                    entity,
+                    f"{label}: automatic",
+                    auto,
+                    "blue",
+                    content="summary",
+                    tap=call("switch.turn_on", switch, question),
+                ),
+            ),
+            conditional(
+                [
+                    *when(switch, "off"),
+                    {"condition": "state", "entity": entity, "state": "off"},
+                ],
+                tile(
+                    entity,
+                    f"{label}: off",
+                    off,
+                    "grey",
+                    content="summary",
+                    tap=call("switch.turn_on", switch, question),
+                ),
+            ),
+            conditional(
+                [*when(switch, not_states=("on",)), unknown_any],
+                tile(entity, f"{label}: status unknown", unknown, "grey", content="summary"),
+            ),
         ]
 
     return {
@@ -392,14 +460,17 @@ def bathroom_card(ent, name):
                     tile(status, "Extraction", "mdi:fan-clock", None, content="summary"),
                 ],
             },
-            *toggle(fan, fan_switch, "Fan", "mdi:fan", "ON", "OFF"),
+            *toggle(
+                fan,
+                fan_switch,
+                "Fan",
+                ("mdi:fan-clock", "mdi:fan", "mdi:fan-off", "mdi:fan-alert"),
+            ),
             *toggle(
                 towel,
                 towel_switch,
                 "Towel rail",
-                "mdi:radiator",
-                "ON",
-                "OFF",
+                ("mdi:radiator", "mdi:radiator", "mdi:radiator-off", "mdi:radiator-disabled"),
                 "Request one towel-rail drying cycle? It only heats during off-peak.",
             ),
         ],
@@ -492,6 +563,7 @@ def build_views(ent, custom):
             section(
                 heading("Today (long-term statistics)", "mdi:chart-bar"),
                 *statistics_cards(ent),
+                partial_meters(ent),
                 history(
                     "Power (24 h)",
                     [
@@ -501,9 +573,10 @@ def build_views(ent, custom):
                     ],
                 ),
                 note(
-                    "Daily household, import and export figures come from the optional "
-                    "`home_energy_package.yaml` and begin counting when it is installed; the "
-                    "statistics cards above are retroactive. EMHASS forecasts are never shown as "
+                    "Today's household, import, export, direct-use and self-consumption figures come from "
+                    "the optional `home_energy_package.yaml` and appear only once the daily meters "
+                    "cover a full day (from the first midnight after installation); the raw meters and "
+                    "the statistics cards above show partial or retroactive data meanwhile. EMHASS forecasts are never shown as "
                     "measurements."
                 ),
             ),
@@ -673,11 +746,9 @@ def build_package(mapping=None):
         if isinstance(mapping["energy"][key], dict)
     }
     export_positive = bool(mapping["energy"]["grid_export_positive"])
-    battery = bool(mapping["energy"]["battery_present"])
     grid_expr = f"(states('{e['grid_power']}') | float)"
     toward_grid = grid_expr if export_positive else f"(0 - {grid_expr})"
     idle_w = IDLE_KW * 1000
-    ids = package_ids()
 
     def tmpl(
         name, unique, state, availability, unit=None, device_class=None, state_class=None, icon=None
@@ -739,30 +810,116 @@ def build_package(mapping=None):
             icon="mdi:transmission-tower",
         ),
     ]
-    solar_today, export_today = e["solar_today_energy"], ids["export_today"]
+    solar_today = e["solar_today_energy"]
+    meters = {
+        "import": ("home_grid_import_meter", "Home grid import meter", e["grid_import_total"]),
+        "export": ("home_grid_export_meter", "Home grid export meter", e["grid_export_total"]),
+        "consumption": (
+            "home_consumption_meter",
+            "Home consumption meter",
+            "sensor.home_house_energy_total",
+        ),
+    }
+    meter_id = {k: f"sensor.{v[0]}" for k, v in meters.items()}
+
+    def full_day(meter):
+        # A meter created mid-day only holds part of the day: trust it from the first midnight.
+        last = f"state_attr('{meter}', 'last_reset')"
+        return (
+            f"({last} is not none and ({last} | as_datetime) is not none and "
+            f"({last} | as_datetime) <= now().replace(hour=0, minute=5, second=0, microsecond=0))"
+        )
+
+    def fresh(entity, seconds=1800):
+        return (
+            f"(states['{entity}'] is not none and "
+            f"(now() - states['{entity}'].last_reported).total_seconds() < {seconds})"
+        )
+
+    def avail(*conditions):
+        return "{{ " + " and ".join(conditions) + " }}"
+
+    # Battery presence must be CONFIRMED absent: unknown or present withholds derived figures.
+    battery_ok = "true" if mapping["energy"]["battery_present"] is False else "false"
+    numeric = [f"is_number(states('{x}'))" for x in (solar_today, e["grid_export_total"])]
+    sound = (
+        f"states('{solar_today}') | float >= 0 and "
+        f"states('{meter_id['export']}') | float <= states('{solar_today}') | float + 0.3"
+    )
+    coverage = [full_day(meter_id["export"]), fresh(solar_today), fresh(e["grid_export_total"])]
+    direct_state = (
+        f"{{{{ ((states('{solar_today}') | float - states('{meter_id['export']}') | float)"
+        f" | round(3)) }}}}"
+    )
     sensors += [
+        tmpl(
+            "Home grid import today",
+            "home_grid_import_today",
+            f"{{{{ states('{meter_id['import']}') | float | round(3) }}}}",
+            avail(
+                f"is_number(states('{meter_id['import']}'))",
+                full_day(meter_id["import"]),
+                fresh(e["grid_import_total"]),
+            ),
+            "kWh",
+            "energy",
+            icon="mdi:transmission-tower-import",
+        ),
+        tmpl(
+            "Home grid export today",
+            "home_grid_export_today",
+            f"{{{{ states('{meter_id['export']}') | float | round(3) }}}}",
+            avail(
+                f"is_number(states('{meter_id['export']}'))",
+                full_day(meter_id["export"]),
+                fresh(e["grid_export_total"]),
+            ),
+            "kWh",
+            "energy",
+            icon="mdi:transmission-tower-export",
+        ),
+        tmpl(
+            "Home consumption today",
+            "home_consumption_today",
+            f"{{{{ states('{meter_id['consumption']}') | float | round(3) }}}}",
+            avail(
+                f"is_number(states('{meter_id['consumption']}'))",
+                full_day(meter_id["consumption"]),
+                fresh(e["house_power"], 900),
+            ),
+            "kWh",
+            "energy",
+            icon="mdi:home-lightning-bolt",
+        ),
         tmpl(
             "Home solar used directly today",
             "home_solar_used_directly_today",
-            f"{{{{ ([states('{solar_today}') | float - states('{export_today}') | float, 0] | max) | round(3) }}}}",
-            "{{ false }}" if battery else _numeric(solar_today, export_today),
+            direct_state,
+            avail(
+                battery_ok,
+                *numeric,
+                f"is_number(states('{meter_id['export']}'))",
+                *coverage,
+                sound,
+            ),
             "kWh",
             "energy",
-            "total",
+            icon="mdi:home-battery",
         ),
         tmpl(
             "Home self-consumption today",
             "home_self_consumption_today",
-            f"{{{{ (([states('{solar_today}') | float - states('{export_today}') | float, 0] | max) / states('{solar_today}') | float * 100) | round(0) }}}}",
-            # Trustworthy only: no battery, real generation so far today, and counters that agree
-            # (export cannot exceed generation beyond a small reset-timing tolerance).
-            "{{ false }}"
-            if battery
-            else (
-                "{{ "
-                + _numeric(solar_today, export_today)[3:-3]
-                + f" and states('{solar_today}') | float >= 1.0"
-                + f" and states('{export_today}') | float <= states('{solar_today}') | float + 0.3 }}}}"
+            f"{{{{ (((states('{solar_today}') | float - states('{meter_id['export']}') | float)"
+            f" / states('{solar_today}') | float * 100) | round(0)) }}}}",
+            # Trustworthy only: confirmed no battery, a full-day export meter, fresh sources,
+            # real generation so far today, and counters that agree.
+            avail(
+                battery_ok,
+                *numeric,
+                f"is_number(states('{meter_id['export']}'))",
+                *coverage,
+                sound,
+                f"states('{solar_today}') | float >= 1.0",
             ),
             "%",
             None,
@@ -770,27 +927,12 @@ def build_package(mapping=None):
             "mdi:percent-circle",
         ),
     ]
+    utility_meter = {
+        key: {"name": name, "unique_id": unique, "source": source, "cycle": "daily"}
+        for key, (unique, name, source) in meters.items()
+    }
     return {
-        "utility_meter": {
-            "home_grid_import_today": {
-                "name": "Home grid import today",
-                "unique_id": "home_grid_import_today",
-                "source": e["grid_import_total"],
-                "cycle": "daily",
-            },
-            "home_grid_export_today": {
-                "name": "Home grid export today",
-                "unique_id": "home_grid_export_today",
-                "source": e["grid_export_total"],
-                "cycle": "daily",
-            },
-            "home_consumption_today": {
-                "name": "Home consumption today",
-                "unique_id": "home_consumption_today",
-                "source": "sensor.home_house_energy_total",
-                "cycle": "daily",
-            },
-        },
+        "utility_meter": {meters[k][0]: utility_meter[k] for k in meters},
         "sensor": [
             {
                 "platform": "integration",
@@ -819,7 +961,8 @@ HEADERS = {
     "package": (
         "# Optional Home Assistant package (generated by tools/build_home_dashboard.py).\n"
         "# Save as /config/packages/thermowatt_home_energy.yaml with 'homeassistant: packages: !include_dir_named packages'.\n"
-        "# Daily meters start counting when installed; a restart (not a reset) is needed to load it.\n"
+        "# Daily meters start when installed; derived daily figures stay unavailable until the first full day,\n"
+        "# and need energy.battery_present: false in the mapping. Reload (not reset) to load it.\n"
     ),
 }
 

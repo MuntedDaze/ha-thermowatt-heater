@@ -179,8 +179,14 @@ views:
           name: Tank bottom temperature
         - entity: sensor.thermann_shadow_status_age
           name: Reading age (min)
+        - entity: sensor.thermann_shadow_thermann_mode
+          name: Reported mode
+        - entity: sensor.thermann_shadow_thermann_target
+          name: Reported target
+        - entity: sensor.thermann_shadow_desired_thermostat_temperature
+          name: Desired target
         - entity: sensor.thermann_shadow_hot_water_operating_mode
-          name: Mode
+          name: Controller mode
         - entity: sensor.thermann_shadow_current_heating_plan
           name: Plan
         - entity: sensor.thermann_shadow_next_intended_action
@@ -444,8 +450,8 @@ views:
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-          name: Fan
-          icon: mdi:fan
+          name: 'Fan: manual'
+          icon: mdi:fan-clock
           color: blue
           state_content: summary
           tap_action:
@@ -465,11 +471,14 @@ views:
         conditions:
         - condition: state
           entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-          state_not: 'on'
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+          state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-          name: Fan
+          name: 'Fan: automatic'
           icon: mdi:fan
           color: blue
           state_content: summary
@@ -489,12 +498,73 @@ views:
       - type: conditional
         conditions:
         - condition: state
+          entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+          state: 'off'
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+          name: 'Fan: off'
+          icon: mdi:fan-off
+          color: grey
+          state_content: summary
+          tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+          icon_tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+          state_not: 'on'
+        - condition: or
+          conditions:
+          - condition: state
+            entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+            state: unavailable
+          - condition: state
+            entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+            state: unknown
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+            state: unavailable
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+            state: unknown
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+          name: 'Fan: status unknown'
+          icon: mdi:fan-alert
+          color: grey
+          state_content: summary
+          tap_action:
+            action: more-info
+          icon_tap_action:
+            action: more-info
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
           entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
           state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          name: Towel rail
+          name: 'Towel rail: manual'
           icon: mdi:radiator
           color: blue
           state_content: summary
@@ -515,11 +585,14 @@ views:
         conditions:
         - condition: state
           entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          state_not: 'on'
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+          state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          name: Towel rail
+          name: 'Towel rail: automatic'
           icon: mdi:radiator
           color: blue
           state_content: summary
@@ -537,6 +610,71 @@ views:
               entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
             confirmation:
               text: Request one towel-rail drying cycle? It only heats during off-peak.
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+          state: 'off'
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+          name: 'Towel rail: off'
+          icon: mdi:radiator-off
+          color: grey
+          state_content: summary
+          tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+            confirmation:
+              text: Request one towel-rail drying cycle? It only heats during off-peak.
+          icon_tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+            confirmation:
+              text: Request one towel-rail drying cycle? It only heats during off-peak.
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+          state_not: 'on'
+        - condition: or
+          conditions:
+          - condition: state
+            entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+            state: unavailable
+          - condition: state
+            entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+            state: unknown
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+            state: unavailable
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+            state: unknown
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+          name: 'Towel rail: status unknown'
+          icon: mdi:radiator-disabled
+          color: grey
+          state_content: summary
+          tap_action:
+            action: more-info
+          icon_tap_action:
+            action: more-info
           hold_action:
             action: none
           vertical: false
@@ -607,8 +745,8 @@ views:
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-          name: Fan
-          icon: mdi:fan
+          name: 'Fan: manual'
+          icon: mdi:fan-clock
           color: blue
           state_content: summary
           tap_action:
@@ -628,11 +766,14 @@ views:
         conditions:
         - condition: state
           entity: switch.tapo_smart_controller_ensuite_fan_manual_override
-          state_not: 'on'
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+          state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-          name: Fan
+          name: 'Fan: automatic'
           icon: mdi:fan
           color: blue
           state_content: summary
@@ -652,12 +793,73 @@ views:
       - type: conditional
         conditions:
         - condition: state
+          entity: switch.tapo_smart_controller_ensuite_fan_manual_override
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+          state: 'off'
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+          name: 'Fan: off'
+          icon: mdi:fan-off
+          color: grey
+          state_content: summary
+          tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
+          icon_tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_ensuite_fan_manual_override
+          state_not: 'on'
+        - condition: or
+          conditions:
+          - condition: state
+            entity: switch.tapo_smart_controller_ensuite_fan_manual_override
+            state: unavailable
+          - condition: state
+            entity: switch.tapo_smart_controller_ensuite_fan_manual_override
+            state: unknown
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+            state: unavailable
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+            state: unknown
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+          name: 'Fan: status unknown'
+          icon: mdi:fan-alert
+          color: grey
+          state_content: summary
+          tap_action:
+            action: more-info
+          icon_tap_action:
+            action: more-info
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
           entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
           state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          name: Towel rail
+          name: 'Towel rail: manual'
           icon: mdi:radiator
           color: blue
           state_content: summary
@@ -678,11 +880,14 @@ views:
         conditions:
         - condition: state
           entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          state_not: 'on'
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+          state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          name: Towel rail
+          name: 'Towel rail: automatic'
           icon: mdi:radiator
           color: blue
           state_content: summary
@@ -700,6 +905,71 @@ views:
               entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
             confirmation:
               text: Request one towel-rail drying cycle? It only heats during off-peak.
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+          state: 'off'
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+          name: 'Towel rail: off'
+          icon: mdi:radiator-off
+          color: grey
+          state_content: summary
+          tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+            confirmation:
+              text: Request one towel-rail drying cycle? It only heats during off-peak.
+          icon_tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+            confirmation:
+              text: Request one towel-rail drying cycle? It only heats during off-peak.
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+          state_not: 'on'
+        - condition: or
+          conditions:
+          - condition: state
+            entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+            state: unavailable
+          - condition: state
+            entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+            state: unknown
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+            state: unavailable
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+            state: unknown
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+          name: 'Towel rail: status unknown'
+          icon: mdi:radiator-disabled
+          color: grey
+          state_content: summary
+          tap_action:
+            action: more-info
+          icon_tap_action:
+            action: more-info
           hold_action:
             action: none
           vertical: false
@@ -883,6 +1153,16 @@ views:
       period:
         calendar:
           period: day
+    - type: entities
+      title: Raw daily meters (partial on the day installed)
+      show_header_toggle: false
+      entities:
+      - entity: sensor.home_grid_import_meter
+        name: Grid import since installed
+      - entity: sensor.home_grid_export_meter
+        name: Grid export since installed
+      - entity: sensor.home_consumption_meter
+        name: Household since installed
     - type: history-graph
       title: Power (24 h)
       hours_to_show: 24
@@ -891,9 +1171,10 @@ views:
       - sensor.goodwe_inverter_house_consumption
       - sensor.goodwe_inverter_meter_active_power
     - type: markdown
-      content: Daily household, import and export figures come from the optional `home_energy_package.yaml`
-        and begin counting when it is installed; the statistics cards above are retroactive. EMHASS
-        forecasts are never shown as measurements.
+      content: Today's household, import, export, direct-use and self-consumption figures come from
+        the optional `home_energy_package.yaml` and appear only once the daily meters cover a full
+        day (from the first midnight after installation); the raw meters and the statistics cards
+        above show partial or retroactive data meanwhile. EMHASS forecasts are never shown as measurements.
 - title: Hot water
   path: hot-water
   icon: mdi:water-boiler
@@ -915,8 +1196,14 @@ views:
           name: Tank bottom temperature
         - entity: sensor.thermann_shadow_status_age
           name: Reading age (min)
+        - entity: sensor.thermann_shadow_thermann_mode
+          name: Reported mode
+        - entity: sensor.thermann_shadow_thermann_target
+          name: Reported target
+        - entity: sensor.thermann_shadow_desired_thermostat_temperature
+          name: Desired target
         - entity: sensor.thermann_shadow_hot_water_operating_mode
-          name: Mode
+          name: Controller mode
         - entity: sensor.thermann_shadow_current_heating_plan
           name: Plan
         - entity: sensor.thermann_shadow_next_intended_action
@@ -1155,8 +1442,8 @@ views:
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-          name: Fan
-          icon: mdi:fan
+          name: 'Fan: manual'
+          icon: mdi:fan-clock
           color: blue
           state_content: summary
           tap_action:
@@ -1176,11 +1463,14 @@ views:
         conditions:
         - condition: state
           entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-          state_not: 'on'
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+          state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-          name: Fan
+          name: 'Fan: automatic'
           icon: mdi:fan
           color: blue
           state_content: summary
@@ -1200,12 +1490,73 @@ views:
       - type: conditional
         conditions:
         - condition: state
+          entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+          state: 'off'
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+          name: 'Fan: off'
+          icon: mdi:fan-off
+          color: grey
+          state_content: summary
+          tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+          icon_tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+          state_not: 'on'
+        - condition: or
+          conditions:
+          - condition: state
+            entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+            state: unavailable
+          - condition: state
+            entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+            state: unknown
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+            state: unavailable
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+            state: unknown
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+          name: 'Fan: status unknown'
+          icon: mdi:fan-alert
+          color: grey
+          state_content: summary
+          tap_action:
+            action: more-info
+          icon_tap_action:
+            action: more-info
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
           entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
           state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          name: Towel rail
+          name: 'Towel rail: manual'
           icon: mdi:radiator
           color: blue
           state_content: summary
@@ -1226,11 +1577,14 @@ views:
         conditions:
         - condition: state
           entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          state_not: 'on'
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+          state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          name: Towel rail
+          name: 'Towel rail: automatic'
           icon: mdi:radiator
           color: blue
           state_content: summary
@@ -1248,6 +1602,71 @@ views:
               entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
             confirmation:
               text: Request one towel-rail drying cycle? It only heats during off-peak.
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+          state: 'off'
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+          name: 'Towel rail: off'
+          icon: mdi:radiator-off
+          color: grey
+          state_content: summary
+          tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+            confirmation:
+              text: Request one towel-rail drying cycle? It only heats during off-peak.
+          icon_tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+            confirmation:
+              text: Request one towel-rail drying cycle? It only heats during off-peak.
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+          state_not: 'on'
+        - condition: or
+          conditions:
+          - condition: state
+            entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+            state: unavailable
+          - condition: state
+            entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
+            state: unknown
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+            state: unavailable
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+            state: unknown
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+          name: 'Towel rail: status unknown'
+          icon: mdi:radiator-disabled
+          color: grey
+          state_content: summary
+          tap_action:
+            action: more-info
+          icon_tap_action:
+            action: more-info
           hold_action:
             action: none
           vertical: false
@@ -1326,8 +1745,8 @@ views:
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-          name: Fan
-          icon: mdi:fan
+          name: 'Fan: manual'
+          icon: mdi:fan-clock
           color: blue
           state_content: summary
           tap_action:
@@ -1347,11 +1766,14 @@ views:
         conditions:
         - condition: state
           entity: switch.tapo_smart_controller_ensuite_fan_manual_override
-          state_not: 'on'
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+          state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-          name: Fan
+          name: 'Fan: automatic'
           icon: mdi:fan
           color: blue
           state_content: summary
@@ -1371,12 +1793,73 @@ views:
       - type: conditional
         conditions:
         - condition: state
+          entity: switch.tapo_smart_controller_ensuite_fan_manual_override
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+          state: 'off'
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+          name: 'Fan: off'
+          icon: mdi:fan-off
+          color: grey
+          state_content: summary
+          tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
+          icon_tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_ensuite_fan_manual_override
+          state_not: 'on'
+        - condition: or
+          conditions:
+          - condition: state
+            entity: switch.tapo_smart_controller_ensuite_fan_manual_override
+            state: unavailable
+          - condition: state
+            entity: switch.tapo_smart_controller_ensuite_fan_manual_override
+            state: unknown
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+            state: unavailable
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+            state: unknown
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
+          name: 'Fan: status unknown'
+          icon: mdi:fan-alert
+          color: grey
+          state_content: summary
+          tap_action:
+            action: more-info
+          icon_tap_action:
+            action: more-info
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
           entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
           state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          name: Towel rail
+          name: 'Towel rail: manual'
           icon: mdi:radiator
           color: blue
           state_content: summary
@@ -1397,11 +1880,14 @@ views:
         conditions:
         - condition: state
           entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          state_not: 'on'
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+          state: 'on'
         card:
           type: tile
           entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          name: Towel rail
+          name: 'Towel rail: automatic'
           icon: mdi:radiator
           color: blue
           state_content: summary
@@ -1419,6 +1905,71 @@ views:
               entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
             confirmation:
               text: Request one towel-rail drying cycle? It only heats during off-peak.
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+          state: 'off'
+        - condition: state
+          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+          state: 'off'
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+          name: 'Towel rail: off'
+          icon: mdi:radiator-off
+          color: grey
+          state_content: summary
+          tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+            confirmation:
+              text: Request one towel-rail drying cycle? It only heats during off-peak.
+          icon_tap_action:
+            action: perform-action
+            perform_action: switch.turn_on
+            target:
+              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+            confirmation:
+              text: Request one towel-rail drying cycle? It only heats during off-peak.
+          hold_action:
+            action: none
+          vertical: false
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+          state_not: 'on'
+        - condition: or
+          conditions:
+          - condition: state
+            entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+            state: unavailable
+          - condition: state
+            entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
+            state: unknown
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+            state: unavailable
+          - condition: state
+            entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+            state: unknown
+        card:
+          type: tile
+          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+          name: 'Towel rail: status unknown'
+          icon: mdi:radiator-disabled
+          color: grey
+          state_content: summary
+          tap_action:
+            action: more-info
+          icon_tap_action:
+            action: more-info
           hold_action:
             action: none
           vertical: false

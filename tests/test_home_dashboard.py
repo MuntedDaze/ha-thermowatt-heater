@@ -224,29 +224,83 @@ def test_hot_water_override_toggle_is_state_driven_and_confirmed(home):
     assert unknown["card"]["color"] == "grey"
 
 
-def test_toggle_state_reflects_actual_physical_state_not_the_request(home):
-    data, _ = home
-    stacks = [
+def bathroom_toggles(data, name="Main Bathroom"):
+    stack = next(
         c
         for c in walk(view(data, "home"))
-        if c.get("type") == "vertical-stack" and c["cards"][0].get("heading") == "Main Bathroom"
-    ]
-    cards = stacks[0]["cards"]
-    pairs = [c for c in cards if c["type"] == "conditional"]
-    assert len(pairs) == 4
-    fan_cancel, fan_request, towel_cancel, towel_request = pairs
-    # Tile entity = actual state (binary_sensor), the switch only decides what a tap does.
-    assert fan_cancel["card"]["entity"].startswith("binary_sensor.") and fan_cancel["card"][
-        "entity"
-    ].endswith("_fan_running")
-    assert towel_cancel["card"]["entity"].endswith("_towel_rail_heating")
-    assert fan_cancel["conditions"][0]["state"] == "on"
-    assert fan_cancel["card"]["tap_action"]["perform_action"] == "switch.turn_off"
-    assert fan_request["card"]["tap_action"]["perform_action"] == "switch.turn_on"
-    assert towel_request["card"]["tap_action"]["confirmation"][
-        "text"
-    ]  # starting heating is confirmed
-    assert towel_cancel["card"]["state_content"] == "summary"  # queued / waiting / remaining shown
+        if c.get("type") == "vertical-stack" and c["cards"][0].get("heading") == name
+    )
+    branches = [c for c in stack["cards"] if c["type"] == "conditional"]
+    assert len(branches) == 8  # four states each for the fan and the towel rail
+    return branches[:4], branches[4:]
+
+
+def test_toggle_state_reflects_actual_physical_state_not_the_request(home):
+    data, _ = home
+    fan, towel = bathroom_toggles(data)
+    manual, auto, off, unknown = fan
+    # Tile entity = OBSERVED state (binary_sensor); the switch only decides what a tap does.
+    for card in (manual, auto, off, unknown):
+        assert card["card"]["entity"].startswith("binary_sensor.")
+        assert card["card"]["state_content"] == "summary"  # queued / waiting / remaining shown
+    assert manual["card"]["entity"].endswith("_fan_running")
+    assert towel[0]["card"]["entity"].endswith("_towel_rail_heating")
+
+
+def test_auto_running_is_distinct_from_an_active_manual_request_and_cancel_is_always_possible(home):
+    data, _ = home
+    for toggles in bathroom_toggles(data):
+        manual, auto, off, unknown = toggles
+        assert manual["card"]["name"].endswith(": manual")
+        assert auto["card"]["name"].endswith(": automatic")
+        assert off["card"]["name"].endswith(": off")
+        # a request (even one still queued/waiting) is cancelled whatever the physical state is
+        assert [c["state"] for c in manual["conditions"]] == ["on"]
+        assert manual["card"]["tap_action"]["perform_action"] == "switch.turn_off"
+        # colours: blue active, grey off
+        assert manual["card"]["color"] == "blue" and auto["card"]["color"] == "blue"
+        assert off["card"]["color"] == "grey"
+        for card in (auto, off):
+            assert card["card"]["tap_action"]["perform_action"] == "switch.turn_on"
+            assert card["conditions"][0]["state"] == "off"  # the request switch is known and off
+
+
+def test_toggles_are_inert_when_the_request_or_actual_state_is_unknown(home):
+    data, _ = home
+    for toggles in bathroom_toggles(data):
+        manual, auto, off, unknown = toggles
+        assert unknown["card"]["tap_action"] == {"action": "more-info"}
+        assert unknown["card"]["color"] == "grey"
+        assert unknown["conditions"][0]["state_not"] == "on"
+        states = {
+            (c["entity"].split("_")[-1], c["state"]) for c in unknown["conditions"][1]["conditions"]
+        }
+        assert {s for _, s in states} == {"unavailable", "unknown"}
+        assert len(unknown["conditions"][1]["conditions"]) == 4  # switch and sensor, both unknown
+        # only a KNOWN off request switch (state "off") can start anything
+        for card in (auto, off):
+            assert card["conditions"][0]["state"] == "off"
+
+
+def test_starting_towel_heating_is_confirmed(home):
+    data, _ = home
+    _, towel = bathroom_toggles(data)
+    for card in towel[1:3]:
+        assert card["card"]["tap_action"]["confirmation"]["text"]
+
+
+def test_hot_water_card_shows_reported_mode_and_targets(home):
+    data, _ = home
+    card = next(
+        c
+        for c in walk(view(data, "home"))
+        if c.get("type") == "vertical-stack" and c["cards"][0].get("heading") == "Hot water"
+    )
+    names = {r["name"]: r["entity"] for r in card["cards"][1]["entities"]}
+    assert names["Reported mode"] == "sensor.thermann_shadow_thermann_mode"
+    assert names["Reported target"] == "sensor.thermann_shadow_thermann_target"
+    assert names["Desired target"] == "sensor.thermann_shadow_desired_thermostat_temperature"
+    assert names["Controller mode"] == MODE
 
 
 # ------------------------------------------------------------------ mappings (nothing invented)
@@ -289,13 +343,13 @@ def test_power_flow_uses_verified_measured_entities_and_native_fallback_has_no_c
 
 
 # ------------------------------------------------------------------ energy package templates
-def package_templates():
-    package = build.build_package()
+def package_templates(mapping=None):
+    package = build.build_package(mapping)
     return {item["unique_id"]: item for item in package["template"][0]["sensor"]}
 
 
-def value(unique, states):
-    item = package_templates()[unique]
+def value(unique, states, mapping=None):
+    item = package_templates(mapping)[unique]
     available = render(item["availability"], states, NOW)
     return available, (render(item["state"], states, NOW) if available else None)
 
@@ -304,7 +358,37 @@ GRID = "sensor.goodwe_inverter_meter_active_power"
 PV = "sensor.goodwe_inverter_pv_power"
 HOUSE = "sensor.goodwe_inverter_house_consumption"
 SOLAR_TODAY = "sensor.goodwe_inverter_today_s_pv_generation"
-EXPORT_TODAY = "sensor.home_grid_export_today"
+IMPORT_TOTAL = "sensor.goodwe_inverter_meter_total_energy_import"
+EXPORT_TOTAL = "sensor.goodwe_inverter_meter_total_energy_export"
+EXPORT_METER = "sensor.home_grid_export_meter"
+IMPORT_METER = "sensor.home_grid_import_meter"
+CONSUMPTION_METER = "sensor.home_consumption_meter"
+MIDNIGHT_OK = "2026-11-21T14:00:03+00:00"  # reset at local midnight, before today's 00:05 cut-off
+
+
+def meter(state, reset=MIDNIGHT_OK):
+    return {"state": state, "attributes": {"last_reset": reset}}
+
+
+def day(solar="20.0", export="12.5", imp="3.0", cons="11.0", reset=MIDNIGHT_OK, **over):
+    states = {
+        SOLAR_TODAY: solar,
+        IMPORT_TOTAL: "1000",
+        EXPORT_TOTAL: "500",
+        HOUSE: "800",
+        EXPORT_METER: meter(export, reset),
+        IMPORT_METER: meter(imp, reset),
+        CONSUMPTION_METER: meter(cons, reset),
+    }
+    states.update(over)
+    return states
+
+
+@pytest.fixture
+def battery_free():
+    mapping = build.load_mapping()
+    mapping["energy"]["battery_present"] = False
+    return mapping
 
 
 def test_kw_conversion_directions_and_three_decimals():
@@ -339,55 +423,103 @@ def test_unavailable_readings_are_never_converted_to_zero(bad):
     assert value("home_grid_state", {})[0] is False  # entity missing
 
 
-def test_solar_used_directly_and_self_consumption_when_trustworthy():
-    states = {SOLAR_TODAY: "20.0", EXPORT_TODAY: "12.5"}
-    assert value("home_solar_used_directly_today", states) == (True, 7.5)
-    assert value("home_self_consumption_today", states) == (True, 38.0)  # 7.5 / 20
+def test_full_day_figures_with_a_confirmed_battery_free_system(battery_free):
+    states = day()
+    assert value("home_solar_used_directly_today", states, battery_free) == (True, 7.5)
+    assert value("home_self_consumption_today", states, battery_free) == (True, 38.0)  # 7.5 / 20
+    assert value("home_grid_export_today", states, battery_free) == (True, 12.5)
+    assert value("home_grid_import_today", states, battery_free) == (True, 3.0)
+    assert value("home_consumption_today", states, battery_free) == (True, 11.0)
 
 
-def test_self_consumption_is_withheld_when_not_trustworthy():
-    # night / start of day: too little generation to be meaningful
-    assert (
-        value("home_self_consumption_today", {SOLAR_TODAY: "0.2", EXPORT_TODAY: "0.0"})[0] is False
-    )
-    # counters disagree (export > generation): reset-timing mismatch
-    assert (
-        value("home_self_consumption_today", {SOLAR_TODAY: "5.0", EXPORT_TODAY: "9.0"})[0] is False
-    )
-    # unavailable counters
-    assert (
-        value("home_self_consumption_today", {SOLAR_TODAY: "5.0", EXPORT_TODAY: "unavailable"})[0]
-        is False
-    )
-    assert (
-        value("home_solar_used_directly_today", {SOLAR_TODAY: "unavailable", EXPORT_TODAY: "1"})[0]
-        is False
+def test_first_day_install_mid_day_withholds_every_derived_figure(battery_free):
+    """10 kWh solar so far, 6 kWh already exported before install: the meter shows 0, not truth."""
+    installed_at = "2026-11-22T00:30:00+00:00"  # created this afternoon (local), after midnight
+    states = day(solar="10.0", export="0.0", reset=installed_at)
+    for unique in (
+        "home_solar_used_directly_today",
+        "home_self_consumption_today",
+        "home_grid_export_today",
+        "home_grid_import_today",
+        "home_consumption_today",
+    ):
+        assert value(unique, states, battery_free)[0] is False, unique
+
+
+def test_midnight_rollover_trusts_a_meter_reset_at_midnight_and_not_yesterdays(battery_free):
+    just_reset = "2026-11-21T13:00:05+00:00"  # local 00:00:05
+    assert value("home_grid_export_today", day(reset=just_reset), battery_free)[0] is True
+    # an export meter that has not rolled over yet carries yesterday's reset, i.e. is still full-day
+    assert value("home_grid_export_today", day(reset="2026-11-20T13:00:00+00:00"), battery_free)[0]
+    # a reset a few minutes AFTER the cut-off means partial coverage
+    late = "2026-11-22T00:30:00+00:00"
+    assert value("home_grid_export_today", day(reset=late), battery_free)[0] is False
+
+
+def test_inconsistent_counters_are_withheld_not_clamped(battery_free):
+    states = day(solar="5.0", export="9.0")  # export larger than generation
+    assert value("home_solar_used_directly_today", states, battery_free)[0] is False
+    assert value("home_self_consumption_today", states, battery_free)[0] is False
+
+
+def test_too_little_generation_withholds_the_percentage_only(battery_free):
+    states = day(solar="0.2", export="0.0")
+    assert value("home_self_consumption_today", states, battery_free)[0] is False
+    assert value("home_solar_used_directly_today", states, battery_free) == (True, 0.2)
+
+
+@pytest.mark.parametrize(
+    "missing", [SOLAR_TODAY, EXPORT_METER, IMPORT_METER, CONSUMPTION_METER, EXPORT_TOTAL]
+)
+def test_unavailable_or_missing_energy_sources_withhold_figures(battery_free, missing):
+    for state in ("unavailable", "unknown"):
+        states = day()
+        states[missing] = meter(state) if missing.startswith("sensor.home_") else state
+        unavailable = [
+            u
+            for u in (
+                "home_solar_used_directly_today",
+                "home_self_consumption_today",
+            )
+            if value(u, states, battery_free)[0] is False
+        ]
+        if missing != IMPORT_METER and missing != CONSUMPTION_METER:
+            assert len(unavailable) == 2
+    gone = day()
+    del gone[missing]
+    assert value("home_self_consumption_today", gone, battery_free)[0] is False or missing in (
+        IMPORT_METER,
+        CONSUMPTION_METER,
     )
 
 
-def test_battery_presence_withholds_derived_self_consumption(monkeypatch):
-    mapping = build.load_mapping()
-    mapping["energy"]["battery_present"] = True
-    package = build.build_package(mapping)
-    items = {i["unique_id"]: i for i in package["template"][0]["sensor"]}
-    assert items["home_self_consumption_today"]["availability"] == "{{ false }}"
-    assert items["home_solar_used_directly_today"]["availability"] == "{{ false }}"
+def test_stale_sources_withhold_precise_totals(battery_free):
+    stale = day(**{SOLAR_TODAY: {"state": "20.0", "age": 7200}})
+    assert value("home_solar_used_directly_today", stale, battery_free)[0] is False
+    stale_counter = day(**{EXPORT_TOTAL: {"state": "500", "age": 7200}})
+    assert value("home_grid_export_today", stale_counter, battery_free)[0] is False
+    stale_house = day(**{HOUSE: {"state": "800", "age": 3600}})
+    assert value("home_consumption_today", stale_house, battery_free)[0] is False
+
+
+def test_battery_unknown_or_present_withholds_derived_figures(battery_free):
+    for flag in ("unknown", True):
+        mapping = build.load_mapping()
+        mapping["energy"]["battery_present"] = flag
+        for unique in ("home_solar_used_directly_today", "home_self_consumption_today"):
+            assert value(unique, day(), mapping)[0] is False, (flag, unique)
+    assert build.load_mapping()["energy"]["battery_present"] == "unknown"  # shipped default
+    assert value("home_self_consumption_today", day())[0] is False  # unconfirmed by default
 
 
 def test_daily_meters_are_reset_aware_and_use_measured_sources():
     package = build.build_package()
     meters = package["utility_meter"]
     assert all(m["cycle"] == "daily" for m in meters.values())
-    assert (
-        meters["home_grid_import_today"]["source"]
-        == "sensor.goodwe_inverter_meter_total_energy_import"
-    )
-    assert (
-        meters["home_grid_export_today"]["source"]
-        == "sensor.goodwe_inverter_meter_total_energy_export"
-    )
+    assert meters["home_grid_import_meter"]["source"] == IMPORT_TOTAL
+    assert meters["home_grid_export_meter"]["source"] == EXPORT_TOTAL
     house = package["sensor"][0]
-    assert house["source"] == HOUSE and house["max_sub_interval"]  # steady zero still integrates
+    assert house["source"] == HOUSE and house["max_sub_interval"]  # steady zero still accrues
     for forbidden in ("p_pv_forecast", "forecast"):
         assert forbidden not in json.dumps(package)  # EMHASS forecasts are never measurements
 
