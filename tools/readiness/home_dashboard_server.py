@@ -364,6 +364,28 @@ async def main():
         hass,
     )
     seeded = seed(hass)
+    # The demo integration adds its own lights. Real lights are DISCOVERED, so this test copy of the dashboard
+    # excludes the demo ones (exactly what the `exclude` option is for) and shows only the seeded lights.
+    import yaml
+
+    demo_lights = sorted(e for e in hass.states.async_entity_ids("light") if e not in seeded)
+    document = yaml.safe_load((CONFIG / "home.yaml").read_text(encoding="utf-8"))
+
+    def lights_cards(node):
+        if isinstance(node, dict):
+            if node.get("type") == "custom:thermowatt-lights-card":
+                yield node
+            for value in node.values():
+                yield from lights_cards(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from lights_cards(value)
+
+    for card in lights_cards(document):
+        card["exclude"] = demo_lights
+    (CONFIG / "home.yaml").write_text(
+        yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding="utf-8"
+    )
 
     class StateView(HomeAssistantView):
         url = "/api/home_ui_state"
