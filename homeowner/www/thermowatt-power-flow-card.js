@@ -571,7 +571,7 @@ function barsSvg(items, key, unit) {
   const max = Math.max(...items.map((i) => i[key] || 0), 1e-9);
   const w = 56;
   const gap = 10;
-  const height = 110;
+  const height = 124;
   const bars = items
     .map((item, index) => {
       const value = item[key];
