@@ -37,6 +37,7 @@ this installation's recorder history/registry) or `owner-confirmed` (supplied by
 | Bathrooms | Both bathroom cards plus charts of humidity and temperature **and the physical fan and towel relays** (original sensors, so history is not limited to the v0.3.x install date) |
 | Doors | Garage and front door **monitoring only**, plain-English status, contact history |
 | System | Plain-English status of Thermowatt and the Tapo controller, settings links |
+| Device Energy | Per-device energy and estimated tariff-valued costs for Tapo devices, daily and monthly tables, history (see [DEVICE_ENERGY.md](DEVICE_ENERGY.md)) |
 
 Grey = off or inactive, blue = on or active. The colour of a control always follows the **observed** state;
 a manual request, a queued request waiting for off-peak and an unknown status each have their own label
