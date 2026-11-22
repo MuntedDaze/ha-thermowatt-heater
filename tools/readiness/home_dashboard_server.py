@@ -255,7 +255,7 @@ async def seed_device_energy(hass):
         ("sensor.dryer_total_consumption", 0.15),
         ("sensor.fridge_total_energy", 0.05),
     ):
-        hourly_start = last_hour - timedelta(hours=24 * 70)
+        hourly_start = last_hour - timedelta(hours=24 * 70 - 1)  # 1680 rows ending AT last_hour
         async_import_statistics(
             hass,
             meta(entity_id, "kWh", False, True),
