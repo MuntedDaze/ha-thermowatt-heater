@@ -456,7 +456,7 @@ async function main() {
         expect(JSON.stringify(result.calls)).toContain("switch.turn_off");
         expect(JSON.stringify(result.calls)).toContain(AUTOMATIC);
         // optional solar boost is locked while automatic control is on: inert, and it says why
-        await expect(page.getByText("Optional solar boost: enabled (locked while automatic heater control is on)")).toBeVisible();
+        await expect(page.getByText("Optional solar boost: enabled (locked: automatic control is on)")).toBeVisible();
         result = await tap("Optional solar boost: enabled (locked", { first: true });
         expect(result.calls).toEqual([]);
         expect(result.confirmationShown).toBe(false);

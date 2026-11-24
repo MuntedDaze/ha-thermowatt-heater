@@ -272,7 +272,7 @@ views:
       card:
         type: tile
         entity: switch.thermann_shadow_enable_optional_solar_boost
-        name: 'Optional solar boost: enabled (locked while automatic heater control is on)'
+        name: 'Optional solar boost: enabled (locked: automatic control is on)'
         icon: mdi:solar-power-variant
         color: grey
         hide_state: true
@@ -296,7 +296,7 @@ views:
       card:
         type: tile
         entity: switch.thermann_shadow_enable_optional_solar_boost
-        name: 'Optional solar boost: disabled (locked while automatic heater control is on)'
+        name: 'Optional solar boost: disabled (locked: automatic control is on)'
         icon: mdi:solar-power-variant-outline
         color: grey
         hide_state: true

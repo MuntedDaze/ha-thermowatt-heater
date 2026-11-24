@@ -102,7 +102,7 @@ All controls use entities that already exist, with a confirmation for each signi
 | Control | What it is | Confirmation |
 | --- | --- | --- |
 | **Automatic heater control** ON / OFF | `switch.thermann_shadow_automatic_heater_control`, exactly as before: OFF stops all automatic commands (the heater keeps its mode); ON is refused by the integration until commissioning is complete | stopping and starting |
-| **Optional solar boost** enabled / disabled | `switch.thermann_shadow_enable_optional_solar_boost`: only allows extra solar storage, never forces the heater on or off. **The integration locks this setting while Automatic heater control is on**, so the tile is greyed with that reason; turn automatic control off first to change it | changing it |
+| **Optional solar boost** enabled / disabled | `switch.thermann_shadow_enable_optional_solar_boost`: only allows extra solar storage, never forces the heater on or off. **The integration locks this setting while Automatic heater control is on**, so the tile is greyed with that reason ("locked: automatic control is on"); turn automatic control off first to change it | changing it |
 | **12-hour 62 C override** start / cancel | the existing Start / Cancel buttons; the panel shows when it ends and how long is left | start and cancel |
 
 Hold / Resume and the **Thermowatt Settings** button (to the integration's own settings, diagnostic report and

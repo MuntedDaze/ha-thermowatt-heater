@@ -559,7 +559,7 @@ def solar_boost_toggle(ent, columns=12):
     so then the tile is inert and says why; it is never a way to force the heater on or off."""
     auto = ent.thermowatt("switch", "Automatic heater control")
     boost = ent.thermowatt("switch", "Enable optional solar boost")
-    locked = "Locked while automatic heater control is on"
+    locked = "locked: automatic control is on"
     cards = []
     for boost_state, label in (("on", "enabled"), ("off", "disabled")):
         cards.append(
@@ -567,7 +567,7 @@ def solar_boost_toggle(ent, columns=12):
                 [*when(auto, "on"), *when(boost, boost_state)],
                 tile(
                     boost,
-                    f"Optional solar boost: {label} ({locked.lower()})",
+                    f"Optional solar boost: {label} ({locked})",
                     "mdi:solar-power-variant"
                     if boost_state == "on"
                     else "mdi:solar-power-variant-outline",
