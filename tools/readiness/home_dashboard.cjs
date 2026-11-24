@@ -82,6 +82,14 @@ async function main() {
     }
     return false;
   };
+  // A tap on an inert tile opens that entity's more-info dialog (which may open nested ones): close them all so
+  // the next tap is not blocked.
+  const closeDialogs = async () => {
+    for (let i = 0; i < 4; i += 1) {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(250);
+    }
+  };
   const tap = async (text, { first = false } = {}) => {
     await dismissHttpDialog();
     await clearCalls();
@@ -96,11 +104,11 @@ async function main() {
       await page.waitForTimeout(800);
       const recorded = await calls();
       if (recorded.length || confirmationShown) {
-        await page.keyboard.press("Escape");
+        await closeDialogs();
         return { calls: recorded, confirmationShown };
       }
     }
-    await page.keyboard.press("Escape");
+    await closeDialogs();
     return { calls: await calls(), confirmationShown };
   };
   // Layout facts measured in the real rendered DOM (open shadow roots are searched).
