@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Thermowatt Home page: visual harness</title>
+<!-- Visual harness for <thermowatt-home-page> (not part of the install). Serve the repo root and open
+     /tests/js/preview/harness_home.html?theme=dark&lights=3&header=56 . `header` is the Home Assistant app bar height
+     that sits above the card, so the card measures a realistic viewport. The real custom elements run with mock
+     states; the weather card is a stand-in (native cards are covered by the real-frontend CI). -->
+<style>
+  :root { --card-background-color:#fff; --primary-text-color:#212121; --secondary-text-color:#727272; --divider-color:#e0e0e0;
+    --primary-color:#03a9f4; --success-color:#43a047; --warning-color:#fb8c00; --error-color:#e53935; --ha-card-border-radius:12px; --secondary-background-color:#e5e5e5; }
+  :root[data-theme="dark"] { --card-background-color:#1c1c1c; --primary-text-color:#e1e1e1; --secondary-text-color:#9b9b9b;
+    --divider-color:#3a3a3a; --secondary-background-color:#282828; }
+  html, body { margin:0; height:100%; }
+  body { font-family:Roboto,system-ui,sans-serif; background:#f4f4f4; overflow-x:hidden; }
+  :root[data-theme="dark"] body { background:#111; color:#e1e1e1; }
+  #bar { background:var(--card-background-color); border-bottom:1px solid var(--divider-color); color:var(--primary-text-color); display:flex; align-items:center; padding:0 16px; box-sizing:border-box; }
+  #page { padding:8px; box-sizing:border-box; }
+  ha-card { display:block; background:var(--card-background-color); border-radius:var(--ha-card-border-radius); border:1px solid var(--divider-color); color:var(--primary-text-color); }
+  ha-icon { display:inline-block; width:var(--mdc-icon-size,24px); height:var(--mdc-icon-size,24px); border-radius:50%; background:currentColor; opacity:.35; }
+  .weather { height:100%; box-sizing:border-box; padding:16px; }
+</style>
+<div id="bar"></div>
+<div id="page"></div>
+<script type="module">
+  const q = new URLSearchParams(location.search);
+  if (q.get("theme") === "dark") document.documentElement.dataset.theme = "dark";
+  const header = Number(q.get("header") || 56);
+  const bar = document.getElementById("bar");
+  bar.style.height = `${header}px`;
+  bar.textContent = "Home Assistant app bar";
+  if (q.get("sidebar") === "1") document.getElementById("page").style.marginLeft = "256px";
+  customElements.define("ha-card", class extends HTMLElement {});
+  const now = new Date();
+  const iso = (minutes) => new Date(now.getTime() + minutes * 60e3).toISOString();
+  window.loadCardHelpers = async () => ({
+    createCardElement: async (config) => {
+      const el = document.createElement("ha-card");
+      el.style.height = "100%";
+      el.innerHTML = `<div class="weather"><div style="font-size:22px;font-weight:500">${config.name || "Weather"}</div><div style="font-size:48px">17 °C</div><div style="color:var(--secondary-text-color)">Partly cloudy · stand-in for the native weather card</div></div>`;
+      el.hass = undefined;
+      return el;
+    },
+  });
+  await import("/homeowner/www/thermowatt-power-flow-card.js");
+  const lightCount = Number(q.get("lights") || 3);
+  const states = {};
+  const registry = {};
+  const put = (id, state, attributes = {}) => { states[id] = { state, attributes, last_changed: iso(-5), last_updated: iso(-1), last_reported: iso(-1) }; };
+  put("sensor.goodwe_inverter_pv_power", "4210", { unit_of_measurement: "W" });
+  put("sensor.goodwe_inverter_house_consumption", "1420", { unit_of_measurement: "W" });
+  put("sensor.goodwe_inverter_meter_active_power", "2790", { unit_of_measurement: "W" });
+  put("sensor.goodwe_inverter_today_s_pv_generation", "21.4", { unit_of_measurement: "kWh" });
+  put("sensor.home_energy_status", q.get("energy") || "ready");
+  put("sensor.home_solar_used_directly_today", "9.8", { unit_of_measurement: "kWh" });
+  put("sensor.hw_temp", "52.4", { unit_of_measurement: "°C" });
+  put("sensor.hw_mode", "manual");
+  put("sensor.hw_target", "62");
+  put("switch.hw_auto", "on");
+  put("sensor.hw_operating", "automatic");
+  put("sensor.hw_tariff", "off_peak");
+  put("sensor.hw_boost", "Waiting");
+  put("switch.hw_boost_enabled", "on");
+  put("sensor.hw_next", "normal_storage_62");
+  put("sensor.hw_last", iso(-12));
+  put("sensor.hw_next_poll", iso(18));
+  put("sensor.garage_pos", "Closed");
+  put("binary_sensor.front_open", "off");
+  const names = ["Main Bathroom", "Ensuite"];
+  const bathrooms = names.map((name, i) => {
+    const k = `b${i}`;
+    put(`sensor.${k}_h`, i ? "71" : "58");
+    put(`sensor.${k}_t`, i ? "24.1" : "22.4", { unit_of_measurement: "°C" });
+    put(`binary_sensor.${k}_shower`, i ? "on" : "off");
+    put(`binary_sensor.${k}_fan`, i ? "on" : "off", { summary: i ? "Running — automatic: shower detected" : "Off — normal" });
+    put(`binary_sensor.${k}_towel`, i ? "on" : "off", { summary: i ? "On — drying after the shower" : "Off — no drying scheduled" });
+    put(`sensor.${k}_remaining`, i ? "2h 40m" : "0m", { remaining_seconds: i ? 9600 : 0, waiting_for_off_peak: false });
+    put(`switch.${k}_fan_manual`, q.get("manual") === String(i) ? "on" : "off", { configured_minutes: 20, remaining_seconds: q.get("manual") === String(i) ? 1020 : null });
+    return { name, humidity: `sensor.${k}_h`, temperature: `sensor.${k}_t`, shower: `binary_sensor.${k}_shower`, fan_running: `binary_sensor.${k}_fan`, towel_heating: `binary_sensor.${k}_towel`, towel_remaining: `sensor.${k}_remaining`, fan_switch: `switch.${k}_fan_manual` };
+  });
+  const lightNames = ["Dining room", "Living room", "Verandah", "Hall", "Study", "Kitchen", "Deck", "Garden", "Porch", "Pantry"];
+  for (let i = 0; i < lightCount; i += 1) {
+    put(`light.l${i}`, i % 2 ? "off" : "on", { friendly_name: lightNames[i], supported_color_modes: ["brightness"], ...(i % 2 ? {} : { brightness: 180 }) });
+    registry[`light.l${i}`] = {};
+  }
+  const hass = { states, entities: registry, callService: (d, s, data) => console.log("service", d, s, JSON.stringify(data)), callWS: async () => [], connection: {} };
+  const card = document.createElement("thermowatt-home-page");
+  card.setConfig({
+    flow: { solar_entity: "sensor.goodwe_inverter_pv_power", house_entity: "sensor.goodwe_inverter_house_consumption", grid_entity: "sensor.goodwe_inverter_meter_active_power", grid_export_positive: true,
+      today: { solar: "sensor.goodwe_inverter_today_s_pv_generation", import: "sensor.imp", export: "sensor.exp", used: "sensor.home_solar_used_directly_today", status: "sensor.home_energy_status" }, timezone: "Australia/Hobart" },
+    hot_water: { temperature: "sensor.hw_temp", mode: "sensor.hw_mode", target: "sensor.hw_target", automatic: "switch.hw_auto", operating: "sensor.hw_operating", tariff: "sensor.hw_tariff", boost: "sensor.hw_boost", boost_enabled: "switch.hw_boost_enabled", next_action: "sensor.hw_next", last_poll: "sensor.hw_last", next_poll: "sensor.hw_next_poll" },
+    weather: { entity: "weather.home", name: "Rokeby" },
+    doors: { garage_position: "sensor.garage_pos", front_open: "binary_sensor.front_open" },
+    bathrooms,
+    lights: { discover: true },
+    timezone: "Australia/Hobart",
+  });
+  document.getElementById("page").appendChild(card);
+  card.hass = hass;
+  window.__card = card;
+  window.__measure = () => {
+    const r = card.shadowRoot;
+    const out = { innerWidth, innerHeight, host: card.getBoundingClientRect().toJSON(), scrollHeight: document.documentElement.scrollHeight, overflow: [] };
+    for (const el of r.querySelectorAll("ha-card, .cell, thermowatt-power-flow-card, thermowatt-lights-card")) {
+      const b = el.getBoundingClientRect();
+      out.overflow.push([el.id || el.className || el.tagName, Math.round(b.width), Math.round(b.height), el.scrollHeight > el.clientHeight + 1 ? `clipped ${el.scrollHeight - el.clientHeight}` : "ok"]);
+    }
+    return out;
+  };
+</script>

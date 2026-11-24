@@ -62,7 +62,7 @@ def view(data, path):
     return next(v for v in data["views"] if v["path"] == path)
 
 
-def stack(data, name, path="home"):
+def stack(data, name, path="bathrooms"):
     """The section holding one bathroom's panel and its controls."""
     return next(
         sec
@@ -87,6 +87,7 @@ def test_outputs_are_valid_yaml_with_the_required_views(home):
         "energy",
         "hot-water",
         "bathrooms",
+        "lights",
         "doors",
         "system",
         "device-energy",
@@ -110,6 +111,7 @@ SUPPORTED = {
     "custom:thermowatt-device-energy-page",
     "custom:thermowatt-panel-card",
     "custom:thermowatt-lights-card",
+    "custom:thermowatt-home-page",
     "logbook",
 }
 
@@ -128,6 +130,8 @@ def test_every_card_is_a_supported_native_or_declared_card(home, native, generic
                 assert item.get("entity"), item  # a tile card without an entity is a config error
 
 
+AUTOMATIC = "switch.thermann_shadow_automatic_heater_control"
+BOOST_ENABLED = "switch.thermann_shadow_enable_optional_solar_boost"
 PANEL = "custom:thermowatt-panel-card"
 LIGHTS = "custom:thermowatt-lights-card"
 
@@ -138,40 +142,54 @@ def panel_json(card, states, now=None):
     return result if isinstance(result, dict) else json.loads(result)
 
 
-def test_home_layout_is_designed_around_large_cards(home):
+def test_home_is_one_tablet_fitted_card_in_a_panel_view(home):
     data, _ = home
     h = view(data, "home")
-    assert h["type"] == "sections" and h["max_columns"] == 3 and h["dense_section_placement"]
-    # three columns, two rows: [energy | hot water | weather and doors] [Main | Ensuite | lights]
-    assert [s.get("column_span", 1) for s in h["sections"]] == [1, 1, 1, 1, 1, 1]
-    flow, hot, weather, main, ensuite, lights = h["sections"]
-    assert flow["cards"][0]["type"] == "custom:thermowatt-power-flow-card"
-    assert set(flow["cards"][0]["today"]) == {"solar", "import", "export"}  # today's figures strip
-    assert (
-        hot["cards"][0]["type"] == PANEL and "'title': 'Hot water'" in hot["cards"][0]["template"]
-    )
-    assert (
-        weather["cards"][0]["type"] == "weather-forecast" and weather["cards"][1]["type"] == PANEL
-    )
-    for section, name in ((main, "Main Bathroom"), (ensuite, "Ensuite")):
-        assert section["cards"][0]["type"] == PANEL
-        assert f"'title': {json.dumps(name)}" in section["cards"][0]["template"]
-    assert lights["cards"][0]["type"] == LIGHTS
-    # large display cards, native controls: no graphs, entity lists or markdown crowd the main screen
+    assert h["type"] == "panel" and len(h["cards"]) == 1
+    card = h["cards"][0]
+    assert card["type"] == "custom:thermowatt-home-page"
+    # energy: animated flow plus today's figures, including solar used directly (package figure)
+    assert set(card["flow"]["today"]) == {"solar", "import", "export", "used", "status"}
+    assert card["flow"]["today"]["used"] == "sensor.home_solar_used_directly_today"
+    assert card["flow"]["today"]["status"] == "sensor.home_energy_status"
+    assert card["weather"] == {"entity": "weather.home", "name": "Rokeby, TAS"}
+    assert [b["name"] for b in card["bathrooms"]] == ["Main Bathroom", "Ensuite"]
+    assert card["lights"]["discover"] is True
+    # large display cards: no graphs, entity lists or markdown crowd the main screen
     assert not [c for c in walk(h) if c.get("type") in ("history-graph", "entities", "markdown")]
 
 
+def test_home_page_has_no_hot_water_override_and_one_fan_control_per_bathroom(home, native):
+    data, _ = home
+    card = view(data, "home")["cards"][0]
+    text = json.dumps(card)
+    for forbidden in (START, CANCEL, HOLD, RESUME, "Override", "override_toggle", "guest_mode"):
+        assert forbidden not in text, forbidden
+    # the only thing the page may operate: each bathroom's own timed manual-fan switch
+    for b, name in zip(card["bathrooms"], ("main_bathroom", "ensuite"), strict=True):
+        assert b["fan_switch"] == f"switch.tapo_smart_controller_{name}_fan_manual_override"
+        assert "towel_switch" not in b and "towel_rail_manual_override" not in json.dumps(b)
+    # nor does the no-custom-card Home view offer a 12 hour override
+    native_home = json.dumps(view(native[0], "home"))
+    assert START not in native_home and CANCEL not in native_home
+
+
+def test_home_page_hot_water_entities_exist_in_the_integration(home):
+    data, ent = home
+    hw = view(data, "home")["cards"][0]["hot_water"]
+    package_dir = ROOT / "custom_components/thermann_shadow"
+    source = "".join(p.read_text(encoding="utf-8") for p in package_dir.glob("*.py"))
+    for key in ("temperature", "mode", "target", "automatic", "tariff", "boost", "boost_enabled", "next_action", "next_poll"):
+        assert hw[key] in ent.used and ent.used[hw[key]] == "thermann_shadow", key
+    for name in ("Automatic heater control", "Enable optional solar boost", "Solar boost status", "Next cloud poll"):
+        assert f'"{name}"' in source, name
+
+
 def test_tabs_show_text_labels_because_icons_hide_the_title(home, native):
-    for data, _ in (home, native):
-        assert [v["title"] for v in data["views"]] == [
-            "Home",
-            "Energy",
-            "Hot water",
-            "Bathrooms",
-            "Doors",
-            "System",
-            "Device energy",
-        ]
+    base = ["Home", "Energy", "Hot water", "Bathrooms", "Doors", "System", "Device energy"]
+    designed = [*base[:4], "Lights", *base[4:]]  # the Lights page needs the custom card's diagnostics
+    for data, titles in ((home[0], designed), (native[0], base)):
+        assert [v["title"] for v in data["views"]] == titles
         assert not [v for v in data["views"] if "icon" in v]
 
 
@@ -214,7 +232,7 @@ def test_thermowatt_entities_are_real_entity_names(home):
 
 def test_tapo_entities_exist_in_the_published_contract(home, native, generic):
     contract = json.loads(build.TAPO_CONTRACT.read_text(encoding="utf-8"))["entities"]
-    assert json.loads(build.TAPO_CONTRACT.read_text(encoding="utf-8"))["version"] == "0.3.1"
+    assert json.loads(build.TAPO_CONTRACT.read_text(encoding="utf-8"))["version"] == "0.4.0"
     for _, ent in (home, native, generic):
         for eid, source in ent.used.items():
             if source == "tapo_smart_controller":
@@ -224,6 +242,11 @@ def test_tapo_entities_exist_in_the_published_contract(home, native, generic):
 def test_both_bathrooms_use_identical_cards(home):
     data, _ = home
     main, ensuite = stack(data, "Main Bathroom"), stack(data, "Ensuite")
+    # the history graphs read each bathroom's ORIGINAL sensors (different entity names by design)
+    main, ensuite = (
+        {**sec, "cards": [c for c in sec["cards"] if c.get("type") != "history-graph"]}
+        for sec in (main, ensuite)
+    )
 
     def shape(card):
         text = json.dumps(card).replace("main_bathroom", "X").replace("ensuite", "X")
@@ -273,8 +296,15 @@ def test_only_whitelisted_actions_exist(home):
             assert target in allowed_buttons
             assert action["confirmation"]["text"]  # every heating-related press is confirmed
         elif service in ("switch.turn_on", "switch.turn_off"):
-            assert target.startswith("switch.tapo_smart_controller_")
-            assert target.endswith("_manual_override")
+            if target in (AUTOMATIC, BOOST_ENABLED):
+                # the integration's own switches; stopping/starting or changing them is always confirmed
+                assert action["confirmation"]["text"]
+            else:
+                assert target.startswith("switch.tapo_smart_controller_")
+                assert target.endswith("_manual_override")
+        elif service == "automation.toggle":
+            assert target in ("automation.evening_lights_on", "automation.evening_lights_off")
+            assert action["confirmation"]["text"]
         else:
             assert service == "light.toggle"
 
@@ -297,7 +327,9 @@ def test_dashboard_never_commands_a_physical_relay_or_the_original_devices(home)
 def test_hot_water_override_toggle_is_state_driven_and_confirmed(home):
     data, _ = home
     on, off, unknown, unavailable_now = [
-        c for c in view(data, "home")["sections"][1]["cards"] if c["type"] == "conditional"
+        c
+        for c in walk(view(data, "hot-water"))
+        if c.get("type") == "conditional" and json.dumps(c["conditions"]).count(MODE) >= 1
     ]
     # holiday / disabled: the controller would refuse, so the tile is inert instead of misleading
     assert unavailable_now["card"]["tap_action"] == {"action": "more-info"}
@@ -350,10 +382,12 @@ def test_settings_navigation_is_compact_and_correct(home):
     assert paths == {
         "/config/integrations/integration/thermann_shadow",
         "/config/integrations/integration/tapo_smart_controller",
+        "/config/automation/dashboard",  # Lights page: edit the evening schedule
+        "/config/labels",  # Lights page: label a light
     }
     for item in walk(view(data, "hot-water")):
-        if item.get("icon") == "mdi:cog-outline":
-            assert item["type"] == "tile" and item["name"] == "Hot water settings"
+        if item.get("icon") == "mdi:cog-outline" and item["type"] == "tile":
+            assert item["name"] == "Thermowatt Settings"
 
 
 # ------------------------------------------------------------------ bathroom toggles
@@ -604,11 +638,8 @@ def test_homeowner_profile_is_fully_mapped_and_verified(home):
     assert mapping["lights"]["discover"] is True
     assert ent.unresolved == []
     assert "mapping needed" not in json.dumps(data)
-    weather = next(c for c in walk(data) if c.get("type") == "weather-forecast")
-    assert weather["entity"] == "weather.home" and weather["name"] == "Rokeby, TAS"
-    assert (
-        weather["forecast_type"] == "daily" and weather["show_current"] and weather["show_forecast"]
-    )
+    weather = view(data, "home")["cards"][0]["weather"]
+    assert weather == {"entity": "weather.home", "name": "Rokeby, TAS"}
     # lights are discovered at run time: no light tile and no light entity is hardcoded in the dashboard
     assert not [c for c in walk(data) if c.get("entity", "").startswith("light.")]
     lights = next(c for c in walk(data) if c.get("type") == LIGHTS)
@@ -1072,7 +1103,7 @@ def test_device_energy_is_the_seventh_view(home):
     data, _ = home
     v = data["views"][-1]
     assert v["path"] == "device-energy" and v["title"] == "Device energy"
-    assert len(data["views"]) == 7
+    assert len(data["views"]) == 8  # Home, Energy, Hot water, Bathrooms, Lights, Doors, System, Device energy
 
 
 def test_rates_live_in_one_central_place_and_are_not_hardcoded_elsewhere(home):
@@ -1319,11 +1350,11 @@ HW_STATES = {
 
 def test_hot_water_panel_is_large_type_plain_english(home):
     data, _ = home
-    card = view(data, "home")["sections"][1]["cards"][0]
+    card = view(data, "hot-water")["sections"][0]["cards"][0]
     m = panel_json(card, HW_STATES)
     assert m["title"] == "Hot water" and m["badge"] == {"text": "Automatic", "tone": "info"}
     assert m["hero"] == {
-        "label": "Tank bottom",
+        "label": "Water temperature",
         "value": "52.4",
         "unit": "°C",
         "caption": "Updated 7 min ago · last poll 14:05",
@@ -1336,14 +1367,15 @@ def test_hot_water_panel_is_large_type_plain_english(home):
     assert by_label["Solar boost"]["value"] == "Idle"
     assert by_label["Next"]["value"] == "Wait for off peak"
     assert by_label["Next"]["detail"] == "Next poll 14:30"
-    assert "Override ends" not in by_label  # never "Unknown" during normal automatic operation
+    assert "12 h override ends" not in by_label  # never "Unknown" during normal automatic operation
+    assert "Tank bottom" not in json.dumps(m)
     assert "_" not in json.dumps(m)  # no internal identifiers
     assert m["columns"] == 2
 
 
 def test_hot_water_panel_reported_and_desired_targets_and_override_expiry(home):
     data, _ = home
-    card = view(data, "home")["sections"][1]["cards"][0]
+    card = view(data, "hot-water")["sections"][0]["cards"][0]
     differ = panel_json(
         card, {**HW_STATES, "sensor.thermann_shadow_desired_thermostat_temperature": "45.0"}
     )
@@ -1359,14 +1391,24 @@ def test_hot_water_panel_reported_and_desired_targets_and_override_expiry(home):
         },
     )
     assert active["badge"] == {"text": "12 h override", "tone": "warn"}
-    assert {s["label"]: s for s in active["stats"]}["Override ends"]["value"] == "02:10"
+    assert {s["label"]: s for s in active["stats"]}["12 h override ends"]["value"] == "02:10"
+    later = panel_json(
+        card,
+        {
+            **HW_STATES,
+            MODE: "guest",
+            "sensor.thermann_shadow_guest_mode_ends": "2026-11-23T02:10:00+11:00",
+        },
+        datetime(2026, 11, 22, 23, 40, tzinfo=HOBART),
+    )
+    assert {s["label"]: s for s in later["stats"]}["12 h override ends"]["detail"] == "2 h 30 min left"
     peak = panel_json(card, {**HW_STATES, "sensor.thermann_shadow_current_tariff": "peak"})
     assert {s["label"]: s for s in peak["stats"]}["Tariff"]["tone"] == "warn"
 
 
 def test_hot_water_panel_missing_values_are_dashes_never_a_guess(home):
     data, _ = home
-    card = view(data, "home")["sections"][1]["cards"][0]
+    card = view(data, "hot-water")["sections"][0]["cards"][0]
     m = panel_json(
         card,
         {
@@ -1511,15 +1553,16 @@ def test_display_cards_never_call_services_or_poll():
     panel = js[js.index("class ThermowattPanelCard") : js.index("export function discoverLights")]
     for forbidden in ("callService", "callWS", "fetch(", "setInterval"):
         assert forbidden not in panel, forbidden
-    # the only services the lights card may call are light.toggle and light.turn_on, on a tap or a slider move
+    # the only services the lights card may call are light.toggle (homeassistant.toggle for a switch the owner
+    # labelled show_as_light) and light.turn_on, on a tap or a slider move
     lights = js[
         js.index("class ThermowattLightsCard") : js.index(
             'if (typeof customElements !== "undefined") {\n  if (!customElements.get("thermowatt-panel-card"))'
         )
     ]
-    assert set(re.findall(r'callService\("(\w+)", "(\w+)"', lights)) == {
-        ("light", "toggle"),
-        ("light", "turn_on"),
+    assert set(re.findall(r'callService\(([^,]+), "(\w+)"', lights)) == {
+        ('id.startsWith("light.") ? "light" : "homeassistant"', "toggle"),
+        ('"light"', "turn_on"),
     }
 
 
