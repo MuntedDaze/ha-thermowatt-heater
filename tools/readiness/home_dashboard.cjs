@@ -135,6 +135,11 @@ async function main() {
         for (const el of homeCard.shadowRoot.querySelectorAll("ha-card, .cell")) {
           if (el.scrollHeight > el.clientHeight + 1) clipped.push(`${el.id || el.className || el.tagName}:${el.scrollHeight - el.clientHeight}`);
         }
+        const wide = [];
+        for (const el of [...homeCard.shadowRoot.querySelectorAll("*")]) {
+          const r = el.getBoundingClientRect();
+          if (r.right > window.innerWidth + 1) wide.push(`${el.tagName.toLowerCase()}.${el.className || el.id}:${Math.round(r.right - window.innerWidth)}`);
+        }
         const flowCard = homeCard.shadowRoot.querySelector("thermowatt-power-flow-card");
         const text = [...(flowCard ? flowCard.shadowRoot.querySelectorAll("text") : [])].map((t) => t.getBoundingClientRect().height);
         const smallest = [...homeCard.shadowRoot.querySelectorAll(".line, .lab, .fact .k, .foot")].map((el) => parseFloat(getComputedStyle(el).fontSize));
@@ -149,6 +154,7 @@ async function main() {
           documentScroll: document.documentElement.scrollHeight - window.innerHeight,
           scrollOverflow,
           clipped,
+          wide: wide.slice(0, 8),
           columns: 3,
           overlaps: 0,
           overflowX: document.documentElement.scrollWidth - window.innerWidth,

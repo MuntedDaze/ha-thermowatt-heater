@@ -935,17 +935,17 @@ export function bathroomModel(hass, b) {
 const HOME_CSS = `
   :host{display:block;--u:11px}
   .grid{height:100%;display:grid;gap:calc(var(--u)*.9);grid-template-columns:minmax(0,1.12fr) minmax(0,1fr) minmax(0,.92fr);grid-template-rows:minmax(0,1.22fr);grid-auto-rows:minmax(0,1fr)}
-  .cell{min-width:0;min-height:0;display:flex;flex-direction:column;gap:calc(var(--u)*.8)}
+  .cell{min-width:0;min-height:0;display:flex;flex-direction:column;gap:calc(var(--u)*.8);overflow:hidden}
   .cell>*{min-height:0}
   .cell>thermowatt-power-flow-card,.cell>thermowatt-lights-card{flex:1}
   .cell>.wx{flex:1;overflow:hidden;border-radius:var(--ha-card-border-radius,12px)}
   .wx{min-width:0}.wx>*{display:block;height:100%;min-width:0;max-width:100%}
   ha-card.pg{flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:calc(var(--u)*.8);padding:calc(var(--u)*1.35) calc(var(--u)*1.5);overflow:hidden;container-type:inline-size;
     --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);--tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
-  ha-card.strip{flex:none;display:flex;align-items:center;gap:calc(var(--u)*.8);padding:calc(var(--u)*.7) calc(var(--u)*1.2);
+  ha-card.strip{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:calc(var(--u)*.5) calc(var(--u)*.8);min-width:0;overflow:hidden;padding:calc(var(--u)*.7) calc(var(--u)*1.2);
     --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);--tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
   .strip ha-icon{--mdc-icon-size:calc(var(--u)*1.9);color:var(--primary-color)}
-  .strip .k{flex:1;font-size:calc(var(--u)*1.1);font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .strip .k{flex:1 1 auto;min-width:0;font-size:calc(var(--u)*1.1);font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--secondary-text-color)}
   .h{display:flex;align-items:center;gap:calc(var(--u)*.7)}
   .h ha-icon{--mdc-icon-size:calc(var(--u)*1.9);color:var(--primary-color);flex:none}
   .t{flex:1;min-width:0;font-size:calc(var(--u)*1.1);font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
