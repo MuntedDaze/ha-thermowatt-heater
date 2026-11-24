@@ -199,3 +199,41 @@ this once in **Developer Tools -> Template** and send me the output:
 
 Nothing extra: the Device Energy view is part of `homeowner/home.yaml`, and its card is in the existing
 `/config/www/thermowatt/thermowatt-power-flow-card.js` (replace the file; hard-refresh). No package, no restart.
+
+## Why the whole-house balance can say "solar generation statistics are incomplete" (the November gap)
+
+The balance uses long-term statistics and needs **every completed hour** of solar generation, grid import and grid export
+in the period. When one source has hours with no statistics row, the balance is withheld (never estimated, never zero).
+The balance card now **lists the exact missing hours** for that source (by day, with the run length) and says whether
+every one falls overnight.
+
+**What a missing hour is.** Home Assistant writes an hourly statistics row only if the sensor reported a usable value
+during that hour. The GoodWe inverter switches off when there is no sun and its entities become *unavailable*, so
+**an inverter that sleeps every night leaves no rows for the dark hours**. Over a month that is a gap in every night,
+which is why a month-long balance reports missing solar statistics even though nothing was lost in the day. A
+restart, a network drop or a replaced sensor leaves a gap in the same way; the listing shows which case it is (a gap
+in daylight is not an overnight shutdown).
+
+**What is and is not lost.** For a cumulative counter Home Assistant adds the energy counted across a gap to the first
+hour after it, so a long period's *total* normally stays right, but **which hours it belongs to is not recorded**.
+That is why per-hour views (tariff costs, today's hourly shape) are affected and why the card withholds the balance
+instead of assuming the missing hours were empty. Nothing in the card invents a reading for the gap, and the figures that
+were recorded are unchanged.
+
+**Decision for the owner (not changed here):** treating a source that is *unavailable only overnight* as having no
+generation in those hours is physically reasonable for solar, but it would change how the balance is calculated, so it
+is left as a separate, explicit decision. The Home page "Imported/Exported today" figures already show a lower bound (`≥`)
+when a day is not fully covered.
+
+## Cost figures: tariff-valued estimates, and the rates they use
+
+Costs are **estimated tariff-valued operating costs** (consumption times the peak or off-peak price in force when it
+was used). They are **not Aurora charges**: no supply charge, no feed-in credit, no assumption that the energy was
+bought from the grid. They are labelled "estimated" and, because the date the current prices started has not been
+confirmed (`effective_from: null`), every historical figure is shown with `≈` as an **assumed** rate.
+
+**Please check the prices:** `homeowner/home_mapping.yaml` lists off-peak $0.1419 and peak $0.1907 per kWh for this
+card, while the Thermowatt controller's own tariff settings (`custom_components/thermann_shadow/config.py`, used for
+heater economics) are off-peak $0.1702 and peak $0.361878. The two sets of prices disagree and I cannot verify either
+against your Aurora account. They are left as they are, and the costs stay labelled as assumptions until you confirm
+the correct rates and the date they started (then add an entry with that `effective_from`).

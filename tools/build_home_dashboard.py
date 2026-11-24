@@ -564,7 +564,9 @@ def solar_boost_toggle(ent, columns=12):
                 tile(
                     boost,
                     f"Optional solar boost: {label} ({locked.lower()})",
-                    "mdi:solar-power-variant" if boost_state == "on" else "mdi:solar-power-variant-outline",
+                    "mdi:solar-power-variant"
+                    if boost_state == "on"
+                    else "mdi:solar-power-variant-outline",
                     "grey",
                     tap={"action": "none"},
                     hide_state=True,
@@ -1339,7 +1341,9 @@ def home_page_card(ent):
     mapping = ent.mapping
     last_poll = integration_config.DEFAULT_SOURCES["last_poll"]
     ent.used[last_poll] = "thermann_bridge"
-    flow = {k: v for k, v in power_flow_card(ent, True).items() if k not in ("type", "grid_options")}
+    flow = {
+        k: v for k, v in power_flow_card(ent, True).items() if k not in ("type", "grid_options")
+    }
     lights = {k: v for k, v in lights_card(ent).items() if k not in ("type", "grid_options")}
     weather_entity = ent.mapped("weather")
     place = mapping.get("place") or ""
@@ -1385,7 +1389,7 @@ def home_page_card(ent):
     return card
 
 
-LIGHTING_PACKAGE = "homeowner/lighting_schedule_package.yaml"
+LIGHTING_PACKAGE = "homeowner/optional/evening_lights_schedule.yaml"
 LIGHTING_AUTOMATIONS = ("automation.evening_lights_on", "automation.evening_lights_off")
 LIGHT_LABEL = "Evening lights"
 
@@ -1403,12 +1407,14 @@ def lighting_view(ent):
             "title": "Evening lights schedule",
             "icon": "mdi:weather-sunset",
             "lines": [
-                "When switched on below: lights with the \"" + LIGHT_LABEL + "\" label turn ON two hours before "
+                'When switched on below: lights with the "'
+                + LIGHT_LABEL
+                + '" label turn ON two hours before '
                 "sunset (it follows the seasons and Tasmanian daylight saving by itself) and OFF at 01:00.",
                 "Switching a light yourself at any time always works: the schedule only acts at those two "
                 "moments and never turns a light back on or off afterwards.",
-                "The schedule is switched OFF until you turn it on. Add the label to a light in "
-                "Settings, Areas, labels and zones, Labels.",
+                "Nothing is scheduled until the optional schedule file is installed (the install notes "
+                "explain how). Add the label to a light in Settings, Areas, labels and zones, Labels.",
             ],
         },
         columns=12,
@@ -1427,7 +1433,7 @@ def lighting_view(ent):
                 tap=call(
                     "automation.toggle",
                     automation,
-                    f"Switch the \"{name}\" schedule on or off?",
+                    f'Switch the "{name}" schedule on or off?',
                 ),
             ),
             12,
@@ -1448,13 +1454,17 @@ def lighting_view(ent):
             section(lights),
             section(
                 schedule,
-                schedule_tile(on_automation, "Evening lights on (2 h before sunset)", "mdi:weather-sunset-down"),
+                schedule_tile(
+                    on_automation,
+                    "Evening lights on (2 h before sunset)",
+                    "mdi:weather-sunset-down",
+                ),
                 schedule_tile(off_automation, "Evening lights off (01:00)", "mdi:weather-night"),
                 conditional(
                     missing,
                     note(
-                        "The evening schedule is not installed yet. See docs/owner/HOME_DASHBOARD.md "
-                        "(Lighting schedule) for the optional package.",
+                        "The evening schedule is not installed, so no lights are scheduled. See "
+                        "docs/owner/HOME_DASHBOARD.md (Lighting schedule) for the optional file.",
                         12,
                     ),
                     12,
@@ -1856,9 +1866,7 @@ def build_views_designed(ent):
     """
     mapping = ent.mapping
     names = [b["name"] for b in mapping["bathrooms"]]
-    place = mapping.get("place") or ""
     flow = power_flow_card(ent, True)
-    weather = _weather_card(ent, place)
 
     # The Home page is ONE card in a panel view: it fits a tablet in landscape without scrolling.
     home = {"title": "Home", "path": "home", "type": "panel", "cards": [home_page_card(ent)]}

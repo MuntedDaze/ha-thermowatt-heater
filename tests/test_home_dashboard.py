@@ -179,15 +179,34 @@ def test_home_page_hot_water_entities_exist_in_the_integration(home):
     hw = view(data, "home")["cards"][0]["hot_water"]
     package_dir = ROOT / "custom_components/thermann_shadow"
     source = "".join(p.read_text(encoding="utf-8") for p in package_dir.glob("*.py"))
-    for key in ("temperature", "mode", "target", "automatic", "tariff", "boost", "boost_enabled", "next_action", "next_poll"):
+    for key in (
+        "temperature",
+        "mode",
+        "target",
+        "automatic",
+        "tariff",
+        "boost",
+        "boost_enabled",
+        "next_action",
+        "next_poll",
+    ):
         assert hw[key] in ent.used and ent.used[hw[key]] == "thermann_shadow", key
-    for name in ("Automatic heater control", "Enable optional solar boost", "Solar boost status", "Next cloud poll"):
+    for name in (
+        "Automatic heater control",
+        "Enable optional solar boost",
+        "Solar boost status",
+        "Next cloud poll",
+    ):
         assert f'"{name}"' in source, name
 
 
 def test_tabs_show_text_labels_because_icons_hide_the_title(home, native):
     base = ["Home", "Energy", "Hot water", "Bathrooms", "Doors", "System", "Device energy"]
-    designed = [*base[:4], "Lights", *base[4:]]  # the Lights page needs the custom card's diagnostics
+    designed = [
+        *base[:4],
+        "Lights",
+        *base[4:],
+    ]  # the Lights page needs the custom card's diagnostics
     for data, titles in ((home[0], designed), (native[0], base)):
         assert [v["title"] for v in data["views"]] == titles
         assert not [v for v in data["views"] if "icon" in v]
@@ -1103,7 +1122,9 @@ def test_device_energy_is_the_seventh_view(home):
     data, _ = home
     v = data["views"][-1]
     assert v["path"] == "device-energy" and v["title"] == "Device energy"
-    assert len(data["views"]) == 8  # Home, Energy, Hot water, Bathrooms, Lights, Doors, System, Device energy
+    assert (
+        len(data["views"]) == 8
+    )  # Home, Energy, Hot water, Bathrooms, Lights, Doors, System, Device energy
 
 
 def test_rates_live_in_one_central_place_and_are_not_hardcoded_elsewhere(home):
@@ -1401,7 +1422,9 @@ def test_hot_water_panel_reported_and_desired_targets_and_override_expiry(home):
         },
         datetime(2026, 11, 22, 23, 40, tzinfo=HOBART),
     )
-    assert {s["label"]: s for s in later["stats"]}["12 h override ends"]["detail"] == "2 h 30 min left"
+    assert {s["label"]: s for s in later["stats"]}["12 h override ends"][
+        "detail"
+    ] == "2 h 30 min left"
     peak = panel_json(card, {**HW_STATES, "sensor.thermann_shadow_current_tariff": "peak"})
     assert {s["label"]: s for s in peak["stats"]}["Tariff"]["tone"] == "warn"
 

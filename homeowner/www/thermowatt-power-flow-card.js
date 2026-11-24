@@ -670,13 +670,10 @@ export function discoverLights(hass, config) {
   for (const l of config.lights || []) consider(l.entity, l.name); // pinned first, in the configured order
   // A switch (a smart plug or relay that powers a lamp) is shown as a light only when the owner gives it the
   // `show_as_light` label: Home Assistant cannot tell a lamp plug from a heater plug, so it is never guessed.
-  if (showLabel) {
-    for (const id of Object.keys(states)) {
-      if (id.startsWith("light.") || !["switch", "input_boolean"].includes(id.split(".")[0])) continue;
-      if (labelsOf(registry[id] || {}).includes(showLabel)) consider(id, null);
-    }
-  }
-  const rest = Object.keys(states).filter((id) => id.startsWith("light.") && !seen.has(id));
+  const labelled = showLabel
+    ? Object.keys(states).filter((id) => !id.startsWith("light.") && ["switch", "input_boolean"].includes(id.split(".")[0]) && labelsOf(registry[id] || {}).includes(showLabel))
+    : [];
+  const rest = [...Object.keys(states).filter((id) => id.startsWith("light.")), ...labelled].filter((id) => !seen.has(id));
   const shownName = (id) => String(names[id] || (states[id].attributes || {}).friendly_name || prettyEntityName(id));
   rest.sort((a, b) => shownName(a).localeCompare(shownName(b), undefined, { numeric: true }));
   for (const id of rest) consider(id, null);
@@ -1462,6 +1459,53 @@ export function coverage(buckets, from, to, now) {
   return result;
 }
 
+/**
+ * The completed hours of [from, to) that have NO statistics, as contiguous runs {start, end, hours} (hours before the
+ * first recorded one included). Nothing is filled in: this only reports where Home Assistant wrote no row.
+ */
+export function missingRuns(buckets, from, to, now) {
+  const present = new Set();
+  const hours = new Map();
+  for (const b of buckets) {
+    const h = Math.floor(b.start / HOUR_MS) * HOUR_MS;
+    const entry = hours.get(h) || { whole: false, fine: 0 };
+    if (b.end - b.start >= HOUR_MS) entry.whole = true;
+    else entry.fine += 1;
+    hours.set(h, entry);
+  }
+  for (const [h, entry] of hours) if (entry.whole || entry.fine >= 12) present.add(h);
+  const end = Math.min(to, Math.floor(now / HOUR_MS) * HOUR_MS);
+  const runs = [];
+  for (let h = Math.ceil(from / HOUR_MS) * HOUR_MS; h < end; h += HOUR_MS) {
+    if (present.has(h)) continue;
+    const last = runs[runs.length - 1];
+    if (last && last.end === h) {
+      last.end = h + HOUR_MS;
+      last.hours += 1;
+    } else {
+      runs.push({ start: h, end: h + HOUR_MS, hours: 1 });
+    }
+  }
+  return runs;
+}
+
+/** Plain-English listing of gap runs. `overnight` = every missing hour starts between 18:00 and 07:00 local time. */
+export function describeGaps(runs, timeZone = DEFAULT_TIMEZONE, limit = 10) {
+  const when = (ms) => new Date(ms).toLocaleString("en-AU", { timeZone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+  let total = 0;
+  let overnight = runs.length > 0;
+  for (const run of runs) {
+    total += run.hours;
+    for (let h = run.start; h < run.end; h += HOUR_MS) {
+      const local = zonedParts(h, timeZone).hour;
+      if (local >= 7 && local < 18) overnight = false;
+    }
+  }
+  const shown = runs.slice(0, limit).map((r) => `${when(r.start)} to ${when(r.end)} (${r.hours} h)`);
+  if (runs.length > limit) shown.push(`and ${runs.length - limit} more`);
+  return { total, overnight, lines: shown };
+}
+
 /** Sum buckets in [from, to) into energy and tariff-valued cost, each allocated at its own start time. */
 export function accumulate(buckets, { from, to, tariff, rates, timeZone = DEFAULT_TIMEZONE }) {
   const result = { kwh: 0, offKwh: 0, peakKwh: 0, offCost: 0, peakCost: 0, cost: 0, count: 0, firstStart: null, assumedKwh: 0, unpricedKwh: 0 };
@@ -1574,7 +1618,12 @@ export function energyBalance({ sources, devices, from, to, now, battery, unusab
     const src = sources[key];
     const total = sumKwh(src.buckets, start, end);
     const cov = coverage(src.buckets, start, end, end);
-    if (!total || cov.leading || cov.missing) return withheld(`${labels[key]} statistics are incomplete (${cov.leading + cov.missing} h without data)`);
+    if (!total || cov.leading || cov.missing) {
+      return {
+        ...withheld(`${labels[key]} statistics are incomplete (${cov.leading + cov.missing} h without data)`),
+        gaps: { source: labels[key], runs: missingRuns(src.buckets, start, end, end) },
+      };
+    }
     values[key] = total.kwh;
   }
   base.requestedFrom = from;
@@ -2014,6 +2063,12 @@ function balanceHtml(s, view, compact) {
   html += `<p class="note">Battery-free balance from the inverter's generation, import and export statistics and the monitored devices, over the same complete hours${ended ? ` (to ${escapeHtml(ended)})` : ""}. Energy only: device costs elsewhere are tariff-valued estimates, not grid spending, and no solar is attributed to individual devices.</p>`;
   for (const [name, b] of [["Today", day], ["Month", month]]) {
     if (b.status === "withheld") html += `<p class="note"><b>${name}:</b> withheld, ${escapeHtml(b.reason)}.</p>`;
+    if (b.status === "withheld" && b.gaps && b.gaps.runs.length) {
+      const g = describeGaps(b.gaps.runs, s.tz);
+      html += `<details class="gaps"><summary>${name}: the ${g.total} hour${g.total === 1 ? "" : "s"} with no ${escapeHtml(b.gaps.source)} statistics</summary><ul>${g.lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>` +
+        `<p class="note">${g.overnight ? "Every missing hour is overnight, which is typical of an inverter that switches off when there is no sun: while the source is unavailable the recorder writes no row for that hour. " : "Some missing hours fall in daylight, so this is more than an overnight shutdown (a Home Assistant restart, a network drop or a replaced sensor). "}` +
+        "Nothing is estimated and no zero is invented. Home Assistant adds the energy a cumulative counter gained across a gap to the first hour after it, so a long period's total normally stays right, but which hours it belongs to is not known; the card therefore withholds the balance instead of assuming the gap was empty.</p></details>";
+    }
     else if (b.status === "pending") html += `<p class="note"><b>${name}:</b> collecting, ${escapeHtml(b.reason)}.</p>`;
     else {
       if (b.partial) html += `<p class="note"><b>${name}:</b> covers ${escapeHtml(fromText(b))} onwards: some statistics start later than the period.</p>`;

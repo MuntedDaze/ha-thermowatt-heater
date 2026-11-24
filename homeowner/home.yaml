@@ -1501,8 +1501,8 @@ views:
           sunset (it follows the seasons and Tasmanian daylight saving by itself) and OFF at 01:00.'
         - 'Switching a light yourself at any time always works: the schedule only acts at those two
           moments and never turns a light back on or off afterwards.'
-        - The schedule is switched OFF until you turn it on. Add the label to a light in Settings,
-          Areas, labels and zones, Labels.
+        - Nothing is scheduled until the optional schedule file is installed (the install notes explain
+          how). Add the label to a light in Settings, Areas, labels and zones, Labels.
     - type: conditional
       conditions:
       - condition: or
@@ -1585,8 +1585,8 @@ views:
         state_not: 'off'
       card:
         type: markdown
-        content: The evening schedule is not installed yet. See docs/owner/HOME_DASHBOARD.md (Lighting
-          schedule) for the optional package.
+        content: The evening schedule is not installed, so no lights are scheduled. See docs/owner/HOME_DASHBOARD.md
+          (Lighting schedule) for the optional file.
         grid_options:
           columns: 12
       grid_options:

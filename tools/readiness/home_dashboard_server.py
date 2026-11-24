@@ -104,6 +104,81 @@ def seed(hass):
             "off",
             {"supported_color_modes": ["brightness"], "color_mode": None},
         ),
+        # tablet Home page: realistic numbers, the integration's own switches and the bathrooms
+        "sensor.home_solar_used_directly_today": ("9.8", {"unit_of_measurement": "kWh"}),
+        "switch.thermann_shadow_automatic_heater_control": ("on", {}),
+        "switch.thermann_shadow_enable_optional_solar_boost": ("on", {}),
+        "switch.garden_lamp": (
+            "off",
+            {"friendly_name": "Garden lamp"},
+        ),  # a lamp on a smart plug: a switch
+        "sensor.tapo_smart_controller_main_bathroom_humidity": ("58", {"unit_of_measurement": "%"}),
+        "sensor.tapo_smart_controller_main_bathroom_temperature": (
+            "22.4",
+            {"unit_of_measurement": "°C"},
+        ),
+        "sensor.tapo_smart_controller_main_bathroom_background_humidity": (
+            "52",
+            {"unit_of_measurement": "%"},
+        ),
+        "sensor.tapo_smart_controller_main_bathroom_fan_status": (
+            "idle",
+            {"reason": "Humidity is normal; the fan is not needed."},
+        ),
+        "sensor.tapo_smart_controller_main_bathroom_towel_rail_remaining_time": (
+            "0m",
+            {"remaining_seconds": 0, "waiting_for_off_peak": False},
+        ),
+        "sensor.tapo_smart_controller_ensuite_humidity": ("71", {"unit_of_measurement": "%"}),
+        "sensor.tapo_smart_controller_ensuite_temperature": ("24.1", {"unit_of_measurement": "°C"}),
+        "sensor.tapo_smart_controller_ensuite_background_humidity": (
+            "50",
+            {"unit_of_measurement": "%"},
+        ),
+        "sensor.tapo_smart_controller_ensuite_fan_status": (
+            "shower_active",
+            {"reason": "A shower was detected; the fan is running."},
+        ),
+        "sensor.tapo_smart_controller_ensuite_towel_rail_remaining_time": (
+            "2h 40m",
+            {"remaining_seconds": 9600, "waiting_for_off_peak": False},
+        ),
+        "binary_sensor.tapo_smart_controller_ensuite_shower_detected": (
+            "on",
+            {"device_class": "moisture"},
+        ),
+        "binary_sensor.tapo_smart_controller_ensuite_fan_running": (
+            "on",
+            {"summary": "Running — automatic: shower detected"},
+        ),
+        "binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating": (
+            "on",
+            {"summary": "On — drying after the shower"},
+        ),
+        "switch.tapo_smart_controller_main_bathroom_fan_manual_override": (
+            "off",
+            {"configured_minutes": 20, "remaining_seconds": None},
+        ),
+        "switch.tapo_smart_controller_ensuite_fan_manual_override": (
+            "off",
+            {"configured_minutes": 20, "remaining_seconds": None},
+        ),
+        "number.tapo_smart_controller_main_bathroom_manual_fan_duration": (
+            "20",
+            {"unit_of_measurement": "min"},
+        ),
+        "number.tapo_smart_controller_ensuite_manual_fan_duration": (
+            "20",
+            {"unit_of_measurement": "min"},
+        ),
+        "number.tapo_smart_controller_main_bathroom_towel_drying_duration": (
+            "4",
+            {"unit_of_measurement": "h"},
+        ),
+        "number.tapo_smart_controller_ensuite_towel_drying_duration": (
+            "4",
+            {"unit_of_measurement": "h"},
+        ),
     }
     for custom in (True, False):
         _, ent = build.build_dashboard(custom=custom)
