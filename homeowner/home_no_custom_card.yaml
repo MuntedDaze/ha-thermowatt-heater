@@ -1360,7 +1360,7 @@ views:
       card:
         type: tile
         entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: status unknown'
+        name: '12-hour 62 °C override: status unknown'
         icon: mdi:water-boiler-alert
         color: grey
         hide_state: true
@@ -1386,7 +1386,7 @@ views:
       card:
         type: tile
         entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: not available now'
+        name: '12-hour 62 °C override: not available now'
         icon: mdi:water-boiler-off
         color: grey
         hide_state: true

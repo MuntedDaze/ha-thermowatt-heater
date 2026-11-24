@@ -474,7 +474,11 @@ def override_toggle(ent, columns=12):
         hide_state=True,
     )
     unknown = tile(
-        mode, "12 h override: status unknown", "mdi:water-boiler-alert", "grey", hide_state=True
+        mode,
+        "12-hour 62 °C override: status unknown",
+        "mdi:water-boiler-alert",
+        "grey",
+        hide_state=True,
     )
     return [
         conditional(when(mode, "guest"), on_card, columns),
@@ -488,7 +492,7 @@ def override_toggle(ent, columns=12):
             [any_state(mode, ("holiday", "disabled"))],
             tile(
                 mode,
-                "12 h override: not available now",
+                "12-hour 62 °C override: not available now",
                 "mdi:water-boiler-off",
                 "grey",
                 hide_state=True,
