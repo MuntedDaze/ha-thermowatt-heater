@@ -68,8 +68,8 @@ def seed(hass):
         ),
         "sensor.thermann_shadow_hot_water_operating_mode": ("automatic", {}),
         "sensor.thermann_shadow_current_tariff": ("off_peak", {}),
-        "sensor.thermann_shadow_solar_boost_status": ("idle", {}),
-        "sensor.thermann_shadow_next_intended_action": ("wait_for_off_peak", {}),
+        "sensor.thermann_shadow_solar_boost_status": ("Waiting", {}),
+        "sensor.thermann_shadow_next_intended_action": ("normal_storage_62", {}),
         "sensor.thermann_shadow_next_cloud_poll": (later, {}),
         "sensor.home_last_successful_poll": (earlier, {}),
         "sensor.thermann_shadow_guest_mode_ends": ("unknown", {}),
@@ -452,6 +452,8 @@ async def main():
         if isinstance(node, dict):
             if node.get("type") == "custom:thermowatt-lights-card":
                 yield node
+            if node.get("type") == "custom:thermowatt-home-page":
+                yield node["lights"]  # the Home page card embeds the lights card
             for value in node.values():
                 yield from lights_cards(value)
         elif isinstance(node, list):

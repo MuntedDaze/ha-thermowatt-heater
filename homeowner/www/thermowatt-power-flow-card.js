@@ -940,7 +940,7 @@ const HOME_CSS = `
   .cell>thermowatt-power-flow-card,.cell>thermowatt-lights-card{flex:1}
   .cell>.wx{flex:1;overflow:hidden;border-radius:var(--ha-card-border-radius,12px)}
   .wx>*{display:block;height:100%}
-  ha-card.pg{flex:1;display:flex;flex-direction:column;gap:calc(var(--u)*.8);padding:calc(var(--u)*1.35) calc(var(--u)*1.5);overflow:hidden;container-type:inline-size;
+  ha-card.pg{flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:calc(var(--u)*.8);padding:calc(var(--u)*1.35) calc(var(--u)*1.5);overflow:hidden;container-type:inline-size;
     --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);--tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
   ha-card.strip{flex:none;display:flex;align-items:center;gap:calc(var(--u)*.8);padding:calc(var(--u)*.7) calc(var(--u)*1.2);
     --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);--tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
