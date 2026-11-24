@@ -131,6 +131,7 @@ test("solar used directly shows only while the package says its daily meters are
   assert.equal(mod.directUseKwh(states("ready", st("unavailable")), today), null);
   assert.equal(mod.directUseKwh({ states: {} }, today), null);
   assert.equal(mod.directUseKwh(states("ready"), { solar: "x" }), null); // not configured
+  assert.equal(mod.directUseKwh(states("ready"), { used: "sensor.used" }), null); // no status entity: no claim
 });
 
 // ----------------------------------------------------------------------------- lights: why a light is missing

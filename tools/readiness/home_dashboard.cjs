@@ -314,6 +314,7 @@ async function main() {
         await setState(STATUS, "collecting_first_day");
         await goHome("home");
 
+        let result;
         // Lights are DISCOVERED: the two seeded lights show, a third appears with no reconfiguration, and the
         // card scales to ten. Unavailable lights and light groups are not shown.
         const lightFacts = () =>
@@ -408,7 +409,7 @@ async function main() {
         for (let i = 4; i <= 10; i += 1) await setState(`light.test_light_${i}`, "unavailable", { friendly_name: `Test light ${i}` });
         await setState("light.third_light", "unavailable", { friendly_name: "Third light" });
         await expect.poll(async () => (await lightFacts()).count, { timeout: 10000 }).toBe(2);
-        let result = await tap("Living room", { first: true });
+        result = await tap("Living room", { first: true });
         expect(JSON.stringify(result.calls)).toContain("light.toggle");
 
         // Home: the manual fan button of each bathroom (the only control on the page).

@@ -172,6 +172,9 @@ def test_home_page_has_no_hot_water_override_and_one_fan_control_per_bathroom(ho
     # nor does the no-custom-card Home view offer a 12 hour override
     native_home = json.dumps(view(native[0], "home"))
     assert START not in native_home and CANCEL not in native_home
+    # and its towel rails are status only (no towel manual-override switch call on the native Home view)
+    assert "towel_rail_manual_override" not in native_home
+    assert "switch.tapo_smart_controller_main_bathroom_fan_manual_override" in native_home
 
 
 def test_home_page_hot_water_entities_exist_in_the_integration(home):

@@ -412,128 +412,19 @@ views:
           hold_action:
             action: none
           vertical: false
-      - type: conditional
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          state: 'on'
-        card:
-          type: tile
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          name: 'Towel rail: manual'
-          icon: mdi:radiator
-          color: blue
-          state_content: summary
-          tap_action:
-            action: perform-action
-            perform_action: switch.turn_off
-            target:
-              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          icon_tap_action:
-            action: perform-action
-            perform_action: switch.turn_off
-            target:
-              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          hold_action:
-            action: none
-          vertical: false
-      - type: conditional
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          state: 'off'
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          state: 'on'
-        card:
-          type: tile
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          name: 'Towel rail: automatic'
-          icon: mdi:radiator
-          color: blue
-          state_content: summary
-          tap_action:
-            action: perform-action
-            perform_action: switch.turn_on
-            target:
-              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-            confirmation:
-              text: Request one towel-rail drying cycle? It only heats during off-peak.
-          icon_tap_action:
-            action: perform-action
-            perform_action: switch.turn_on
-            target:
-              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-            confirmation:
-              text: Request one towel-rail drying cycle? It only heats during off-peak.
-          hold_action:
-            action: none
-          vertical: false
-      - type: conditional
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          state: 'off'
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          state: 'off'
-        card:
-          type: tile
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          name: 'Towel rail: off'
-          icon: mdi:radiator-off
-          color: grey
-          state_content: summary
-          tap_action:
-            action: perform-action
-            perform_action: switch.turn_on
-            target:
-              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-            confirmation:
-              text: Request one towel-rail drying cycle? It only heats during off-peak.
-          icon_tap_action:
-            action: perform-action
-            perform_action: switch.turn_on
-            target:
-              entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-            confirmation:
-              text: Request one towel-rail drying cycle? It only heats during off-peak.
-          hold_action:
-            action: none
-          vertical: false
-      - type: conditional
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          state_not: 'on'
-        - condition: or
-          conditions:
-          - condition: state
-            entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-            state: unavailable
-          - condition: state
-            entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-            state: unknown
-          - condition: state
-            entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-            state: unavailable
-          - condition: state
-            entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-            state: unknown
-        card:
-          type: tile
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          name: 'Towel rail: status unknown'
-          icon: mdi:radiator-disabled
-          color: grey
-          state_content: summary
-          tap_action:
-            action: more-info
-          icon_tap_action:
-            action: more-info
-          hold_action:
-            action: none
-          vertical: false
+      - type: tile
+        entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+        name: Towel rail
+        icon: mdi:radiator
+        color: orange
+        state_content: summary
+        tap_action:
+          action: none
+        icon_tap_action:
+          action: none
+        hold_action:
+          action: none
+        vertical: false
   - type: grid
     cards:
     - type: vertical-stack
@@ -684,128 +575,19 @@ views:
           hold_action:
             action: none
           vertical: false
-      - type: conditional
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          state: 'on'
-        card:
-          type: tile
-          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          name: 'Towel rail: manual'
-          icon: mdi:radiator
-          color: blue
-          state_content: summary
-          tap_action:
-            action: perform-action
-            perform_action: switch.turn_off
-            target:
-              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          icon_tap_action:
-            action: perform-action
-            perform_action: switch.turn_off
-            target:
-              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          hold_action:
-            action: none
-          vertical: false
-      - type: conditional
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          state: 'off'
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          state: 'on'
-        card:
-          type: tile
-          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          name: 'Towel rail: automatic'
-          icon: mdi:radiator
-          color: blue
-          state_content: summary
-          tap_action:
-            action: perform-action
-            perform_action: switch.turn_on
-            target:
-              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-            confirmation:
-              text: Request one towel-rail drying cycle? It only heats during off-peak.
-          icon_tap_action:
-            action: perform-action
-            perform_action: switch.turn_on
-            target:
-              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-            confirmation:
-              text: Request one towel-rail drying cycle? It only heats during off-peak.
-          hold_action:
-            action: none
-          vertical: false
-      - type: conditional
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          state: 'off'
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          state: 'off'
-        card:
-          type: tile
-          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          name: 'Towel rail: off'
-          icon: mdi:radiator-off
-          color: grey
-          state_content: summary
-          tap_action:
-            action: perform-action
-            perform_action: switch.turn_on
-            target:
-              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-            confirmation:
-              text: Request one towel-rail drying cycle? It only heats during off-peak.
-          icon_tap_action:
-            action: perform-action
-            perform_action: switch.turn_on
-            target:
-              entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-            confirmation:
-              text: Request one towel-rail drying cycle? It only heats during off-peak.
-          hold_action:
-            action: none
-          vertical: false
-      - type: conditional
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          state_not: 'on'
-        - condition: or
-          conditions:
-          - condition: state
-            entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-            state: unavailable
-          - condition: state
-            entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-            state: unknown
-          - condition: state
-            entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-            state: unavailable
-          - condition: state
-            entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-            state: unknown
-        card:
-          type: tile
-          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          name: 'Towel rail: status unknown'
-          icon: mdi:radiator-disabled
-          color: grey
-          state_content: summary
-          tap_action:
-            action: more-info
-          icon_tap_action:
-            action: more-info
-          hold_action:
-            action: none
-          vertical: false
+      - type: tile
+        entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+        name: Towel rail
+        icon: mdi:radiator
+        color: orange
+        state_content: summary
+        tap_action:
+          action: none
+        icon_tap_action:
+          action: none
+        hold_action:
+          action: none
+        vertical: false
   - type: grid
     cards:
     - type: heading

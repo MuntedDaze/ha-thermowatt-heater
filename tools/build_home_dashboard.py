@@ -688,7 +688,7 @@ def hold_toggle(ent, columns=12):
 
 
 # ------------------------------------------------------------------ bathrooms
-def bathroom_card(ent, name, columns=6, controls_only=False):
+def bathroom_card(ent, name, columns=6, controls_only=False, towel_controls=True):
     hum = ent.tapo("sensor", name, "Humidity")
     temp = ent.tapo("sensor", name, "Temperature")
     fan = ent.tapo("binary_sensor", name, "Fan Running")
@@ -801,12 +801,25 @@ def bathroom_card(ent, name, columns=6, controls_only=False):
                 "Fan",
                 ("mdi:fan-clock", "mdi:fan", "mdi:fan-off", "mdi:fan-alert"),
             ),
-            *toggle(
-                towel,
-                towel_switch,
-                "Towel rail",
-                ("mdi:radiator", "mdi:radiator", "mdi:radiator-off", "mdi:radiator-disabled"),
-                "Request one towel-rail drying cycle? It only heats during off-peak.",
+            *(
+                toggle(
+                    towel,
+                    towel_switch,
+                    "Towel rail",
+                    ("mdi:radiator", "mdi:radiator", "mdi:radiator-off", "mdi:radiator-disabled"),
+                    "Request one towel-rail drying cycle? It only heats during off-peak.",
+                )
+                if towel_controls
+                else [  # Home: the towel rail is status only (no manual request from the main screen)
+                    tile(
+                        towel,
+                        "Towel rail",
+                        "mdi:radiator",
+                        "orange",
+                        content="summary",
+                        tap={"action": "none"},
+                    )
+                ]
             ),
         ],
     }
@@ -1672,7 +1685,9 @@ def build_views_native(ent):
     if not lights:
         ent.unresolved.append("lights.names")
         lights.append(mapping_needed("Lights", "lights.names", 12))
-    bathrooms = [bathroom_card(ent, name, 12) for name in names]  # one column wide each
+    bathrooms = [
+        bathroom_card(ent, name, 12, towel_controls=False) for name in names
+    ]  # one column wide each
 
     home = view(
         "Home",

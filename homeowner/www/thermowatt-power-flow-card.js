@@ -250,7 +250,7 @@ export async function loadTodayEnergy(hass, today, timeZone = DEFAULT_TIMEZONE, 
 export function directUseKwh(hass, today) {
   if (!today || !today.used) return null;
   const states = hass.states || {};
-  if (today.status && (!states[today.status] || states[today.status].state !== "ready")) return null;
+  if (!today.status || !states[today.status] || states[today.status].state !== "ready") return null; // no status, no claim
   return liveKwh(states[today.used]);
 }
 
@@ -822,7 +822,7 @@ const niceText = (value) => {
 };
 const clockText = (value, timeZone) => {
   const ms = Date.parse(value);
-  return Number.isFinite(ms) ? new Date(ms).toLocaleTimeString("en-AU", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }) : null;
+  return Number.isFinite(ms) ? new Date(ms).toLocaleTimeString("en-AU", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
 };
 
 /** Solar boost for the Home page: Off when the setting is off, else Active / Waiting from the controller's status. */
@@ -999,11 +999,20 @@ class ThermowattHomePage extends BaseUi {
   connectedCallback() {
     this._onResize = () => this._fit();
     window.addEventListener("resize", this._onResize);
+    // a sidebar toggle or an on-screen keyboard changes the space without a window resize
+    if (typeof ResizeObserver !== "undefined") {
+      this._observer = new ResizeObserver(() => this._fit());
+      this._observer.observe(document.documentElement);
+    }
     if (this._built) requestAnimationFrame(() => this._fit());
   }
 
   disconnectedCallback() {
     window.removeEventListener("resize", this._onResize);
+    if (this._observer) {
+      this._observer.disconnect();
+      this._observer = null;
+    }
   }
 
   set hass(hass) {
@@ -1022,7 +1031,7 @@ class ThermowattHomePage extends BaseUi {
       return;
     }
     const top = this.getBoundingClientRect().top;
-    const available = Math.max(420, Math.floor(window.innerHeight - top - 8));
+    const available = Math.max(280, Math.floor(window.innerHeight - top - 8));
     this.style.height = `${available}px`;
     // type scales with the measured height inside a readable range
     const u = Math.min(14, Math.max(9.6, available / 52));
@@ -1032,8 +1041,9 @@ class ThermowattHomePage extends BaseUi {
   _build() {
     this._built = true;
     const c = this._config;
-    const root = this.attachShadow({ mode: "open" });
+    const root = this.shadowRoot || this.attachShadow({ mode: "open" }); // setConfig can run again on a live element
     this._root = root;
+    this._weather = null;
     root.innerHTML = `<style>${HOME_CSS}</style><div class="grid">
       <div class="cell" id="c-energy"></div>
       <div class="cell"><ha-card class="pg" id="hot"></ha-card></div>
@@ -1491,7 +1501,7 @@ export function missingRuns(buckets, from, to, now) {
 
 /** Plain-English listing of gap runs. `overnight` = every missing hour starts between 18:00 and 07:00 local time. */
 export function describeGaps(runs, timeZone = DEFAULT_TIMEZONE, limit = 10) {
-  const when = (ms) => new Date(ms).toLocaleString("en-AU", { timeZone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+  const when = (ms) => new Date(ms).toLocaleString("en-AU", { timeZone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   let total = 0;
   let overnight = runs.length > 0;
   for (const run of runs) {
