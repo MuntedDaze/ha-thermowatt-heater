@@ -419,6 +419,9 @@ async function main() {
         expect(result.confirmationShown, "switching the schedule on asks for confirmation").toBe(true);
         expect(JSON.stringify(result.calls)).toContain("automation.toggle");
         await page.screenshot({ path: `${output}/lights-page-${size.name}.png`, fullPage: true });
+        // the schedule is "not installed" again for the next viewport (states persist across the run)
+        await setState("automation.evening_lights_on", "unavailable");
+        await setState("automation.evening_lights_off", "unavailable");
         await goHome("home");
         for (let i = 4; i <= 10; i += 1) await setState(`light.test_light_${i}`, "unavailable", { friendly_name: `Test light ${i}` });
         await setState("light.third_light", "unavailable", { friendly_name: "Third light" });
