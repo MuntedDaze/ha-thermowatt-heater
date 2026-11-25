@@ -1,15 +1,18 @@
-# Upgrading to Controller 0.18.1 and Thermann Hot Water 1.5.0
+# Upgrading to Controller 0.18.2 and Thermann Hot Water 1.5.1
 
-For the owner's installation (Home Assistant OS, Thermann Hot Water app 1.4.1,
-Controller 0.17.1, CT-free GoodWe, EMHASS, fixed-AEST Aurora 93), to Controller
-0.18.1 and then app 1.5.0. These steps
+For the owner's installation (Home Assistant OS, Thermann Hot Water app 1.4.1
+or 1.5.0, Controller 0.17.1 or 0.18.1, CT-free GoodWe, EMHASS, fixed-AEST
+Aurora 93), to Controller 0.18.2 and then app 1.5.1. These steps
 are for the owner after review and approval; they are not permission for an
 agent to deploy, restart or operate anything. The earlier 0.16 / 1.4 guide is in
 [history](../history/next-major/OWNER_UPGRADE_0_16.md).
 
-What changes is listed in the [controller changelog](../../shadow_controller/CHANGELOG.md);
+What changes is listed in the [controller changelog](../../shadow_controller/CHANGELOG.md)
+and [app changelog](../../thermowatt-heater/CHANGELOG.md);
 the requirements are in [OPERATING_POLICY.md](../OPERATING_POLICY.md).
-Controller 0.18.1 works with app 1.4.1; the app update is a separate step.
+Controller 0.18.2 works with app 1.4.1, 1.5.0 and 1.5.1; the app update is a
+separate step (installing both 0.18.2 and 1.5.1 enables full boundary-race
+backoff deferral).
 
 ## 1. Before you start
 
@@ -60,14 +63,16 @@ integration or its configuration entry. Restart Home Assistant.
 - Turn **Automatic heater control** back on only when you intend to (separate
   decision).
 
-## 4. Update the Thermann Hot Water app to 1.5.0 (separate step)
+## 4. Update the Thermann Hot Water app to 1.5.1 (separate step)
 
-Do this after the controller is running 0.18.1 (it also works with 1.4.1).
+Do this after the controller is running 0.18.2 (keep **Automatic heater control**
+off and preserve the heater's current Manual 62 °C setting until supervised
+commissioning).
 
 1. With **Automatic heater control** off, check there is no pending command
    (*Last command result* is not `awaiting_confirmation`).
 2. **Settings → Apps → Thermann Hot Water → Update.** Supervisor asks first
-   because 1.5.0 is marked as a breaking version. Do not uninstall, reinstall
+   because 1.5.1 is marked as a breaking version. Do not uninstall, reinstall
    or delete the app's data: credentials, tokens, authentication generation,
    guard state, request ledger and command journal stay in place.
 3. Open the app's **Configuration** tab. The only polling option is

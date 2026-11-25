@@ -1,5 +1,41 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.18.2 — cloud outage recovery safeguards and tablet Home dashboard (with app 1.5.1)
+
+Addresses the 25 November 2026 live boundary-race incident (`docs/audits/2026-11-25/CLOUD_OUTAGE_RECOVERY_INVESTIGATION.md`) and completes the Samsung Galaxy Tab S7 FE landscape Home dashboard refinement.
+
+- **Safe deferral on proven-never-sent transient cloud backoff refusals.**
+  When the bridge explicitly proves no heater POST was attempted due to
+  transient cloud backoff (`refused_cloud_backoff`, or
+  `refused_status_refresh_failed` with an allowlisted non-auth/non-quota
+  transient error while `bridge_confirmation_pending` is `False` and auth is
+  `authorized`), the controller resolves the intent as `deferred_cloud_backoff`
+  and returns to `change_requested` (or `observing` after an HA restart)
+  instead of locking into `fault_locked`. Automatic control then applies the
+  wanted target once the cloud recovers. All auth, quota, policy, dropped,
+  rejected, unclassified, late-poll, and timeout failures remain strictly
+  `fault_locked`.
+- **30-second Smart pre-transition poll lead.** Non-peak tariff and flat-tariff
+  transition boundaries schedule their Smart read 30 s ahead of the boundary
+  (e.g., `21:59:30` before `22:00:00`), preventing synchronous poll/command
+  collisions while keeping healthy reads fresh (`<= 60 s`) through
+  `COMMAND_INTERVAL` with zero extra pre-command GETs.
+- **Honest fault wording.** `command_not_applied` and `confirmation_timeout`
+  messages state that the MQTT command was **published** rather than claiming
+  it "was sent" when the bridge never confirmed sending or applying it.
+- **Continuous restore warning & preserved notification cooldown.**
+  `parked_off_restore_since` stays continuous across `command_spacing` /
+  `cloud_or_freshness_gate` holds, and `alert_cooldowns` preserves the 6-hour
+  notification cooldown across brief `cloud_health = unavailable` / flap gaps.
+- **Tablet-first Home dashboard refinement (with Tapo Smart Controller 0.4.0).**
+  Single-screen `1280×704` Samsung Galaxy Tab S7 FE landscape fit with all 5
+  weather forecast days visible without clipping, `>= 13 px` minimum text,
+  Lights page with optional inactive lighting schedule, and updated Bathrooms
+  controls.
+- **Heating policy unchanged.** Manual 45/62/70 °C targets, peak-OFF rules,
+  solar-boost qualification and settings lock, and `AuthGuard` protections are
+  unchanged. No settings or migrations change (entry stays at minor version 6).
+
 ## 0.18.1 — final release: forecast independence and cleanup (app 1.5.0 unchanged)
 
 Final owner instruction of 20 November 2026 (`docs/OPERATING_POLICY.md` §1.11).

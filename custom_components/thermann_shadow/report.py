@@ -325,9 +325,9 @@ def build(runtime, now, ha_version="unknown"):
     report = {
         "schema": 1,
         "versions": {
-            "controller": "0.18.1",
+            "controller": "0.18.2",
             "bridge": attrs.get("bridge_version")
-            if attrs.get("bridge_version") in {"1.3.17", "1.4.0", "1.4.1", "1.5.0"}
+            if attrs.get("bridge_version") in {"1.3.17", "1.4.0", "1.4.1", "1.5.0", "1.5.1"}
             else "unreported",
             "home_assistant": ha_version
             if isinstance(ha_version, str)

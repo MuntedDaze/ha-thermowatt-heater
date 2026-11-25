@@ -856,7 +856,7 @@ class MyThermowattBridge:
             timestamp = self.last_success.get(serial)
             schedule = self.poll_schedule.summary(serial)
             payload = {
-                "bridge_version": "1.5.0",
+                "bridge_version": "1.5.1",
                 "last_successful_poll": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
                 if timestamp is not None
                 else None,

@@ -3,8 +3,8 @@ scheduled heating transitions (22:00 Hobart / 21:00 AEST evening peak -> 45 C
 baseline), recovery, failure to recover, notification cooldown preservation,
 pre-transition Smart poll lead, honest fault wording, and fail-closed locks.
 
-Uses the real MyThermowattBridge (1.5.0), ShadowRuntime, Executor, and
-Controller (0.18.1) with synthetic clocks, mocked HTTP, and realistic Home
+Uses the real MyThermowattBridge (1.5.1), ShadowRuntime, Executor, and
+Controller (0.18.2) with synthetic clocks, mocked HTTP, and realistic Home
 Assistant MQTT availability handling. Never touches live Home Assistant or live
 Thermowatt cloud services.
 """
@@ -711,3 +711,69 @@ def test_smart_mode_ordinary_get_does_not_proactively_refresh_on_cloud_success_f
     assert endpoints == [("GET", "status"), ("GET", "status")]
     assert rig.bridge.failures == 2
     assert rig.bridge.guard.state["mode"] == "authorized"
+
+
+def test_ha_restart_during_deferred_cloud_backoff_reinspects_and_auto_recovers(
+    tmp_path, monkeypatch
+):
+    """Independent safety check: if HA restarts while a command is confirming and
+    then observes refused_cloud_backoff, it never replays the command immediately,
+    enters observing (requiring a genuinely NEW post-restart poll), keeps
+    parked_off_restore_since continuous, and automatically restores 45 C once
+    the 1-hour backoff expires."""
+    rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 30), cloud_polling="smart")
+    outage_at = hobart(MON, 22, 0)
+    recovery_at = outage_at + timedelta(seconds=3600)
+
+    rig.t = outage_at.timestamp()
+    evaluate(rig)
+    assert rig.commands() == ["Manual:45@off"]
+    queued_cmd = rig.bridge.commands.get_nowait()
+
+    def cloud(method, url, **kwargs):
+        endpoint = url.rsplit("/", 1)[-1]
+        if endpoint == "status" and rig.now() < recovery_at:
+            rig.status_attempts.append(rig.now())
+            rig.bridge.commands.put_nowait(queued_cmd)
+            return response(body=CLOUD_SUCCESS_FALSE)
+        if endpoint == "status":
+            rig.status_attempts.append(rig.now())
+        return rig.cloud(method, url, **kwargs)
+
+    rig.bridge.session.request.side_effect = cloud
+    rig.bridge.next_poll = rig.t
+    rig.bridge.next_background[SERIAL] = rig.t
+    rig.bridge.next_cloud = rig.t
+    rig.bridge.tick()
+    assert rig.bridge.last_command["result"] == "refused_cloud_backoff"
+    assert not heater_posts(rig)
+
+    # Simulate Home Assistant restarting before processing the refusal.
+    rig.t += 120
+    rig.executor = rig._executor()
+    controller = rig.executor.controller
+    assert controller.state == "confirming"
+    assert controller.reason == "reconciling_command_after_restart"
+
+    evaluate(rig)
+    assert controller.state == "observing"
+    assert controller.fault is None
+    assert controller.intent is None
+    assert controller.history[-1]["status"] == "deferred_cloud_backoff"
+    assert controller.parked_off_restore_since == outage_at.isoformat()
+    assert rig.commands() == ["Manual:45@off"]  # never replayed across restart
+
+    # Stays safely observing through the 1-hour backoff and alerts at 30 minutes.
+    advance(rig, recovery_at - timedelta(seconds=1))
+    assert controller.state == "observing"
+    assert rig.commands() == ["Manual:45@off"]
+    assert not heater_posts(rig)
+    assert rig.notifications.count("thermann_shadow_parked_off_cannot_restore") == 1
+
+    # Fresh post-restart poll at 23:00 classifies Off and restores Manual 45 C.
+    advance(rig, recovery_at + timedelta(minutes=3))
+    assert rig.bridge.cloud_health == "ok"
+    assert len(heater_posts(rig)) == 1
+    assert controller.state == "baseline_45"
+    assert controller.fault is None
+    assert rig.tank.mode == "Manual" and rig.tank.setpoint == 45
