@@ -1,7 +1,7 @@
 """Deterministic offline tests for cloud_success_false outage, 1-hour backoff,
 scheduled heating transitions (22:00 Hobart / 21:00 AEST evening peak -> 45 C
-baseline), recovery, failure to recover, notification deduplication, and Smart
-mode token-refresh behaviour.
+baseline), recovery, failure to recover, notification cooldown preservation,
+pre-transition Smart poll lead, honest fault wording, and fail-closed locks.
 
 Uses the real MyThermowattBridge (1.5.0), ShadowRuntime, Executor, and
 Controller (0.18.1) with synthetic clocks, mocked HTTP, and realistic Home
@@ -10,9 +10,13 @@ Thermowatt cloud services.
 """
 
 from datetime import timedelta
+import json
 from types import SimpleNamespace
 
+import pytest
+
 from conftest import TOKENS, response
+from test_controller_0_9_0 import cfg, obs, ready as ready_controller, want
 from test_integration_0_9_0 import MON, SERIAL, Rig, drive, hobart
 from test_shadow_model import c
 
@@ -209,52 +213,23 @@ def test_outage_before_transition_clean_backoff_and_automatic_recovery(
     assert "cloud_fault" not in controller.active_alerts
 
 
-def test_race_status_poll_failure_drains_published_command_and_locks_on_recovery(
-    tmp_path, monkeypatch
-):
-    """Exact live-incident Race A: at 22:00 Hobart the controller publishes
-    Manual:45@off (intent=published, state=confirming) while the bridge's
-    status poll fails with cloud_success_false and _offline() silently drains
-    the command queue. At 23:00 recovery the bridge recovers to Off, but the
-    controller locks into fault_locked (command_not_applied) instead of
-    automatically applying 45 C until the owner acknowledges the fault."""
+def test_race_a_in_flight_status_poll_failure_defers_and_auto_recovers_at_1h(tmp_path, monkeypatch):
+    """Fix #1 + #2 (confirmed 25 Nov 2026 live incident Race A): at 22:00 Hobart
+    the controller publishes Manual:45@off while the bridge's status poll fails
+    with cloud_success_false. _offline() now records refused_cloud_backoff
+    instead of silently draining the queue; controller defers cleanly without
+    locking, fires parked_off_cannot_restore at 30 min with zero retries, and
+    automatically restores Manual 45 C at 23:00 recovery."""
     rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 30), cloud_polling="smart")
     outage_at = hobart(MON, 22, 0)
     recovery_at = outage_at + timedelta(seconds=3600)
 
-    # At 22:00:00, controller evaluates while bridge still looks healthy and
-    # publishes Manual:45@off into the bridge queue.
     rig.t = outage_at.timestamp()
     evaluate(rig)
     controller = rig.executor.controller
     assert rig.commands() == ["Manual:45@off"]
     assert controller.state == "confirming"
-    assert controller.intent is not None
     assert controller.intent["status"] == "published"
-    assert controller.heater == "off"
-    assert rig.bridge.commands.qsize() == 1
-
-    # Simultaneously, the bridge's scheduled 22:00 status poll fails with
-    # cloud_success_false before processing the queued command: tick() enters
-    # _offline() (silently draining self.commands) and starts a 3,600 s backoff.
-    def fail_then_recover(method, url, **kwargs):
-        endpoint = url.rsplit("/", 1)[-1]
-        if endpoint == "status" and rig.now() < recovery_at:
-            rig.status_attempts.append(rig.now())
-            return response(body=CLOUD_SUCCESS_FALSE)
-        if endpoint == "status":
-            rig.status_attempts.append(rig.now())
-        return rig.cloud(method, url, **kwargs)
-
-    rig.bridge.session.request.side_effect = fail_then_recover
-    # Simulate the in-flight status_poll failure path in tick().
-    rig.bridge.next_poll = rig.t
-    rig.bridge.next_background[SERIAL] = rig.t
-    rig.bridge.next_cloud = rig.t
-    # Put command back after poll starts by triggering poll_status via tick when
-    # poll_due fails during discovery/status before or after command drain:
-    # Pop the command temporarily, run the failing poll_status, or inject it
-    # right before _offline() runs during the HTTP GET.
     queued_cmd = rig.bridge.commands.get_nowait()
 
     def in_flight_status_fail(method, url, **kwargs):
@@ -269,58 +244,62 @@ def test_race_status_poll_failure_drains_published_command_and_locks_on_recovery
         return rig.cloud(method, url, **kwargs)
 
     rig.bridge.session.request.side_effect = in_flight_status_fail
+    rig.bridge.next_poll = rig.t
+    rig.bridge.next_background[SERIAL] = rig.t
+    rig.bridge.next_cloud = rig.t
     rig.bridge.tick()
 
     assert rig.bridge.cloud_health == "backoff"
     assert rig.bridge.last_error == "cloud_success_false"
     assert rig.bridge.failures == 1
     assert rig.bridge.next_cloud == outage_at.timestamp() + 3600
-    assert rig.bridge.commands.empty()  # silently drained by _offline()
-    assert rig.bridge.last_command is None  # bridge never recorded a refusal
+    assert rig.bridge.commands.empty()
+    assert rig.bridge.last_command["result"] == "refused_cloud_backoff"
+    assert rig.bridge.last_command["error"] == "cloud_success_false"
     assert rig.bridge.pending is None
     assert not heater_posts(rig)
     assert rig.tank.mode == "Off"
 
-    # Throughout the 1-hour backoff, intent stays published & unconfirmed.
-    advance(rig, recovery_at - timedelta(seconds=1))
-    assert controller.state == "confirming"
-    assert controller.intent is not None
-    assert controller.intent["status"] == "published"
+    # Next controller evaluation resolves the proven-never-sent refusal without locking.
+    rig.t += 60
+    evaluate(rig)
+    assert controller.fault is None
+    assert controller.intent is None
     assert controller.heater == "off"
-    assert len(rig.status_attempts) == 1
-    assert not heater_posts(rig)
+    assert controller.history[-1]["status"] == "deferred_cloud_backoff"
+    assert controller.parked_off_restore_since == outage_at.isoformat()
 
-    # At 23:00:00 the cloud recovers and bridge polls Off.
-    # Current behaviour: controller hits late_poll (>= 7 min) and locks into
-    # fault_locked (command_not_applied) instead of auto-recovering.
-    advance(rig, recovery_at + timedelta(minutes=2))
+    # Throughout the 1-hour backoff: zero extra cloud calls, zero extra commands,
+    # and parked_off_cannot_restore still alerts at 30 minutes.
+    advance(rig, recovery_at - timedelta(seconds=1))
+    assert controller.state == "change_requested"
+    assert controller.fault is None
+    assert len(rig.status_attempts) == 1
+    assert rig.commands() == ["Manual:45@off"]
+    assert not heater_posts(rig)
+    assert rig.notifications.count("thermann_shadow_parked_off_cannot_restore") == 1
+
+    # At 23:00:00 cloud recovers -> bridge polls Off -> controller automatically
+    # sends Manual:45@off, reuses fresh status, and confirms Manual 45 C.
+    advance(rig, recovery_at + timedelta(minutes=3))
     assert rig.bridge.cloud_health == "ok"
     assert rig.bridge.failures == 0
-    assert controller.state == "fault_locked"
-    assert controller.fault == "command_not_applied"
-    assert controller.intent is None
-    assert controller.history[-1]["status"] == "not_applied"
-    assert rig.tank.mode == "Off"
-    assert not heater_posts(rig)
-
-    # Manual owner acknowledgement restores automatic control on the next fresh poll.
-    assert drive(rig.executor.async_owner_action("acknowledge"))
-    assert controller.state == "observing"
-    # Advance to the next scheduled status read + confirmation.
-    advance(rig, recovery_at + timedelta(minutes=35))
     assert rig.commands() == ["Manual:45@off", "Manual:45@off"]
     assert len(heater_posts(rig)) == 1
     assert controller.state == "baseline_45"
+    assert controller.heater == "baseline"
+    assert controller.fault is None
     assert rig.tank.mode == "Manual" and rig.tank.setpoint == 45
+    assert "parked_off_cannot_restore" not in controller.active_alerts
 
 
-def test_race_command_queued_during_backoff_expires_at_recovery_and_locks(tmp_path, monkeypatch):
-    """Exact live-incident Race B: bridge enters 3,600 s backoff on
-    cloud_success_false at 22:00:00, and controller's Manual:45@off arrives
-    over MQTT right after _offline() (before HA ingests cloud_health=backoff).
-    The command sits untouched in bridge.commands for 60 minutes, keeping
-    controller in confirming/published, then expires as
-    dropped_command_older_than_30s at 23:00 and locks into fault_locked."""
+def test_race_b_command_queued_during_backoff_refused_immediately_and_auto_recovers(
+    tmp_path, monkeypatch
+):
+    """Fix #1 + #2 (Race B): Manual:45@off arrives right after bridge enters
+    3,600 s backoff. tick() immediately drains it with refused_cloud_backoff
+    (0 HTTP requests), controller defers without locking, and automatically
+    restores Manual 45 C at 23:00 recovery."""
     rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 30), cloud_polling="smart")
     outage_at = hobart(MON, 22, 0)
     recovery_at = outage_at + timedelta(seconds=3600)
@@ -336,9 +315,6 @@ def test_race_command_queued_during_backoff_expires_at_recovery_and_locks(tmp_pa
 
     rig.bridge.session.request.side_effect = cloud
 
-    # Snapshot healthy HA states just before bridge publishes backoff, then run
-    # the failing bridge status poll, then evaluate controller on the pre-backoff
-    # snapshot (simulating MQTT propagation lag).
     rig.t = outage_at.timestamp()
     pre_backoff_states = dict(rig.states)
     rig.bridge.next_poll = rig.t
@@ -346,53 +322,69 @@ def test_race_command_queued_during_backoff_expires_at_recovery_and_locks(tmp_pa
     rig.bridge.next_cloud = rig.t
     rig.bridge.tick()
     assert rig.bridge.cloud_health == "backoff"
-    assert rig.bridge.next_cloud == outage_at.timestamp() + 3600
 
+    # Simulate MQTT lag: controller evaluates on pre-backoff states and publishes.
     post_backoff_states = dict(rig.states)
     rig.states.clear()
     rig.states.update(pre_backoff_states)
-    evaluate(rig)  # controller publishes Manual:45@off while bridge is already in backoff
+    evaluate(rig)
     rig.states.clear()
     rig.states.update(post_backoff_states)
 
     controller = rig.executor.controller
     assert rig.commands() == ["Manual:45@off"]
     assert controller.state == "confirming"
-    assert controller.intent["status"] == "published"
     assert rig.bridge.commands.qsize() == 1
-    assert rig.bridge.last_command is None
 
-    # Command stays unread during the entire 3,600 s backoff.
+    # Bridge's next tick drains the queued command immediately with refused_cloud_backoff.
+    rig.t += 1
+    rig.bridge.tick()
+    assert rig.bridge.commands.empty()
+    assert rig.bridge.last_command["result"] == "refused_cloud_backoff"
+    assert rig.bridge.last_command["error"] == "cloud_success_false"
+    assert len(rig.status_attempts) == 1
+
+    rig.t += 59
+    evaluate(rig)
+    assert controller.fault is None
+    assert controller.intent is None
+    assert controller.history[-1]["status"] == "deferred_cloud_backoff"
+
+    # Zero requests during backoff; automatic recovery at 23:00.
     advance(rig, recovery_at - timedelta(seconds=1))
-    assert controller.state == "confirming"
-    assert controller.intent["status"] == "published"
-    assert rig.bridge.commands.qsize() == 1
     assert len(rig.status_attempts) == 1
     assert not heater_posts(rig)
 
-    # At 23:00:00, bridge wakes, pops the 3,600 s old command, drops it as
-    # dropped_command_older_than_30s, then succeeds on status_poll (Off).
-    advance(rig, recovery_at + timedelta(minutes=2))
+    advance(rig, recovery_at + timedelta(minutes=3))
     assert rig.bridge.cloud_health == "ok"
-    assert rig.bridge.last_command["result"] == "dropped_command_older_than_30s"
-    assert controller.state == "fault_locked"
-    assert controller.fault == "bridge_refused_or_dropped"
-    assert controller.intent is None
-    assert not heater_posts(rig)
-    assert rig.tank.mode == "Off"
+    assert len(heater_posts(rig)) == 1
+    assert controller.state == "baseline_45"
+    assert rig.tank.mode == "Manual" and rig.tank.setpoint == 45
 
 
-def test_pre_command_status_refresh_cloud_success_false_enters_1h_backoff_and_locks(
+def test_pre_command_status_refresh_cloud_success_false_defers_and_auto_recovers(
     tmp_path, monkeypatch
 ):
-    """If Manual:45@off triggers a pre-command status refresh (> 60 s old status)
-    and that refresh receives cloud_success_false, bridge refuses the command
-    with zero POST, enters 3,600 s backoff, and controller locks cleanly."""
+    """Fix #2: if Manual:45@off triggers a pre-command status refresh that gets
+    transient cloud_success_false (non-auth, non-quota), bridge enters 3,600 s
+    backoff with refused_status_refresh_failed, controller defers safely, and
+    automatically restores Manual 45 C at +1 h recovery."""
     rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 50), cloud_polling="smart")
     transition_at = hobart(MON, 22, 0)
-    rig.t = transition_at.timestamp()  # prior poll is 90 s old (> 60 s bridge limit)
+    recovery_at = transition_at + timedelta(seconds=3600)
+    rig.t = transition_at.timestamp()
     rig.bridge.token_obtained_at = rig.t
-    rig.bridge.session.request.side_effect = [response(body=CLOUD_SUCCESS_FALSE)]
+
+    def cloud(method, url, **kwargs):
+        endpoint = url.rsplit("/", 1)[-1]
+        if endpoint == "status" and rig.now() < recovery_at:
+            rig.status_attempts.append(rig.now())
+            return response(body=CLOUD_SUCCESS_FALSE)
+        if endpoint == "status":
+            rig.status_attempts.append(rig.now())
+        return rig.cloud(method, url, **kwargs)
+
+    rig.bridge.session.request.side_effect = cloud
 
     evaluate(rig)
     assert rig.commands() == ["Manual:45@off"]
@@ -401,20 +393,126 @@ def test_pre_command_status_refresh_cloud_success_false_enters_1h_backoff_and_lo
     assert rig.bridge.cloud_health == "backoff"
     assert rig.bridge.last_error == "cloud_success_false"
     assert rig.bridge.failures == 1
-    assert rig.bridge.next_cloud == transition_at.timestamp() + 3600
+    assert rig.bridge.next_cloud == recovery_at.timestamp()
     assert rig.bridge.last_command["result"] == "refused_status_refresh_failed"
     assert rig.bridge.last_command["error"] == "cloud_success_false"
     assert rig.bridge.pending is None
     assert not heater_posts(rig)
 
-    # Next controller evaluation immediately resolves the refusal -> fault_locked.
     rig.t += 60
     evaluate(rig)
     controller = rig.executor.controller
+    assert controller.fault is None
+    assert controller.intent is None
+    assert controller.heater == "off"
+    assert controller.history[-1]["status"] == "deferred_cloud_backoff"
+
+    advance(rig, recovery_at + timedelta(minutes=3))
+    assert rig.bridge.cloud_health == "ok"
+    assert len(heater_posts(rig)) == 1
+    assert controller.state == "baseline_45"
+    assert rig.tank.mode == "Manual" and rig.tank.setpoint == 45
+
+
+@pytest.mark.parametrize(
+    "bridge_result,error,cloud_health,auth_mode",
+    [
+        ("refused_status_refresh_failed", "cloud_daily_limit", "quota_limited", "authorized"),
+        ("refused_status_refresh_failed", "cloud_http_429", "quota_limited", "authorized"),
+        ("refused_status_refresh_failed", "cloud_http_401", "auth_locked", "blocked"),
+        ("refused_status_refresh_failed", "cloud_http_403", "auth_locked", "blocked"),
+        ("refused_status_refresh_failed", "cloud_error_unclassified", "backoff", "authorized"),
+        ("refused_status_refresh_failed", None, "backoff", "authorized"),
+        ("refused_auth_not_ready", "auth_http_401", "auth_locked", "blocked"),
+        ("refused_cloud_quota_limited", "cloud_daily_limit", "quota_limited", "authorized"),
+        ("refused_cloud_backoff", "cloud_daily_limit", "quota_limited", "authorized"),
+        ("refused_by_policy", None, "ok", "authorized"),
+        ("dropped_command_older_than_30s", None, "ok", "authorized"),
+        ("rejected_by_cloud", "command_rejected", "backoff", "authorized"),
+    ],
+)
+def test_non_transient_or_auth_quota_refusals_still_fail_closed_to_fault_locked(
+    bridge_result, error, cloud_health, auth_mode
+):
+    """Fix #2 fail-closed invariant: auth, quota, policy, dropped, rejected, and
+    unclassified errors ALWAYS lock into fault_locked."""
+    now = hobart(MON, 22, 0)
+    controller = ready_controller(now, "Off", 45.0)
+    controller.step(obs(now + timedelta(minutes=1)), want("baseline"), cfg())
+    assert controller.state == "confirming"
+    last = {
+        "payload": "Manual:45@off",
+        "result": bridge_result,
+        "at": (now + timedelta(minutes=1, seconds=5)).isoformat(),
+    }
+    if error is not None:
+        last["error"] = error
+    controller.step(
+        obs(
+            now + timedelta(minutes=2),
+            poll_age=120,
+            cloud_health=cloud_health,
+            auth_mode=auth_mode,
+            last_command=last,
+        ),
+        want("baseline"),
+        cfg(),
+    )
     assert controller.state == "fault_locked"
     assert controller.fault == "bridge_refused_or_dropped"
-    assert controller.intent is None
-    assert controller.history[-1]["status"] == "not_applied"
+
+
+def test_fault_notifications_say_published_not_sent_when_bridge_never_confirmed():
+    """Honest fault wording: late_poll (command_not_applied) and
+    confirmation_timeout must not falsely claim the command 'was sent'."""
+    now = hobart(MON, 22, 0)
+    c_late = ready_controller(now, "Off", 45.0)
+    c_late.step(obs(now), want("baseline"), cfg())
+    effects = c_late.step(
+        obs(now + timedelta(minutes=10), mode="Off", poll_age=0), want("baseline"), cfg()
+    )
+    assert c_late.state == "fault_locked" and c_late.fault == "command_not_applied"
+    notice = next(e for e in effects if e.kind == "notify" and e.key == "fault_command_not_applied")
+    assert "published to MQTT" in notice.message
+    assert "was sent" not in notice.message
+
+    c_timeout = ready_controller(now, "Off", 45.0)
+    c_timeout.step(obs(now), want("baseline"), cfg())
+    timeout_effects = c_timeout.step(
+        obs(now + timedelta(minutes=66), mode="Off", poll_age=4000), want("baseline"), cfg()
+    )
+    assert c_timeout.state == "fault_locked" and c_timeout.fault == "confirmation_timeout"
+    t_notice = next(
+        e for e in timeout_effects if e.kind == "notify" and e.key == "fault_confirmation_timeout"
+    )
+    assert "published at" in t_notice.message
+    assert "sent at" not in t_notice.message
+
+
+def test_smart_poll_plan_leads_evening_peak_end_by_30s_to_prevent_boundary_race(
+    tmp_path, monkeypatch
+):
+    """Fix #3: Smart polling schedules its pre-transition read 30 s before
+    22:00:00 (at 21:59:30), so a healthy read stays <= 60 s fresh through 22:00
+    (0 extra pre-command GETs) and a failing read reports backoff before 22:00."""
+    rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 30), cloud_polling="smart")
+    poll_plans = [
+        json.loads(payload) for topic, payload in rig.ha_publishes if topic.endswith("/poll_plan")
+    ]
+    assert poll_plans
+    latest = poll_plans[-1]
+    assert latest["status_at"] == hobart(MON, 21, 30).timestamp()
+    # 21:30:00 -> 21:59:30 = 1,770 seconds (30 s lead before 22:00:00 peak end).
+    assert latest["delay_seconds"] == 1770
+    assert latest["reason"] == "before_decision"
+
+    # Let the real Smart schedule run across 21:59:30 -> 22:00:00 on a healthy cloud:
+    # the 21:59:30 status is reused by Manual:45@off with ZERO extra pre-command GET!
+    rig.bridge.session.request.reset_mock()
+    advance(rig, hobart(MON, 22, 3))
+    assert rig.executor.controller.state == "baseline_45"
+    assert len(heater_posts(rig)) == 1
+    assert rig.bridge.usage.counts["command_refresh"] == 0
 
 
 def test_failure_to_recover_at_1h_doubles_backoff_and_recovers_later_from_change_requested(
@@ -474,12 +572,12 @@ def test_failure_to_recover_at_1h_doubles_backoff_and_recovers_later_from_change
     assert rig.tank.mode == "Manual" and rig.tank.setpoint == 45
 
 
-def test_failure_to_recover_while_confirming_hits_65m_confirmation_timeout_and_stays_locked(
+def test_failure_to_recover_with_no_bridge_reply_still_hits_65m_confirmation_timeout(
     tmp_path, monkeypatch
 ):
-    """If an intent is published/confirming (Race A) and the +1 h recovery poll
-    also fails (2 h backoff), the 65-minute confirmation timeout fires at +65 m
-    and locks the controller even after cloud eventually recovers at +3 h."""
+    """If an MQTT command never reaches the bridge at all (e.g. broker drop) and
+    the +1 h recovery poll fails (2 h backoff), the 65-minute confirmation
+    timeout still fails closed to fault_locked even after cloud later recovers."""
     rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 30), cloud_polling="smart")
     outage_at = hobart(MON, 22, 0)
     first_retry = outage_at + timedelta(seconds=3600)
@@ -489,14 +587,13 @@ def test_failure_to_recover_while_confirming_hits_65m_confirmation_timeout_and_s
     evaluate(rig)
     controller = rig.executor.controller
     assert controller.state == "confirming"
-    queued_cmd = rig.bridge.commands.get_nowait()
+    # Simulate broker dropping the MQTT publish before the bridge ever receives it.
+    rig.bridge.commands.get_nowait()
 
     def cloud(method, url, **kwargs):
         endpoint = url.rsplit("/", 1)[-1]
         if endpoint == "status" and rig.now() < second_retry:
             rig.status_attempts.append(rig.now())
-            if len(rig.status_attempts) == 1:
-                rig.bridge.commands.put_nowait(queued_cmd)
             return response(body=CLOUD_SUCCESS_FALSE)
         if endpoint == "status":
             rig.status_attempts.append(rig.now())
@@ -508,34 +605,28 @@ def test_failure_to_recover_while_confirming_hits_65m_confirmation_timeout_and_s
     rig.bridge.next_cloud = rig.t
     rig.bridge.tick()
 
-    # At +1 h (23:00), retry fails again -> 7,200 s backoff; still confirming at 23:04.
     advance(rig, outage_at + timedelta(minutes=64))
     assert rig.bridge.failures == 2
     assert controller.state == "confirming"
     assert controller.intent["status"] == "published"
 
-    # Past 65 minutes (confirmation_timeout_minutes = 65.0) -> fault_locked.
     advance(rig, outage_at + timedelta(minutes=66))
     assert controller.state == "fault_locked"
     assert controller.fault == "confirmation_timeout"
     assert controller.intent is None
     assert controller.history[-1]["status"] == "timeout"
 
-    # Even after cloud recovers at +3 h, controller remains fault_locked with zero POSTs.
     advance(rig, second_retry + timedelta(minutes=5))
     assert rig.bridge.cloud_health == "ok"
     assert controller.state == "fault_locked"
-    assert controller.fault == "confirmation_timeout"
     assert not heater_posts(rig)
     assert rig.tank.mode == "Off"
 
 
-def test_notifications_no_spam_on_backoff_but_unavailable_gap_resets_cooldown(
-    tmp_path, monkeypatch
-):
-    """Consecutive failures in continuous backoff emit cloud_fault once per 6 h
-    cooldown; however, a brief cloud_health='unavailable' gap clears self.alerts
-    and immediately re-notifies when backoff returns."""
+def test_notifications_preserve_6h_cooldown_across_brief_unavailable_gap(tmp_path, monkeypatch):
+    """Fix #5: consecutive failures in backoff emit cloud_fault once per 6 h
+    cooldown, AND a brief cloud_health='unavailable' gap no longer erases the
+    cooldown or re-fires cloud_fault until the 6 h cooldown actually expires."""
     rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 28), cloud_polling="smart")
     outage_at = hobart(MON, 21, 58)
     rig.bridge.session.request.side_effect = lambda m, u, **k: response(body=CLOUD_SUCCESS_FALSE)
@@ -559,6 +650,7 @@ def test_notifications_no_spam_on_backoff_but_unavailable_gap_resets_cooldown(
     rig.report(c.DEFAULT_SOURCES["cloud_health"], "unavailable", {})
     evaluate(rig)
     assert "cloud_fault" not in rig.executor.controller.alerts
+    assert "cloud_fault" in rig.executor.controller.alert_cooldowns
 
     rig.t += 60
     rig.states[c.DEFAULT_SOURCES["cloud_health"]] = SimpleNamespace(
@@ -568,22 +660,31 @@ def test_notifications_no_spam_on_backoff_but_unavailable_gap_resets_cooldown(
         last_updated=rig.now(),
     )
     evaluate(rig)
-    # Current behaviour: cooldown was erased by the 1-minute unavailable gap.
+    # Cooldown preserved: still only 1 notification within 6 hours.
+    assert rig.notifications.count("thermann_shadow_cloud_fault") == 1
+
+    # After the 6-hour cooldown expires, cloud_fault notifies again.
+    rig.t = (outage_at + timedelta(hours=6, minutes=1)).timestamp()
+    rig.states[c.DEFAULT_SOURCES["cloud_health"]] = SimpleNamespace(
+        state=saved_health.state,
+        attributes=saved_health.attributes,
+        last_reported=rig.now(),
+        last_updated=rig.now(),
+    )
+    evaluate(rig)
     assert rig.notifications.count("thermann_shadow_cloud_fault") == 2
 
 
 def test_smart_mode_ordinary_get_does_not_proactively_refresh_on_cloud_success_false(
     tmp_path, monkeypatch
 ):
-    """In bridge 1.5.0 Smart mode, ordinary GET /status skips proactive 20-min
-    token refresh (ordinary_smart_get checks self.smart, not poll_schedule.active).
-    If the vendor ever returns HTTP 200 success:false for a stale session, neither
-    the initial poll nor the 1-hour recovery poll refreshes the token."""
+    """Auth/token behaviour unchanged: in bridge 1.5.0 Smart mode, ordinary
+    GET /status keeps bounded_reactive_refresh without extra /refresh calls on
+    HTTP 200 success:false."""
     rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 28), cloud_polling="smart")
     outage_at = hobart(MON, 21, 58)
     recovery_at = outage_at + timedelta(seconds=3600)
 
-    # Age the access token well past PROACTIVE_REFRESH_AGE (1200 s).
     rig.bridge.token_obtained_at = outage_at.timestamp() - 3600
     endpoints = []
 
@@ -605,8 +706,6 @@ def test_smart_mode_ordinary_get_does_not_proactively_refresh_on_cloud_success_f
     assert rig.bridge.last_error == "cloud_success_false"
     assert rig.bridge.failures == 1
 
-    # Advance 1 hour to the recovery poll (fixed fallback timing, but self.smart
-    # is still True): still sends GET /status without refreshing the 2-hour-old token.
     rig.t = recovery_at.timestamp()
     rig.bridge.tick()
     assert endpoints == [("GET", "status"), ("GET", "status")]

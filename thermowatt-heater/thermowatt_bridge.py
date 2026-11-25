@@ -711,7 +711,28 @@ class MyThermowattBridge:
             f"P/{serial}/availability", "online" if available else "offline", qos=1, retain=True
         )
 
-    def _offline(self):
+    def _drain_commands(self, reason=None, error=None):
+        """Empty the command queue; report an explicit refusal when commands are enabled."""
+        while True:
+            try:
+                _issued, _serial, kind, payload = self.commands.get_nowait()
+            except queue.Empty:
+                break
+            if reason is None or not self.options.get("commands_enabled", False):
+                continue
+            if self.pending is not None:
+                safe = self._safe_payload(payload)
+                self.refused_while_pending = {
+                    "kind": kind if kind in {"MODE", "TEMP"} else "other",
+                    "payload": safe if kind == "MODE" else "temperature",
+                    "result": "refused_confirmation_pending",
+                    "at": self._iso(self.clock()),
+                }
+                self.publish_diagnostics(force=True)
+                continue
+            self._command_result(kind, payload, reason, error=error)
+
+    def _offline(self, drain_reason=None, drain_error=None, *, drain=True):
         self.confirmed.clear()
         self.poll_schedule.clear()
         self._restore_fixed_bound()
@@ -720,11 +741,8 @@ class MyThermowattBridge:
             self.poll_hints.clear()
         for serial in self.config["devices"]:
             self._availability(serial, False)
-        while True:
-            try:
-                self.commands.get_nowait()
-            except queue.Empty:
-                break
+        if drain:
+            self._drain_commands(drain_reason, drain_error)
 
     def publish_discovery(self, serial, name):
         availability = [
@@ -1633,11 +1651,11 @@ class MyThermowattBridge:
         self._expire_pending()
         if self.mqtt_reconnected.is_set():
             self.mqtt_reconnected.clear()
-            self._offline()
+            self._offline("dropped_bridge_offline")
             self.discovered = False
             self.reconnect_refresh = bool(self.options.get("on_demand_refresh_enabled", False))
         if not self.options.get("cloud_enabled", False) or not self.mqtt_connected.is_set():
-            self._offline()
+            self._offline("dropped_bridge_offline" if self.mqtt_connected.is_set() else None)
             return
         polling = False
         self.read_this_tick = set()
@@ -1661,6 +1679,16 @@ class MyThermowattBridge:
                     with self.refresh_lock:
                         self._record_refresh("reconnect_read_scheduled")
             if self.clock() < self.next_cloud:
+                if (
+                    self.cloud_health in {"backoff", "quota_limited"}
+                    or self.clock() < self.usage.cooldown_until
+                ):
+                    backoff_reason = (
+                        "refused_cloud_quota_limited"
+                        if self.cloud_health == "quota_limited"
+                        else "refused_cloud_backoff"
+                    )
+                    self._drain_commands(backoff_reason, self.last_error)
                 return
             self.login()
             poll_due = self.clock() >= self.next_poll
@@ -1722,7 +1750,7 @@ class MyThermowattBridge:
             self.next_cloud = min(self.clock() + self.COMMAND_INTERVAL, self.next_poll)
             self._adaptive_sync()
         except (CloudError, OSError, ValueError, TypeError) as error:
-            self._offline()
+            self._offline(drain=False)
             self.failures = min(self.failures + 1, 5)
             delay = min(self.MAX_BACKOFF, 20 * 2**self.failures)
             # A failed pre-command status read is a failed status read: it gets
@@ -1761,6 +1789,13 @@ class MyThermowattBridge:
                 self.cloud_health = "quota_limited"
             else:
                 self.cloud_health = "backoff"
+            if self.guard.failed_storage or self.guard.state["mode"] == "blocked":
+                drain_reason = "refused_auth_not_ready"
+            elif self.cloud_health == "quota_limited":
+                drain_reason = "refused_cloud_quota_limited"
+            else:
+                drain_reason = "refused_cloud_backoff"
+            self._drain_commands(drain_reason, code)
             self.publish_diagnostics(force=True)
             if diagnostic != self.last_diagnostic:
                 LOG.warning(

@@ -57,6 +57,10 @@ VENDOR_MODES = {"Manual", "Schedule", "Eco", "Off", "Holiday", "Unknown"}
 SHADOW_LOG_LENGTH = 30
 # Longest healthy quiet interval of a Smart v3 plan (8 hours overnight).
 SMART_OWNER_CHECK_MAX_SECONDS = 28800
+# Schedule pre-transition Smart reads slightly ahead of non-peak boundaries so
+# a failing poll (up to 20 s timeout) reports backoff before the transition,
+# while a healthy poll stays <= 60 s fresh through the 20 s command interval.
+TRANSITION_POLL_LEAD = timedelta(seconds=30)
 
 
 def controller_config(
@@ -403,15 +407,16 @@ class Executor:
         ) + timedelta(minutes=5)
 
     def _event_decision_at(self, now, decision, decision_at):
-        """Observe at the real policy transition, allowing the strict prior to be reused."""
+        """Observe slightly ahead of real policy transitions so a healthy read
+        reuses its strict prior and a failing read reports backoff first."""
         moments = []
         boundary = self.runtime.values.get("next_tariff_change")
         if boundary is not None:
-            moments.append(
-                boundary - self.policy.s.peak_lead
-                if self.runtime.values.get("next_tariff_kind") == "peak"
-                else boundary
-            )
+            if self.runtime.values.get("next_tariff_kind") == "peak":
+                moments.append(boundary - self.policy.s.peak_lead)
+            else:
+                lead = boundary - TRANSITION_POLL_LEAD
+                moments.append(lead if lead >= now else boundary)
         if boundary is not None and self.runtime.values.get("next_tariff_kind") == "peak":
             check = boundary - timedelta(
                 minutes=self.runtime.native_options["pre_peak_observation_minutes"]
@@ -435,8 +440,9 @@ class Executor:
                 for clock in (self.policy.s.daytime_start, self.policy.s.baseline_start):
                     when = datetime.combine(day, clock, zone)
                     if when >= now and self.policy._kind(when) != "peak":
-                        moments.append(when)
-        # Retain actual start/pause/override decisions, but use the adjusted peak
+                        lead = when - TRANSITION_POLL_LEAD
+                        moments.append(lead if lead >= now else when)
+        # Retain actual start/pause/override decisions, but use the adjusted
         # boundary above rather than the old ten-minute advance fetch.
         if decision_at is not None and decision_at != boundary:
             moments.append(decision_at)
