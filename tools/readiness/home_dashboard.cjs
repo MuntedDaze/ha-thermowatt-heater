@@ -141,8 +141,27 @@ async function main() {
           if (r.right > window.innerWidth + 1) wide.push(`${el.tagName.toLowerCase()}.${el.className || el.id}:${Math.round(r.right - window.innerWidth)}`);
         }
         const flowCard = homeCard.shadowRoot.querySelector("thermowatt-power-flow-card");
+        const lightsCard = homeCard.shadowRoot.querySelector("thermowatt-lights-card");
         const text = [...(flowCard ? flowCard.shadowRoot.querySelectorAll("text") : [])].map((t) => t.getBoundingClientRect().height);
-        const smallest = [...homeCard.shadowRoot.querySelectorAll(".line, .lab, .fact .k, .foot")].map((el) => parseFloat(getComputedStyle(el).fontSize));
+        const smallest = [
+          ...homeCard.shadowRoot.querySelectorAll(".line, .lab, .fact .k, .fact .s, .foot, .t, .chip, .strip .k"),
+          ...(flowCard ? flowCard.shadowRoot.querySelectorAll(".kpi .lab, .kpi .val, .title, .chip") : []),
+          ...(lightsCard ? lightsCard.shadowRoot.querySelectorAll(".lt .n, .lt .s, .small, .title, .chip") : []),
+        ].map((el) => parseFloat(getComputedStyle(el).fontSize));
+        const wxCard = all(homeCard.shadowRoot, "hui-weather-forecast-card")[0];
+        let weatherForecast = null;
+        if (wxCard && wxCard.shadowRoot) {
+          const wxBox = wxCard.getBoundingClientRect();
+          const forecast = wxCard.shadowRoot.querySelector(".forecast");
+          const days = forecast ? [...forecast.children] : [];
+          const clippedDays = days.filter((d) => d.getBoundingClientRect().right > wxBox.right + 1).length;
+          weatherForecast = {
+            cardWidth: Math.round(wxBox.width),
+            days: days.length,
+            clippedDays,
+            overflowX: forecast ? Math.round(forecast.scrollWidth - forecast.clientWidth) : 0,
+          };
+        }
         return {
           panel: true,
           viewTop: Math.round(box.top),
@@ -159,7 +178,8 @@ async function main() {
           overlaps: 0,
           overflowX: document.documentElement.scrollWidth - window.innerWidth,
           minSvgTextHeight: text.length ? Math.min(...text) : null,
-          smallestFontPx: smallest.length ? Math.min(...smallest) : null,
+          smallestFontPx: smallest.length ? Number(Math.min(...smallest).toFixed(2)) : null,
+          weatherForecast,
         };
       }
       const view = all(document, "hui-sections-view")[0];
@@ -252,7 +272,12 @@ async function main() {
         expect(facts.documentScroll, "the page does not scroll").toBeLessThanOrEqual(2);
         expect(facts.scrollOverflow, "no scroll container around the Home card scrolls").toBeLessThanOrEqual(2);
         expect(facts.clipped, "no Home card has clipped content").toEqual([]);
-        expect(facts.smallestFontPx, "text stays readable").toBeGreaterThanOrEqual(10);
+        expect(facts.smallestFontPx, "meaningful tablet text stays >= 13 px").toBeGreaterThanOrEqual(13);
+        if (facts.weatherForecast) {
+          expect(facts.weatherForecast.days, "all 5 forecast days render").toBeGreaterThanOrEqual(5);
+          expect(facts.weatherForecast.clippedDays, "no weather forecast day is clipped at the right edge").toBe(0);
+          expect(facts.weatherForecast.overflowX, "weather forecast does not horizontally overflow").toBeLessThanOrEqual(2);
+        }
       }
 
       // Compact hot-water summary and energy panel are on the main screen.
@@ -575,6 +600,17 @@ async function main() {
         await setState(TOWEL, "on", { summary: "Heating — 3h 10m left (automatic)" });
         await expect(page.getByText("Towel rail: automatic").first()).toBeVisible();
         await setState(TOWEL, "off", { summary: "Off — no drying scheduled" });
+        await page.evaluate(() => {
+          window.scrollTo(0, 0);
+          const walk = (root) => {
+            for (const el of root.querySelectorAll("*")) {
+              if (el.scrollTop > 0) el.scrollTop = 0;
+              if (el.shadowRoot) walk(el.shadowRoot);
+            }
+          };
+          walk(document);
+        });
+        await page.waitForTimeout(400);
         await page.screenshot({ path: `${output}/bathrooms-${size.name}.png`, fullPage: true });
 
         // Doors: plain-English status, no raw state, no actuation.

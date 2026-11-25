@@ -307,16 +307,17 @@ class ThermowattPowerFlowCard extends Base {
       ? `<div class="kpis${withUsed ? " k4" : ""}">${kpi("Solar today", today.solar, "ok")}${withUsed ? kpi("Used directly", today.used, "ok") : ""}${kpi("Imported today", today.import, "warn")}${kpi("Exported today", today.export, "info")}</div>`
       : "";
     const compact = c.compact
-      ? `ha-card{padding:calc(var(--u,11px)*1.3) calc(var(--u,11px)*1.5);gap:calc(var(--u,11px)*.7)}
-        .head{min-height:0;gap:calc(var(--u,11px)*.7)}.head ha-icon{--mdc-icon-size:calc(var(--u,11px)*1.9)}
-        .title{font-size:calc(var(--u,11px)*1.1)}.chip{font-size:calc(var(--u,11px)*1.15);padding:calc(var(--u,11px)*.2) calc(var(--u,11px)*.85)}
+      ? `ha-card{padding:calc(var(--u,11px)*1.15) calc(var(--u,11px)*1.3);gap:calc(var(--u,11px)*.6)}
+        .head{min-height:0;gap:calc(var(--u,11px)*.65)}.head ha-icon{--mdc-icon-size:calc(var(--u,11px)*1.9)}
+        .title{font-size:max(13.5px,calc(var(--u,11px)*1.12))}.chip{font-size:max(13.5px,calc(var(--u,11px)*1.14));padding:calc(var(--u,11px)*.2) calc(var(--u,11px)*.75)}
         .flow{flex:1;min-height:0;max-width:none;margin:0;display:flex;align-items:center;justify-content:center}
         .flow svg{width:auto;max-width:100%;height:100%;max-height:100%}
         .flow svg text{font-size:17px}.flow svg text:nth-of-type(n+1):not([font-weight]){font-size:16px}
-        .kpis{margin-top:0;gap:calc(var(--u,11px)*.6)}
-        .kpi{padding:calc(var(--u,11px)*.6) calc(var(--u,11px)*.8);border-radius:calc(var(--u,11px)*1.1)}
-        .kpi .lab{font-size:calc(var(--u,11px)*1.0);letter-spacing:.03em;line-height:1.15}
-        .kpi .val{font-size:calc(var(--u,11px)*1.7);margin-top:calc(var(--u,11px)*.15);white-space:nowrap}
+        .kpis{margin-top:0;gap:calc(var(--u,11px)*.48)}
+        .kpi{padding:calc(var(--u,11px)*.55) calc(var(--u,11px)*.62);border-radius:calc(var(--u,11px)*1.05)}
+        .kpi .lab{font-size:max(13px,calc(var(--u,11px)*1.06));text-transform:none;letter-spacing:.01em;line-height:1.15}
+        .kpi .val{font-size:max(18.5px,calc(var(--u,11px)*1.58));margin-top:calc(var(--u,11px)*.18);white-space:nowrap}
+        .kpi .unit{font-size:max(12.5px,.6em);margin-left:.14em}
         @media (max-width:759px){.flow svg{width:100%;height:auto}}`
       : "";
     this._root.innerHTML =
@@ -787,13 +788,14 @@ class ThermowattLightsCard extends BaseUi {
       .diag code{font-size:12.5px;color:var(--secondary-text-color)}
       ${
         this._config.compact
-          ? `ha-card{padding:calc(var(--u,11px)*1.35) calc(var(--u,11px)*1.5);gap:calc(var(--u,11px)*.8);overflow:hidden}
-        .head{min-height:0}.head ha-icon{--mdc-icon-size:calc(var(--u,11px)*1.9)}.title{font-size:calc(var(--u,11px)*1.1)}.chip{font-size:calc(var(--u,11px)*1.15)}
-        .lights,.lights.medium,.lights.dense{flex:1;min-height:0;overflow:auto;scrollbar-width:none;gap:calc(var(--u,11px)*.7);grid-template-columns:repeat(auto-fill,minmax(calc(var(--u,11px)*10.5),1fr));align-content:start}
-        .light{padding:calc(var(--u,11px)*.9);border-radius:calc(var(--u,11px)*1.2);gap:calc(var(--u,11px)*.5)}
-        .lt{column-gap:calc(var(--u,11px)*.7)}.lt ha-icon,.dense .lt ha-icon{--mdc-icon-size:calc(var(--u,11px)*2.4)}
-        .lt .n,.dense .lt .n{font-size:calc(var(--u,11px)*1.3)}.lt .s{font-size:calc(var(--u,11px)*1.1)}
-        input[type=range]{height:max(28px,calc(var(--u,11px)*2.4))}`
+          ? `ha-card{padding:calc(var(--u,11px)*1.15) calc(var(--u,11px)*1.3);gap:calc(var(--u,11px)*.65);overflow:hidden}
+        .head{min-height:0}.head ha-icon{--mdc-icon-size:calc(var(--u,11px)*1.9)}.title{font-size:max(13.5px,calc(var(--u,11px)*1.12))}.chip{font-size:max(13.5px,calc(var(--u,11px)*1.14));padding:calc(var(--u,11px)*.2) calc(var(--u,11px)*.75)}
+        .lights,.lights.medium,.lights.dense{flex:1;min-height:0;overflow:auto;scrollbar-width:none;gap:calc(var(--u,11px)*.65);grid-template-columns:repeat(auto-fill,minmax(calc(var(--u,11px)*10.5),1fr));align-content:start}
+        .light{padding:calc(var(--u,11px)*.85);border-radius:calc(var(--u,11px)*1.15);gap:calc(var(--u,11px)*.45)}
+        .lt{column-gap:calc(var(--u,11px)*.7)}.lt ha-icon,.dense .lt ha-icon{--mdc-icon-size:calc(var(--u,11px)*2.3)}
+        .lt .n,.dense .lt .n{font-size:max(15px,calc(var(--u,11px)*1.32))}.lt .s{font-size:max(13.5px,calc(var(--u,11px)*1.12))}
+        .small{font-size:max(13px,calc(var(--u,11px)*1.08))}
+        input[type=range]{height:max(28px,calc(var(--u,11px)*2.3))}`
           : ""
       }
       </style>${body}</ha-card>`;
@@ -934,45 +936,45 @@ export function bathroomModel(hass, b) {
 
 const HOME_CSS = `
   :host{display:block;--u:11px}
-  .grid{height:100%;display:grid;gap:calc(var(--u)*.9);grid-template-columns:minmax(0,1.12fr) minmax(0,1fr) minmax(0,.92fr);grid-template-rows:minmax(0,1.22fr);grid-auto-rows:minmax(0,1fr)}
-  .cell{min-width:0;min-height:0;display:flex;flex-direction:column;gap:calc(var(--u)*.8);overflow:hidden}
+  .grid{height:100%;display:grid;gap:calc(var(--u)*.82);grid-template-columns:minmax(0,1.08fr) minmax(0,.88fr) minmax(0,1.08fr);grid-template-rows:minmax(0,1.22fr);grid-auto-rows:minmax(0,1fr)}
+  .cell{min-width:0;min-height:0;display:flex;flex-direction:column;gap:calc(var(--u)*.7);overflow:hidden}
   .cell>*{min-height:0}
   .cell>thermowatt-power-flow-card,.cell>thermowatt-lights-card{flex:1}
   .cell>.wx{flex:1;overflow:hidden;border-radius:var(--ha-card-border-radius,12px)}
   .wx{min-width:0}.wx>*{display:block;height:100%;min-width:0;max-width:100%}
-  ha-card.pg{flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:calc(var(--u)*.8);padding:calc(var(--u)*1.35) calc(var(--u)*1.5);overflow:hidden;container-type:inline-size;
+  ha-card.pg{flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:calc(var(--u)*.65);padding:calc(var(--u)*1.15) calc(var(--u)*1.3);overflow:hidden;container-type:inline-size;
     --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);--tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
-  ha-card.strip{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:calc(var(--u)*.5) calc(var(--u)*.8);min-width:0;overflow:hidden;padding:calc(var(--u)*.7) calc(var(--u)*1.2);
+  ha-card.strip{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:calc(var(--u)*.45) calc(var(--u)*.65);min-width:0;overflow:hidden;padding:calc(var(--u)*.6) calc(var(--u)*1.05);
     --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);--tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
-  .strip ha-icon{--mdc-icon-size:calc(var(--u)*1.9);color:var(--primary-color)}
-  .strip .k{flex:1 1 auto;min-width:0;font-size:calc(var(--u)*1.1);font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--secondary-text-color)}
-  .h{display:flex;align-items:center;gap:calc(var(--u)*.7)}
-  .h ha-icon{--mdc-icon-size:calc(var(--u)*1.9);color:var(--primary-color);flex:none}
-  .t{flex:1;min-width:0;font-size:calc(var(--u)*1.1);font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .chip{display:inline-flex;align-items:center;padding:calc(var(--u)*.2) calc(var(--u)*.85);border-radius:999px;font-size:calc(var(--u)*1.15);font-weight:500;white-space:nowrap;color:var(--tw-tone,var(--tw-idle));background:color-mix(in srgb,var(--tw-tone,var(--tw-idle)) 16%,transparent)}
+  .strip ha-icon{--mdc-icon-size:calc(var(--u)*1.85);color:var(--primary-color)}
+  .strip .k{flex:1 1 auto;min-width:0;font-size:max(13.5px,calc(var(--u)*1.12));font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .h{display:flex;align-items:center;gap:calc(var(--u)*.65)}
+  .h ha-icon{--mdc-icon-size:calc(var(--u)*1.85);color:var(--primary-color);flex:none}
+  .t{flex:1;min-width:0;font-size:max(13.5px,calc(var(--u)*1.12));font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chip{display:inline-flex;align-items:center;padding:calc(var(--u)*.2) calc(var(--u)*.75);border-radius:999px;font-size:max(13.5px,calc(var(--u)*1.14));font-weight:500;white-space:nowrap;color:var(--tw-tone,var(--tw-idle));background:color-mix(in srgb,var(--tw-tone,var(--tw-idle)) 16%,transparent)}
   .t-ok{--tw-tone:var(--tw-ok)}.t-warn{--tw-tone:var(--tw-warn)}.t-bad{--tw-tone:var(--tw-bad)}.t-info{--tw-tone:var(--tw-info)}.t-idle{--tw-tone:var(--tw-idle)}
-  .big{font-size:calc(var(--u)*4.4);font-weight:500;line-height:1;letter-spacing:-.02em;color:var(--primary-text-color);white-space:nowrap}
-  .big .unit{font-size:.4em;font-weight:400;color:var(--secondary-text-color);margin-left:.15em;letter-spacing:0}
-  .lab{font-size:calc(var(--u)*1.1);color:var(--secondary-text-color)}
-  .top{display:grid;grid-template-columns:auto 1fr;gap:calc(var(--u)*1.2);align-items:center}
-  .facts{display:grid;gap:calc(var(--u)*.7) calc(var(--u)*.9);grid-template-columns:repeat(var(--n,2),minmax(0,1fr))}
+  .big{font-size:calc(var(--u)*3.9);font-weight:500;line-height:1;letter-spacing:-.02em;color:var(--primary-text-color);white-space:nowrap}
+  .big .unit{font-size:.42em;font-weight:400;color:var(--secondary-text-color);margin-left:.15em;letter-spacing:0}
+  .lab{font-size:max(13.5px,calc(var(--u)*1.12));color:var(--secondary-text-color)}
+  .top{display:grid;grid-template-columns:auto 1fr;gap:calc(var(--u)*1.0);align-items:center}
+  .facts{display:grid;gap:calc(var(--u)*.6) calc(var(--u)*.85);grid-template-columns:repeat(var(--n,2),minmax(0,1fr))}
   .fact{min-width:0}
-  .fact .k{font-size:calc(var(--u)*.95);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color)}
-  .fact .v{font-size:calc(var(--u)*1.5);font-weight:600;color:var(--primary-text-color);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .fact .s{font-size:calc(var(--u)*1.05);color:var(--secondary-text-color)}
+  .fact .k{font-size:max(13px,calc(var(--u)*1.06));font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .fact .v{font-size:max(16.5px,calc(var(--u)*1.46));font-weight:600;color:var(--primary-text-color);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fact .s{font-size:max(13.5px,calc(var(--u)*1.12));color:var(--primary-text-color);opacity:.82}
   .fact.t-ok .v,.fact.t-warn .v,.fact.t-info .v,.fact.t-bad .v{color:var(--tw-tone)}
-  .foot{margin-top:auto;font-size:calc(var(--u)*1.1);color:var(--secondary-text-color)}
-  .nums{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*1)}
-  .nums .big{font-size:calc(var(--u)*3.4)}
-  .line{font-size:calc(var(--u)*1.2);color:var(--secondary-text-color);line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .foot{margin-top:auto;font-size:max(13px,calc(var(--u)*1.08));color:var(--secondary-text-color)}
+  .nums{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*.85)}
+  .nums .big{font-size:calc(var(--u)*3.15)}
+  .line{font-size:max(14px,calc(var(--u)*1.22));color:var(--secondary-text-color);line-height:1.24;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
   .line b{color:var(--primary-text-color);font-weight:600;margin-right:.4em}
-  button.fan{all:unset;box-sizing:border-box;cursor:pointer;margin-top:auto;display:flex;align-items:center;justify-content:center;gap:calc(var(--u)*.6);min-height:max(44px,calc(var(--u)*3.8));padding:0 calc(var(--u)*1.2);border-radius:calc(var(--u)*1.2);font-size:calc(var(--u)*1.35);font-weight:600;
+  button.fan{all:unset;box-sizing:border-box;cursor:pointer;margin-top:auto;display:flex;align-items:center;justify-content:center;gap:calc(var(--u)*.6);min-height:max(44px,calc(var(--u)*3.7));padding:0 calc(var(--u)*1.1);border-radius:calc(var(--u)*1.15);font-size:max(15.5px,calc(var(--u)*1.35));font-weight:600;
     background:color-mix(in srgb,var(--primary-color) 18%,transparent);color:var(--primary-color)}
   button.fan ha-icon{--mdc-icon-size:calc(var(--u)*1.9)}
   button.fan.cancel{background:color-mix(in srgb,var(--warning-color,#fb8c00) 22%,transparent);color:var(--warning-color,#fb8c00)}
   button.fan.inert{cursor:default;background:color-mix(in srgb,var(--primary-text-color) 8%,transparent);color:var(--secondary-text-color)}
   button.fan:focus-visible{outline:2px solid var(--primary-color)}
-  @container (max-width:300px){.top{grid-template-columns:1fr}.big{font-size:calc(var(--u)*3.8)}}
+  @container (max-width:240px){.top{grid-template-columns:1fr}.big{font-size:calc(var(--u)*3.5)}}
   @media (max-width:759px){
     :host{height:auto!important}
     .grid{display:flex;flex-direction:column;height:auto}
@@ -2102,8 +2104,15 @@ const BaseElement = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 // One load per configuration, shared by every card part on the page (summary, daily, monthly, history).
 const SHARED = new Map();
 
-const withTimeout = (promise) =>
-  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("statistics request timed out")), 60e3))]);
+const withTimeout = (promise) => {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("statistics request timed out")), 60e3);
+    }),
+  ]).finally(() => clearTimeout(timer));
+};
 
 /**
  * Load and value the statistics. Units come from the RECORDER'S statistics metadata (the unit the statistics

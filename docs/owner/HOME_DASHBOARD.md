@@ -61,8 +61,9 @@ changes: everything follows your theme's own colours (dark and light).
   `[energy now | hot water | weather and doors]` over `[Main Bathroom | Ensuite | lights]`. It measures the space the
   **browser actually gives it** (window height below the card, which already excludes Home Assistant's header and the
   browser's own bars; never the 2560x1600 of the tablet's screen) and scales its type with that height inside a
-  readable range, so it fits **without scrolling**. This is measured in a real Home Assistant frontend on every CI
-  run at 1920x1080, 1366x768, 1280x800 and 1280x704 (no scrolling, no clipped card, no overlap, text at least 10 px).
+  readable range (at least 13 px for meaningful text on the tablet), so it fits **without scrolling**. This is measured
+  in a real Home Assistant frontend on every CI run at 1920x1080, 1366x768, 1280x800 and 1280x704 (no scrolling, no
+  clipped card, no clipped weather forecast day, no overlap, meaningful text at least 13 px).
   Energy, Hot water and Device energy are three columns, Bathrooms, Lights, Doors and System two. Device energy is one full-width page card (a panel view) that arranges the balance hero, the
   summary column, the Today table and the monthly history itself. On a phone every view is a single column.
 * **No custom-card fallback.** `homeowner/home_no_custom_card.yaml` keeps the previous native composition for
@@ -164,6 +165,20 @@ Labels. Install steps are at the top of the YAML file (create the label, copy to
 configuration, restart). Tests: `tests/test_lighting_schedule.py` (configuration, no manual interference, no entity
 IDs, 01:00 exists exactly once every local day through both daylight-saving changes, sunset-minus-two-hours moves with
 the seasons).
+
+### Summary of Home Assistant labels (distinct purposes)
+
+| Label ID | What it controls | Does it affect automation or other cards? |
+| --- | --- | --- |
+| `show_as_light` | Shows a `switch` (e.g., a lamp on a smart plug) on the dashboard **Lights** card (on/off only, no brightness) | No — display/toggle inclusion only; does not add the switch to the evening schedule |
+| `hide_from_dashboard` | Hides an unwanted `light` entity from the dashboard **Lights** card | No — display exclusion only |
+| `evening_lights` | Selects which lights or lamp switches the **optional evening schedule** turns ON 2 h before sunset and OFF at 01:00 | No — only used if you install and enable `evening_lights_schedule.yaml`; does not show a switch on the Lights card unless it also has `show_as_light` |
+
+To inspect why a newly added third light is missing on your live Home Assistant:
+
+1. Open the dashboard **Lights** page and check **Why some lights are not shown** and **Switches that look like lamps**.
+2. If it appears under *Switches that look like lamps*, add the label `show_as_light` to it.
+3. If it is not listed there at all, open **Settings -> Devices & services -> Entities**, enable *Show disabled entities*, and search for the device name (or check **Developer Tools -> States** for its domain and state).
 
 ## Install / upgrade (nothing is overwritten, no integration is reset)
 
