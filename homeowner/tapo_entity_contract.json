@@ -1,6 +1,6 @@
 {
   "integration": "tapo_smart_controller",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "note": "Entity IDs published for dashboards for the default two-bathroom setup (Main Bathroom, Ensuite). A different bathroom name changes only the name part. Verified against a real Home Assistant Core instance by tests/ha_compat/test_entity_contract.py.",
   "entities": {
     "sensor.tapo_smart_controller_main_bathroom_humidity": {
@@ -138,6 +138,22 @@
     "button.tapo_smart_controller_clear_all_faults": {
       "name": "Clear All Faults",
       "purpose": "clear latched controller faults"
+    },
+    "number.tapo_smart_controller_main_bathroom_manual_fan_duration": {
+      "name": "Main Bathroom Manual Fan Duration",
+      "purpose": "how long Run fan lasts (minutes, 5-120); the integration's own option, same as Configure"
+    },
+    "number.tapo_smart_controller_main_bathroom_towel_drying_duration": {
+      "name": "Main Bathroom Towel Drying Duration",
+      "purpose": "cumulative off-peak drying hours after a shower (1-12, step 0.5); the integration's own option"
+    },
+    "number.tapo_smart_controller_ensuite_manual_fan_duration": {
+      "name": "Ensuite Manual Fan Duration",
+      "purpose": "how long Run fan lasts (minutes, 5-120); the integration's own option, same as Configure"
+    },
+    "number.tapo_smart_controller_ensuite_towel_drying_duration": {
+      "name": "Ensuite Towel Drying Duration",
+      "purpose": "cumulative off-peak drying hours after a shower (1-12, step 0.5); the integration's own option"
     }
   }
 }

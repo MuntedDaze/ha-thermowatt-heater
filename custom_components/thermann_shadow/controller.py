@@ -67,6 +67,26 @@ ACTIVE_OF = {value: key for key, value in STATE_OF.items()}
 EVENT_PREFIXES = ("fault_", "override_")
 
 FAILURE_PREFIXES = ("dropped_", "refused_", "rejected_")
+# Strict allowlist of transient (non-auth, non-quota) bridge read failures that
+# prove no heater POST was attempted before entering cloud backoff.
+TRANSIENT_REFRESH_ERRORS = frozenset(
+    {
+        "cloud_success_false",
+        "cloud_timeout",
+        "cloud_connection_error",
+        "cloud_network_error",
+        "cloud_invalid_json",
+        "cloud_envelope_not_object",
+        "cloud_error_nonempty",
+        "cloud_result_missing",
+        "cloud_result_wrong_type",
+        "cloud_backoff",
+        "cloud_http_500",
+        "cloud_http_502",
+        "cloud_http_503",
+        "cloud_http_504",
+    }
+)
 # The bridge's FRESH status showed something other than the stated prior state
 # (the owner changed it since the last poll): owner control, not a fault.
 OWNER_CHANGE_RESULTS = {
@@ -128,7 +148,7 @@ def heater_state(mode: str | None, target_c: float | None) -> str | None:
 
 RECOVERY = {
     "command_not_confirmed": "The bridge sent the command once but no status within its confirmation window (about 6 minutes) showed the requested mode. It was not repeated. Check the Thermann app: if it shows the requested mode, the cloud is slow to report it; otherwise the command did not take effect. Set the mode you want in the app, then press Acknowledge fault; automatic control re-inspects the heater first.",
-    "command_not_applied": "The heater did not change mode. Check the Thermann app: it should show the mode you expect. Then press Acknowledge fault; automatic control re-inspects the heater before doing anything.",
+    "command_not_applied": "The heater did not report the requested mode after the MQTT command was published (it may not have been sent or applied). Check the Thermann Hot Water app diagnostics and the Thermann app, set the mode you want if needed, then press Acknowledge fault; automatic control re-inspects the heater before doing anything.",
     "confirmation_timeout": "No status arrived to confirm the last command. Check the Thermann Hot Water app log and cloud health, then the Thermann app. Press Acknowledge fault when the heater state is known.",
     "bridge_refused_or_dropped": "The bridge did not send the command (see last command result). Nothing was changed on the heater. Fix the cause, then Acknowledge fault.",
     "publish_failed": "Home Assistant could not publish the MQTT command. Nothing is known to have reached the heater. Check MQTT, then Acknowledge fault.",
@@ -318,6 +338,7 @@ class Controller:
     inspect_after: str | None = None  # a NEW poll after this time is required to act
     fault: str | None = None
     alerts: dict = field(default_factory=dict)
+    alert_cooldowns: dict = field(default_factory=dict)
     active_alerts: list = field(default_factory=list)
     last_want: dict | None = None
     gate_failures: list = field(default_factory=list)
@@ -749,6 +770,23 @@ class Controller:
             )
         )
 
+    @staticmethod
+    def _transient_backoff_refusal(obs: Observation, last: dict) -> bool:
+        """True only when the bridge explicitly proves no POST was attempted due
+        to a transient (non-auth, non-quota) cloud backoff or pre-command read failure."""
+        if (
+            obs.bridge_confirmation_pending is not False
+            or obs.auth_mode != "authorized"
+            or obs.cloud_health in {"auth_locked", "quota_limited"}
+        ):
+            return False
+        result = last.get("result")
+        if result == "refused_cloud_backoff":
+            return True
+        if result == "refused_status_refresh_failed":
+            return last.get("error") in TRANSIENT_REFRESH_ERRORS
+        return False
+
     def _confirm(
         self, obs: Observation, cfg: ControllerConfig, new_poll: bool, effects: list[Effect]
     ) -> None:
@@ -786,6 +824,18 @@ class Controller:
             )
             return
         if bridge_fresh and bridge_failure(result):
+            if self._transient_backoff_refusal(obs, last):
+                restored = self.reason == "reconciling_command_after_restart"
+                self._resolve("deferred_cloud_backoff", obs)
+                if restored or self.heater is None:
+                    self.state = OBSERVING if self.enabled else DISABLED
+                    self.reason = "deferred_cloud_backoff_reinspecting"
+                    self.inspect_after = _iso(obs.now)
+                else:
+                    self.state = CHANGE_REQUESTED
+                    self.reason = "deferred_cloud_backoff"
+                    self.gate_failures = ["bridge_in_backoff"]
+                return
             self._resolve("not_applied", obs)
             self._lock(
                 "bridge_refused_or_dropped",
@@ -829,7 +879,8 @@ class Controller:
             self._resolve("not_applied", obs)
             self._lock(
                 "command_not_applied",
-                f"{intent['payload']} was sent but the heater still reports {obs.mode}.",
+                f"{intent['payload']} was published to MQTT, but a later status poll still "
+                f"reports {obs.mode} (the bridge did not confirm sending or applying it).",
                 effects,
             )
             return
@@ -838,7 +889,7 @@ class Controller:
             self._resolve("timeout", obs)
             self._lock(
                 "intent_unresolved_after_restart" if restored else "confirmation_timeout",
-                f"{intent['payload']} sent at {intent['created_at']} was never confirmed.",
+                f"{intent['payload']} published at {intent['created_at']} was never confirmed.",
                 effects,
             )
             return
@@ -1012,6 +1063,7 @@ class Controller:
             for key in list(self.alerts):
                 del self.alerts[key]
                 effects.append(Effect("resolve", key=key))
+            self.alert_cooldowns.clear()
             effects[:] = [e for e in effects if e.kind != "notify"]
             return
         alerts: list[tuple[str, str, str]] = []
@@ -1047,6 +1099,11 @@ class Controller:
             self.last_observed_heater == OFF
             and (
                 want.state in TARGET_C
+                or (
+                    want.state == "hold"
+                    and want.reason in {"command_spacing", "cloud_or_freshness_gate"}
+                    and want.plan.get("wanted") in TARGET_C
+                )
                 or (
                     self.heater is None
                     and want.state == "hold"
@@ -1199,14 +1256,20 @@ class Controller:
         cooldown = timedelta(hours=cfg.notification_cooldown_hours)
         for key, title, message in alerts:
             self.active_alerts.append(key)
-            last = _dt(self.alerts.get(key))
+            last = _dt(self.alert_cooldowns.get(key) or self.alerts.get(key))
             if last is None or now - last >= cooldown:
-                self.alerts[key] = _iso(now)
+                stamp = _iso(now)
+                self.alerts[key] = stamp
+                self.alert_cooldowns[key] = stamp
                 effects.append(Effect("notify", key=key, title=title, message=message))
         for key in list(self.alerts):
             if key not in self.active_alerts and not key.startswith(EVENT_PREFIXES):
                 del self.alerts[key]
                 effects.append(Effect("resolve", key=key))
+        for key in list(self.alert_cooldowns):
+            recorded = _dt(self.alert_cooldowns.get(key))
+            if key not in self.alerts and (recorded is None or now - recorded >= cooldown):
+                del self.alert_cooldowns[key]
         for effect in effects:
             if effect.kind == "notify" and effect.key.startswith(EVENT_PREFIXES):
                 self.alerts[effect.key] = _iso(now)

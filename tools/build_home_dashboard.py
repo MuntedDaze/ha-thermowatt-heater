@@ -277,6 +277,8 @@ def package_ids():
 
 def power_flow_card(ent, custom):
     if custom:
+        ids = package_ids()
+        ent.used[ids["used_today"]] = ent.used[ids["status"]] = "home_energy_package"
         return {
             "type": "custom:thermowatt-power-flow-card",
             "solar_entity": ent.energy("solar_power"),
@@ -287,6 +289,9 @@ def power_flow_card(ent, custom):
                 "solar": ent.energy("solar_today_energy"),
                 "import": ent.energy("grid_import_total"),
                 "export": ent.energy("grid_export_total"),
+                # solar used directly: the package figure, shown only while its daily meters are complete
+                "used": ids["used_today"],
+                "status": ids["status"],
             },
             **(
                 {"timezone": str(ent.mapping["device_energy"]["timezone"])}
@@ -415,7 +420,7 @@ HOT_WATER_TEMPLATE = """\
 {% set ctrl_names = {'automatic': 'Automatic', 'guest': '12 h override', 'holiday': 'Holiday', 'disabled': 'Off'} %}
 {% set tariff_names = {'off_peak': 'Off-peak', 'peak': 'Peak', 'shoulder': 'Shoulder'} %}
 # {{ (t | float(0) | round(1) ~ ' °C') if t not in bad else '—' }}
-Tank bottom · {{ ('updated ' ~ (age | int(0)) ~ ' min ago') if age not in bad else 'age unknown' }} · last poll {{ hhmm(last) if last not in bad else '—' }}
+Water temperature · {{ ('updated ' ~ (age | int(0)) ~ ' min ago') if age not in bad else 'age unknown' }} · last poll {{ hhmm(last) if last not in bad else '—' }}
 
 **Heater** {{ nice(mode_r) if mode_r not in bad else '—' }} · target {{ (tgt_r | float(0) | round(0) | int ~ ' °C') if tgt_r not in bad else '—' }}{% if tgt_d not in bad and tgt_r not in bad and (tgt_d | float(0) | round(0)) != (tgt_r | float(0) | round(0)) %} · desired {{ tgt_d | float(0) | round(0) | int }} °C{% endif %}
 **Control** {{ ctrl_names.get(ctrl, nice(ctrl)) if ctrl not in bad else '—' }} · **Tariff** {{ tariff_names.get(tariff, nice(tariff)) if tariff not in bad else '—' }} · **Solar boost** {{ nice(boost) if boost not in bad else '—' }}
@@ -451,25 +456,29 @@ def override_toggle(ent, columns=12):
     cancel = ent.thermowatt("button", "Cancel 12hr Override")
     on_card = tile(
         mode,
-        "12 h override: ON",
+        "12-hour 62 °C override: ON",
         "mdi:water-boiler",
         "blue",
-        tap=press(cancel, "Cancel the 12 hour 62 °C override? Normal automatic control resumes."),
+        tap=press(cancel, "Cancel the 12-hour 62 °C override? Normal automatic control resumes."),
         hide_state=True,
     )
     off_card = tile(
         mode,
-        "12 h override: OFF",
+        "12-hour 62 °C override: OFF",
         "mdi:water-boiler-off",
         "grey",
         tap=press(
             start,
-            "Start the 12 hour 62 °C override? It may heat during peak hours; controller safeguards still apply.",
+            "Start the 12-hour 62 °C override? It may heat during peak hours; controller safeguards still apply.",
         ),
         hide_state=True,
     )
     unknown = tile(
-        mode, "12 h override: status unknown", "mdi:water-boiler-alert", "grey", hide_state=True
+        mode,
+        "12-hour 62 °C override: status unknown",
+        "mdi:water-boiler-alert",
+        "grey",
+        hide_state=True,
     )
     return [
         conditional(when(mode, "guest"), on_card, columns),
@@ -483,13 +492,162 @@ def override_toggle(ent, columns=12):
             [any_state(mode, ("holiday", "disabled"))],
             tile(
                 mode,
-                "12 h override: not available now",
+                "12-hour 62 °C override: not available now",
                 "mdi:water-boiler-off",
                 "grey",
                 hide_state=True,
             ),
             columns,
         ),
+    ]
+
+
+def automatic_toggle(ent, columns=12):
+    """Automatic heater control: the integration's own master switch (it refuses ON until commissioned)."""
+    auto = ent.thermowatt("switch", "Automatic heater control")
+    return [
+        conditional(
+            when(auto, "on"),
+            tile(
+                auto,
+                "Automatic heater control: ON",
+                "mdi:robot",
+                "blue",
+                tap=call(
+                    "switch.turn_off",
+                    auto,
+                    "Turn automatic heater control OFF? Thermowatt stops sending commands to the "
+                    "heater (the heater keeps its current mode) until you turn it on again.",
+                ),
+                hide_state=True,
+            ),
+            columns,
+        ),
+        conditional(
+            when(auto, "off"),
+            tile(
+                auto,
+                "Automatic heater control: OFF",
+                "mdi:robot-off",
+                "grey",
+                tap=call(
+                    "switch.turn_on",
+                    auto,
+                    "Turn automatic heater control ON? Thermowatt will start managing the heater. "
+                    "It refuses to start until commissioning is complete.",
+                ),
+                hide_state=True,
+            ),
+            columns,
+        ),
+        conditional(
+            [any_state(auto, ("unavailable", "unknown"))],
+            tile(
+                auto,
+                "Automatic heater control: status unknown",
+                "mdi:robot-confused",
+                "grey",
+                hide_state=True,
+            ),
+            columns,
+        ),
+    ]
+
+
+def solar_boost_toggle(ent, columns=12):
+    """Optional solar boost on/off. The integration locks this setting while automatic control is on,
+    so then the tile is inert and says why; it is never a way to force the heater on or off."""
+    auto = ent.thermowatt("switch", "Automatic heater control")
+    boost = ent.thermowatt("switch", "Enable optional solar boost")
+    locked = "locked: automatic control is on"
+    cards = []
+    for boost_state, label in (("on", "enabled"), ("off", "disabled")):
+        cards.append(
+            conditional(
+                [*when(auto, "on"), *when(boost, boost_state)],
+                tile(
+                    boost,
+                    f"Optional solar boost: {label} ({locked})",
+                    "mdi:solar-power-variant"
+                    if boost_state == "on"
+                    else "mdi:solar-power-variant-outline",
+                    "grey",
+                    tap={"action": "none"},
+                    hide_state=True,
+                ),
+                columns,
+            )
+        )
+    cards.append(
+        conditional(
+            [*when(auto, "off"), *when(boost, "on")],
+            tile(
+                boost,
+                "Optional solar boost: enabled",
+                "mdi:solar-power-variant",
+                "orange",
+                tap=call(
+                    "switch.turn_off",
+                    boost,
+                    "Disable optional solar boost? This only stops extra solar storage; it does not "
+                    "turn the heater on or off.",
+                ),
+                hide_state=True,
+            ),
+            columns,
+        )
+    )
+    cards.append(
+        conditional(
+            [*when(auto, "off"), *when(boost, "off")],
+            tile(
+                boost,
+                "Optional solar boost: disabled",
+                "mdi:solar-power-variant-outline",
+                "grey",
+                tap=call(
+                    "switch.turn_on",
+                    boost,
+                    "Enable optional solar boost? It does not start boosting by itself: automatic "
+                    "control and every safety check still apply.",
+                ),
+                hide_state=True,
+            ),
+            columns,
+        )
+    )
+    cards.append(
+        conditional(
+            [
+                {
+                    "condition": "or",
+                    "conditions": [
+                        {"condition": "state", "entity": e, "state": st}
+                        for e in (auto, boost)
+                        for st in ("unavailable", "unknown")
+                    ],
+                }
+            ],
+            tile(
+                boost,
+                "Optional solar boost: status unknown",
+                "mdi:solar-power-variant-outline",
+                "grey",
+                hide_state=True,
+            ),
+            columns,
+        )
+    )
+    return cards
+
+
+def hot_water_controls(ent, columns=12):
+    """Everyday hot-water controls, all through existing Thermowatt entities (no new control path)."""
+    return [
+        heading("Everyday controls", "mdi:tune-variant", "subtitle"),
+        *automatic_toggle(ent, columns),
+        *solar_boost_toggle(ent, columns),
+        *override_toggle(ent, columns),
     ]
 
 
@@ -534,7 +692,7 @@ def hold_toggle(ent, columns=12):
 
 
 # ------------------------------------------------------------------ bathrooms
-def bathroom_card(ent, name, columns=6, controls_only=False):
+def bathroom_card(ent, name, columns=6, controls_only=False, towel_controls=True):
     hum = ent.tapo("sensor", name, "Humidity")
     temp = ent.tapo("sensor", name, "Temperature")
     fan = ent.tapo("binary_sensor", name, "Fan Running")
@@ -647,12 +805,25 @@ def bathroom_card(ent, name, columns=6, controls_only=False):
                 "Fan",
                 ("mdi:fan-clock", "mdi:fan", "mdi:fan-off", "mdi:fan-alert"),
             ),
-            *toggle(
-                towel,
-                towel_switch,
-                "Towel rail",
-                ("mdi:radiator", "mdi:radiator", "mdi:radiator-off", "mdi:radiator-disabled"),
-                "Request one towel-rail drying cycle? It only heats during off-peak.",
+            *(
+                toggle(
+                    towel,
+                    towel_switch,
+                    "Towel rail",
+                    ("mdi:radiator", "mdi:radiator", "mdi:radiator-off", "mdi:radiator-disabled"),
+                    "Request one towel-rail drying cycle? It only heats during off-peak.",
+                )
+                if towel_controls
+                else [  # Home: the towel rail is status only (no manual request from the main screen)
+                    tile(
+                        towel,
+                        "Towel rail",
+                        "mdi:radiator",
+                        "orange",
+                        content="summary",
+                        tap={"action": "none"},
+                    )
+                ]
             ),
         ],
     }
@@ -828,12 +999,12 @@ HOT_WATER_PANEL_TEMPLATE = (
   {'label': 'Solar boost', 'value': nice(boost) if boost not in bad else none},
   {'label': 'Next', 'value': nice(nxt) if nxt not in bad else none, 'detail': ('Next poll ' ~ hhmm(poll)) if poll not in bad else none}
 ] %}
-{% if ctrl == 'guest' and ends not in bad %}{% set stats = stats + [{'label': 'Override ends', 'value': hhmm(ends), 'tone': 'warn'}] %}{% endif %}
+{% if ctrl == 'guest' and ends not in bad %}{% set left = ((as_datetime(ends, none) - now()).total_seconds() // 60) | int(0) if as_datetime(ends, none) is not none else none %}{% set stats = stats + [{'label': '12 h override ends', 'value': hhmm(ends), 'tone': 'warn', 'detail': ((((left // 60) | string) ~ ' h ' ~ ((left % 60) | string) ~ ' min left') if left is not none and left > 0 else none)}] %}{% endif %}
 {{ {
   'title': 'Hot water',
   'icon': 'mdi:water-boiler',
   'badge': {'text': ctrl_names.get(ctrl, nice(ctrl)) if ctrl not in bad else 'Status unknown', 'tone': 'warn' if ctrl == 'guest' else ('idle' if ctrl in bad else 'info')},
-  'hero': {'label': 'Tank bottom', 'value': ('%.1f' | format(t | float(0))) if t not in bad else none, 'unit': '°C',
+  'hero': {'label': 'Water temperature', 'value': ('%.1f' | format(t | float(0))) if t not in bad else none, 'unit': '°C',
            'caption': (('Updated ' ~ (age | int(0)) ~ ' min ago') if age not in bad else 'Age unknown') ~ ' · last poll ' ~ (hhmm(last) if last not in bad else '—')},
   'stats': stats,
   'columns': 2
@@ -991,6 +1162,19 @@ BATHROOM_PANEL_TEMPLATE = (
 {% set h = states('@@HUM@@') %}
 {% set t = states('@@TEMP@@') %}
 {% set shower = states('@@SHOWER@@') %}
+{% set bg = states('@@BG@@') %}
+{% set reason = state_attr('@@FANSTATUS@@', 'reason') %}
+{% set fan_s = state_attr('@@FAN@@', 'summary') %}
+{% set towel_s = state_attr('@@TOWEL@@', 'summary') %}
+{% set left = states('@@LEFT@@') %}
+{% set waiting = state_attr('@@LEFT@@', 'waiting_for_off_peak') %}
+{% set rows = [
+  {'label': 'Learned background humidity', 'value': (('%d' | format(bg | float(0) | round(0))) ~ ' %') if bg not in bad else none},
+  {'label': 'Fan', 'value': fan_s if fan_s else none, 'tone': 'info' if is_state('@@FAN@@', 'on') else 'idle'},
+  {'label': 'Why the fan is in this state', 'value': reason if reason else none},
+  {'label': 'Towel rail', 'value': towel_s if towel_s else none, 'tone': 'warn' if is_state('@@TOWEL@@', 'on') else 'idle'},
+  {'label': 'Drying time left', 'value': (left ~ (' · waiting for off-peak' if waiting else '')) if left not in bad else none}
+] %}
 {{ {
   'title': @@NAME@@,
   'icon': 'mdi:shower-head',
@@ -998,21 +1182,54 @@ BATHROOM_PANEL_TEMPLATE = (
   'heroes': [
     {'label': 'Humidity', 'value': ('%d' | format(h | float(0) | round(0))) if h not in bad else none, 'unit': '%', 'tone': 'info' if shower == 'on' else 'idle'},
     {'label': 'Temperature', 'value': ('%.1f' | format(t | float(0))) if t not in bad else none, 'unit': '°C'}
-  ]
+  ],
+  'groups': [{'title': 'Monitoring', 'rows': rows}] if @@DETAIL@@ else []
 } | tojson }}
 """
 )
 
 
-def bathroom_panel(ent, name, columns=12):
+def bathroom_panel(ent, name, columns=12, detail=False):
     template = (
         BATHROOM_PANEL_TEMPLATE.replace("@@BAD@@", BAD)
         .replace("@@NAME@@", _js(name))
         .replace("@@HUM@@", ent.tapo("sensor", name, "Humidity"))
         .replace("@@TEMP@@", ent.tapo("sensor", name, "Temperature"))
         .replace("@@SHOWER@@", ent.tapo("binary_sensor", name, "Shower Detected"))
+        .replace("@@BG@@", ent.tapo("sensor", name, "Background Humidity"))
+        .replace("@@FANSTATUS@@", ent.tapo("sensor", name, "Fan Status"))
+        .replace("@@FAN@@", ent.tapo("binary_sensor", name, "Fan Running"))
+        .replace("@@TOWEL@@", ent.tapo("binary_sensor", name, "Towel Rail Heating"))
+        .replace("@@LEFT@@", ent.tapo("sensor", name, "Towel Rail Remaining Time"))
+        .replace("@@DETAIL@@", "true" if detail else "false")
     )
     return panel_card(template, columns)
+
+
+def bathroom_setting_tiles(ent, name, columns=12):
+    """The two per-bathroom settings as the Tapo integration's own number entities (tap to type a value).
+
+    They are views of the integration's saved options (the same values Configure edits), not copies."""
+    fan_minutes = ent.tapo("number", name, "Manual Fan Duration")
+    towel_hours = ent.tapo("number", name, "Towel Drying Duration")
+    return [
+        tile(
+            fan_minutes,
+            "Run fan length (5-120 min): tap to change",
+            "mdi:fan-clock",
+            "blue",
+            content="state",
+            columns=columns,
+        ),
+        tile(
+            towel_hours,
+            "Towel drying per shower (1-12 h): tap to change",
+            "mdi:radiator",
+            "orange",
+            content="state",
+            columns=columns,
+        ),
+    ]
 
 
 DOORS_PANEL_TEMPLATE = (
@@ -1136,12 +1353,153 @@ def lights_card(ent, columns=12):
     return card
 
 
+def home_page_card(ent):
+    """ONE card: the whole Home page, fitted to the space the browser gives it (see thermowatt-home-page)."""
+    mapping = ent.mapping
+    last_poll = integration_config.DEFAULT_SOURCES["last_poll"]
+    ent.used[last_poll] = "thermann_bridge"
+    flow = {
+        k: v for k, v in power_flow_card(ent, True).items() if k not in ("type", "grid_options")
+    }
+    lights = {k: v for k, v in lights_card(ent).items() if k not in ("type", "grid_options")}
+    weather_entity = ent.mapped("weather")
+    place = mapping.get("place") or ""
+    card = {
+        "type": HOME_PAGE_CARD,
+        "flow": flow,
+        "hot_water": {
+            "temperature": ent.thermowatt("sensor", "Bottom temperature"),
+            "mode": ent.thermowatt("sensor", "Thermann mode"),
+            "target": ent.thermowatt("sensor", "Thermann target"),
+            "automatic": ent.thermowatt("switch", "Automatic heater control"),
+            "operating": ent.thermowatt("sensor", "Hot water operating mode"),
+            "tariff": ent.thermowatt("sensor", "Current tariff"),
+            "boost": ent.thermowatt("sensor", "Solar boost status"),
+            "boost_enabled": ent.thermowatt("switch", "Enable optional solar boost"),
+            "next_action": ent.thermowatt("sensor", "Next intended action"),
+            "last_poll": last_poll,
+            "next_poll": ent.thermowatt("sensor", "Next cloud poll"),
+        },
+        "doors": {
+            "garage_position": ent.tapo("sensor", "Garage Door Position"),
+            "front_open": ent.tapo("binary_sensor", "Front Door Open"),
+        },
+        "bathrooms": [
+            {
+                "name": b["name"],
+                "humidity": ent.tapo("sensor", b["name"], "Humidity"),
+                "temperature": ent.tapo("sensor", b["name"], "Temperature"),
+                "shower": ent.tapo("binary_sensor", b["name"], "Shower Detected"),
+                "fan_running": ent.tapo("binary_sensor", b["name"], "Fan Running"),
+                "towel_heating": ent.tapo("binary_sensor", b["name"], "Towel Rail Heating"),
+                "towel_remaining": ent.tapo("sensor", b["name"], "Towel Rail Remaining Time"),
+                "fan_switch": ent.tapo("switch", b["name"], "Fan Manual Override"),
+            }
+            for b in mapping["bathrooms"]
+        ],
+        "lights": lights,
+    }
+    if weather_entity:
+        card["weather"] = {"entity": weather_entity, **({"name": place} if place else {})}
+    if (mapping.get("device_energy") or {}).get("timezone"):
+        card["timezone"] = str(mapping["device_energy"]["timezone"])
+    return card
+
+
+LIGHTING_PACKAGE = "homeowner/optional/evening_lights_schedule.yaml"
+LIGHTING_AUTOMATIONS = ("automation.evening_lights_on", "automation.evening_lights_off")
+LIGHT_LABEL = "Evening lights"
+
+
+def lighting_view(ent):
+    """Lights page: every light with its brightness, why any light is missing, and the evening schedule."""
+    lights = lights_card(ent)
+    lights["diagnostics"] = True
+    lights.pop("grid_options", None)
+    on_automation, off_automation = LIGHTING_AUTOMATIONS
+    for automation in LIGHTING_AUTOMATIONS:
+        ent.used[automation] = "lighting_schedule_package"
+    schedule = panel_card(
+        model={
+            "title": "Evening lights schedule",
+            "icon": "mdi:weather-sunset",
+            "lines": [
+                'When switched on below: lights with the "'
+                + LIGHT_LABEL
+                + '" label turn ON two hours before '
+                "sunset (it follows the seasons and Tasmanian daylight saving by itself) and OFF at 01:00.",
+                "Switching a light yourself at any time always works: the schedule only acts at those two "
+                "moments and never turns a light back on or off afterwards.",
+                "Nothing is scheduled until the optional schedule file is installed (the install notes "
+                "explain how). Add the label to a light in Settings, Areas, labels and zones, Labels.",
+            ],
+        },
+        columns=12,
+    )
+
+    def schedule_tile(automation, name, icon):
+        known = [{"condition": "state", "entity": automation, "state": st} for st in ("on", "off")]
+        return conditional(
+            [{"condition": "or", "conditions": known}],
+            tile(
+                automation,
+                name,
+                icon,
+                "orange",
+                content="state",
+                tap=call(
+                    "automation.toggle",
+                    automation,
+                    f'Switch the "{name}" schedule on or off?',
+                ),
+            ),
+            12,
+        )
+
+    missing = [
+        {"condition": "state", "entity": automation, "state_not": st}
+        for automation in (on_automation,)
+        for st in ("on", "off")
+    ]
+    return {
+        "title": "Lights",
+        "path": "lights",
+        "type": "sections",
+        "max_columns": 2,
+        "dense_section_placement": True,
+        "sections": [
+            section(lights),
+            section(
+                schedule,
+                schedule_tile(
+                    on_automation,
+                    "Evening lights on (2 h before sunset)",
+                    "mdi:weather-sunset-down",
+                ),
+                schedule_tile(off_automation, "Evening lights off (01:00)", "mdi:weather-night"),
+                conditional(
+                    missing,
+                    note(
+                        "The evening schedule is not installed, so no lights are scheduled. See "
+                        "docs/owner/HOME_DASHBOARD.md (Lighting schedule) for the optional file.",
+                        12,
+                    ),
+                    12,
+                ),
+                settings_tile("sun.sun", "Edit automations", "/config/automation/dashboard", 12),
+                settings_tile("sun.sun", "Light labels", "/config/labels", 12),
+            ),
+        ],
+    }
+
+
 def bathroom_toggles(ent, name):
     """The fan and towel-rail controls of one bathroom (state-aware, inert when status is unknown)."""
     return bathroom_card(ent, name, 12, controls_only=True)
 
 
 # ------------------------------------------------------------------ device energy
+HOME_PAGE_CARD = "custom:thermowatt-home-page"
 DEVICE_ENERGY_CARD = "custom:thermowatt-device-energy-card"
 DEVICE_ENERGY_PAGE = "custom:thermowatt-device-energy-page"
 
@@ -1331,7 +1689,9 @@ def build_views_native(ent):
     if not lights:
         ent.unresolved.append("lights.names")
         lights.append(mapping_needed("Lights", "lights.names", 12))
-    bathrooms = [bathroom_card(ent, name, 12) for name in names]  # one column wide each
+    bathrooms = [
+        bathroom_card(ent, name, 12, towel_controls=False) for name in names
+    ]  # one column wide each
 
     home = view(
         "Home",
@@ -1340,7 +1700,7 @@ def build_views_native(ent):
         [
             section(flow),
             section(*energy_panel(ent, 6)),
-            section(hot_water_summary(ent), *override_toggle(ent)),
+            section(hot_water_summary(ent)),
             section(weather),
             # Row 2 on a 4-column screen: one bathroom per column, then lights and doors across two.
             *[section(bathroom) for bathroom in bathrooms],
@@ -1385,24 +1745,22 @@ def build_views_native(ent):
         "hot-water",
         "mdi:water-boiler",
         [
+            section(hot_water_summary(ent), *hot_water_controls(ent)),
             section(
-                hot_water_summary(ent),
-                *override_toggle(ent),
+                heading("Plan and diagnostics", "mdi:text-box-search-outline", "subtitle"),
+                diagnostics_summary(ent),
+                heading("Advanced", "mdi:cog-outline", "subtitle"),
                 *hold_toggle(ent),
                 settings_tile(
                     ent.thermowatt("sensor", "Automatic control state"),
-                    "Hot water settings",
+                    "Thermowatt Settings",
                     THERMOWATT_SETTINGS_PATH,
                     12,
                 ),
             ),
             section(
-                heading("Plan and diagnostics", "mdi:text-box-search-outline", "subtitle"),
-                diagnostics_summary(ent),
-            ),
-            section(
                 history(
-                    "Tank bottom temperature",
+                    "Water temperature, last 48 hours",
                     [ent.thermowatt("sensor", "Bottom temperature")],
                     48,
                     12,
@@ -1527,23 +1885,10 @@ def build_views_designed(ent):
     """
     mapping = ent.mapping
     names = [b["name"] for b in mapping["bathrooms"]]
-    place = mapping.get("place") or ""
     flow = power_flow_card(ent, True)
-    weather = _weather_card(ent, place)
 
-    home = view(
-        "Home",
-        "home",
-        None,
-        [
-            section(flow),
-            section(hot_water_panel(ent), *override_toggle(ent)),
-            section(weather, doors_panel(ent)),
-            *[section(bathroom_panel(ent, name), *bathroom_toggles(ent, name)) for name in names],
-            section(lights_card(ent)),
-        ],
-        max_columns=3,
-    )
+    # The Home page is ONE card in a panel view: it fits a tablet in landscape without scrolling.
+    home = {"title": "Home", "path": "home", "type": "panel", "cards": [home_page_card(ent)]}
     de_base = device_energy_card(ent)
     energy_mini = (
         [{**de_base, "part": "balancemini"}] if de_base.get("type") == DEVICE_ENERGY_CARD else []
@@ -1575,21 +1920,21 @@ def build_views_designed(ent):
         "hot-water",
         None,
         [
+            section(hot_water_panel(ent), *hot_water_controls(ent)),
             section(
-                hot_water_panel(ent),
-                *override_toggle(ent),
+                diagnostics_panel(ent),
+                heading("Advanced", "mdi:cog-outline", "subtitle"),
                 *hold_toggle(ent),
                 settings_tile(
                     ent.thermowatt("sensor", "Automatic control state"),
-                    "Hot water settings",
+                    "Thermowatt Settings",
                     THERMOWATT_SETTINGS_PATH,
                     12,
                 ),
             ),
-            section(diagnostics_panel(ent)),
             section(
                 history(
-                    "Tank bottom temperature",
+                    "Water temperature, last 48 hours",
                     [ent.thermowatt("sensor", "Bottom temperature")],
                     48,
                     12,
@@ -1604,12 +1949,15 @@ def build_views_designed(ent):
         None,
         [
             section(
-                bathroom_panel(ent, name),
+                bathroom_panel(ent, name, detail=True),
+                heading("Controls", "mdi:tune-variant", "subtitle"),
                 *bathroom_toggles(ent, name),
+                heading("Settings", "mdi:cog-outline", "subtitle"),
+                *bathroom_setting_tiles(ent, name),
                 *bathroom_history(ent, index, name),
                 settings_tile(
                     ent.tapo("binary_sensor", "Controller Health Problem"),
-                    "Bathroom tuning (Tapo settings)",
+                    "Tapo Controller Settings",
                     TAPO_SETTINGS_PATH,
                     12,
                 ),
@@ -1618,6 +1966,7 @@ def build_views_designed(ent):
         ],
         max_columns=2,
     )
+    lights_view = lighting_view(ent)
     contacts = []
     for key in ("garage_contact", "front_contact"):
         node = mapping["doors"].get(key) or {}
@@ -1658,7 +2007,7 @@ def build_views_designed(ent):
         max_columns=2,
     )
     device_energy = device_energy_view(ent)
-    return [home, energy, hot_water, bath_view, doors_view, system, device_energy]
+    return [home, energy, hot_water, bath_view, lights_view, doors_view, system, device_energy]
 
 
 def build_views(ent, custom):

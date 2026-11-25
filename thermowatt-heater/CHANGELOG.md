@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.5.1] — explicit backoff command refusals (with controller 0.18.2)
+
+Addresses the 25 November 2026 live boundary-race incident (`docs/audits/2026-11-25/CLOUD_OUTAGE_RECOVERY_INVESTIGATION.md`).
+
+- **No silent command draining or 60-minute backoff queue stalls.** When a cloud
+  status poll fails or the bridge is already in cloud backoff/quota cooldown,
+  queued MQTT commands are drained immediately with an explicit terminal refusal
+  (`refused_cloud_backoff`, `refused_cloud_quota_limited`,
+  `refused_auth_not_ready`, or `dropped_bridge_offline`) instead of being
+  silently discarded by `_offline()` or sitting unread until
+  `dropped_command_older_than_30s` at recovery.
+- Normal 20-second `COMMAND_INTERVAL` pacing while healthy is unchanged, and a
+  pending uncertain POST record (`self.pending`) is never overwritten
+  (`refused_while_pending` is used instead).
+- Unchanged: credentials, tokens, authentication guard, proactive/reactive
+  refresh rules, backoff ladder (3,600 s minimum), exact-prior command checks,
+  zero-retry POST safety, MQTT topics, options, schema and entity IDs.
+- Marked in `breaking_versions` so Supervisor asks before updating.
+
 ## Controller 0.18.1 (app 1.5.0 unchanged)
 
 - Final release: solar boosting no longer depends on forecasts (priced on the

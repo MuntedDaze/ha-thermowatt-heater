@@ -75,7 +75,7 @@ def parked(tmp_path, monkeypatch):
 
 
 def fail_restore(rig, kind="auth", *, settle_fault=True):
-    rig.t += 11 if kind != "status" else 71
+    rig.t += 11 if kind not in {"status", "status_quota"} else 71
     if kind != "auth":
         rig.bridge.token_obtained_at = rig.t  # test a GET/POST failure, not token refresh
     decision = evaluate(rig)
@@ -84,13 +84,17 @@ def fail_restore(rig, kind="auth", *, settle_fault=True):
     started = rig.executor.controller.parked_off_restore_since
     assert started == rig.now().isoformat()
     rig.bridge.session.request.side_effect = (
-        [response(401)] if kind == "auth" else requests.Timeout()
+        [response(401)]
+        if kind == "auth"
+        else (lambda *a, **k: response(body={"error": "Daily request limit exceeded"}))
+        if kind == "status_quota"
+        else requests.Timeout()
     )
     rig.bridge.tick()
     if kind == "auth":
         assert rig.bridge.last_command["result"] == "refused_authentication_before_command"
         assert not heater_posts(rig) and rig.bridge.pending is None
-    elif kind == "status":
+    elif kind in {"status", "status_quota"}:
         assert rig.bridge.last_command["result"] == "refused_status_refresh_failed"
         assert not heater_posts(rig) and rig.bridge.pending is None
     else:
@@ -99,6 +103,14 @@ def fail_restore(rig, kind="auth", *, settle_fault=True):
         return datetime.fromisoformat(started)
     advance(rig, rig.now() + timedelta(minutes=8 if kind == "post" else 1))
     controller = rig.executor.controller
+    if kind == "status":
+        # Transient pre-command status timeout defers safely without locking,
+        # while retaining parked-OFF restore age and sending no retries.
+        assert controller.state in {"parked", "change_requested"}
+        assert controller.fault is None and controller.heater == "off"
+        assert controller.last_observed_heater == "off"
+        assert controller.parked_off_restore_since == started
+        return datetime.fromisoformat(started)
     assert controller.state == "fault_locked" and controller.heater is None
     assert controller.last_observed_heater == "off"
     decision = rig.executor.last_decision
@@ -109,7 +121,7 @@ def fail_restore(rig, kind="auth", *, settle_fault=True):
     return datetime.fromisoformat(started)
 
 
-@pytest.mark.parametrize("failure", ["auth", "status", "post"])
+@pytest.mark.parametrize("failure", ["auth", "status", "status_quota", "post"])
 def test_real_restoration_failure_warns_at_thirty_minutes_without_more_commands(parked, failure):
     rig = parked
     started = fail_restore(rig, failure)
@@ -124,7 +136,10 @@ def test_real_restoration_failure_warns_at_thirty_minutes_without_more_commands(
     assert rig.notifications.count(NOTICE) == 1  # existing notification cooldown
     assert controller.parked_off_restore_since == started.isoformat()
     assert rig.commands() == ["Manual:45@off"] and len(heater_posts(rig)) == attempts
-    assert controller.state == "fault_locked" and controller.heater is None
+    if failure == "status":
+        assert controller.state == "change_requested" and controller.heater == "off"
+    else:
+        assert controller.state == "fault_locked" and controller.heater is None
     if failure == "auth":
         assert rig.bridge.session.request.call_count == cloud_attempts
         assert rig.bridge.guard.state["mode"] == "blocked"
@@ -179,7 +194,7 @@ def test_executor_restart_retains_restore_age_fault_and_notification_deduplicati
 
 def test_genuine_restoration_clears_warning_without_automatically_acknowledging_fault(parked):
     rig = parked
-    started = fail_restore(rig, "status")
+    started = fail_restore(rig, "status_quota")
     advance(rig, started + timedelta(minutes=31))
     assert ALERT in rig.executor.controller.active_alerts
     rig.tank.apply("Manual", 45, rig.t)  # simulated external owner restoration

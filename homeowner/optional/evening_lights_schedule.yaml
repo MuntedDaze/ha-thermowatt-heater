@@ -1,0 +1,48 @@
+# OPTIONAL evening lights schedule: NOT installed or active until you copy this file into place.
+#
+#   lights ON  two hours before local sunset (Home Assistant computes the real sunset every day, so it follows
+#              the seasons, and it uses Home Assistant's own time zone, so Tasmanian daylight saving is automatic)
+#   lights OFF at 01:00 local time, every day
+#
+# Which lights: every light (or lamp plug) that has the Home Assistant LABEL "Evening lights"
+# (Settings -> Areas, labels & zones -> Labels; its id is evening_lights). A new light joins the schedule by
+# getting the label; nothing here is regenerated and no entity ID is listed.
+#
+# Manual use is never fought: there is no condition and no "state changed" trigger, so the schedule acts at
+# exactly two moments a day and never turns a light back on or off afterwards. Switching a light yourself at any
+# time (including its brightness) simply works, and the next scheduled event still runs as normal.
+# If Home Assistant is restarting at one of the two moments, that event is skipped (no catch-up) rather than
+# switching lights at a surprising time.
+#
+# Install (after you approve it):
+#   1. Settings -> Areas, labels & zones -> Labels -> create "Evening lights"; add it to the lights you want.
+#   2. Copy this file to /config/packages/evening_lights_schedule.yaml
+#      (packages must be enabled:  homeassistant: packages: !include_dir_named packages  in configuration.yaml).
+#   3. Developer tools -> YAML -> Check configuration, then Restart (or "Reload automations").
+# Switch the schedule off at any time with the two tiles on the dashboard's Lights page, or Settings ->
+# Automations. Remove the file (and reload) to uninstall it.
+automation:
+  - id: thermowatt_evening_lights_on
+    alias: Evening lights on
+    description: Turn the lights labelled "Evening lights" on two hours before local sunset.
+    mode: single
+    triggers:
+      - trigger: sun
+        event: sunset
+        offset: "-02:00:00"
+    actions:
+      - action: homeassistant.turn_on
+        target:
+          label_id: evening_lights
+
+  - id: thermowatt_evening_lights_off
+    alias: Evening lights off
+    description: Turn the lights labelled "Evening lights" off at 01:00 local time.
+    mode: single
+    triggers:
+      - trigger: time
+        at: "01:00:00"
+    actions:
+      - action: homeassistant.turn_off
+        target:
+          label_id: evening_lights

@@ -12,19 +12,25 @@ const START = "button.thermann_shadow_start_guest_mode_12_h";
 const CANCEL = "button.thermann_shadow_cancel_guest_mode";
 const HOLD = "button.thermann_shadow_hold_heater_owner_override";
 const RESUME = "button.thermann_shadow_resume_automatic_control";
+const AUTOMATIC = "switch.thermann_shadow_automatic_heater_control";
+const BOOST_ENABLED = "switch.thermann_shadow_enable_optional_solar_boost";
 const STATUS = "sensor.home_energy_status";
 const FAN = "binary_sensor.tapo_smart_controller_main_bathroom_fan_running";
 const FAN_SWITCH = "switch.tapo_smart_controller_main_bathroom_fan_manual_override";
 const TOWEL = "binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating";
 const TOWEL_SWITCH = "switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override";
+// The Galaxy Tab S7 FE is 2560x1600 physical at a device pixel ratio of 2, so its CSS viewport is about 1280x800:
+// 1280x800 with the browser's bars hidden or as an installed app (desktop-1280), about 1280x704 with Chrome's tab
+// strip and address bar showing (tablet-1280x704). Home Assistant docks its 256 px sidebar from 870 px wide.
 const WIDTHS = [
   { width: 1920, height: 1080, name: "desktop-1920", interactive: true },
   { width: 1366, height: 768, name: "laptop-1366", interactive: false },
   { width: 1280, height: 800, name: "desktop-1280", interactive: false },
+  { width: 1280, height: 704, name: "tablet-1280x704", interactive: false },
   { width: 390, height: 844, name: "mobile-390", interactive: true },
 ];
-// Home must fit a normal desktop viewport at 1920x1080 and stay reasonable on smaller screens.
-const MAX_SCROLL_RATIO = { "desktop-1920": 1.3, "laptop-1366": 2.4, "desktop-1280": 2.4 };
+// The Home page is ONE card that fits the viewport: no scrolling at any width of 760 px or more.
+const HOME_FITS = new Set(["desktop-1920", "laptop-1366", "desktop-1280", "tablet-1280x704"]);
 
 async function main() {
   const browser = await chromium.launch({ args: ["--no-sandbox"] });
@@ -76,6 +82,14 @@ async function main() {
     }
     return false;
   };
+  // A tap on an inert tile opens that entity's more-info dialog (which may open nested ones): close them all so
+  // the next tap is not blocked.
+  const closeDialogs = async () => {
+    for (let i = 0; i < 4; i += 1) {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(250);
+    }
+  };
   const tap = async (text, { first = false } = {}) => {
     await dismissHttpDialog();
     await clearCalls();
@@ -90,11 +104,11 @@ async function main() {
       await page.waitForTimeout(800);
       const recorded = await calls();
       if (recorded.length || confirmationShown) {
-        await page.keyboard.press("Escape");
+        await closeDialogs();
         return { calls: recorded, confirmationShown };
       }
     }
-    await page.keyboard.press("Escape");
+    await closeDialogs();
     return { calls: await calls(), confirmationShown };
   };
   // Layout facts measured in the real rendered DOM (open shadow roots are searched).
@@ -107,6 +121,71 @@ async function main() {
         }
         return out;
       };
+      const homeCard = all(document, "thermowatt-home-page")[0];
+      if (homeCard) {
+        // a panel view: ONE card, measured against the space the browser really gives it
+        const box = homeCard.getBoundingClientRect();
+        let scrollOverflow = 0;
+        for (let node = homeCard; node; node = node.parentNode || node.host) {
+          if (node.nodeType !== 1) continue;
+          const overflowY = getComputedStyle(node).overflowY;
+          if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight - node.clientHeight > scrollOverflow) scrollOverflow = node.scrollHeight - node.clientHeight;
+        }
+        const clipped = [];
+        for (const el of homeCard.shadowRoot.querySelectorAll("ha-card, .cell")) {
+          if (el.scrollHeight > el.clientHeight + 1) clipped.push(`${el.id || el.className || el.tagName}:${el.scrollHeight - el.clientHeight}`);
+        }
+        const wide = [];
+        for (const el of [...homeCard.shadowRoot.querySelectorAll("*")]) {
+          const r = el.getBoundingClientRect();
+          if (r.right > window.innerWidth + 1) wide.push(`${el.tagName.toLowerCase()}.${el.className || el.id}:${Math.round(r.right - window.innerWidth)}`);
+        }
+        const flowCard = homeCard.shadowRoot.querySelector("thermowatt-power-flow-card");
+        const lightsCard = homeCard.shadowRoot.querySelector("thermowatt-lights-card");
+        const text = [...(flowCard ? flowCard.shadowRoot.querySelectorAll("text") : [])].map((t) => t.getBoundingClientRect().height);
+        const smallest = [
+          ...homeCard.shadowRoot.querySelectorAll(".line, .lab, .fact .k, .fact .s, .foot, .t, .chip, .strip .k"),
+          ...(flowCard ? flowCard.shadowRoot.querySelectorAll(".kpi .lab, .kpi .val, .title, .chip") : []),
+          ...(lightsCard ? lightsCard.shadowRoot.querySelectorAll(".lt .n, .lt .s, .small, .title, .chip") : []),
+        ].map((el) => parseFloat(getComputedStyle(el).fontSize));
+        const truncatedTitles = [...homeCard.shadowRoot.querySelectorAll(".t")]
+          .filter((el) => el.scrollWidth > el.clientWidth + 1)
+          .map((el) => el.textContent.trim());
+        const wxCard = all(homeCard.shadowRoot, "hui-weather-forecast-card")[0];
+        let weatherForecast = null;
+        if (wxCard && wxCard.shadowRoot) {
+          const wxBox = wxCard.getBoundingClientRect();
+          const forecast = wxCard.shadowRoot.querySelector(".forecast");
+          const days = forecast ? [...forecast.children] : [];
+          const clippedDays = days.filter((d) => d.getBoundingClientRect().right > wxBox.right + 1).length;
+          weatherForecast = {
+            cardWidth: Math.round(wxBox.width),
+            days: days.length,
+            clippedDays,
+            overflowX: forecast ? Math.round(forecast.scrollWidth - forecast.clientWidth) : 0,
+          };
+        }
+        return {
+          panel: true,
+          viewTop: Math.round(box.top),
+          viewport: [window.innerWidth, window.innerHeight],
+          cardBottom: Math.round(box.bottom),
+          contentHeight: Math.round(box.height),
+          availableHeight: Math.round(window.innerHeight - box.top),
+          ratio: Number((box.bottom / window.innerHeight).toFixed(2)),
+          documentScroll: document.documentElement.scrollHeight - window.innerHeight,
+          scrollOverflow,
+          clipped,
+          wide: wide.slice(0, 8),
+          columns: 3,
+          overlaps: 0,
+          overflowX: document.documentElement.scrollWidth - window.innerWidth,
+          minSvgTextHeight: text.length ? Math.min(...text) : null,
+          smallestFontPx: smallest.length ? Number(Math.min(...smallest).toFixed(2)) : null,
+          truncatedTitles,
+          weatherForecast,
+        };
+      }
       const view = all(document, "hui-sections-view")[0];
       const sections = all(view.shadowRoot, "hui-section").map((s) => s.getBoundingClientRect());
       const top = view.getBoundingClientRect().top;
@@ -191,14 +270,36 @@ async function main() {
       expect(facts.overflowX).toBeLessThanOrEqual(2); // no horizontal overflow
       expect(facts.overlaps).toBe(0); // no overlapping sections
       if (facts.minSvgTextHeight !== null) expect(facts.minSvgTextHeight).toBeGreaterThanOrEqual(8);
-      if (MAX_SCROLL_RATIO[size.name]) expect(facts.ratio).toBeLessThanOrEqual(MAX_SCROLL_RATIO[size.name]);
+      if (HOME_FITS.has(size.name)) {
+        expect(facts.panel, "Home is a panel view").toBe(true);
+        expect(facts.cardBottom, "the Home card ends inside the viewport").toBeLessThanOrEqual(size.height);
+        expect(facts.documentScroll, "the page does not scroll").toBeLessThanOrEqual(2);
+        expect(facts.scrollOverflow, "no scroll container around the Home card scrolls").toBeLessThanOrEqual(2);
+        expect(facts.clipped, "no Home card has clipped content").toEqual([]);
+        expect(facts.smallestFontPx, "meaningful tablet text stays >= 13 px").toBeGreaterThanOrEqual(13);
+        expect(facts.truncatedTitles, "no Home card header title is truncated").toEqual([]);
+        if (facts.weatherForecast) {
+          expect(facts.weatherForecast.days, "all 5 forecast days render").toBeGreaterThanOrEqual(5);
+          expect(facts.weatherForecast.clippedDays, "no weather forecast day is clipped at the right edge").toBe(0);
+          expect(facts.weatherForecast.overflowX, "weather forecast does not horizontally overflow").toBeLessThanOrEqual(2);
+        }
+      }
 
       // Compact hot-water summary and energy panel are on the main screen.
-      await expect(page.getByText("Tank bottom", { exact: false }).first()).toBeVisible();
+      await expect(page.getByText("Water temperature", { exact: false }).first()).toBeVisible();
+      await expect(page.getByText("Tank bottom", { exact: false })).toHaveCount(0);
       await expect(page.getByText("52.4").first()).toBeVisible();
       await expect(page.getByText("Solar today").first()).toBeVisible(); // today's strip under the flow diagram
+      await expect(page.getByText("Used directly").first()).toBeVisible(); // solar used directly (withheld until a full day)
+      await expect(page.getByText("Imported today").first()).toBeVisible();
       await expect(page.getByText("Exported today").first()).toBeVisible();
-      await expect(page.getByText("Override ends")).toHaveCount(0); // no Unknown while automatic
+      await expect(page.getByText("Automatic on", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("Run fan — 20 min")).toHaveCount(2); // one per bathroom, the default length
+      await expect(page.getByText("Main Bathroom", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("Ensuite", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("Garage closed").first()).toBeVisible(); // doors: a small status only
+      await expect(page.getByText("12-hour", { exact: false })).toHaveCount(0); // no hot-water override on Home
+      await expect(page.getByText("override", { exact: false })).toHaveCount(0);
       await expect(page.getByText("Weather: mapping needed")).toHaveCount(0);
       const weather = await page.evaluate(() => {
         const deepText = (root) => {
@@ -257,6 +358,7 @@ async function main() {
         await setState(STATUS, "collecting_first_day");
         await goHome("home");
 
+        let result;
         // Lights are DISCOVERED: the two seeded lights show, a third appears with no reconfiguration, and the
         // card scales to ten. Unavailable lights and light groups are not shown.
         const lightFacts = () =>
@@ -313,41 +415,169 @@ async function main() {
               ...(i % 2 && i % 3 !== 0 ? { brightness: 120 + i } : {}),
             });
           }
-          await expect(page.getByText(`Test light ${wanted}`, { exact: true }).first()).toBeVisible();
+          // Home: the lights card shows every light inside its own cell (it scrolls inside), the page never scrolls
+          await expect.poll(async () => (await lightFacts()).count, { timeout: 10000 }).toBe(wanted);
           lights = await lightFacts();
-          expect(lights.count).toBe(wanted);
-          expect(lights.outside).toBe(0);
-          expect(lights.overlaps).toBe(0);
           expect(lights.narrowest).toBeGreaterThan(100); // never squeezed into an unreadable sliver
           expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(2);
+          if (HOME_FITS.has(size.name)) expect((await layout()).clipped).toEqual([]);
+          await shootLights(`home-${wanted}`);
+          // Lights page: the full layout, with the reasons for every light that is not shown
+          await goHome("lights");
+          await expect.poll(async () => (await lightFacts()).count, { timeout: 10000 }).toBe(wanted);
+          lights = await lightFacts();
+          expect(lights.outside).toBe(0);
+          expect(lights.overlaps).toBe(0);
+          expect(lights.narrowest).toBeGreaterThan(100);
           await shootLights(String(wanted));
+          await goHome("home");
         }
+        // The third light's missing-light explanation: every excluded light is listed with its reason.
+        await goHome("lights");
+        await expect(page.getByText("Why some lights are not shown", { exact: false })).toBeVisible();
+        await expect(page.getByText("Gone light", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText("Currently unavailable", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText("A light group", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText("Switches that look like lamps", { exact: false })).toBeVisible();
+        await expect(page.getByText("switch.garden_lamp", { exact: false }).first()).toBeVisible(); // a lamp on a plug is a switch
+        await expect(page.getByText("show_as_light", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText("The evening schedule is not installed", { exact: false })).toBeVisible();
+        await setState("automation.evening_lights_on", "off", { friendly_name: "Evening lights on" });
+        await setState("automation.evening_lights_off", "off", { friendly_name: "Evening lights off" });
+        await expect(page.getByText("Evening lights on (2 h before sunset)", { exact: false })).toBeVisible();
+        result = await tap("Evening lights on (2 h before sunset)", { first: true });
+        expect(result.confirmationShown, "switching the schedule on asks for confirmation").toBe(true);
+        expect(JSON.stringify(result.calls)).toContain("automation.toggle");
+        await page.screenshot({ path: `${output}/lights-page-${size.name}.png`, fullPage: true });
+        // the schedule is "not installed" again for the next viewport (states persist across the run)
+        await setState("automation.evening_lights_on", "unavailable");
+        await setState("automation.evening_lights_off", "unavailable");
+        await goHome("home");
         for (let i = 4; i <= 10; i += 1) await setState(`light.test_light_${i}`, "unavailable", { friendly_name: `Test light ${i}` });
         await setState("light.third_light", "unavailable", { friendly_name: "Third light" });
         await expect.poll(async () => (await lightFacts()).count, { timeout: 10000 }).toBe(2);
-        let result = await tap("Living room", { first: true });
+        result = await tap("Living room", { first: true });
         expect(JSON.stringify(result.calls)).toContain("light.toggle");
 
-        // 12 h override: ON / OFF / unknown (each press confirmed, existing buttons only).
+        // Home: the manual fan button of each bathroom (the only control on the page).
+        await expect(page.getByText("Run fan — 20 min").first()).toBeVisible();
+        result = await tap("Run fan — 20 min", { first: true });
+        expect(JSON.stringify(result.calls)).toContain("switch.turn_on");
+        expect(JSON.stringify(result.calls)).toContain(FAN_SWITCH);
+        expect(JSON.stringify(result.calls)).not.toContain("towel");
+        await setState(FAN_SWITCH, "on", { configured_minutes: 20, remaining_seconds: 17 * 60 - 20 });
+        await expect(page.getByText("Cancel fan — 17 min left").first()).toBeVisible();
+        result = await tap("Cancel fan — 17 min left", { first: true });
+        expect(JSON.stringify(result.calls)).toContain("switch.turn_off");
+        expect(JSON.stringify(result.calls)).toContain(FAN_SWITCH);
+        await setState(FAN_SWITCH, "off", { configured_minutes: 45, remaining_seconds: null });
+        await expect(page.getByText("Run fan — 45 min").first()).toBeVisible(); // the Bathrooms-page setting shows here
+        await setState(FAN_SWITCH, "off", { configured_minutes: 20, remaining_seconds: null });
+        await setState(FAN, "unavailable");
+        await expect(page.getByText("Fan unavailable").first()).toBeVisible();
+        result = await tap("Fan unavailable", { first: true });
+        expect(result.calls).toEqual([]);
+        await setState(FAN, "off", { summary: "Off — normal" });
+        await setState(TOWEL, "off", { summary: "Waiting for off-peak — 4h 00m left (manual)" });
+        await setState("sensor.tapo_smart_controller_main_bathroom_towel_rail_remaining_time", "4h", { remaining_seconds: 14400, waiting_for_off_peak: true });
+        await expect(page.getByText("waiting for off-peak", { exact: false }).first()).toBeVisible(); // drying time left
+        await setState(TOWEL, "off", { summary: "Off — no drying scheduled" });
+        await setState("sensor.tapo_smart_controller_main_bathroom_towel_rail_remaining_time", "0m", { remaining_seconds: 0, waiting_for_off_peak: false });
+
+        // Hot water view: grouped controls, every significant action confirmed, existing entities only.
+        await goHome("hot-water");
+        await setState(AUTOMATIC, "on");
+        await setState(BOOST_ENABLED, "on");
+        await expect(page.getByText("Everyday controls", { exact: true })).toBeVisible();
+        await expect(page.getByText("Automatic heater control: ON")).toBeVisible();
+        result = await tap("Automatic heater control: ON");
+        expect(result.confirmationShown, "stopping automatic control asks for confirmation").toBe(true);
+        expect(JSON.stringify(result.calls)).toContain("switch.turn_off");
+        expect(JSON.stringify(result.calls)).toContain(AUTOMATIC);
+        // optional solar boost is locked while automatic control is on: inert, and it says why
+        await expect(page.getByText("Optional solar boost: enabled (locked: automatic control is on)")).toBeVisible();
+        result = await tap("Optional solar boost: enabled (locked", { first: true });
+        expect(result.calls).toEqual([]);
+        expect(result.confirmationShown).toBe(false);
+        await setState(AUTOMATIC, "off");
+        await expect(page.getByText("Automatic heater control: OFF")).toBeVisible();
+        await expect(page.getByText("Optional solar boost: enabled", { exact: true })).toBeVisible();
+        result = await tap("Optional solar boost: enabled", { first: true });
+        expect(result.confirmationShown).toBe(true);
+        expect(JSON.stringify(result.calls)).toContain("switch.turn_off");
+        expect(JSON.stringify(result.calls)).toContain(BOOST_ENABLED);
+        expect(JSON.stringify(result.calls)).not.toContain("button.press"); // never a way to force the heater
+        await setState(BOOST_ENABLED, "off");
+        await expect(page.getByText("Optional solar boost: disabled", { exact: true })).toBeVisible();
+        result = await tap("Optional solar boost: disabled", { first: true });
+        expect(result.confirmationShown).toBe(true);
+        expect(JSON.stringify(result.calls)).toContain("switch.turn_on");
+        result = await tap("Automatic heater control: OFF");
+        expect(result.confirmationShown, "starting automatic control asks for confirmation").toBe(true);
+        expect(JSON.stringify(result.calls)).toContain("switch.turn_on");
+        await setState(AUTOMATIC, "unavailable");
+        await expect(page.getByText("Automatic heater control: status unknown")).toBeVisible();
+        result = await tap("Automatic heater control: status unknown");
+        expect(result.calls).toEqual([]);
+        await setState(AUTOMATIC, "on");
+        await setState(BOOST_ENABLED, "on");
+        // 12-hour 62 C override: ON / OFF / unknown, each press confirmed, existing buttons only
         await setState(MODE, "automatic");
-        await expect(page.getByText("12 h override: OFF")).toBeVisible();
-        result = await tap("12 h override: OFF");
+        await expect(page.getByText("12-hour 62 °C override: OFF")).toBeVisible();
+        result = await tap("12-hour 62 °C override: OFF");
         expect(result.confirmationShown, "start override asks for confirmation").toBe(true);
         expect(JSON.stringify(result.calls)).toContain(START);
         await setState(MODE, "guest");
         await setState("sensor.thermann_shadow_guest_mode_ends", new Date(Date.now() + 3600e3).toISOString());
-        await expect(page.getByText("12 h override: ON")).toBeVisible();
-        await expect(page.getByText("Override ends").first()).toBeVisible(); // only while active
-        result = await tap("12 h override: ON");
+        await expect(page.getByText("12-hour 62 °C override: ON")).toBeVisible();
+        await expect(page.getByText("12 h override ends").first()).toBeVisible(); // end time and time left, only while active
+        await expect(page.getByText("min left").first()).toBeVisible();
+        result = await tap("12-hour 62 °C override: ON");
         expect(result.confirmationShown, "cancel override asks for confirmation").toBe(true);
         expect(JSON.stringify(result.calls)).toContain(CANCEL);
         await setState(MODE, "unavailable");
-        await expect(page.getByText("12 h override: status unknown")).toBeVisible();
-        result = await tap("12 h override: status unknown");
+        await expect(page.getByText("12-hour 62 °C override: status unknown")).toBeVisible();
+        result = await tap("12-hour 62 °C override: status unknown");
         expect(result.calls).toEqual([]);
         expect(result.confirmationShown).toBe(false);
         await setState(MODE, "automatic");
+        // grouped: operating info, everyday controls, then diagnostics and advanced settings; Thermowatt Settings button
+        await expect(page.getByText("Thermowatt Settings", { exact: true })).toBeVisible();
+        await expect(page.getByText("Advanced", { exact: true })).toBeVisible();
+        await expect(page.getByText("Water temperature", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText("Tank bottom", { exact: false })).toHaveCount(0);
+        await setState(CONTROL, "observing");
+        await expect(page.getByText("Automatic heating: active")).toBeVisible();
+        result = await tap("Automatic heating: active");
+        expect(result.confirmationShown).toBe(true);
+        expect(JSON.stringify(result.calls)).toContain(HOLD);
+        await setState(CONTROL, "owner_override");
+        await expect(page.getByText("Automatic heating: on hold")).toBeVisible();
+        result = await tap("Automatic heating: on hold");
+        expect(JSON.stringify(result.calls)).toContain(RESUME);
+        await setState(CONTROL, "fault_locked");
+        await expect(page.getByText("Automatic heating: not available")).toBeVisible();
+        result = await tap("Automatic heating: not available");
+        expect(result.calls).toEqual([]);
+        await setState(CONTROL, "observing");
+        await expect(page.locator("hui-history-graph-card").first()).toBeVisible();
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(600);
+        await page.screenshot({ path: `${output}/hot-water-${size.name}.png`, fullPage: true });
 
+        // Bathrooms view: charts built from the original sensors and the physical relays.
+        await goHome("bathrooms");
+        await expect(page.locator("hui-history-graph-card")).toHaveCount(4);
+        await expect(page.getByText("Learned background humidity").first()).toBeVisible();
+        await expect(page.getByText("Why the fan is in this state").first()).toBeVisible();
+        await expect(page.getByText("Humidity is normal; the fan is not needed.").first()).toBeVisible();
+        await expect(page.getByText("Drying time left").first()).toBeVisible();
+        await expect(page.getByText("Run fan length (5-120 min)", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText("Towel drying per shower (1-12 h)", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText("Tapo Controller Settings").first()).toBeVisible();
+        // the setting tiles open the integration's own number entity (a typed value); nothing is set by looking
+        await clearCalls();
+        expect(await calls()).toEqual([]);
         // Bathroom fan: automatic / manual / off / unknown; towel: queued request stays cancellable.
         await setState(FAN, "on", { summary: "On — automatic, drying the room" });
         await setState(FAN_SWITCH, "off");
@@ -375,31 +605,17 @@ async function main() {
         await setState(TOWEL, "on", { summary: "Heating — 3h 10m left (automatic)" });
         await expect(page.getByText("Towel rail: automatic").first()).toBeVisible();
         await setState(TOWEL, "off", { summary: "Off — no drying scheduled" });
-
-        // Hot water view: one override control and one hold/resume control.
-        await goHome("hot-water");
-        await setState(CONTROL, "observing");
-        await expect(page.getByText("Automatic heating: active")).toBeVisible();
-        result = await tap("Automatic heating: active");
-        expect(result.confirmationShown).toBe(true);
-        expect(JSON.stringify(result.calls)).toContain(HOLD);
-        await setState(CONTROL, "owner_override");
-        await expect(page.getByText("Automatic heating: on hold")).toBeVisible();
-        result = await tap("Automatic heating: on hold");
-        expect(JSON.stringify(result.calls)).toContain(RESUME);
-        await setState(CONTROL, "fault_locked");
-        await expect(page.getByText("Automatic heating: not available")).toBeVisible();
-        result = await tap("Automatic heating: not available");
-        expect(result.calls).toEqual([]);
-        await setState(CONTROL, "observing");
-        await expect(page.locator("hui-history-graph-card").first()).toBeVisible();
-        await page.keyboard.press("Escape");
-        await page.waitForTimeout(600);
-        await page.screenshot({ path: `${output}/hot-water-${size.name}.png`, fullPage: true });
-
-        // Bathrooms view: charts built from the original sensors and the physical relays.
-        await goHome("bathrooms");
-        await expect(page.locator("hui-history-graph-card")).toHaveCount(4);
+        await page.evaluate(() => {
+          window.scrollTo(0, 0);
+          const walk = (root) => {
+            for (const el of root.querySelectorAll("*")) {
+              if (el.scrollTop > 0) el.scrollTop = 0;
+              if (el.shadowRoot) walk(el.shadowRoot);
+            }
+          };
+          walk(document);
+        });
+        await page.waitForTimeout(400);
         await page.screenshot({ path: `${output}/bathrooms-${size.name}.png`, fullPage: true });
 
         // Doors: plain-English status, no raw state, no actuation.
@@ -528,7 +744,12 @@ async function main() {
         await goHome("energy");
         await expect(page.getByText("4.123 kW")).toBeVisible();
         await expect(page.getByText("Whole-house balance").first()).toBeVisible(); // compact balance under today's energy
-        await expect(page.getByText("Household used").first()).toBeVisible();
+        if (diagram === null) {
+          // First hour after local midnight has no completed hour yet.
+          await expect(page.getByText("collecting", { exact: false }).first()).toBeVisible();
+        } else {
+          await expect(page.getByText("Household used").first()).toBeVisible();
+        }
         await page.screenshot({ path: `${output}/energy-${size.name}.png`, fullPage: true });
       }
       report.push({ size: size.name, ...facts, motion });

@@ -5,13 +5,10 @@ title: Home
 views:
 - title: Home
   path: home
-  type: sections
-  max_columns: 3
-  dense_section_placement: true
-  sections:
-  - type: grid
-    cards:
-    - type: custom:thermowatt-power-flow-card
+  type: panel
+  cards:
+  - type: custom:thermowatt-home-page
+    flow:
       solar_entity: sensor.goodwe_inverter_pv_power
       house_entity: sensor.goodwe_inverter_house_consumption
       grid_entity: sensor.goodwe_inverter_meter_active_power
@@ -20,745 +17,43 @@ views:
         solar: sensor.goodwe_inverter_today_s_pv_generation
         import: sensor.goodwe_inverter_meter_total_energy_import
         export: sensor.goodwe_inverter_meter_total_energy_export
-      grid_options:
-        columns: 12
-  - type: grid
-    cards:
-    - type: custom:thermowatt-panel-card
-      grid_options:
-        columns: 12
-      template: "{% set bad = ['unknown', 'unavailable', 'none', ''] %}\n{% macro nice(v) -%}{{ v\
-        \ | replace('_', ' ') | capitalize }}{%- endmacro %}\n{% macro hhmm(v) -%}{% set d = as_datetime(v,\
-        \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
-        {% set t = states('sensor.thermann_shadow_bottom_temperature') %}\n{% set age = states('sensor.thermann_shadow_status_age')\
-        \ %}\n{% set mode_r = states('sensor.thermann_shadow_thermann_mode') %}\n{% set tgt_r = states('sensor.thermann_shadow_thermann_target')\
-        \ %}\n{% set tgt_d = states('sensor.thermann_shadow_desired_thermostat_temperature') %}\n\
-        {% set ctrl = states('sensor.thermann_shadow_hot_water_operating_mode') %}\n{% set tariff\
-        \ = states('sensor.thermann_shadow_current_tariff') %}\n{% set boost = states('sensor.thermann_shadow_solar_boost_status')\
-        \ %}\n{% set nxt = states('sensor.thermann_shadow_next_intended_action') %}\n{% set poll\
-        \ = states('sensor.thermann_shadow_next_cloud_poll') %}\n{% set last = states('sensor.home_last_successful_poll')\
-        \ %}\n{% set ends = states('sensor.thermann_shadow_guest_mode_ends') %}\n{% set ctrl_names\
-        \ = {'automatic': 'Automatic', 'guest': '12 h override', 'holiday': 'Holiday', 'disabled':\
-        \ 'Off'} %}\n{% set tariff_names = {'off_peak': 'Off-peak', 'peak': 'Peak', 'shoulder': 'Shoulder'}\
-        \ %}\n{% set target = ('Target ' ~ ('%d' | format(tgt_r | float(0) | round(0)) ) ~ ' °C')\
-        \ if tgt_r not in bad else none %}\n{% set desired = (' · desired ' ~ ('%d' | format(tgt_d\
-        \ | float(0) | round(0))) ~ ' °C') if (tgt_d not in bad and tgt_r not in bad and (tgt_d |\
-        \ float(0) | round(0)) != (tgt_r | float(0) | round(0))) else '' %}\n{% set stats = [\n \
-        \ {'label': 'Heater', 'value': nice(mode_r) if mode_r not in bad else none, 'detail': (target\
-        \ ~ desired) if target else none},\n  {'label': 'Tariff', 'value': tariff_names.get(tariff,\
-        \ nice(tariff)) if tariff not in bad else none, 'tone': 'warn' if tariff == 'peak' else ('ok'\
-        \ if tariff == 'off_peak' else 'idle')},\n  {'label': 'Solar boost', 'value': nice(boost)\
-        \ if boost not in bad else none},\n  {'label': 'Next', 'value': nice(nxt) if nxt not in bad\
-        \ else none, 'detail': ('Next poll ' ~ hhmm(poll)) if poll not in bad else none}\n] %}\n\
-        {% if ctrl == 'guest' and ends not in bad %}{% set stats = stats + [{'label': 'Override ends',\
-        \ 'value': hhmm(ends), 'tone': 'warn'}] %}{% endif %}\n{{ {\n  'title': 'Hot water',\n  'icon':\
-        \ 'mdi:water-boiler',\n  'badge': {'text': ctrl_names.get(ctrl, nice(ctrl)) if ctrl not in\
-        \ bad else 'Status unknown', 'tone': 'warn' if ctrl == 'guest' else ('idle' if ctrl in bad\
-        \ else 'info')},\n  'hero': {'label': 'Tank bottom', 'value': ('%.1f' | format(t | float(0)))\
-        \ if t not in bad else none, 'unit': '°C',\n           'caption': (('Updated ' ~ (age | int(0))\
-        \ ~ ' min ago') if age not in bad else 'Age unknown') ~ ' · last poll ' ~ (hhmm(last) if\
-        \ last not in bad else '—')},\n  'stats': stats,\n  'columns': 2\n} | tojson }}\n"
-      model: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        state: guest
-      card:
-        type: tile
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: ON'
-        icon: mdi:water-boiler
-        color: blue
-        hide_state: true
-        tap_action:
-          action: perform-action
-          perform_action: button.press
-          target:
-            entity_id: button.thermann_shadow_cancel_guest_mode
-          confirmation:
-            text: Cancel the 12 hour 62 °C override? Normal automatic control resumes.
-        icon_tap_action:
-          action: perform-action
-          perform_action: button.press
-          target:
-            entity_id: button.thermann_shadow_cancel_guest_mode
-          confirmation:
-            text: Cancel the 12 hour 62 °C override? Normal automatic control resumes.
-        hold_action:
-          action: none
-        vertical: false
-      grid_options:
-        columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        state_not: guest
-      - condition: state
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        state_not: unavailable
-      - condition: state
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        state_not: unknown
-      - condition: state
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        state_not: holiday
-      - condition: state
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        state_not: disabled
-      card:
-        type: tile
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: OFF'
-        icon: mdi:water-boiler-off
-        color: grey
-        hide_state: true
-        tap_action:
-          action: perform-action
-          perform_action: button.press
-          target:
-            entity_id: button.thermann_shadow_start_guest_mode_12_h
-          confirmation:
-            text: Start the 12 hour 62 °C override? It may heat during peak hours; controller safeguards
-              still apply.
-        icon_tap_action:
-          action: perform-action
-          perform_action: button.press
-          target:
-            entity_id: button.thermann_shadow_start_guest_mode_12_h
-          confirmation:
-            text: Start the 12 hour 62 °C override? It may heat during peak hours; controller safeguards
-              still apply.
-        hold_action:
-          action: none
-        vertical: false
-      grid_options:
-        columns: 12
-    - type: conditional
-      conditions:
-      - condition: or
-        conditions:
-        - condition: state
-          entity: sensor.thermann_shadow_hot_water_operating_mode
-          state: unavailable
-        - condition: state
-          entity: sensor.thermann_shadow_hot_water_operating_mode
-          state: unknown
-      card:
-        type: tile
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: status unknown'
-        icon: mdi:water-boiler-alert
-        color: grey
-        hide_state: true
-        tap_action:
-          action: more-info
-        icon_tap_action:
-          action: more-info
-        hold_action:
-          action: none
-        vertical: false
-      grid_options:
-        columns: 12
-    - type: conditional
-      conditions:
-      - condition: or
-        conditions:
-        - condition: state
-          entity: sensor.thermann_shadow_hot_water_operating_mode
-          state: holiday
-        - condition: state
-          entity: sensor.thermann_shadow_hot_water_operating_mode
-          state: disabled
-      card:
-        type: tile
-        entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: not available now'
-        icon: mdi:water-boiler-off
-        color: grey
-        hide_state: true
-        tap_action:
-          action: more-info
-        icon_tap_action:
-          action: more-info
-        hold_action:
-          action: none
-        vertical: false
-      grid_options:
-        columns: 12
-  - type: grid
-    cards:
-    - type: markdown
-      content: '**Weather: mapping needed.** Set `weather.entity` in the mapping file to the real
-        entity ID (Developer Tools -> States), then run `python tools/build_home_dashboard.py`.'
-      grid_options:
-        columns: 12
-    - type: custom:thermowatt-panel-card
-      grid_options:
-        columns: 12
-      template: "{% set bad = ['unknown', 'unavailable', 'none', ''] %}\n{% macro nice(v) -%}{{ v\
-        \ | replace('_', ' ') | capitalize }}{%- endmacro %}\n{% macro hhmm(v) -%}{% set d = as_datetime(v,\
-        \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
-        {% set gp = states('sensor.tapo_smart_controller_garage_door_position') %}\n{% set gs = state_attr('sensor.tapo_smart_controller_garage_door_status',\
-        \ 'summary') %}\n{% set fo = states('binary_sensor.tapo_smart_controller_front_door_open')\
-        \ %}\n{% set fs = state_attr('sensor.tapo_smart_controller_front_door_lock_status', 'summary')\
-        \ %}\n{% macro tail(v) -%}{{ v.split(' — ')[1] if v and ' — ' in v else '' }}{%- endmacro\
-        \ %}\n{{ {\n  'title': 'Doors',\n  'icon': 'mdi:shield-home',\n  'badge': {'text': 'Monitoring\
-        \ only', 'tone': 'idle'},\n  'stats': [\n    {'label': 'Garage door', 'value': gp if gp in\
-        \ ['Closed', 'Not closed'] else 'Unknown',\n     'tone': 'ok' if gp == 'Closed' else ('warn'\
-        \ if gp == 'Not closed' else 'idle'), 'detail': tail(gs) or none},\n    {'label': 'Front\
-        \ door', 'value': 'Open' if fo == 'on' else ('Closed' if fo == 'off' else 'Unknown'),\n \
-        \    'tone': 'warn' if fo == 'on' else ('ok' if fo == 'off' else 'idle'), 'detail': tail(fs)\
-        \ or none}\n  ],\n  'columns': 2,\n  'lines': []\n} | tojson }}\n"
-      model: 12
-  - type: grid
-    cards:
-    - type: custom:thermowatt-panel-card
-      grid_options:
-        columns: 12
-      template: "{% set bad = ['unknown', 'unavailable', 'none', ''] %}\n{% macro nice(v) -%}{{ v\
-        \ | replace('_', ' ') | capitalize }}{%- endmacro %}\n{% macro hhmm(v) -%}{% set d = as_datetime(v,\
-        \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
-        {% set h = states('sensor.tapo_smart_controller_main_bathroom_humidity') %}\n{% set t = states('sensor.tapo_smart_controller_main_bathroom_temperature')\
-        \ %}\n{% set shower = states('binary_sensor.tapo_smart_controller_main_bathroom_shower_detected')\
-        \ %}\n{{ {\n  'title': \"Main Bathroom\",\n  'icon': 'mdi:shower-head',\n  'badge': {'text':\
-        \ 'Shower detected', 'tone': 'info', 'icon': 'mdi:shower'} if shower == 'on' else ({'text':\
-        \ 'No shower detected', 'tone': 'idle'} if shower == 'off' else {'text': 'Shower status unknown',\
-        \ 'tone': 'idle'}),\n  'heroes': [\n    {'label': 'Humidity', 'value': ('%d' | format(h |\
-        \ float(0) | round(0))) if h not in bad else none, 'unit': '%', 'tone': 'info' if shower\
-        \ == 'on' else 'idle'},\n    {'label': 'Temperature', 'value': ('%.1f' | format(t | float(0)))\
-        \ if t not in bad else none, 'unit': '°C'}\n  ]\n} | tojson }}\n"
-      model: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        state: 'on'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-        name: 'Fan: manual'
-        icon: mdi:fan-clock
-        color: blue
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_off
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_off
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        state: 'off'
-      - condition: state
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-        state: 'on'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-        name: 'Fan: automatic'
-        icon: mdi:fan
-        color: blue
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        state: 'off'
-      - condition: state
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-        state: 'off'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-        name: 'Fan: off'
-        icon: mdi:fan-off
-        color: grey
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-        state_not: 'on'
-      - condition: or
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-          state: unavailable
-        - condition: state
-          entity: switch.tapo_smart_controller_main_bathroom_fan_manual_override
-          state: unknown
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-          state: unavailable
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-          state: unknown
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
-        name: 'Fan: status unknown'
-        icon: mdi:fan-alert
-        color: grey
-        state_content: summary
-        tap_action:
-          action: more-info
-        icon_tap_action:
-          action: more-info
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-        state: 'on'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-        name: 'Towel rail: manual'
-        icon: mdi:radiator
-        color: blue
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_off
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_off
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-        state: 'off'
-      - condition: state
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-        state: 'on'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-        name: 'Towel rail: automatic'
-        icon: mdi:radiator
-        color: blue
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          confirmation:
-            text: Request one towel-rail drying cycle? It only heats during off-peak.
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          confirmation:
-            text: Request one towel-rail drying cycle? It only heats during off-peak.
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-        state: 'off'
-      - condition: state
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-        state: 'off'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-        name: 'Towel rail: off'
-        icon: mdi:radiator-off
-        color: grey
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          confirmation:
-            text: Request one towel-rail drying cycle? It only heats during off-peak.
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          confirmation:
-            text: Request one towel-rail drying cycle? It only heats during off-peak.
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-        state_not: 'on'
-      - condition: or
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          state: unavailable
-        - condition: state
-          entity: switch.tapo_smart_controller_main_bathroom_towel_rail_manual_override
-          state: unknown
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          state: unavailable
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-          state: unknown
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
-        name: 'Towel rail: status unknown'
-        icon: mdi:radiator-disabled
-        color: grey
-        state_content: summary
-        tap_action:
-          action: more-info
-        icon_tap_action:
-          action: more-info
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-  - type: grid
-    cards:
-    - type: custom:thermowatt-panel-card
-      grid_options:
-        columns: 12
-      template: "{% set bad = ['unknown', 'unavailable', 'none', ''] %}\n{% macro nice(v) -%}{{ v\
-        \ | replace('_', ' ') | capitalize }}{%- endmacro %}\n{% macro hhmm(v) -%}{% set d = as_datetime(v,\
-        \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
-        {% set h = states('sensor.tapo_smart_controller_ensuite_humidity') %}\n{% set t = states('sensor.tapo_smart_controller_ensuite_temperature')\
-        \ %}\n{% set shower = states('binary_sensor.tapo_smart_controller_ensuite_shower_detected')\
-        \ %}\n{{ {\n  'title': \"Ensuite\",\n  'icon': 'mdi:shower-head',\n  'badge': {'text': 'Shower\
-        \ detected', 'tone': 'info', 'icon': 'mdi:shower'} if shower == 'on' else ({'text': 'No shower\
-        \ detected', 'tone': 'idle'} if shower == 'off' else {'text': 'Shower status unknown', 'tone':\
-        \ 'idle'}),\n  'heroes': [\n    {'label': 'Humidity', 'value': ('%d' | format(h | float(0)\
-        \ | round(0))) if h not in bad else none, 'unit': '%', 'tone': 'info' if shower == 'on' else\
-        \ 'idle'},\n    {'label': 'Temperature', 'value': ('%.1f' | format(t | float(0))) if t not\
-        \ in bad else none, 'unit': '°C'}\n  ]\n} | tojson }}\n"
-      model: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_ensuite_fan_manual_override
-        state: 'on'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-        name: 'Fan: manual'
-        icon: mdi:fan-clock
-        color: blue
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_off
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_off
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_ensuite_fan_manual_override
-        state: 'off'
-      - condition: state
-        entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-        state: 'on'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-        name: 'Fan: automatic'
-        icon: mdi:fan
-        color: blue
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_ensuite_fan_manual_override
-        state: 'off'
-      - condition: state
-        entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-        state: 'off'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-        name: 'Fan: off'
-        icon: mdi:fan-off
-        color: grey
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_fan_manual_override
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_ensuite_fan_manual_override
-        state_not: 'on'
-      - condition: or
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_ensuite_fan_manual_override
-          state: unavailable
-        - condition: state
-          entity: switch.tapo_smart_controller_ensuite_fan_manual_override
-          state: unknown
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-          state: unavailable
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-          state: unknown
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_ensuite_fan_running
-        name: 'Fan: status unknown'
-        icon: mdi:fan-alert
-        color: grey
-        state_content: summary
-        tap_action:
-          action: more-info
-        icon_tap_action:
-          action: more-info
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-        state: 'on'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-        name: 'Towel rail: manual'
-        icon: mdi:radiator
-        color: blue
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_off
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_off
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-        state: 'off'
-      - condition: state
-        entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-        state: 'on'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-        name: 'Towel rail: automatic'
-        icon: mdi:radiator
-        color: blue
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          confirmation:
-            text: Request one towel-rail drying cycle? It only heats during off-peak.
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          confirmation:
-            text: Request one towel-rail drying cycle? It only heats during off-peak.
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-        state: 'off'
-      - condition: state
-        entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-        state: 'off'
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-        name: 'Towel rail: off'
-        icon: mdi:radiator-off
-        color: grey
-        state_content: summary
-        tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          confirmation:
-            text: Request one towel-rail drying cycle? It only heats during off-peak.
-        icon_tap_action:
-          action: perform-action
-          perform_action: switch.turn_on
-          target:
-            entity_id: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          confirmation:
-            text: Request one towel-rail drying cycle? It only heats during off-peak.
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-        state_not: 'on'
-      - condition: or
-        conditions:
-        - condition: state
-          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          state: unavailable
-        - condition: state
-          entity: switch.tapo_smart_controller_ensuite_towel_rail_manual_override
-          state: unknown
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          state: unavailable
-        - condition: state
-          entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-          state: unknown
-      card:
-        type: tile
-        entity: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
-        name: 'Towel rail: status unknown'
-        icon: mdi:radiator-disabled
-        color: grey
-        state_content: summary
-        tap_action:
-          action: more-info
-        icon_tap_action:
-          action: more-info
-        hold_action:
-          action: none
-        vertical: false
-        grid_options:
-          columns: 12
-  - type: grid
-    cards:
-    - type: custom:thermowatt-lights-card
+        used: sensor.home_solar_used_directly_today
+        status: sensor.home_energy_status
+    hot_water:
+      temperature: sensor.thermann_shadow_bottom_temperature
+      mode: sensor.thermann_shadow_thermann_mode
+      target: sensor.thermann_shadow_thermann_target
+      automatic: switch.thermann_shadow_automatic_heater_control
+      operating: sensor.thermann_shadow_hot_water_operating_mode
+      tariff: sensor.thermann_shadow_current_tariff
+      boost: sensor.thermann_shadow_solar_boost_status
+      boost_enabled: switch.thermann_shadow_enable_optional_solar_boost
+      next_action: sensor.thermann_shadow_next_intended_action
+      last_poll: sensor.home_last_successful_poll
+      next_poll: sensor.thermann_shadow_next_cloud_poll
+    doors:
+      garage_position: sensor.tapo_smart_controller_garage_door_position
+      front_open: binary_sensor.tapo_smart_controller_front_door_open
+    bathrooms:
+    - name: Main Bathroom
+      humidity: sensor.tapo_smart_controller_main_bathroom_humidity
+      temperature: sensor.tapo_smart_controller_main_bathroom_temperature
+      shower: binary_sensor.tapo_smart_controller_main_bathroom_shower_detected
+      fan_running: binary_sensor.tapo_smart_controller_main_bathroom_fan_running
+      towel_heating: binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating
+      towel_remaining: sensor.tapo_smart_controller_main_bathroom_towel_rail_remaining_time
+      fan_switch: switch.tapo_smart_controller_main_bathroom_fan_manual_override
+    - name: Ensuite
+      humidity: sensor.tapo_smart_controller_ensuite_humidity
+      temperature: sensor.tapo_smart_controller_ensuite_temperature
+      shower: binary_sensor.tapo_smart_controller_ensuite_shower_detected
+      fan_running: binary_sensor.tapo_smart_controller_ensuite_fan_running
+      towel_heating: binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating
+      towel_remaining: sensor.tapo_smart_controller_ensuite_towel_rail_remaining_time
+      fan_switch: switch.tapo_smart_controller_ensuite_fan_manual_override
+    lights:
       discover: true
       exclude_label: hide_from_dashboard
-      grid_options:
-        columns: 12
 - title: Energy
   path: energy
   type: sections
@@ -776,6 +71,8 @@ views:
         solar: sensor.goodwe_inverter_today_s_pv_generation
         import: sensor.goodwe_inverter_meter_total_energy_import
         export: sensor.goodwe_inverter_meter_total_energy_export
+        used: sensor.home_solar_used_directly_today
+        status: sensor.home_energy_status
       grid_options:
         columns: 12
   - type: grid
@@ -856,15 +153,266 @@ views:
         \ if tariff == 'off_peak' else 'idle')},\n  {'label': 'Solar boost', 'value': nice(boost)\
         \ if boost not in bad else none},\n  {'label': 'Next', 'value': nice(nxt) if nxt not in bad\
         \ else none, 'detail': ('Next poll ' ~ hhmm(poll)) if poll not in bad else none}\n] %}\n\
-        {% if ctrl == 'guest' and ends not in bad %}{% set stats = stats + [{'label': 'Override ends',\
-        \ 'value': hhmm(ends), 'tone': 'warn'}] %}{% endif %}\n{{ {\n  'title': 'Hot water',\n  'icon':\
-        \ 'mdi:water-boiler',\n  'badge': {'text': ctrl_names.get(ctrl, nice(ctrl)) if ctrl not in\
-        \ bad else 'Status unknown', 'tone': 'warn' if ctrl == 'guest' else ('idle' if ctrl in bad\
-        \ else 'info')},\n  'hero': {'label': 'Tank bottom', 'value': ('%.1f' | format(t | float(0)))\
-        \ if t not in bad else none, 'unit': '°C',\n           'caption': (('Updated ' ~ (age | int(0))\
-        \ ~ ' min ago') if age not in bad else 'Age unknown') ~ ' · last poll ' ~ (hhmm(last) if\
-        \ last not in bad else '—')},\n  'stats': stats,\n  'columns': 2\n} | tojson }}\n"
+        {% if ctrl == 'guest' and ends not in bad %}{% set left = ((as_datetime(ends, none) - now()).total_seconds()\
+        \ // 60) | int(0) if as_datetime(ends, none) is not none else none %}{% set stats = stats\
+        \ + [{'label': '12 h override ends', 'value': hhmm(ends), 'tone': 'warn', 'detail': ((((left\
+        \ // 60) | string) ~ ' h ' ~ ((left % 60) | string) ~ ' min left') if left is not none and\
+        \ left > 0 else none)}] %}{% endif %}\n{{ {\n  'title': 'Hot water',\n  'icon': 'mdi:water-boiler',\n\
+        \  'badge': {'text': ctrl_names.get(ctrl, nice(ctrl)) if ctrl not in bad else 'Status unknown',\
+        \ 'tone': 'warn' if ctrl == 'guest' else ('idle' if ctrl in bad else 'info')},\n  'hero':\
+        \ {'label': 'Water temperature', 'value': ('%.1f' | format(t | float(0))) if t not in bad\
+        \ else none, 'unit': '°C',\n           'caption': (('Updated ' ~ (age | int(0)) ~ ' min ago')\
+        \ if age not in bad else 'Age unknown') ~ ' · last poll ' ~ (hhmm(last) if last not in bad\
+        \ else '—')},\n  'stats': stats,\n  'columns': 2\n} | tojson }}\n"
       model: 12
+    - type: heading
+      heading: Everyday controls
+      heading_style: subtitle
+      icon: mdi:tune-variant
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: switch.thermann_shadow_automatic_heater_control
+        state: 'on'
+      card:
+        type: tile
+        entity: switch.thermann_shadow_automatic_heater_control
+        name: 'Automatic heater control: ON'
+        icon: mdi:robot
+        color: blue
+        hide_state: true
+        tap_action:
+          action: perform-action
+          perform_action: switch.turn_off
+          target:
+            entity_id: switch.thermann_shadow_automatic_heater_control
+          confirmation:
+            text: Turn automatic heater control OFF? Thermowatt stops sending commands to the heater
+              (the heater keeps its current mode) until you turn it on again.
+        icon_tap_action:
+          action: perform-action
+          perform_action: switch.turn_off
+          target:
+            entity_id: switch.thermann_shadow_automatic_heater_control
+          confirmation:
+            text: Turn automatic heater control OFF? Thermowatt stops sending commands to the heater
+              (the heater keeps its current mode) until you turn it on again.
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: switch.thermann_shadow_automatic_heater_control
+        state: 'off'
+      card:
+        type: tile
+        entity: switch.thermann_shadow_automatic_heater_control
+        name: 'Automatic heater control: OFF'
+        icon: mdi:robot-off
+        color: grey
+        hide_state: true
+        tap_action:
+          action: perform-action
+          perform_action: switch.turn_on
+          target:
+            entity_id: switch.thermann_shadow_automatic_heater_control
+          confirmation:
+            text: Turn automatic heater control ON? Thermowatt will start managing the heater. It
+              refuses to start until commissioning is complete.
+        icon_tap_action:
+          action: perform-action
+          perform_action: switch.turn_on
+          target:
+            entity_id: switch.thermann_shadow_automatic_heater_control
+          confirmation:
+            text: Turn automatic heater control ON? Thermowatt will start managing the heater. It
+              refuses to start until commissioning is complete.
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: or
+        conditions:
+        - condition: state
+          entity: switch.thermann_shadow_automatic_heater_control
+          state: unavailable
+        - condition: state
+          entity: switch.thermann_shadow_automatic_heater_control
+          state: unknown
+      card:
+        type: tile
+        entity: switch.thermann_shadow_automatic_heater_control
+        name: 'Automatic heater control: status unknown'
+        icon: mdi:robot-confused
+        color: grey
+        hide_state: true
+        tap_action:
+          action: more-info
+        icon_tap_action:
+          action: more-info
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: switch.thermann_shadow_automatic_heater_control
+        state: 'on'
+      - condition: state
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        state: 'on'
+      card:
+        type: tile
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        name: 'Optional solar boost: enabled (locked: automatic control is on)'
+        icon: mdi:solar-power-variant
+        color: grey
+        hide_state: true
+        tap_action:
+          action: none
+        icon_tap_action:
+          action: none
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: switch.thermann_shadow_automatic_heater_control
+        state: 'on'
+      - condition: state
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        state: 'off'
+      card:
+        type: tile
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        name: 'Optional solar boost: disabled (locked: automatic control is on)'
+        icon: mdi:solar-power-variant-outline
+        color: grey
+        hide_state: true
+        tap_action:
+          action: none
+        icon_tap_action:
+          action: none
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: switch.thermann_shadow_automatic_heater_control
+        state: 'off'
+      - condition: state
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        state: 'on'
+      card:
+        type: tile
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        name: 'Optional solar boost: enabled'
+        icon: mdi:solar-power-variant
+        color: orange
+        hide_state: true
+        tap_action:
+          action: perform-action
+          perform_action: switch.turn_off
+          target:
+            entity_id: switch.thermann_shadow_enable_optional_solar_boost
+          confirmation:
+            text: Disable optional solar boost? This only stops extra solar storage; it does not
+              turn the heater on or off.
+        icon_tap_action:
+          action: perform-action
+          perform_action: switch.turn_off
+          target:
+            entity_id: switch.thermann_shadow_enable_optional_solar_boost
+          confirmation:
+            text: Disable optional solar boost? This only stops extra solar storage; it does not
+              turn the heater on or off.
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: switch.thermann_shadow_automatic_heater_control
+        state: 'off'
+      - condition: state
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        state: 'off'
+      card:
+        type: tile
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        name: 'Optional solar boost: disabled'
+        icon: mdi:solar-power-variant-outline
+        color: grey
+        hide_state: true
+        tap_action:
+          action: perform-action
+          perform_action: switch.turn_on
+          target:
+            entity_id: switch.thermann_shadow_enable_optional_solar_boost
+          confirmation:
+            text: 'Enable optional solar boost? It does not start boosting by itself: automatic control
+              and every safety check still apply.'
+        icon_tap_action:
+          action: perform-action
+          perform_action: switch.turn_on
+          target:
+            entity_id: switch.thermann_shadow_enable_optional_solar_boost
+          confirmation:
+            text: 'Enable optional solar boost? It does not start boosting by itself: automatic control
+              and every safety check still apply.'
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: or
+        conditions:
+        - condition: state
+          entity: switch.thermann_shadow_automatic_heater_control
+          state: unavailable
+        - condition: state
+          entity: switch.thermann_shadow_automatic_heater_control
+          state: unknown
+        - condition: state
+          entity: switch.thermann_shadow_enable_optional_solar_boost
+          state: unavailable
+        - condition: state
+          entity: switch.thermann_shadow_enable_optional_solar_boost
+          state: unknown
+      card:
+        type: tile
+        entity: switch.thermann_shadow_enable_optional_solar_boost
+        name: 'Optional solar boost: status unknown'
+        icon: mdi:solar-power-variant-outline
+        color: grey
+        hide_state: true
+        tap_action:
+          action: more-info
+        icon_tap_action:
+          action: more-info
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
     - type: conditional
       conditions:
       - condition: state
@@ -873,7 +421,7 @@ views:
       card:
         type: tile
         entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: ON'
+        name: '12-hour 62 °C override: ON'
         icon: mdi:water-boiler
         color: blue
         hide_state: true
@@ -883,14 +431,14 @@ views:
           target:
             entity_id: button.thermann_shadow_cancel_guest_mode
           confirmation:
-            text: Cancel the 12 hour 62 °C override? Normal automatic control resumes.
+            text: Cancel the 12-hour 62 °C override? Normal automatic control resumes.
         icon_tap_action:
           action: perform-action
           perform_action: button.press
           target:
             entity_id: button.thermann_shadow_cancel_guest_mode
           confirmation:
-            text: Cancel the 12 hour 62 °C override? Normal automatic control resumes.
+            text: Cancel the 12-hour 62 °C override? Normal automatic control resumes.
         hold_action:
           action: none
         vertical: false
@@ -916,7 +464,7 @@ views:
       card:
         type: tile
         entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: OFF'
+        name: '12-hour 62 °C override: OFF'
         icon: mdi:water-boiler-off
         color: grey
         hide_state: true
@@ -926,7 +474,7 @@ views:
           target:
             entity_id: button.thermann_shadow_start_guest_mode_12_h
           confirmation:
-            text: Start the 12 hour 62 °C override? It may heat during peak hours; controller safeguards
+            text: Start the 12-hour 62 °C override? It may heat during peak hours; controller safeguards
               still apply.
         icon_tap_action:
           action: perform-action
@@ -934,7 +482,7 @@ views:
           target:
             entity_id: button.thermann_shadow_start_guest_mode_12_h
           confirmation:
-            text: Start the 12 hour 62 °C override? It may heat during peak hours; controller safeguards
+            text: Start the 12-hour 62 °C override? It may heat during peak hours; controller safeguards
               still apply.
         hold_action:
           action: none
@@ -954,7 +502,7 @@ views:
       card:
         type: tile
         entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: status unknown'
+        name: '12-hour 62 °C override: status unknown'
         icon: mdi:water-boiler-alert
         color: grey
         hide_state: true
@@ -980,7 +528,7 @@ views:
       card:
         type: tile
         entity: sensor.thermann_shadow_hot_water_operating_mode
-        name: '12 h override: not available now'
+        name: '12-hour 62 °C override: not available now'
         icon: mdi:water-boiler-off
         color: grey
         hide_state: true
@@ -993,6 +541,32 @@ views:
         vertical: false
       grid_options:
         columns: 12
+  - type: grid
+    cards:
+    - type: custom:thermowatt-panel-card
+      grid_options:
+        columns: 12
+      template: "{% set bad = ['unknown', 'unavailable', 'none', ''] %}\n{% macro nice(v) -%}{{ v\
+        \ | replace('_', ' ') | capitalize }}{%- endmacro %}\n{% macro hhmm(v) -%}{% set d = as_datetime(v,\
+        \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
+        {% set plan = states('sensor.thermann_shadow_current_heating_plan') %}\n{% set nxt = states('sensor.thermann_shadow_next_intended_action')\
+        \ %}\n{% set start = states('sensor.thermann_shadow_next_heating_start') %}\n{% set boost\
+        \ = states('sensor.thermann_shadow_solar_boost_status') %}\n{% set why = states('sensor.thermann_shadow_why_thermowatt_made_this_decision')\
+        \ %}\n{% set last = states('sensor.thermann_shadow_last_command_result') %}\n{% set reqs\
+        \ = states('sensor.thermann_shadow_cloud_requests_in_last_24_hours') %}\n{{ {\n  'title':\
+        \ 'Plan and diagnostics',\n  'icon': 'mdi:text-box-search-outline',\n  'rows': [\n    {'label':\
+        \ 'Plan', 'value': plan if plan not in bad else none},\n    {'label': 'Next action', 'value':\
+        \ nice(nxt) if nxt not in bad else none},\n    {'label': 'Next heating start', 'value': hhmm(start)\
+        \ if start not in bad else 'none planned'},\n    {'label': 'Solar boost', 'value': nice(boost)\
+        \ if boost not in bad else none},\n    {'label': 'Why this decision', 'value': nice(why)\
+        \ if why not in bad else none},\n    {'label': 'Last command', 'value': nice(last) if last\
+        \ not in bad else none},\n    {'label': 'Cloud requests in 24 h', 'value': reqs if reqs not\
+        \ in bad else none}\n  ]\n} | tojson }}\n"
+      model: 12
+    - type: heading
+      heading: Advanced
+      heading_style: subtitle
+      icon: mdi:cog-outline
     - type: conditional
       conditions:
       - condition: state
@@ -1120,7 +694,7 @@ views:
     - type: tile
       entity: sensor.thermann_shadow_automatic_control_state
       hide_state: true
-      name: Hot water settings
+      name: Thermowatt Settings
       icon: mdi:cog-outline
       vertical: false
       tap_action:
@@ -1133,30 +707,8 @@ views:
         columns: 12
   - type: grid
     cards:
-    - type: custom:thermowatt-panel-card
-      grid_options:
-        columns: 12
-      template: "{% set bad = ['unknown', 'unavailable', 'none', ''] %}\n{% macro nice(v) -%}{{ v\
-        \ | replace('_', ' ') | capitalize }}{%- endmacro %}\n{% macro hhmm(v) -%}{% set d = as_datetime(v,\
-        \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
-        {% set plan = states('sensor.thermann_shadow_current_heating_plan') %}\n{% set nxt = states('sensor.thermann_shadow_next_intended_action')\
-        \ %}\n{% set start = states('sensor.thermann_shadow_next_heating_start') %}\n{% set boost\
-        \ = states('sensor.thermann_shadow_solar_boost_status') %}\n{% set why = states('sensor.thermann_shadow_why_thermowatt_made_this_decision')\
-        \ %}\n{% set last = states('sensor.thermann_shadow_last_command_result') %}\n{% set reqs\
-        \ = states('sensor.thermann_shadow_cloud_requests_in_last_24_hours') %}\n{{ {\n  'title':\
-        \ 'Plan and diagnostics',\n  'icon': 'mdi:text-box-search-outline',\n  'rows': [\n    {'label':\
-        \ 'Plan', 'value': plan if plan not in bad else none},\n    {'label': 'Next action', 'value':\
-        \ nice(nxt) if nxt not in bad else none},\n    {'label': 'Next heating start', 'value': hhmm(start)\
-        \ if start not in bad else 'none planned'},\n    {'label': 'Solar boost', 'value': nice(boost)\
-        \ if boost not in bad else none},\n    {'label': 'Why this decision', 'value': nice(why)\
-        \ if why not in bad else none},\n    {'label': 'Last command', 'value': nice(last) if last\
-        \ not in bad else none},\n    {'label': 'Cloud requests in 24 h', 'value': reqs if reqs not\
-        \ in bad else none}\n  ]\n} | tojson }}\n"
-      model: 12
-  - type: grid
-    cards:
     - type: history-graph
-      title: Tank bottom temperature
+      title: Water temperature, last 48 hours
       hours_to_show: 48
       entities:
       - sensor.thermann_shadow_bottom_temperature
@@ -1178,14 +730,33 @@ views:
         \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
         {% set h = states('sensor.tapo_smart_controller_main_bathroom_humidity') %}\n{% set t = states('sensor.tapo_smart_controller_main_bathroom_temperature')\
         \ %}\n{% set shower = states('binary_sensor.tapo_smart_controller_main_bathroom_shower_detected')\
-        \ %}\n{{ {\n  'title': \"Main Bathroom\",\n  'icon': 'mdi:shower-head',\n  'badge': {'text':\
-        \ 'Shower detected', 'tone': 'info', 'icon': 'mdi:shower'} if shower == 'on' else ({'text':\
-        \ 'No shower detected', 'tone': 'idle'} if shower == 'off' else {'text': 'Shower status unknown',\
-        \ 'tone': 'idle'}),\n  'heroes': [\n    {'label': 'Humidity', 'value': ('%d' | format(h |\
-        \ float(0) | round(0))) if h not in bad else none, 'unit': '%', 'tone': 'info' if shower\
-        \ == 'on' else 'idle'},\n    {'label': 'Temperature', 'value': ('%.1f' | format(t | float(0)))\
-        \ if t not in bad else none, 'unit': '°C'}\n  ]\n} | tojson }}\n"
+        \ %}\n{% set bg = states('sensor.tapo_smart_controller_main_bathroom_background_humidity')\
+        \ %}\n{% set reason = state_attr('sensor.tapo_smart_controller_main_bathroom_fan_status',\
+        \ 'reason') %}\n{% set fan_s = state_attr('binary_sensor.tapo_smart_controller_main_bathroom_fan_running',\
+        \ 'summary') %}\n{% set towel_s = state_attr('binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating',\
+        \ 'summary') %}\n{% set left = states('sensor.tapo_smart_controller_main_bathroom_towel_rail_remaining_time')\
+        \ %}\n{% set waiting = state_attr('sensor.tapo_smart_controller_main_bathroom_towel_rail_remaining_time',\
+        \ 'waiting_for_off_peak') %}\n{% set rows = [\n  {'label': 'Learned background humidity',\
+        \ 'value': (('%d' | format(bg | float(0) | round(0))) ~ ' %') if bg not in bad else none},\n\
+        \  {'label': 'Fan', 'value': fan_s if fan_s else none, 'tone': 'info' if is_state('binary_sensor.tapo_smart_controller_main_bathroom_fan_running',\
+        \ 'on') else 'idle'},\n  {'label': 'Why the fan is in this state', 'value': reason if reason\
+        \ else none},\n  {'label': 'Towel rail', 'value': towel_s if towel_s else none, 'tone': 'warn'\
+        \ if is_state('binary_sensor.tapo_smart_controller_main_bathroom_towel_rail_heating', 'on')\
+        \ else 'idle'},\n  {'label': 'Drying time left', 'value': (left ~ (' · waiting for off-peak'\
+        \ if waiting else '')) if left not in bad else none}\n] %}\n{{ {\n  'title': \"Main Bathroom\"\
+        ,\n  'icon': 'mdi:shower-head',\n  'badge': {'text': 'Shower detected', 'tone': 'info', 'icon':\
+        \ 'mdi:shower'} if shower == 'on' else ({'text': 'No shower detected', 'tone': 'idle'} if\
+        \ shower == 'off' else {'text': 'Shower status unknown', 'tone': 'idle'}),\n  'heroes': [\n\
+        \    {'label': 'Humidity', 'value': ('%d' | format(h | float(0) | round(0))) if h not in\
+        \ bad else none, 'unit': '%', 'tone': 'info' if shower == 'on' else 'idle'},\n    {'label':\
+        \ 'Temperature', 'value': ('%.1f' | format(t | float(0))) if t not in bad else none, 'unit':\
+        \ '°C'}\n  ],\n  'groups': [{'title': 'Monitoring', 'rows': rows}] if true else []\n} | tojson\
+        \ }}\n"
       model: 12
+    - type: heading
+      heading: Controls
+      heading_style: subtitle
+      icon: mdi:tune-variant
     - type: conditional
       conditions:
       - condition: state
@@ -1438,6 +1009,40 @@ views:
         vertical: false
         grid_options:
           columns: 12
+    - type: heading
+      heading: Settings
+      heading_style: subtitle
+      icon: mdi:cog-outline
+    - type: tile
+      entity: number.tapo_smart_controller_main_bathroom_manual_fan_duration
+      name: 'Run fan length (5-120 min): tap to change'
+      icon: mdi:fan-clock
+      color: blue
+      state_content: state
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: none
+      vertical: false
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: number.tapo_smart_controller_main_bathroom_towel_drying_duration
+      name: 'Towel drying per shower (1-12 h): tap to change'
+      icon: mdi:radiator
+      color: orange
+      state_content: state
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: none
+      vertical: false
+      grid_options:
+        columns: 12
     - type: history-graph
       title: 'Main Bathroom: humidity and temperature'
       hours_to_show: 24
@@ -1457,7 +1062,7 @@ views:
     - type: tile
       entity: binary_sensor.tapo_smart_controller_controller_health_problem
       hide_state: true
-      name: Bathroom tuning (Tapo settings)
+      name: Tapo Controller Settings
       icon: mdi:cog-outline
       vertical: false
       tap_action:
@@ -1478,14 +1083,33 @@ views:
         \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
         {% set h = states('sensor.tapo_smart_controller_ensuite_humidity') %}\n{% set t = states('sensor.tapo_smart_controller_ensuite_temperature')\
         \ %}\n{% set shower = states('binary_sensor.tapo_smart_controller_ensuite_shower_detected')\
-        \ %}\n{{ {\n  'title': \"Ensuite\",\n  'icon': 'mdi:shower-head',\n  'badge': {'text': 'Shower\
-        \ detected', 'tone': 'info', 'icon': 'mdi:shower'} if shower == 'on' else ({'text': 'No shower\
-        \ detected', 'tone': 'idle'} if shower == 'off' else {'text': 'Shower status unknown', 'tone':\
-        \ 'idle'}),\n  'heroes': [\n    {'label': 'Humidity', 'value': ('%d' | format(h | float(0)\
-        \ | round(0))) if h not in bad else none, 'unit': '%', 'tone': 'info' if shower == 'on' else\
-        \ 'idle'},\n    {'label': 'Temperature', 'value': ('%.1f' | format(t | float(0))) if t not\
-        \ in bad else none, 'unit': '°C'}\n  ]\n} | tojson }}\n"
+        \ %}\n{% set bg = states('sensor.tapo_smart_controller_ensuite_background_humidity') %}\n\
+        {% set reason = state_attr('sensor.tapo_smart_controller_ensuite_fan_status', 'reason') %}\n\
+        {% set fan_s = state_attr('binary_sensor.tapo_smart_controller_ensuite_fan_running', 'summary')\
+        \ %}\n{% set towel_s = state_attr('binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating',\
+        \ 'summary') %}\n{% set left = states('sensor.tapo_smart_controller_ensuite_towel_rail_remaining_time')\
+        \ %}\n{% set waiting = state_attr('sensor.tapo_smart_controller_ensuite_towel_rail_remaining_time',\
+        \ 'waiting_for_off_peak') %}\n{% set rows = [\n  {'label': 'Learned background humidity',\
+        \ 'value': (('%d' | format(bg | float(0) | round(0))) ~ ' %') if bg not in bad else none},\n\
+        \  {'label': 'Fan', 'value': fan_s if fan_s else none, 'tone': 'info' if is_state('binary_sensor.tapo_smart_controller_ensuite_fan_running',\
+        \ 'on') else 'idle'},\n  {'label': 'Why the fan is in this state', 'value': reason if reason\
+        \ else none},\n  {'label': 'Towel rail', 'value': towel_s if towel_s else none, 'tone': 'warn'\
+        \ if is_state('binary_sensor.tapo_smart_controller_ensuite_towel_rail_heating', 'on') else\
+        \ 'idle'},\n  {'label': 'Drying time left', 'value': (left ~ (' · waiting for off-peak' if\
+        \ waiting else '')) if left not in bad else none}\n] %}\n{{ {\n  'title': \"Ensuite\",\n\
+        \  'icon': 'mdi:shower-head',\n  'badge': {'text': 'Shower detected', 'tone': 'info', 'icon':\
+        \ 'mdi:shower'} if shower == 'on' else ({'text': 'No shower detected', 'tone': 'idle'} if\
+        \ shower == 'off' else {'text': 'Shower status unknown', 'tone': 'idle'}),\n  'heroes': [\n\
+        \    {'label': 'Humidity', 'value': ('%d' | format(h | float(0) | round(0))) if h not in\
+        \ bad else none, 'unit': '%', 'tone': 'info' if shower == 'on' else 'idle'},\n    {'label':\
+        \ 'Temperature', 'value': ('%.1f' | format(t | float(0))) if t not in bad else none, 'unit':\
+        \ '°C'}\n  ],\n  'groups': [{'title': 'Monitoring', 'rows': rows}] if true else []\n} | tojson\
+        \ }}\n"
       model: 12
+    - type: heading
+      heading: Controls
+      heading_style: subtitle
+      icon: mdi:tune-variant
     - type: conditional
       conditions:
       - condition: state
@@ -1738,6 +1362,40 @@ views:
         vertical: false
         grid_options:
           columns: 12
+    - type: heading
+      heading: Settings
+      heading_style: subtitle
+      icon: mdi:cog-outline
+    - type: tile
+      entity: number.tapo_smart_controller_ensuite_manual_fan_duration
+      name: 'Run fan length (5-120 min): tap to change'
+      icon: mdi:fan-clock
+      color: blue
+      state_content: state
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: none
+      vertical: false
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: number.tapo_smart_controller_ensuite_towel_drying_duration
+      name: 'Towel drying per shower (1-12 h): tap to change'
+      icon: mdi:radiator
+      color: orange
+      state_content: state
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: none
+      vertical: false
+      grid_options:
+        columns: 12
     - type: history-graph
       title: 'Ensuite: humidity and temperature'
       hours_to_show: 24
@@ -1757,7 +1415,7 @@ views:
     - type: tile
       entity: binary_sensor.tapo_smart_controller_controller_health_problem
       hide_state: true
-      name: Bathroom tuning (Tapo settings)
+      name: Tapo Controller Settings
       icon: mdi:cog-outline
       vertical: false
       tap_action:
@@ -1766,6 +1424,149 @@ views:
       icon_tap_action:
         action: navigate
         navigation_path: /config/integrations/integration/tapo_smart_controller
+      grid_options:
+        columns: 12
+- title: Lights
+  path: lights
+  type: sections
+  max_columns: 2
+  dense_section_placement: true
+  sections:
+  - type: grid
+    cards:
+    - type: custom:thermowatt-lights-card
+      discover: true
+      exclude_label: hide_from_dashboard
+      diagnostics: true
+  - type: grid
+    cards:
+    - type: custom:thermowatt-panel-card
+      grid_options:
+        columns: 12
+      model:
+        title: Evening lights schedule
+        icon: mdi:weather-sunset
+        lines:
+        - 'When switched on below: lights with the "Evening lights" label turn ON two hours before
+          sunset (it follows the seasons and Tasmanian daylight saving by itself) and OFF at 01:00.'
+        - 'Switching a light yourself at any time always works: the schedule only acts at those two
+          moments and never turns a light back on or off afterwards.'
+        - Nothing is scheduled until the optional schedule file is installed (the install notes explain
+          how). Add the label to a light in Settings, Areas, labels and zones, Labels.
+    - type: conditional
+      conditions:
+      - condition: or
+        conditions:
+        - condition: state
+          entity: automation.evening_lights_on
+          state: 'on'
+        - condition: state
+          entity: automation.evening_lights_on
+          state: 'off'
+      card:
+        type: tile
+        entity: automation.evening_lights_on
+        name: Evening lights on (2 h before sunset)
+        icon: mdi:weather-sunset-down
+        color: orange
+        state_content: state
+        tap_action:
+          action: perform-action
+          perform_action: automation.toggle
+          target:
+            entity_id: automation.evening_lights_on
+          confirmation:
+            text: Switch the "Evening lights on (2 h before sunset)" schedule on or off?
+        icon_tap_action:
+          action: perform-action
+          perform_action: automation.toggle
+          target:
+            entity_id: automation.evening_lights_on
+          confirmation:
+            text: Switch the "Evening lights on (2 h before sunset)" schedule on or off?
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: or
+        conditions:
+        - condition: state
+          entity: automation.evening_lights_off
+          state: 'on'
+        - condition: state
+          entity: automation.evening_lights_off
+          state: 'off'
+      card:
+        type: tile
+        entity: automation.evening_lights_off
+        name: Evening lights off (01:00)
+        icon: mdi:weather-night
+        color: orange
+        state_content: state
+        tap_action:
+          action: perform-action
+          perform_action: automation.toggle
+          target:
+            entity_id: automation.evening_lights_off
+          confirmation:
+            text: Switch the "Evening lights off (01:00)" schedule on or off?
+        icon_tap_action:
+          action: perform-action
+          perform_action: automation.toggle
+          target:
+            entity_id: automation.evening_lights_off
+          confirmation:
+            text: Switch the "Evening lights off (01:00)" schedule on or off?
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: automation.evening_lights_on
+        state_not: 'on'
+      - condition: state
+        entity: automation.evening_lights_on
+        state_not: 'off'
+      card:
+        type: markdown
+        content: The evening schedule is not installed, so no lights are scheduled. See docs/owner/HOME_DASHBOARD.md
+          (Lighting schedule) for the optional file.
+        grid_options:
+          columns: 12
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: sun.sun
+      hide_state: true
+      name: Edit automations
+      icon: mdi:cog-outline
+      vertical: false
+      tap_action:
+        action: navigate
+        navigation_path: /config/automation/dashboard
+      icon_tap_action:
+        action: navigate
+        navigation_path: /config/automation/dashboard
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: sun.sun
+      hide_state: true
+      name: Light labels
+      icon: mdi:cog-outline
+      vertical: false
+      tap_action:
+        action: navigate
+        navigation_path: /config/labels
+      icon_tap_action:
+        action: navigate
+        navigation_path: /config/labels
       grid_options:
         columns: 12
 - title: Doors

@@ -246,6 +246,14 @@ export async function loadTodayEnergy(hass, today, timeZone = DEFAULT_TIMEZONE, 
   return result;
 }
 
+/** Solar used directly today: the package figure, only while the package says its daily meters are complete. */
+export function directUseKwh(hass, today) {
+  if (!today || !today.used) return null;
+  const states = hass.states || {};
+  if (!today.status || !states[today.status] || states[today.status].state !== "ready") return null; // no status, no claim
+  return liveKwh(states[today.used]);
+}
+
 class ThermowattPowerFlowCard extends Base {
   setConfig(config) {
     for (const key of ["solar_entity", "house_entity", "grid_entity"]) {
@@ -280,7 +288,7 @@ class ThermowattPowerFlowCard extends Base {
       idleW: c.idle_threshold_w,
     });
     const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const today = c.today ? { ...this._today, solar: liveKwh(hass.states[c.today.solar]) } : null;
+    const today = c.today ? { ...this._today, solar: liveKwh(hass.states[c.today.solar]), used: directUseKwh(hass, c.today) } : null;
     const key = JSON.stringify([model, reduce, today]);
     if (key === this._key) return; // nothing changed: keep animations running, no DOM work
     this._key = key;
@@ -294,17 +302,35 @@ class ThermowattPowerFlowCard extends Base {
       const lower = typeof value === "object" && value.incomplete ? "≥ " : "";
       return `<div class="kpi t-${tone}"><div class="lab">${label}</div><div class="val">${lower}${kwh.toFixed(kwh < 10 ? 2 : 1)}<span class="unit">kWh</span></div></div>`;
     };
+    const withUsed = Boolean(c.today && c.today.used);
     const strip = today
-      ? `<div class="kpis">${kpi("Solar today", today.solar, "ok")}${kpi("Imported today", today.import, "warn")}${kpi("Exported today", today.export, "info")}</div>`
+      ? `<div class="kpis${withUsed ? " k4" : ""}">${kpi("Solar today", today.solar, "ok")}${withUsed ? kpi("Used directly", today.used, "ok") : ""}${kpi("Imported today", today.import, "warn")}${kpi("Exported today", today.export, "info")}</div>`
+      : "";
+    const compact = c.compact
+      ? `ha-card{padding:calc(var(--u,11px)*1.15) calc(var(--u,11px)*1.3);gap:calc(var(--u,11px)*.6)}
+        .head{min-height:0;gap:calc(var(--u,11px)*.65)}.head ha-icon{--mdc-icon-size:calc(var(--u,11px)*1.9)}
+        .title{font-size:max(13.5px,calc(var(--u,11px)*1.12))}.chip{font-size:max(13.5px,calc(var(--u,11px)*1.14));padding:calc(var(--u,11px)*.2) calc(var(--u,11px)*.75)}
+        .flow{flex:1;min-height:0;max-width:none;margin:0;display:flex;align-items:center;justify-content:center}
+        .flow svg{width:auto;max-width:100%;height:100%;max-height:100%}
+        .flow svg text{font-size:17px}.flow svg text:nth-of-type(n+1):not([font-weight]){font-size:16px}
+        .kpis{margin-top:0;gap:calc(var(--u,11px)*.48)}
+        .kpi{padding:calc(var(--u,11px)*.55) calc(var(--u,11px)*.62);border-radius:calc(var(--u,11px)*1.05)}
+        .kpi .lab{font-size:max(13px,calc(var(--u,11px)*1.06));text-transform:none;letter-spacing:.01em;line-height:1.15}
+        .kpi .val{font-size:max(18.5px,calc(var(--u,11px)*1.58));margin-top:calc(var(--u,11px)*.18);white-space:nowrap}
+        .kpi .unit{font-size:max(12.5px,.6em);margin-left:.14em}
+        @media (max-width:759px){.flow svg{width:100%;height:auto}}`
       : "";
     this._root.innerHTML =
       `<ha-card><style>${UI_CSS}
         .flow{max-width:460px;width:100%;margin:0 auto}
         .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:auto}
+        .kpis.k4{grid-template-columns:repeat(4,minmax(0,1fr))}
+        .kpi{min-width:0}
         .kpi{padding:10px 12px;border-radius:14px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}
         .kpi .lab{font-size:12.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--secondary-text-color)}
         .kpi .val{font-size:clamp(20px,6cqw,28px);font-weight:600;margin-top:2px;color:var(--tw-tone)}
         .kpi .unit{font-size:.55em;font-weight:400;margin-left:.2em;color:var(--secondary-text-color)}
+        ${compact}
       </style>` +
       `<div class="head">${iconHtml("mdi:flash")}<div class="title">${escapeHtml(c.title)}</div><span class="chip t-${gridTone}">${escapeHtml(model.gridLabel)}</span></div>` +
       `<div class="flow">${renderSvg(model, reduce)}</div>${strip}</ha-card>`;
@@ -609,37 +635,58 @@ export function discoverLights(hass, config) {
   const seen = new Set();
   const seenDevice = new Set();
   let unavailable = 0;
+  const excluded = []; // every light that is NOT shown, with the plain-English reason (the Lights page lists them)
+  const showLabel = config.show_as_light_label === undefined ? "show_as_light" : String(config.show_as_light_label || "");
+  const labelsOf = (entry) => entry.labels || entry.lb || [];
+  const skip = (entityId, name, reason) => {
+    seen.add(entityId);
+    excluded.push({ entityId, name, reason });
+  };
   const consider = (entityId, pinnedName) => {
-    if (seen.has(entityId) || exclude.has(entityId)) return;
+    if (seen.has(entityId)) return;
     const state = states[entityId];
-    if (!state) return; // disabled, removed or not loaded: nothing to show
     const entry = registry[entityId] || {};
-    if (entry.hidden || entry.hb) return;
-    if (entry.entity_category || entry.ec) return;
-    if (label && (entry.labels || entry.lb || []).includes(label)) return;
-    const attrs = state.attributes || {};
-    if (config.exclude_groups !== false && Array.isArray(attrs.entity_id) && attrs.entity_id.length) return; // a group: its members are shown
+    const attrs = (state && state.attributes) || {};
     const name = names[entityId] || pinnedName || attrs.friendly_name || prettyEntityName(entityId);
+    if (exclude.has(entityId)) return skip(entityId, name, "Excluded in the dashboard configuration");
+    if (!state) return skip(entityId, name, "Home Assistant has not loaded it (disabled, removed or still starting)");
+    if (entry.hidden || entry.hb) return skip(entityId, name, "Hidden in the entity settings");
+    if (entry.entity_category || entry.ec) return skip(entityId, name, "A configuration or diagnostic entity, not a light");
+    if (label && labelsOf(entry).includes(label)) return skip(entityId, name, `Has the "${label}" label`);
+    if (config.exclude_groups !== false && Array.isArray(attrs.entity_id) && attrs.entity_id.length) return skip(entityId, name, "A light group: its member lights are shown instead");
     const deviceId = entry.device_id || entry.di;
     const duplicate = deviceId ? `${deviceId}|${String(name).toLowerCase()}` : null;
-    if (duplicate && seenDevice.has(duplicate)) return;
+    if (duplicate && seenDevice.has(duplicate)) return skip(entityId, name, "A duplicate of a light already shown (same device and name)");
     if (state.state === "unavailable" || state.state === "unknown") {
       if (!config.show_unavailable) {
         unavailable += 1;
-        seen.add(entityId);
+        skip(entityId, name, `Currently ${state.state}`);
         return;
       }
     }
     seen.add(entityId);
     if (duplicate) seenDevice.add(duplicate);
-    out.push({ entityId, name, state });
+    out.push({ entityId, name, state, domain: entityId.split(".")[0] });
   };
   for (const l of config.lights || []) consider(l.entity, l.name); // pinned first, in the configured order
-  const rest = Object.keys(states).filter((id) => id.startsWith("light.") && !seen.has(id));
+  // A switch (a smart plug or relay that powers a lamp) is shown as a light only when the owner gives it the
+  // `show_as_light` label: Home Assistant cannot tell a lamp plug from a heater plug, so it is never guessed.
+  const labelled = showLabel
+    ? Object.keys(states).filter((id) => !id.startsWith("light.") && ["switch", "input_boolean"].includes(id.split(".")[0]) && labelsOf(registry[id] || {}).includes(showLabel))
+    : [];
+  const rest = [...Object.keys(states).filter((id) => id.startsWith("light.")), ...labelled].filter((id) => !seen.has(id));
   const shownName = (id) => String(names[id] || (states[id].attributes || {}).friendly_name || prettyEntityName(id));
   rest.sort((a, b) => shownName(a).localeCompare(shownName(b), undefined, { numeric: true }));
   for (const id of rest) consider(id, null);
-  return { lights: out, unavailable };
+  // Switches that LOOK like lamps but carry no label: never shown automatically, listed as a hint.
+  const lampLike = /light|lamp|lantern|downlight|porch|garden|deck|patio|spot/i;
+  const candidates = [];
+  for (const id of Object.keys(states)) {
+    if (!id.startsWith("switch.") || seen.has(id)) continue;
+    const text = `${id} ${(states[id].attributes || {}).friendly_name || ""}`;
+    if (lampLike.test(text)) candidates.push({ entityId: id, name: (states[id].attributes || {}).friendly_name || prettyEntityName(id), state: states[id].state });
+  }
+  return { lights: out, unavailable, excluded, candidates };
 }
 
 /** Brightness 1-100 for a dimmable light that is on, else null. */
@@ -657,7 +704,7 @@ export function isDimmable(state) {
 
 class ThermowattLightsCard extends BaseUi {
   setConfig(config) {
-    this._config = { title: "Lights", discover: true, exclude_label: "hide_from_dashboard", ...config };
+    this._config = { title: "Lights", discover: true, exclude_label: "hide_from_dashboard", show_as_light_label: "show_as_light", ...config };
     for (const l of this._config.lights || []) if (!l || typeof l.entity !== "string" || !l.entity.startsWith("light.")) throw new Error("every pinned light needs a light entity");
     this._key = null;
   }
@@ -675,7 +722,7 @@ class ThermowattLightsCard extends BaseUi {
     if (!this._config || !this._hass) return;
     const found = discoverLights(this._hass, this._config);
     const lights = found.lights;
-    const key = JSON.stringify([found.unavailable, lights.map((l) => [l.entityId, l.name, l.state.state, l.state.attributes.brightness, isDimmable(l.state)])]);
+    const key = JSON.stringify([found.unavailable, this._config.diagnostics ? [found.excluded, found.candidates] : 0, lights.map((l) => [l.entityId, l.name, l.state.state, l.state.attributes.brightness, isDimmable(l.state)])]);
     if (key === this._key) return;
     this._key = key;
     if (!this._root) {
@@ -683,7 +730,8 @@ class ThermowattLightsCard extends BaseUi {
       this._root.addEventListener("click", (event) => {
         const tile = event.target.closest("button[data-toggle]");
         if (!tile || tile.disabled) return;
-        this._hass.callService("light", "toggle", { entity_id: tile.dataset.toggle });
+        const id = tile.dataset.toggle;
+        this._hass.callService(id.startsWith("light.") ? "light" : "homeassistant", "toggle", { entity_id: id });
       });
       this._root.addEventListener("change", (event) => {
         const slider = event.target.closest("input[data-brightness]");
@@ -698,7 +746,7 @@ class ThermowattLightsCard extends BaseUi {
     for (const l of lights) {
       const s = l.state.state;
       const pct = brightnessPct(l.state);
-      const dim = isDimmable(l.state) && s === "on";
+      const dim = l.domain === "light" && isDimmable(l.state) && s === "on";
       const label = s === "on" ? (pct === null ? "On" : `On · ${pct}%`) : s === "off" ? "Off" : "Unavailable";
       const usable = s === "on" || s === "off";
       body +=
@@ -708,7 +756,15 @@ class ThermowattLightsCard extends BaseUi {
         "</div>";
     }
     body += "</div>";
-    if (found.unavailable) body += `<p class="note small">${found.unavailable} unavailable light${found.unavailable === 1 ? " is" : "s are"} not shown.</p>`;
+    if (found.unavailable && !this._config.diagnostics) body += `<p class="note small">${found.unavailable} unavailable light${found.unavailable === 1 ? " is" : "s are"} not shown.</p>`;
+    if (this._config.diagnostics) {
+      const row = (r) => `<li><b>${escapeHtml(r.name)}</b> <code>${escapeHtml(r.entityId)}</code><br><span>${escapeHtml(r.reason)}</span></li>`;
+      body += `<details class="diag" open><summary>Why some lights are not shown (${found.excluded.length})</summary>${found.excluded.length ? `<ul>${found.excluded.map(row).join("")}</ul>` : '<p class="note small">Every light entity Home Assistant has loaded is shown above.</p>'}</details>`;
+      if (found.candidates.length) {
+        body += `<details class="diag" open><summary>Switches that look like lamps (${found.candidates.length})</summary><p class="note small">Home Assistant lists these as switches, not lights. To show one here, add the label <b>${escapeHtml(this._config.show_as_light_label)}</b> to it in Settings → Areas, labels &amp; zones → Labels.</p><ul>${found.candidates.map((r) => `<li><b>${escapeHtml(r.name)}</b> <code>${escapeHtml(r.entityId)}</code> <span>(${escapeHtml(r.state)})</span></li>`).join("")}</ul></details>`;
+      }
+      body += '<p class="note small">A light Home Assistant has disabled, or an entity of another type, is not in this list. Settings → Devices &amp; services → Entities shows disabled entities.</p>';
+    }
     this._root.innerHTML = `<ha-card><style>${UI_CSS}
       .lights{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
       .lights.medium{gap:10px;grid-template-columns:repeat(auto-fill,minmax(148px,1fr))}
@@ -726,17 +782,372 @@ class ThermowattLightsCard extends BaseUi {
       .lt:focus-visible{outline:2px solid var(--primary-color);border-radius:8px}
       input[type=range]{width:100%;accent-color:var(--state-light-active-color,#ffc107);margin:2px 0 0}
       .small{font-size:13.5px}
+      .diag{margin-top:6px;font-size:14.5px;color:var(--primary-text-color)}
+      .diag summary{cursor:pointer;font-weight:600}
+      .diag ul{margin:8px 0 0;padding-left:20px}.diag li{margin:0 0 8px}.diag li span{color:var(--secondary-text-color)}
+      .diag code{font-size:12.5px;color:var(--secondary-text-color)}
+      ${
+        this._config.compact
+          ? `ha-card{padding:calc(var(--u,11px)*1.15) calc(var(--u,11px)*1.3);gap:calc(var(--u,11px)*.65);overflow:hidden}
+        .head{min-height:0}.head ha-icon{--mdc-icon-size:calc(var(--u,11px)*1.9)}.title{font-size:max(13.5px,calc(var(--u,11px)*1.12))}.chip{font-size:max(13.5px,calc(var(--u,11px)*1.14));padding:calc(var(--u,11px)*.2) calc(var(--u,11px)*.75)}
+        .lights,.lights.medium,.lights.dense{flex:1;min-height:0;overflow:auto;scrollbar-width:none;gap:calc(var(--u,11px)*.65);grid-template-columns:repeat(auto-fill,minmax(calc(var(--u,11px)*10.5),1fr));align-content:start}
+        .light{padding:calc(var(--u,11px)*.85);border-radius:calc(var(--u,11px)*1.15);gap:calc(var(--u,11px)*.45)}
+        .lt{column-gap:calc(var(--u,11px)*.7)}.lt ha-icon,.dense .lt ha-icon{--mdc-icon-size:calc(var(--u,11px)*2.3)}
+        .lt .n,.dense .lt .n{font-size:max(15px,calc(var(--u,11px)*1.32))}.lt .s{font-size:max(13.5px,calc(var(--u,11px)*1.12))}
+        .small{font-size:max(13px,calc(var(--u,11px)*1.08))}
+        input[type=range]{height:max(28px,calc(var(--u,11px)*2.3))}`
+          : ""
+      }
       </style>${body}</ha-card>`;
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * <thermowatt-home-page>: the everyday Home page for a tablet in landscape (the primary display), as ONE card in a
+ * Home Assistant "panel" view. It measures the space the browser really gives it (window height below its own top
+ * edge, never the tablet's physical resolution) and lays six cards out to fit WITHOUT scrolling: energy | hot water |
+ * weather and doors over bathroom 1 | bathroom 2 | lights. Type scales with the measured height inside a readable
+ * range. Below 760 px wide (a phone) it is a single natural-height column. States are read only; the one control it
+ * adds is the existing timed manual fan override of each bathroom (switch.turn_on / switch.turn_off on the Tapo
+ * Smart Controller's own manual-override switch): it only adds demand, never interrupts automatic extraction, and
+ * never touches the towel rail (status only here). Hot-water overrides are NOT offered here.
+ * ---------------------------------------------------------------------------------------------- */
+const BAD_STATES = ["unknown", "unavailable", "none", ""];
+const stateOf = (hass, entityId) => (entityId && hass.states ? hass.states[entityId] : undefined);
+const validState = (hass, entityId) => {
+  const s = stateOf(hass, entityId);
+  return s && !BAD_STATES.includes(String(s.state).toLowerCase()) ? s : null;
+};
+const niceText = (value) => {
+  const text = String(value).replace(/_/g, " ").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : "";
+};
+const clockText = (value, timeZone) => {
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toLocaleTimeString("en-AU", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
+};
+
+/** Solar boost for the Home page: Off when the setting is off, else Active / Waiting from the controller's status. */
+export function solarBoostLabel(status, enabledState) {
+  if (String(enabledState || "").toLowerCase() === "off") return { text: "Off", tone: "idle" };
+  switch (String(status || "").trim().toLowerCase()) {
+    case "active":
+      return { text: "Active", tone: "ok" };
+    case "waiting":
+    case "waiting to restart":
+    case "cooldown":
+      return { text: "Waiting", tone: "info" };
+    case "off unconfirmed":
+    case "stopping":
+      return { text: "Stopping", tone: "warn" };
+    default:
+      return { text: "—", tone: "idle" };
+  }
+}
+
+const TARIFF_TEXT = { off_peak: "Off-peak", peak: "Peak", shoulder: "Shoulder" };
+const NEXT_ACTION_TEXT = {
+  parked: "Heater off",
+  baseline_45: "Hold 45 °C",
+  normal_storage_62: "Heat to 62 °C",
+  storage_70: "Solar boost 70 °C",
+};
+
+/** Everything the hot-water card shows, in plain English. A missing value is a dash, never a guess. */
+export function hotWaterModel(hass, c, timeZone = "Australia/Hobart") {
+  const read = (key) => validState(hass, c[key]);
+  const temp = read("temperature");
+  const tempValue = temp && Number.isFinite(Number(temp.state)) ? Number(temp.state) : null;
+  const target = read("target");
+  const targetValue = target && Number.isFinite(Number(target.state)) ? Math.round(Number(target.state)) : null;
+  const mode = read("mode");
+  const auto = stateOf(hass, c.automatic);
+  const operating = read("operating");
+  const tariff = read("tariff");
+  const enabled = stateOf(hass, c.boost_enabled);
+  const boost = solarBoostLabel(read("boost") && read("boost").state, enabled && enabled.state);
+  const nextAction = read("next_action");
+  const autoState = auto ? auto.state : null;
+  const control =
+    operating && operating.state === "guest"
+      ? { text: "12 h override", tone: "warn" }
+      : autoState === "on"
+        ? { text: "Automatic on", tone: "ok" }
+        : autoState === "off"
+          ? { text: "Automatic off", tone: "warn" }
+          : { text: "Status unknown", tone: "idle" };
+  return {
+    temperature: tempValue === null ? null : tempValue.toFixed(1),
+    mode: mode ? niceText(mode.state) : null,
+    target: targetValue,
+    control,
+    tariff: tariff ? { text: TARIFF_TEXT[tariff.state] || niceText(tariff.state), tone: tariff.state === "peak" ? "warn" : tariff.state === "off_peak" ? "ok" : "idle" } : { text: "—", tone: "idle" },
+    boost,
+    lastPoll: read("last_poll") ? clockText(read("last_poll").state, timeZone) : null,
+    nextPoll: read("next_poll") ? clockText(read("next_poll").state, timeZone) : null,
+    nextAction: nextAction ? NEXT_ACTION_TEXT[nextAction.state] || niceText(nextAction.state) : null,
+  };
+}
+
+/** The manual-fan button for one bathroom: run, cancel (with the minutes left) or inert. */
+export function fanButton(manualState, remainingSeconds, configuredMinutes, fanState) {
+  const manual = String(manualState || "").toLowerCase();
+  const fan = String(fanState || "").toLowerCase();
+  if (BAD_STATES.includes(manual) || BAD_STATES.includes(fan)) return { kind: "inert", label: "Fan unavailable" };
+  if (manual === "on") {
+    const seconds = Number(remainingSeconds);
+    const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.ceil(seconds / 60)) : null;
+    return { kind: "cancel", label: minutes === null ? "Cancel fan" : `Cancel fan — ${minutes} min left` };
+  }
+  const length = Number.isFinite(Number(configuredMinutes)) && Number(configuredMinutes) > 0 ? Math.round(Number(configuredMinutes)) : 20;
+  return { kind: "run", label: `Run fan — ${length} min` };
+}
+
+/** One bathroom's card: numbers, shower, the actual fan and towel-rail state, drying time left and the fan button. */
+export function bathroomModel(hass, b) {
+  const num = (id, digits) => {
+    const s = validState(hass, id);
+    const v = s ? Number(s.state) : NaN;
+    return Number.isFinite(v) ? v.toFixed(digits) : null;
+  };
+  const attrs = (s) => (s && s.attributes) || {};
+  const good = (s) => s && !BAD_STATES.includes(String(s.state).toLowerCase());
+  const shower = validState(hass, b.shower);
+  const fan = stateOf(hass, b.fan_running);
+  const towel = stateOf(hass, b.towel_heating);
+  const manual = stateOf(hass, b.fan_switch);
+  const drying = stateOf(hass, b.towel_remaining);
+  const seconds = good(drying) ? Number(attrs(drying).remaining_seconds) : NaN;
+  const dryingLeft =
+    Number.isFinite(seconds) && seconds > 0
+      ? `${Math.floor(seconds / 3600) ? `${Math.floor(seconds / 3600)} h ` : ""}${Math.round((seconds % 3600) / 60)} min left${attrs(drying).waiting_for_off_peak ? " · waiting for off-peak" : ""}`
+      : null;
+  return {
+    name: b.name,
+    humidity: num(b.humidity, 0),
+    temperature: num(b.temperature, 1),
+    shower: shower ? shower.state === "on" : null,
+    fanText: good(fan) && attrs(fan).summary ? attrs(fan).summary : "Status unknown",
+    towelText: good(towel) && attrs(towel).summary ? attrs(towel).summary : "Status unknown",
+    dryingLeft,
+    button: fanButton(manual && manual.state, attrs(manual).remaining_seconds, attrs(manual).configured_minutes, fan && fan.state),
+  };
+}
+
+const HOME_CSS = `
+  :host{display:block;--u:11px}
+  .grid{height:100%;display:grid;gap:calc(var(--u)*.82);grid-template-columns:minmax(0,1.06fr) minmax(0,.92fr) minmax(0,1.06fr);grid-template-rows:minmax(0,1.22fr);grid-auto-rows:minmax(0,1fr)}
+  .cell{min-width:0;min-height:0;display:flex;flex-direction:column;gap:calc(var(--u)*.7);overflow:hidden}
+  .cell>*{min-height:0}
+  .cell>thermowatt-power-flow-card,.cell>thermowatt-lights-card{flex:1}
+  .cell>.wx{flex:1;overflow:hidden;border-radius:var(--ha-card-border-radius,12px)}
+  .wx{min-width:0}.wx>*{display:block;height:100%;min-width:0;max-width:100%}
+  ha-card.pg{flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:calc(var(--u)*.65);padding:calc(var(--u)*1.15) calc(var(--u)*1.3);overflow:hidden;container-type:inline-size;
+    --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);--tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
+  ha-card.strip{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:calc(var(--u)*.45) calc(var(--u)*.65);min-width:0;overflow:hidden;padding:calc(var(--u)*.6) calc(var(--u)*1.05);
+    --tw-ok:var(--success-color,#43a047);--tw-warn:var(--warning-color,#fb8c00);--tw-bad:var(--error-color,#e53935);--tw-info:var(--primary-color,#03a9f4);--tw-idle:var(--secondary-text-color,#9e9e9e)}
+  .strip ha-icon{--mdc-icon-size:calc(var(--u)*1.85);color:var(--primary-color)}
+  .strip .k{flex:1 1 auto;min-width:0;font-size:max(13.5px,calc(var(--u)*1.12));font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .h{display:flex;align-items:center;gap:calc(var(--u)*.65)}
+  .h ha-icon{--mdc-icon-size:calc(var(--u)*1.85);color:var(--primary-color);flex:none}
+  .t{flex:1;min-width:0;font-size:max(13.5px,calc(var(--u)*1.12));font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chip{display:inline-flex;align-items:center;padding:calc(var(--u)*.2) calc(var(--u)*.75);border-radius:999px;font-size:max(13.5px,calc(var(--u)*1.14));font-weight:500;white-space:nowrap;color:var(--tw-tone,var(--tw-idle));background:color-mix(in srgb,var(--tw-tone,var(--tw-idle)) 16%,transparent)}
+  .t-ok{--tw-tone:var(--tw-ok)}.t-warn{--tw-tone:var(--tw-warn)}.t-bad{--tw-tone:var(--tw-bad)}.t-info{--tw-tone:var(--tw-info)}.t-idle{--tw-tone:var(--tw-idle)}
+  .big{font-size:calc(var(--u)*3.9);font-weight:500;line-height:1;letter-spacing:-.02em;color:var(--primary-text-color);white-space:nowrap}
+  .big .unit{font-size:.42em;font-weight:400;color:var(--secondary-text-color);margin-left:.15em;letter-spacing:0}
+  .lab{font-size:max(13.5px,calc(var(--u)*1.12));color:var(--secondary-text-color)}
+  .top{display:grid;grid-template-columns:auto 1fr;gap:calc(var(--u)*1.0);align-items:center}
+  .facts{display:grid;gap:calc(var(--u)*.6) calc(var(--u)*.85);grid-template-columns:repeat(var(--n,2),minmax(0,1fr))}
+  .fact{min-width:0}
+  .fact .k{font-size:max(13px,calc(var(--u)*1.06));font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--secondary-text-color)}
+  .fact .v{font-size:max(16.5px,calc(var(--u)*1.46));font-weight:600;color:var(--primary-text-color);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fact .s{font-size:max(13.5px,calc(var(--u)*1.12));color:var(--primary-text-color);opacity:.82}
+  .fact.t-ok .v,.fact.t-warn .v,.fact.t-info .v,.fact.t-bad .v{color:var(--tw-tone)}
+  .foot{margin-top:auto;font-size:max(13px,calc(var(--u)*1.08));color:var(--secondary-text-color)}
+  .nums{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*.85)}
+  .nums .big{font-size:calc(var(--u)*3.15)}
+  .line{font-size:max(14px,calc(var(--u)*1.22));color:var(--secondary-text-color);line-height:1.24;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .line b{color:var(--primary-text-color);font-weight:600;margin-right:.4em}
+  button.fan{all:unset;box-sizing:border-box;cursor:pointer;margin-top:auto;display:flex;align-items:center;justify-content:center;gap:calc(var(--u)*.6);min-height:max(44px,calc(var(--u)*3.7));padding:0 calc(var(--u)*1.1);border-radius:calc(var(--u)*1.15);font-size:max(15.5px,calc(var(--u)*1.35));font-weight:600;
+    background:color-mix(in srgb,var(--primary-color) 18%,transparent);color:var(--primary-color)}
+  button.fan ha-icon{--mdc-icon-size:calc(var(--u)*1.9)}
+  button.fan.cancel{background:color-mix(in srgb,var(--warning-color,#fb8c00) 22%,transparent);color:var(--warning-color,#fb8c00)}
+  button.fan.inert{cursor:default;background:color-mix(in srgb,var(--primary-text-color) 8%,transparent);color:var(--secondary-text-color)}
+  button.fan:focus-visible{outline:2px solid var(--primary-color)}
+  @container (max-width:240px){.top{grid-template-columns:1fr}.big{font-size:calc(var(--u)*3.5)}}
+  @media (max-width:759px){
+    :host{height:auto!important}
+    .grid{display:flex;flex-direction:column;height:auto}
+    .cell{flex:none}
+    .cell>thermowatt-power-flow-card{min-height:calc(var(--u)*30)}
+    .cell>thermowatt-lights-card{min-height:calc(var(--u)*12)}
+    .cell>.wx{min-height:calc(var(--u)*24)}
+    ha-card.pg{flex:none}
+  }
+`;
+
+class ThermowattHomePage extends BaseUi {
+  setConfig(config) {
+    if (!config || !config.flow || !config.hot_water) throw new Error("flow and hot_water are required");
+    this._config = { timezone: "Australia/Hobart", bathrooms: [], ...config };
+    this._built = false;
+    this._keys = {};
+  }
+
+  getCardSize() {
+    return 12;
+  }
+
+  connectedCallback() {
+    this._onResize = () => this._fit();
+    window.addEventListener("resize", this._onResize);
+    // a sidebar toggle or an on-screen keyboard changes the space without a window resize
+    if (typeof ResizeObserver !== "undefined") {
+      this._observer = new ResizeObserver(() => this._fit());
+      this._observer.observe(document.documentElement);
+    }
+    if (this._built) requestAnimationFrame(() => this._fit());
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener("resize", this._onResize);
+    if (this._observer) {
+      this._observer.disconnect();
+      this._observer = null;
+    }
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._config) return;
+    if (!this._built) this._build();
+    this._update();
+  }
+
+  /** Fit to the space the browser really offers: window height below this card's top edge (not the panel's pixels). */
+  _fit() {
+    if (!this._root || typeof window === "undefined") return;
+    if (window.innerWidth < 760) {
+      this.style.height = "auto";
+      this.style.setProperty("--u", "13px");
+      return;
+    }
+    const rect = this.getBoundingClientRect();
+    const available = Math.max(280, Math.floor(window.innerHeight - rect.top - 8));
+    this.style.height = `${available}px`;
+    // type scales with both measured height and width inside a readable range so 1280x800 never truncates headers
+    const byWidth = rect.width > 0 ? rect.width / 78 : 14;
+    const u = Math.min(14, Math.max(9.6, Math.min(available / 52, byWidth)));
+    this.style.setProperty("--u", `${u.toFixed(2)}px`);
+  }
+
+  _build() {
+    this._built = true;
+    const c = this._config;
+    const root = this.shadowRoot || this.attachShadow({ mode: "open" }); // setConfig can run again on a live element
+    this._root = root;
+    this._weather = null;
+    root.innerHTML = `<style>${HOME_CSS}</style><div class="grid">
+      <div class="cell" id="c-energy"></div>
+      <div class="cell"><ha-card class="pg" id="hot"></ha-card></div>
+      <div class="cell"><div class="wx" id="weather"></div><ha-card class="strip" id="doors"></ha-card></div>
+      ${(c.bathrooms || []).map((_, i) => `<div class="cell"><ha-card class="pg" id="bath${i}"></ha-card></div>`).join("")}
+      <div class="cell" id="c-lights"></div>
+    </div>`;
+    // the animated flow diagram and the lights are the existing cards, embedded in compact mode
+    this._flow = document.createElement("thermowatt-power-flow-card");
+    this._flow.setConfig({ ...c.flow, title: c.flow.title || "Energy now", compact: true });
+    root.getElementById("c-energy").appendChild(this._flow);
+    this._lights = document.createElement("thermowatt-lights-card");
+    this._lights.setConfig({ ...(c.lights || { discover: true }), compact: true, title: "Lights" });
+    root.getElementById("c-lights").appendChild(this._lights);
+    root.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-fan]");
+      if (!button || button.classList.contains("inert")) return;
+      const b = (this._config.bathrooms || [])[Number(button.dataset.fan)];
+      if (!b || !b.fan_switch || !this._hass) return;
+      this._hass.callService("switch", button.classList.contains("cancel") ? "turn_off" : "turn_on", { entity_id: b.fan_switch });
+    });
+    this._mountWeather(root.getElementById("weather"));
+    requestAnimationFrame(() => this._fit());
+  }
+
+  async _mountWeather(host) {
+    const w = this._config.weather;
+    if (!w || !w.entity) {
+      host.innerHTML = '<ha-card class="pg"><div class="line">Weather is not configured.</div></ha-card>';
+      return;
+    }
+    try {
+      const helpers = await window.loadCardHelpers();
+      this._weather = await helpers.createCardElement({ type: "weather-forecast", entity: w.entity, ...(w.name ? { name: w.name } : {}), show_current: true, show_forecast: true, forecast_type: "daily" });
+      host.appendChild(this._weather);
+      if (this._hass) this._weather.hass = this._hass;
+    } catch (error) {
+      host.innerHTML = '<ha-card class="pg"><div class="line">Weather could not be shown.</div></ha-card>';
+    }
+  }
+
+  _set(id, key, html) {
+    if (this._keys[id] === key) return;
+    this._keys[id] = key;
+    this._root.getElementById(id).innerHTML = html;
+  }
+
+  _update() {
+    const hass = this._hass;
+    const c = this._config;
+    this._flow.hass = hass;
+    this._lights.hass = hass;
+    if (this._weather) this._weather.hass = hass;
+    const hw = hotWaterModel(hass, c.hot_water, c.timezone);
+    const fact = (k, v, tone, sub) => `<div class="fact${toneClass(tone)}"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v ?? "—")}</div>${sub ? `<div class="s">${escapeHtml(sub)}</div>` : ""}</div>`;
+    const polls = `Last poll ${hw.lastPoll || "—"} · next ${hw.nextPoll || "—"}`;
+    this._set(
+      "hot",
+      JSON.stringify(hw),
+      `<div class="h">${iconHtml("mdi:water-boiler")}<div class="t">Hot water</div><span class="chip${toneClass(hw.control.tone)}">${escapeHtml(hw.control.text)}</span></div>
+       <div class="top"><div><div class="big">${escapeHtml(hw.temperature ?? "—")}${hw.temperature === null ? "" : '<span class="unit">°C</span>'}</div><div class="lab">Water temperature</div></div>
+       <div class="facts" style="--n:1">${fact("Heater", hw.mode, null, hw.target === null ? null : `Target ${hw.target} °C`)}</div></div>
+       <div class="facts" style="--n:2">${fact("Tariff", hw.tariff.text, hw.tariff.tone)}${fact("Solar boost", hw.boost.text, hw.boost.tone)}<div style="grid-column:1 / -1">${fact("Next", hw.nextAction)}</div></div>
+       <div class="foot">${escapeHtml(polls)}</div>`
+    );
+    const doors = c.doors || {};
+    const garage = validState(hass, doors.garage_position);
+    const front = stateOf(hass, doors.front_open);
+    const garageText = garage && garage.state === "Closed" ? { v: "closed", t: "ok" } : garage && garage.state === "Not closed" ? { v: "not closed", t: "warn" } : { v: "unknown", t: "idle" };
+    const frontText = front && front.state === "off" ? { v: "closed", t: "ok" } : front && front.state === "on" ? { v: "open", t: "warn" } : { v: "unknown", t: "idle" };
+    this._set(
+      "doors",
+      JSON.stringify([garageText, frontText]),
+      `${iconHtml("mdi:shield-home")}<span class="k">Doors</span><span class="chip${toneClass(garageText.t)}">Garage ${garageText.v}</span><span class="chip${toneClass(frontText.t)}">Front ${frontText.v}</span>`
+    );
+    (c.bathrooms || []).forEach((b, i) => {
+      const m = bathroomModel(hass, b);
+      const shower = m.shower === null ? { text: "Shower unknown", tone: "idle" } : m.shower ? { text: "Shower detected", tone: "info" } : { text: "No shower", tone: "idle" };
+      this._set(
+        `bath${i}`,
+        JSON.stringify(m),
+        `<div class="h">${iconHtml("mdi:shower-head")}<div class="t">${escapeHtml(m.name)}</div><span class="chip${toneClass(shower.tone)}">${escapeHtml(shower.text)}</span></div>
+         <div class="nums"><div><div class="big">${escapeHtml(m.humidity ?? "—")}${m.humidity === null ? "" : '<span class="unit">%</span>'}</div><div class="lab">Humidity</div></div>
+         <div><div class="big">${escapeHtml(m.temperature ?? "—")}${m.temperature === null ? "" : '<span class="unit">°C</span>'}</div><div class="lab">Temperature</div></div></div>
+         <div class="line"><b>Fan</b>${escapeHtml(m.fanText)}</div>
+         <div class="line"><b>Towel rail</b>${escapeHtml(m.towelText)}${m.dryingLeft ? ` · ${escapeHtml(m.dryingLeft)}` : ""}</div>
+         <button class="fan ${m.button.kind}" data-fan="${i}"${m.button.kind === "inert" ? " disabled" : ""}>${iconHtml("mdi:fan")}${escapeHtml(m.button.label)}</button>`
+      );
+    });
   }
 }
 
 if (typeof customElements !== "undefined") {
   if (!customElements.get("thermowatt-panel-card")) customElements.define("thermowatt-panel-card", ThermowattPanelCard);
   if (!customElements.get("thermowatt-lights-card")) customElements.define("thermowatt-lights-card", ThermowattLightsCard);
+  if (!customElements.get("thermowatt-home-page")) customElements.define("thermowatt-home-page", ThermowattHomePage);
   window.customCards = window.customCards || [];
   window.customCards.push(
     { type: "thermowatt-panel-card", name: "Thermowatt panel", description: "Large-type status panel from a template (read only)" },
-    { type: "thermowatt-lights-card", name: "Thermowatt lights", description: "Any number of lights with brightness" }
+    { type: "thermowatt-lights-card", name: "Thermowatt lights", description: "Any number of lights with brightness" },
+    { type: "thermowatt-home-page", name: "Thermowatt Home page", description: "The whole everyday Home page, fitted to a tablet in landscape" }
   );
 }
 
@@ -1061,6 +1472,53 @@ export function coverage(buckets, from, to, now) {
   return result;
 }
 
+/**
+ * The completed hours of [from, to) that have NO statistics, as contiguous runs {start, end, hours} (hours before the
+ * first recorded one included). Nothing is filled in: this only reports where Home Assistant wrote no row.
+ */
+export function missingRuns(buckets, from, to, now) {
+  const present = new Set();
+  const hours = new Map();
+  for (const b of buckets) {
+    const h = Math.floor(b.start / HOUR_MS) * HOUR_MS;
+    const entry = hours.get(h) || { whole: false, fine: 0 };
+    if (b.end - b.start >= HOUR_MS) entry.whole = true;
+    else entry.fine += 1;
+    hours.set(h, entry);
+  }
+  for (const [h, entry] of hours) if (entry.whole || entry.fine >= 12) present.add(h);
+  const end = Math.min(to, Math.floor(now / HOUR_MS) * HOUR_MS);
+  const runs = [];
+  for (let h = Math.ceil(from / HOUR_MS) * HOUR_MS; h < end; h += HOUR_MS) {
+    if (present.has(h)) continue;
+    const last = runs[runs.length - 1];
+    if (last && last.end === h) {
+      last.end = h + HOUR_MS;
+      last.hours += 1;
+    } else {
+      runs.push({ start: h, end: h + HOUR_MS, hours: 1 });
+    }
+  }
+  return runs;
+}
+
+/** Plain-English listing of gap runs. `overnight` = every missing hour starts between 18:00 and 07:00 local time. */
+export function describeGaps(runs, timeZone = DEFAULT_TIMEZONE, limit = 10) {
+  const when = (ms) => new Date(ms).toLocaleString("en-AU", { timeZone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  let total = 0;
+  let overnight = runs.length > 0;
+  for (const run of runs) {
+    total += run.hours;
+    for (let h = run.start; h < run.end; h += HOUR_MS) {
+      const local = zonedParts(h, timeZone).hour;
+      if (local >= 7 && local < 18) overnight = false;
+    }
+  }
+  const shown = runs.slice(0, limit).map((r) => `${when(r.start)} to ${when(r.end)} (${r.hours} h)`);
+  if (runs.length > limit) shown.push(`and ${runs.length - limit} more`);
+  return { total, overnight, lines: shown };
+}
+
 /** Sum buckets in [from, to) into energy and tariff-valued cost, each allocated at its own start time. */
 export function accumulate(buckets, { from, to, tariff, rates, timeZone = DEFAULT_TIMEZONE }) {
   const result = { kwh: 0, offKwh: 0, peakKwh: 0, offCost: 0, peakCost: 0, cost: 0, count: 0, firstStart: null, assumedKwh: 0, unpricedKwh: 0 };
@@ -1173,7 +1631,12 @@ export function energyBalance({ sources, devices, from, to, now, battery, unusab
     const src = sources[key];
     const total = sumKwh(src.buckets, start, end);
     const cov = coverage(src.buckets, start, end, end);
-    if (!total || cov.leading || cov.missing) return withheld(`${labels[key]} statistics are incomplete (${cov.leading + cov.missing} h without data)`);
+    if (!total || cov.leading || cov.missing) {
+      return {
+        ...withheld(`${labels[key]} statistics are incomplete (${cov.leading + cov.missing} h without data)`),
+        gaps: { source: labels[key], runs: missingRuns(src.buckets, start, end, end) },
+      };
+    }
     values[key] = total.kwh;
   }
   base.requestedFrom = from;
@@ -1613,6 +2076,12 @@ function balanceHtml(s, view, compact) {
   html += `<p class="note">Battery-free balance from the inverter's generation, import and export statistics and the monitored devices, over the same complete hours${ended ? ` (to ${escapeHtml(ended)})` : ""}. Energy only: device costs elsewhere are tariff-valued estimates, not grid spending, and no solar is attributed to individual devices.</p>`;
   for (const [name, b] of [["Today", day], ["Month", month]]) {
     if (b.status === "withheld") html += `<p class="note"><b>${name}:</b> withheld, ${escapeHtml(b.reason)}.</p>`;
+    if (b.status === "withheld" && b.gaps && b.gaps.runs.length) {
+      const g = describeGaps(b.gaps.runs, s.tz);
+      html += `<details class="gaps"><summary>${name}: the ${g.total} hour${g.total === 1 ? "" : "s"} with no ${escapeHtml(b.gaps.source)} statistics</summary><ul>${g.lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>` +
+        `<p class="note">${g.overnight ? "Every missing hour is overnight, which is typical of an inverter that switches off when there is no sun: while the source is unavailable the recorder writes no row for that hour. " : "Some missing hours fall in daylight, so this is more than an overnight shutdown (a Home Assistant restart, a network drop or a replaced sensor). "}` +
+        "Nothing is estimated and no zero is invented. Home Assistant adds the energy a cumulative counter gained across a gap to the first hour after it, so a long period's total normally stays right, but which hours it belongs to is not known; the card therefore withholds the balance instead of assuming the gap was empty.</p></details>";
+    }
     else if (b.status === "pending") html += `<p class="note"><b>${name}:</b> collecting, ${escapeHtml(b.reason)}.</p>`;
     else {
       if (b.partial) html += `<p class="note"><b>${name}:</b> covers ${escapeHtml(fromText(b))} onwards: some statistics start later than the period.</p>`;
@@ -1636,8 +2105,15 @@ const BaseElement = typeof HTMLElement !== "undefined" ? HTMLElement : class {};
 // One load per configuration, shared by every card part on the page (summary, daily, monthly, history).
 const SHARED = new Map();
 
-const withTimeout = (promise) =>
-  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("statistics request timed out")), 60e3))]);
+const withTimeout = (promise) => {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("statistics request timed out")), 60e3);
+    }),
+  ]).finally(() => clearTimeout(timer));
+};
 
 /**
  * Load and value the statistics. Units come from the RECORDER'S statistics metadata (the unit the statistics
