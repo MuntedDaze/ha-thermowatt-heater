@@ -286,6 +286,8 @@ class Intent:
     requests_before: int | None
     reason: str = ""
     status: str = "published"
+    sent_at: str | None = None
+    confirmed_at: str | None = None
     resolved_at: str | None = None
     observed: str | None = None
     bridge_result: str | None = None
@@ -307,6 +309,16 @@ def _iso(value: datetime | None) -> str | None:
 
 def _dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
+
+
+def _valid_iso(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed.isoformat() if parsed.tzinfo is not None else None
 
 
 def hobart_midnight(day: date | datetime, zone: str = "Australia/Hobart") -> datetime:
@@ -337,6 +349,8 @@ class Controller:
     last_transition_at: str | None = None
     inspect_after: str | None = None  # a NEW poll after this time is required to act
     fault: str | None = None
+    last_acknowledged_fault: str | None = None
+    last_acknowledged_at: str | None = None
     alerts: dict = field(default_factory=dict)
     alert_cooldowns: dict = field(default_factory=dict)
     active_alerts: list = field(default_factory=list)
@@ -394,6 +408,21 @@ class Controller:
             controller.intent = None
             if controller.state == CONFIRMING:
                 controller.state = OBSERVING
+        if controller.fault in ("", "none"):
+            controller.fault = None
+        if controller.fault is not None and controller.state != CONFIRMING:
+            if controller.enabled:
+                controller.state, controller.reason, controller.heater = (
+                    FAULT_LOCKED,
+                    controller.fault,
+                    None,
+                )
+            else:
+                controller.state, controller.reason, controller.heater = (
+                    DISABLED,
+                    "automatic_control_disabled",
+                    None,
+                )
         return controller
 
     def restored(self, now: datetime) -> None:
@@ -407,6 +436,12 @@ class Controller:
         if self.state == CONFIRMING and self.intent:
             self.reason = "reconciling_command_after_restart"
             return
+        if self.fault is not None:
+            if self.enabled:
+                self.state, self.reason, self.heater = FAULT_LOCKED, self.fault, None
+            else:
+                self.state, self.reason, self.heater = DISABLED, "automatic_control_disabled", None
+            return
         if self.state in STEADY or self.state == OBSERVING:
             self.state = OBSERVING if self.enabled else DISABLED
             self.reason = "restart_reinspecting_heater"
@@ -417,34 +452,52 @@ class Controller:
         if not enabled:
             self.solar_session_active = False
             if self.state != CONFIRMING:
-                self.state, self.reason = DISABLED, "automatic_control_disabled"
+                self.state, self.reason, self.heater = DISABLED, "automatic_control_disabled", None
+            return
+        if self.state != CONFIRMING and self.fault is not None:
+            self.state, self.reason, self.heater = FAULT_LOCKED, self.fault, None
             return
         if self.state in {DISABLED, *STEADY}:
-            self.state, self.reason = OBSERVING, "enabled_inspecting_heater"
+            self.state, self.reason, self.heater = OBSERVING, "enabled_inspecting_heater", None
             self.inspect_after = _iso(now)
 
     def set_hold(self, now: datetime) -> None:
         self.hold = True
         self.solar_session_active = False
-        if self.state != CONFIRMING:
+        if self.state not in {CONFIRMING, FAULT_LOCKED} and self.fault is None:
             self.state, self.reason = OWNER_OVERRIDE, "owner_hold"
 
     def resume(self, now: datetime) -> bool:
         if self.state not in {OWNER_OVERRIDE, OBSERVING}:
             return False
         self.hold = False
+        if self.fault is not None:
+            if self.enabled:
+                self.state, self.reason, self.heater = FAULT_LOCKED, self.fault, None
+            else:
+                self.state, self.reason, self.heater = DISABLED, "automatic_control_disabled", None
+            return True
         self.state = OBSERVING if self.enabled else DISABLED
-        self.reason = "resumed_inspecting_heater"
+        self.reason = "resumed_inspecting_heater" if self.enabled else "automatic_control_disabled"
         self.inspect_after = _iso(now)
         return True
 
     def acknowledge(self, now: datetime) -> bool:
-        if self.state != FAULT_LOCKED:
+        if self.state == CONFIRMING:
             return False
+        if self.state != FAULT_LOCKED and self.fault is None:
+            return False
+        self.last_acknowledged_fault = self.fault or self.reason
+        self.last_acknowledged_at = _iso(now)
         self.fault = None
-        self.state = OBSERVING if self.enabled else DISABLED
-        self.reason = "fault_acknowledged_inspecting_heater"
+        self.heater = None
         self.inspect_after = _iso(now)
+        if not self.enabled:
+            self.state, self.reason = DISABLED, "automatic_control_disabled"
+        elif self.hold:
+            self.state, self.reason = OWNER_OVERRIDE, "owner_hold"
+        else:
+            self.state, self.reason = OBSERVING, "fault_acknowledged_inspecting_heater"
         return True
 
     # ------------------------------------------------------------------ owner modes
@@ -479,7 +532,7 @@ class Controller:
         if not self.enabled:
             self.refusal = "automatic_control_is_off"
             return False
-        if self.state == FAULT_LOCKED:
+        if self.state == FAULT_LOCKED or self.fault is not None:
             self.refusal = "acknowledge_the_controller_fault_first"
             return False
         if self.holiday_active(now):
@@ -656,6 +709,8 @@ class Controller:
             self.state, self.reason, self.heater = DISABLED, "automatic_control_disabled", None
             self._supervise_alerts(obs, want, cfg, effects)
             return effects
+        if self.fault is not None and self.state != FAULT_LOCKED:
+            self.state, self.reason, self.heater = FAULT_LOCKED, self.fault, None
         if self.hold and self.state != FAULT_LOCKED:
             self.state, self.reason = OWNER_OVERRIDE, "owner_hold"
         if self.state in {FAULT_LOCKED, OWNER_OVERRIDE}:
@@ -804,6 +859,9 @@ class Controller:
         )
         if bridge_fresh:
             intent["bridge_result"] = result
+            posted_at = _valid_iso(last.get("posted_at"))
+            if posted_at is not None:
+                intent["sent_at"] = posted_at
         if bridge_fresh and result in OWNER_CHANGE_RESULTS:
             # The bridge's fresh status was not the stated prior state: the
             # owner changed the heater since the last poll. Nothing was written.
@@ -864,6 +922,7 @@ class Controller:
                 and target != OFF
                 and intent.get("reason") in OPTIONAL_REASONS
             )
+            intent["confirmed_at"] = _iso(obs.poll_at)
             self._resolve("confirmed", obs)
             self._settle(target, f"{target}_confirmed")
             self.last_transition_at = _iso(obs.poll_at)
@@ -1270,6 +1329,23 @@ class Controller:
             recorded = _dt(self.alert_cooldowns.get(key))
             if key not in self.alerts and (recorded is None or now - recorded >= cooldown):
                 del self.alert_cooldowns[key]
+        if (
+            self.state == FAULT_LOCKED
+            and self.fault
+            and f"fault_{self.fault}" not in self.alerts
+            and not any(e.kind == "notify" and e.key == f"fault_{self.fault}" for e in effects)
+        ):
+            effects.append(
+                Effect(
+                    "notify",
+                    key=f"fault_{self.fault}",
+                    title="Hot water: controller fault — automatic control locked",
+                    message=(
+                        f"Unacknowledged fault ({self.fault}) still locks automatic control. "
+                        f"{RECOVERY.get(self.fault, '')}"
+                    ).strip(),
+                )
+            )
         for effect in effects:
             if effect.kind == "notify" and effect.key.startswith(EVENT_PREFIXES):
                 self.alerts[effect.key] = _iso(now)
@@ -1302,6 +1378,8 @@ class Controller:
             "hold": self.hold,
             "heater": self.heater,
             "fault": self.fault,
+            "last_acknowledged_fault": self.last_acknowledged_fault,
+            "last_acknowledged_at": self.last_acknowledged_at,
             "recovery_guidance": self.guidance(),
             "pending_intent": self.intent,
             "last_command": last,

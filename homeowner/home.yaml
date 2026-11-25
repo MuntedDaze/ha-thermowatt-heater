@@ -1679,34 +1679,43 @@ views:
       template: "{% set bad = ['unknown', 'unavailable', 'none', ''] %}\n{% macro nice(v) -%}{{ v\
         \ | replace('_', ' ') | capitalize }}{%- endmacro %}\n{% macro hhmm(v) -%}{% set d = as_datetime(v,\
         \ none) %}{{ as_local(d).strftime('%H:%M') if d is not none else '—' }}{%- endmacro %}\n\
-        {% set cloud = {'ok': 'Connected', 'disabled': 'Disabled', 'auth_locked': 'Sign-in locked:\
-        \ check the Thermann app', 'quota_limited': 'Request limit reached', 'backoff': 'Backing\
-        \ off after an error', 'unavailable': 'Unavailable'} %}\n{% set sup = {'observing': 'Observing:\
-        \ checking the heater before acting', 'parked': 'Heater confirmed off', 'baseline_45': 'Holding\
-        \ the 45 °C baseline', 'normal_storage_62': 'Holding 62 °C storage', 'storage_70': 'Holding\
-        \ the 70 °C boost', 'change_requested': 'A change is needed but is waiting for conditions',\
-        \ 'confirming': 'Command sent: waiting for confirmation', 'owner_override': 'On hold: you\
-        \ pressed Hold', 'disabled': 'Automatic control is off', 'fault_locked': 'Fault: needs acknowledgement'}\
-        \ %}\n{% set tariff = {'off_peak': 'Off-peak', 'peak': 'Peak', 'shoulder': 'Shoulder', 'unknown':\
-        \ 'Unknown'} %}\n{% set fault = states('sensor.thermann_shadow_controller_fault') %}\n{%\
-        \ set c = states('sensor.thermann_shadow_cloud_health') %}\n{% set s = states('sensor.thermann_shadow_automatic_control_state')\
-        \ %}\n{% set t = states('sensor.tapo_smart_controller_electricity_tariff_status') %}\n{%\
-        \ set w = states('sensor.tapo_smart_controller_active_health_warnings') %}\n{% set good_sup\
-        \ = ['observing', 'parked', 'baseline_45', 'normal_storage_62', 'storage_70'] %}\n{% set\
-        \ wait_sup = ['change_requested', 'confirming', 'owner_override', 'disabled'] %}\n{{ {\n\
-        \  'title': 'System status',\n  'icon': 'mdi:stethoscope',\n  'groups': [\n    {'title':\
-        \ 'Thermowatt', 'rows': [\n      {'label': 'Cloud connection', 'value': cloud.get(c, nice(c))\
-        \ if c not in bad else 'Unknown',\n       'tone': 'ok' if c == 'ok' else ('warn' if c in\
-        \ ['disabled', 'quota_limited', 'backoff'] else ('bad' if c in ['auth_locked', 'unavailable']\
-        \ else 'idle'))},\n      {'label': 'Heating control problem', 'value': 'No problems detected'\
-        \ if fault in ['none', 'None', ''] else ('Unknown' if fault in ['unknown', 'unavailable']\
-        \ else nice(fault)),\n       'tone': 'ok' if fault in ['none', 'None', ''] else ('idle' if\
-        \ fault in ['unknown', 'unavailable'] else 'bad')},\n      {'label': 'Supervision', 'value':\
-        \ sup.get(s, nice(s)) if s not in bad else 'Unknown',\n       'tone': 'ok' if s in good_sup\
-        \ else ('warn' if s in wait_sup else ('bad' if s == 'fault_locked' else 'idle'))}\n    ]},\n\
-        \    {'title': 'Tapo Smart Controller', 'rows': [\n      {'label': 'Health', 'value': ('Problem\
-        \ reported' if is_state('binary_sensor.tapo_smart_controller_controller_health_problem',\
-        \ 'on') else ('No problems detected' if is_state('binary_sensor.tapo_smart_controller_controller_health_problem',\
+        {% macro dayhm(v) -%}{% set d = as_datetime(v, none) %}{{ as_local(d).strftime('%d %b %H:%M')\
+        \ if d is not none else '' }}{%- endmacro %}\n{% set cloud = {'ok': 'Connected', 'disabled':\
+        \ 'Disabled', 'auth_locked': 'Sign-in locked: check the Thermann app', 'quota_limited': 'Request\
+        \ limit reached', 'backoff': 'Backing off after an error', 'unavailable': 'Unavailable'}\
+        \ %}\n{% set sup = {'observing': 'Observing: checking the heater before acting', 'parked':\
+        \ 'Heater confirmed off', 'baseline_45': 'Holding the 45 °C baseline', 'normal_storage_62':\
+        \ 'Holding 62 °C storage', 'storage_70': 'Holding the 70 °C boost', 'change_requested': 'A\
+        \ change is needed but is waiting for conditions', 'confirming': 'Command sent: waiting for\
+        \ confirmation', 'owner_override': 'On hold: you pressed Hold', 'disabled': 'Automatic control\
+        \ is off', 'fault_locked': 'Fault: needs acknowledgement'} %}\n{% set tariff = {'off_peak':\
+        \ 'Off-peak', 'peak': 'Peak', 'shoulder': 'Shoulder', 'unknown': 'Unknown'} %}\n{% set fault\
+        \ = states('sensor.thermann_shadow_controller_fault') %}\n{% set ack_fault = state_attr('sensor.thermann_shadow_controller_fault',\
+        \ 'last_acknowledged_fault') %}\n{% set ack_at = state_attr('sensor.thermann_shadow_controller_fault',\
+        \ 'last_acknowledged_at') %}\n{% set has_fault = fault not in ['none', 'None', '', 'unknown',\
+        \ 'unavailable'] %}\n{% set c = states('sensor.thermann_shadow_cloud_health') %}\n{% set\
+        \ s = states('sensor.thermann_shadow_automatic_control_state') %}\n{% set t = states('sensor.tapo_smart_controller_electricity_tariff_status')\
+        \ %}\n{% set w = states('sensor.tapo_smart_controller_active_health_warnings') %}\n{% set\
+        \ good_sup = ['observing', 'parked', 'baseline_45', 'normal_storage_62', 'storage_70'] %}\n\
+        {% set wait_sup = ['change_requested', 'confirming', 'owner_override', 'disabled'] %}\n{%\
+        \ set tw_rows = [\n  {'label': 'Cloud connection', 'value': cloud.get(c, nice(c)) if c not\
+        \ in bad else 'Unknown',\n   'tone': 'ok' if c == 'ok' else ('warn' if c in ['disabled',\
+        \ 'quota_limited', 'backoff'] else ('bad' if c in ['auth_locked', 'unavailable'] else 'idle'))},\n\
+        \  {'label': 'Heating control problem', 'value': 'No problems detected' if fault in ['none',\
+        \ 'None', ''] else ('Unknown' if fault in ['unknown', 'unavailable'] else nice(fault)),\n\
+        \   'tone': 'ok' if fault in ['none', 'None', ''] else ('idle' if fault in ['unknown', 'unavailable']\
+        \ else 'bad')},\n  {'label': 'Supervision',\n   'value': 'Automatic control is off (fault\
+        \ needs acknowledgement)' if (s == 'disabled' and has_fault) else (sup.get(s, nice(s)) if\
+        \ s not in bad else 'Unknown'),\n   'tone': 'bad' if (s == 'fault_locked' or (s == 'disabled'\
+        \ and has_fault)) else ('ok' if s in good_sup else ('warn' if s in wait_sup else 'idle'))}\n\
+        ] %}\n{% if not has_fault and ack_fault and ack_fault not in ['none', 'None', '', 'unknown',\
+        \ 'unavailable'] %}\n  {% set ack_time = dayhm(ack_at) %}\n  {% set tw_rows = tw_rows + [{'label':\
+        \ 'Last acknowledged fault', 'value': nice(ack_fault) ~ ((' (' ~ ack_time ~ ')') if ack_time\
+        \ else ''), 'tone': 'idle'}] %}\n{% endif %}\n{{ {\n  'title': 'System status',\n  'icon':\
+        \ 'mdi:stethoscope',\n  'groups': [\n    {'title': 'Thermowatt', 'rows': tw_rows},\n    {'title':\
+        \ 'Tapo Smart Controller', 'rows': [\n      {'label': 'Health', 'value': ('Problem reported'\
+        \ if is_state('binary_sensor.tapo_smart_controller_controller_health_problem', 'on') else\
+        \ ('No problems detected' if is_state('binary_sensor.tapo_smart_controller_controller_health_problem',\
         \ 'off') else 'Unknown')) ~ ((' (' ~ w ~ ' active warnings)') if w not in bad else ''),\n\
         \       'tone': 'bad' if is_state('binary_sensor.tapo_smart_controller_controller_health_problem',\
         \ 'on') else ('ok' if is_state('binary_sensor.tapo_smart_controller_controller_health_problem',\
@@ -1718,6 +1727,47 @@ views:
         \ 'off') else 'idle')},\n      {'label': 'Tariff read by the controller', 'value': tariff.get(t,\
         \ nice(t)) if t not in bad else 'Unknown'}\n    ]}\n  ]\n} | tojson }}\n"
       model: 12
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: sensor.thermann_shadow_controller_fault
+        state_not: none
+      - condition: state
+        entity: sensor.thermann_shadow_controller_fault
+        state_not: unknown
+      - condition: state
+        entity: sensor.thermann_shadow_controller_fault
+        state_not: unavailable
+      card:
+        type: tile
+        entity: sensor.thermann_shadow_controller_fault
+        name: Acknowledge controller fault
+        icon: mdi:alert-circle-check-outline
+        color: red
+        hide_state: true
+        tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.thermann_shadow_acknowledge_controller_fault
+          confirmation:
+            text: Acknowledge controller fault? Check the official Thermann app first. The controller
+              will wait for a fresh heater status read before acting and never retries an uncertain
+              command.
+        icon_tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.thermann_shadow_acknowledge_controller_fault
+          confirmation:
+            text: Acknowledge controller fault? Check the official Thermann app first. The controller
+              will wait for a fresh heater status read before acting and never retries an uncertain
+              command.
+        hold_action:
+          action: none
+        vertical: false
+      grid_options:
+        columns: 12
   - type: grid
     cards:
     - type: custom:thermowatt-panel-card

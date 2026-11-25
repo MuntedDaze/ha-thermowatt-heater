@@ -359,6 +359,10 @@ def build(runtime, now, ha_version="unknown"):
             if decision
             else "Waiting for an observation.",
             "fault": code(ctl.fault or "none"),
+            "last_acknowledged_fault": code(ctl.last_acknowledged_fault)
+            if ctl.last_acknowledged_fault
+            else None,
+            "last_acknowledged_at": stamp(ctl.last_acknowledged_at),
             "alerts": [code(v) for v in ctl.active_alerts],
             "gates": [code(v) for v in ctl.gate_failures],
             "override_until": stamp(ctl.guest_until),
