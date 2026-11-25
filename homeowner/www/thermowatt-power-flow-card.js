@@ -936,7 +936,7 @@ export function bathroomModel(hass, b) {
 
 const HOME_CSS = `
   :host{display:block;--u:11px}
-  .grid{height:100%;display:grid;gap:calc(var(--u)*.82);grid-template-columns:minmax(0,1.08fr) minmax(0,.88fr) minmax(0,1.08fr);grid-template-rows:minmax(0,1.22fr);grid-auto-rows:minmax(0,1fr)}
+  .grid{height:100%;display:grid;gap:calc(var(--u)*.82);grid-template-columns:minmax(0,1.06fr) minmax(0,.92fr) minmax(0,1.06fr);grid-template-rows:minmax(0,1.22fr);grid-auto-rows:minmax(0,1fr)}
   .cell{min-width:0;min-height:0;display:flex;flex-direction:column;gap:calc(var(--u)*.7);overflow:hidden}
   .cell>*{min-height:0}
   .cell>thermowatt-power-flow-card,.cell>thermowatt-lights-card{flex:1}
@@ -1032,11 +1032,12 @@ class ThermowattHomePage extends BaseUi {
       this.style.setProperty("--u", "13px");
       return;
     }
-    const top = this.getBoundingClientRect().top;
-    const available = Math.max(280, Math.floor(window.innerHeight - top - 8));
+    const rect = this.getBoundingClientRect();
+    const available = Math.max(280, Math.floor(window.innerHeight - rect.top - 8));
     this.style.height = `${available}px`;
-    // type scales with the measured height inside a readable range
-    const u = Math.min(14, Math.max(9.6, available / 52));
+    // type scales with both measured height and width inside a readable range so 1280x800 never truncates headers
+    const byWidth = rect.width > 0 ? rect.width / 78 : 14;
+    const u = Math.min(14, Math.max(9.6, Math.min(available / 52, byWidth)));
     this.style.setProperty("--u", `${u.toFixed(2)}px`);
   }
 

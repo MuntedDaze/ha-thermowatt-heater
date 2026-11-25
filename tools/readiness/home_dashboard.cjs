@@ -148,6 +148,9 @@ async function main() {
           ...(flowCard ? flowCard.shadowRoot.querySelectorAll(".kpi .lab, .kpi .val, .title, .chip") : []),
           ...(lightsCard ? lightsCard.shadowRoot.querySelectorAll(".lt .n, .lt .s, .small, .title, .chip") : []),
         ].map((el) => parseFloat(getComputedStyle(el).fontSize));
+        const truncatedTitles = [...homeCard.shadowRoot.querySelectorAll(".t")]
+          .filter((el) => el.scrollWidth > el.clientWidth + 1)
+          .map((el) => el.textContent.trim());
         const wxCard = all(homeCard.shadowRoot, "hui-weather-forecast-card")[0];
         let weatherForecast = null;
         if (wxCard && wxCard.shadowRoot) {
@@ -179,6 +182,7 @@ async function main() {
           overflowX: document.documentElement.scrollWidth - window.innerWidth,
           minSvgTextHeight: text.length ? Math.min(...text) : null,
           smallestFontPx: smallest.length ? Number(Math.min(...smallest).toFixed(2)) : null,
+          truncatedTitles,
           weatherForecast,
         };
       }
@@ -273,6 +277,7 @@ async function main() {
         expect(facts.scrollOverflow, "no scroll container around the Home card scrolls").toBeLessThanOrEqual(2);
         expect(facts.clipped, "no Home card has clipped content").toEqual([]);
         expect(facts.smallestFontPx, "meaningful tablet text stays >= 13 px").toBeGreaterThanOrEqual(13);
+        expect(facts.truncatedTitles, "no Home card header title is truncated").toEqual([]);
         if (facts.weatherForecast) {
           expect(facts.weatherForecast.days, "all 5 forecast days render").toBeGreaterThanOrEqual(5);
           expect(facts.weatherForecast.clippedDays, "no weather forecast day is clipped at the right edge").toBe(0);
