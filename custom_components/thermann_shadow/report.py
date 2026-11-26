@@ -325,7 +325,7 @@ def build(runtime, now, ha_version="unknown"):
     report = {
         "schema": 1,
         "versions": {
-            "controller": "0.18.2",
+            "controller": "0.18.3",
             "bridge": attrs.get("bridge_version")
             if attrs.get("bridge_version") in {"1.3.17", "1.4.0", "1.4.1", "1.5.0", "1.5.1"}
             else "unreported",
@@ -359,6 +359,10 @@ def build(runtime, now, ha_version="unknown"):
             if decision
             else "Waiting for an observation.",
             "fault": code(ctl.fault or "none"),
+            "last_acknowledged_fault": code(ctl.last_acknowledged_fault)
+            if ctl.last_acknowledged_fault
+            else None,
+            "last_acknowledged_at": stamp(ctl.last_acknowledged_at),
             "alerts": [code(v) for v in ctl.active_alerts],
             "gates": [code(v) for v in ctl.gate_failures],
             "override_until": stamp(ctl.guest_until),

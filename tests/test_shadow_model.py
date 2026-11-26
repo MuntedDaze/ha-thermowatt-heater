@@ -125,7 +125,7 @@ def test_only_the_executor_can_actuate_and_no_network_imports():
     assert "refresh_topic(self.cfg.command_topic)" in executor
     assert '"notify",' in executor and executor.count(".async_call(") == 1
     manifest = json.loads((PACKAGE / "manifest.json").read_text())
-    assert manifest["requirements"] == [] and manifest["version"] == "0.18.2"
+    assert manifest["requirements"] == [] and manifest["version"] == "0.18.3"
     assert manifest["integration_type"] == "hub"
     assert "mqtt" not in manifest.get("dependencies", [])  # loads without MQTT
 

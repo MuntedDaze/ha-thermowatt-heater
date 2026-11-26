@@ -2353,6 +2353,9 @@ views:
 
         {% macro nice(v) -%}{{ v | replace(''_'', '' '') | capitalize }}{%- endmacro %}
 
+        {% macro dayhm(v) -%}{% set d = as_datetime(v, none) %}{{ as_local(d).strftime(''%d %b %H:%M'')
+        if d is not none else '''' }}{%- endmacro %}
+
         {% set cloud = {''ok'': ''Connected'', ''disabled'': ''Disabled'', ''auth_locked'': ''Sign-in
         locked: check the Thermann app'', ''quota_limited'': ''Request limit reached'', ''backoff'':
         ''Backing off after an error'', ''unavailable'': ''Unavailable''} %}
@@ -2368,6 +2371,15 @@ views:
         ''unknown'': ''Unknown''} %}
 
         {% set fault = states(''sensor.thermann_shadow_controller_fault'') %}
+
+        {% set ack_fault = state_attr(''sensor.thermann_shadow_controller_fault'', ''last_acknowledged_fault'')
+        %}
+
+        {% set ack_at = state_attr(''sensor.thermann_shadow_controller_fault'', ''last_acknowledged_at'')
+        %}
+
+        {% set has_fault = fault not in [''none'', ''None'', '''', ''unknown'', ''unavailable'']
+        %}
 
         {% set c = states(''sensor.thermann_shadow_cloud_health'') %}
 
@@ -2385,8 +2397,17 @@ views:
         elif fault in [''unknown'', ''unavailable''] %}Unknown{% else %}{{ nice(fault) }}{% endif
         %}
 
-        - Supervision: {{ sup.get(s, nice(s)) if s not in bad else ''Unknown'' }}
+        - Supervision: {% if s == ''disabled'' and has_fault %}Automatic control is off (fault needs
+        acknowledgement){% else %}{{ sup.get(s, nice(s)) if s not in bad else ''Unknown'' }}{% endif
+        %}
 
+        {% if not has_fault and ack_fault and ack_fault not in [''none'', ''None'', '''', ''unknown'',
+        ''unavailable''] -%}
+
+        - Last acknowledged fault: {{ nice(ack_fault) }}{% if dayhm(ack_at) %} ({{ dayhm(ack_at)
+        }}){% endif %}
+
+        {% endif %}
 
         **Tapo Smart Controller**
 
@@ -2403,6 +2424,47 @@ views:
         }}
 
         '
+      grid_options:
+        columns: 12
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: sensor.thermann_shadow_controller_fault
+        state_not: none
+      - condition: state
+        entity: sensor.thermann_shadow_controller_fault
+        state_not: unknown
+      - condition: state
+        entity: sensor.thermann_shadow_controller_fault
+        state_not: unavailable
+      card:
+        type: tile
+        entity: sensor.thermann_shadow_controller_fault
+        name: Acknowledge controller fault
+        icon: mdi:alert-circle-check-outline
+        color: red
+        hide_state: true
+        tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.thermann_shadow_acknowledge_controller_fault
+          confirmation:
+            text: Acknowledge controller fault? Check the official Thermann app first. The controller
+              will wait for a fresh heater status read before acting and never retries an uncertain
+              command.
+        icon_tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.thermann_shadow_acknowledge_controller_fault
+          confirmation:
+            text: Acknowledge controller fault? Check the official Thermann app first. The controller
+              will wait for a fresh heater status read before acting and never retries an uncertain
+              command.
+        hold_action:
+          action: none
+        vertical: false
       grid_options:
         columns: 12
     column_span: 2

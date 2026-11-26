@@ -1,5 +1,41 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.18.3 — fault lifecycle, command audit timestamps, and System dashboard fault display (app 1.5.1 unchanged)
+
+Addresses the post-commissioning findings observed on 26 November 2026 (09:41 AEDT). Thermann Hot Water bridge remains at 1.5.1 with no bridge code changes.
+
+- **Fault-lifecycle bypass prevented.** Disabling **Automatic heater control**
+  after `fault_locked` now preserves `fault`, and re-enabling enters
+  `fault_locked` (never `observing` or `steady`) until the owner explicitly
+  acknowledges the fault. Hold/Resume and 12hr Override likewise cannot
+  overwrite or bypass `fault_locked`.
+- **Safe healing for persisted 0.18.2 orphaned faults.** Loading or restoring
+  persisted storage where a fault was retained alongside a non-`fault_locked`
+  state (such as `state="parked"` with `fault="command_not_applied"`) locks into
+  `fault_locked` when enabled (or stays `disabled` with `fault` preserved when
+  disabled) so the controller cannot operate unacknowledged and `acknowledge()`
+  is never deadlocked.
+- **Safe owner acknowledgement with fresh reinspection and audit history.**
+  **Acknowledge controller fault** works safely from both `fault_locked` and
+  `disabled` (with a persisted fault), records `last_acknowledged_fault` and
+  `last_acknowledged_at` (exposed on `sensor.thermann_shadow_controller_fault`
+  attributes and in the diagnostic report), clears the active fault and assumed
+  heater state, and requires a fresh post-acknowledge status poll before acting.
+  Uncertain commands are never retried automatically.
+- **Command audit timestamps (`sent_at` and `confirmed_at`).** Confirmed
+  command records populate `sent_at` strictly from bridge-proven
+  `last_command.posted_at` and `confirmed_at` strictly from the confirming
+  status poll (`obs.poll_at`). Refused, dropped, deferred, or unsent commands
+  keep `sent_at` and `confirmed_at` as `null`.
+- **System dashboard fault distinction.** The Home Control System tab separates
+  active unacknowledged faults (red `Heating control problem`, red `Supervision`
+  even while disabled, plus a conditional confirmed **Acknowledge controller
+  fault** tile) from acknowledged historical faults (green `No problems
+  detected` and neutral `Last acknowledged fault` row).
+- **Policies and guards unchanged.** Heating targets (45/62/70 °C), peak rules,
+  10-minute / 3.3 kW solar qualification, command guards, and `AuthGuard` are
+  unchanged.
+
 ## 0.18.2 — cloud outage recovery safeguards and tablet Home dashboard (with app 1.5.1)
 
 Addresses the 25 November 2026 live boundary-race incident (`docs/audits/2026-11-25/CLOUD_OUTAGE_RECOVERY_INVESTIGATION.md`) and completes the Samsung Galaxy Tab S7 FE landscape Home dashboard refinement.

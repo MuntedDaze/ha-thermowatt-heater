@@ -880,10 +880,14 @@ def door_detail(ent):
 SYSTEM_TEMPLATE = """\
 {% set bad = @@BAD@@ %}
 {% macro nice(v) -%}{{ v | replace('_', ' ') | capitalize }}{%- endmacro %}
+{% macro dayhm(v) -%}{% set d = as_datetime(v, none) %}{{ as_local(d).strftime('%d %b %H:%M') if d is not none else '' }}{%- endmacro %}
 {% set cloud = {'ok': 'Connected', 'disabled': 'Disabled', 'auth_locked': 'Sign-in locked: check the Thermann app', 'quota_limited': 'Request limit reached', 'backoff': 'Backing off after an error', 'unavailable': 'Unavailable'} %}
 {% set sup = {'observing': 'Observing: checking the heater before acting', 'parked': 'Heater confirmed off', 'baseline_45': 'Holding the 45 °C baseline', 'normal_storage_62': 'Holding 62 °C storage', 'storage_70': 'Holding the 70 °C boost', 'change_requested': 'A change is needed but is waiting for conditions', 'confirming': 'Command sent: waiting for confirmation', 'owner_override': 'On hold: you pressed Hold', 'disabled': 'Automatic control is off', 'fault_locked': 'Fault: needs acknowledgement'} %}
 {% set tariff = {'off_peak': 'Off-peak', 'peak': 'Peak', 'shoulder': 'Shoulder', 'unknown': 'Unknown'} %}
 {% set fault = states('@@FAULT@@') %}
+{% set ack_fault = state_attr('@@FAULT@@', 'last_acknowledged_fault') %}
+{% set ack_at = state_attr('@@FAULT@@', 'last_acknowledged_at') %}
+{% set has_fault = fault not in ['none', 'None', '', 'unknown', 'unavailable'] %}
 {% set c = states('@@CLOUD@@') %}
 {% set s = states('@@SUP@@') %}
 {% set t = states('@@TARIFF_T@@') %}
@@ -891,13 +895,38 @@ SYSTEM_TEMPLATE = """\
 **Thermowatt**
 - Cloud connection: {{ cloud.get(c, nice(c)) if c not in bad else 'Unknown' }}
 - Heating control problem: {% if fault in ['none', 'None', ''] %}No problems detected{% elif fault in ['unknown', 'unavailable'] %}Unknown{% else %}{{ nice(fault) }}{% endif %}
-- Supervision: {{ sup.get(s, nice(s)) if s not in bad else 'Unknown' }}
-
+- Supervision: {% if s == 'disabled' and has_fault %}Automatic control is off (fault needs acknowledgement){% else %}{{ sup.get(s, nice(s)) if s not in bad else 'Unknown' }}{% endif %}
+{% if not has_fault and ack_fault and ack_fault not in ['none', 'None', '', 'unknown', 'unavailable'] -%}
+- Last acknowledged fault: {{ nice(ack_fault) }}{% if dayhm(ack_at) %} ({{ dayhm(ack_at) }}){% endif %}
+{% endif %}
 **Tapo Smart Controller**
 - Health: {% if is_state('@@HEALTH@@', 'on') %}Problem reported{% elif is_state('@@HEALTH@@', 'off') %}No problems detected{% else %}Unknown{% endif %}{% if w not in bad %} ({{ w }} active warnings){% endif %}
 - Mode: {% if is_state('@@SIM@@', 'on') %}Simulation: no devices are switched{% elif is_state('@@SIM@@', 'off') %}Live control{% else %}Unknown{% endif %}
 - Tariff read by the controller: {{ tariff.get(t, nice(t)) if t not in bad else 'Unknown' }}
 """
+
+
+def fault_acknowledge_tile(ent, columns=12):
+    """Visible only when an active unacknowledged controller fault exists."""
+    fault = ent.thermowatt("sensor", "Controller fault")
+    ack = ent.thermowatt("button", "Acknowledge controller fault")
+    return conditional(
+        when(fault, not_states=("none", "unknown", "unavailable")),
+        tile(
+            fault,
+            "Acknowledge controller fault",
+            "mdi:alert-circle-check-outline",
+            "red",
+            tap=press(
+                ack,
+                "Acknowledge controller fault? Check the official Thermann app first. "
+                "The controller will wait for a fresh heater status read before acting "
+                "and never retries an uncertain command.",
+            ),
+            hide_state=True,
+        ),
+        columns,
+    )
 
 
 def system_summary(ent, columns=12):
@@ -1078,28 +1107,38 @@ def diagnostics_panel(ent, columns=12):
 SYSTEM_PANEL_TEMPLATE = (
     _PANEL_MACROS
     + """\
+{% macro dayhm(v) -%}{% set d = as_datetime(v, none) %}{{ as_local(d).strftime('%d %b %H:%M') if d is not none else '' }}{%- endmacro %}
 {% set cloud = {'ok': 'Connected', 'disabled': 'Disabled', 'auth_locked': 'Sign-in locked: check the Thermann app', 'quota_limited': 'Request limit reached', 'backoff': 'Backing off after an error', 'unavailable': 'Unavailable'} %}
 {% set sup = {'observing': 'Observing: checking the heater before acting', 'parked': 'Heater confirmed off', 'baseline_45': 'Holding the 45 °C baseline', 'normal_storage_62': 'Holding 62 °C storage', 'storage_70': 'Holding the 70 °C boost', 'change_requested': 'A change is needed but is waiting for conditions', 'confirming': 'Command sent: waiting for confirmation', 'owner_override': 'On hold: you pressed Hold', 'disabled': 'Automatic control is off', 'fault_locked': 'Fault: needs acknowledgement'} %}
 {% set tariff = {'off_peak': 'Off-peak', 'peak': 'Peak', 'shoulder': 'Shoulder', 'unknown': 'Unknown'} %}
 {% set fault = states('@@FAULT@@') %}
+{% set ack_fault = state_attr('@@FAULT@@', 'last_acknowledged_fault') %}
+{% set ack_at = state_attr('@@FAULT@@', 'last_acknowledged_at') %}
+{% set has_fault = fault not in ['none', 'None', '', 'unknown', 'unavailable'] %}
 {% set c = states('@@CLOUD@@') %}
 {% set s = states('@@SUP@@') %}
 {% set t = states('@@TARIFF_T@@') %}
 {% set w = states('@@WARN@@') %}
 {% set good_sup = ['observing', 'parked', 'baseline_45', 'normal_storage_62', 'storage_70'] %}
 {% set wait_sup = ['change_requested', 'confirming', 'owner_override', 'disabled'] %}
+{% set tw_rows = [
+  {'label': 'Cloud connection', 'value': cloud.get(c, nice(c)) if c not in bad else 'Unknown',
+   'tone': 'ok' if c == 'ok' else ('warn' if c in ['disabled', 'quota_limited', 'backoff'] else ('bad' if c in ['auth_locked', 'unavailable'] else 'idle'))},
+  {'label': 'Heating control problem', 'value': 'No problems detected' if fault in ['none', 'None', ''] else ('Unknown' if fault in ['unknown', 'unavailable'] else nice(fault)),
+   'tone': 'ok' if fault in ['none', 'None', ''] else ('idle' if fault in ['unknown', 'unavailable'] else 'bad')},
+  {'label': 'Supervision',
+   'value': 'Automatic control is off (fault needs acknowledgement)' if (s == 'disabled' and has_fault) else (sup.get(s, nice(s)) if s not in bad else 'Unknown'),
+   'tone': 'bad' if (s == 'fault_locked' or (s == 'disabled' and has_fault)) else ('ok' if s in good_sup else ('warn' if s in wait_sup else 'idle'))}
+] %}
+{% if not has_fault and ack_fault and ack_fault not in ['none', 'None', '', 'unknown', 'unavailable'] %}
+  {% set ack_time = dayhm(ack_at) %}
+  {% set tw_rows = tw_rows + [{'label': 'Last acknowledged fault', 'value': nice(ack_fault) ~ ((' (' ~ ack_time ~ ')') if ack_time else ''), 'tone': 'idle'}] %}
+{% endif %}
 {{ {
   'title': 'System status',
   'icon': 'mdi:stethoscope',
   'groups': [
-    {'title': 'Thermowatt', 'rows': [
-      {'label': 'Cloud connection', 'value': cloud.get(c, nice(c)) if c not in bad else 'Unknown',
-       'tone': 'ok' if c == 'ok' else ('warn' if c in ['disabled', 'quota_limited', 'backoff'] else ('bad' if c in ['auth_locked', 'unavailable'] else 'idle'))},
-      {'label': 'Heating control problem', 'value': 'No problems detected' if fault in ['none', 'None', ''] else ('Unknown' if fault in ['unknown', 'unavailable'] else nice(fault)),
-       'tone': 'ok' if fault in ['none', 'None', ''] else ('idle' if fault in ['unknown', 'unavailable'] else 'bad')},
-      {'label': 'Supervision', 'value': sup.get(s, nice(s)) if s not in bad else 'Unknown',
-       'tone': 'ok' if s in good_sup else ('warn' if s in wait_sup else ('bad' if s == 'fault_locked' else 'idle'))}
-    ]},
+    {'title': 'Thermowatt', 'rows': tw_rows},
     {'title': 'Tapo Smart Controller', 'rows': [
       {'label': 'Health', 'value': ('Problem reported' if is_state('@@HEALTH@@', 'on') else ('No problems detected' if is_state('@@HEALTH@@', 'off') else 'Unknown')) ~ ((' (' ~ w ~ ' active warnings)') if w not in bad else ''),
        'tone': 'bad' if is_state('@@HEALTH@@', 'on') else ('ok' if is_state('@@HEALTH@@', 'off') else 'idle')},
@@ -1833,6 +1872,7 @@ def build_views_native(ent):
             section(
                 heading("Status", "mdi:stethoscope", "subtitle"),
                 system_summary(ent),
+                fault_acknowledge_tile(ent),
                 span_columns=2,
             ),
             section(
@@ -2003,7 +2043,7 @@ def build_views_designed(ent):
         "System",
         "system",
         None,
-        [section(system_panel(ent)), section(settings_panel(ent))],
+        [section(system_panel(ent), fault_acknowledge_tile(ent)), section(settings_panel(ent))],
         max_columns=2,
     )
     device_energy = device_energy_view(ent)

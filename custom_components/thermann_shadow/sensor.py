@@ -214,11 +214,17 @@ class ControllerSensor(ShadowSensor):
 
     @property
     def extra_state_attributes(self):
-        return (
-            self.runtime.executor.details()
-            if self.key == "controller_state"
-            else super().extra_state_attributes
-        )
+        if self.key == "controller_state":
+            return self.runtime.executor.details()
+        if self.key == "fault":
+            base = super().extra_state_attributes or {}
+            ctl = self.runtime.executor.controller
+            return {
+                **base,
+                "last_acknowledged_fault": ctl.last_acknowledged_fault,
+                "last_acknowledged_at": ctl.last_acknowledged_at,
+            }
+        return super().extra_state_attributes
 
 
 class ThermalStateSensor(ShadowSensor):

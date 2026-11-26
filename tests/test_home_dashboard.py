@@ -29,6 +29,7 @@ START = "button.thermann_shadow_start_guest_mode_12_h"
 CANCEL = "button.thermann_shadow_cancel_guest_mode"
 HOLD = "button.thermann_shadow_hold_heater_owner_override"
 RESUME = "button.thermann_shadow_resume_automatic_control"
+ACK = "button.thermann_shadow_acknowledge_controller_fault"
 CONTROL = "sensor.thermann_shadow_automatic_control_state"
 
 
@@ -307,7 +308,7 @@ def test_no_garage_or_lock_controls_exist(home, native, generic):
 
 def test_only_whitelisted_actions_exist(home):
     data, _ = home
-    allowed_buttons = {START, CANCEL, HOLD, RESUME}
+    allowed_buttons = {START, CANCEL, HOLD, RESUME, ACK}
     for action in actions(data):
         kind = action["action"]
         if kind in ("more-info", "none", "navigate"):
@@ -1531,6 +1532,52 @@ def test_system_panel_uses_plain_english_and_tones_without_hiding_faults(home):
         unknown["Heating control problem"]["value"] == "Unknown"
     )  # unknown is never shown as healthy
     assert unknown["Heating control problem"]["tone"] == "idle"
+    disabled_fault = rows(
+        {
+            **base,
+            "sensor.thermann_shadow_controller_fault": "command_not_applied",
+            CONTROL: "disabled",
+        }
+    )
+    assert disabled_fault["Heating control problem"]["tone"] == "bad"
+    assert (
+        disabled_fault["Supervision"]["value"]
+        == "Automatic control is off (fault needs acknowledgement)"
+    )
+    assert disabled_fault["Supervision"]["tone"] == "bad"
+    acknowledged = rows(
+        {
+            **base,
+            "sensor.thermann_shadow_controller_fault": {
+                "state": "none",
+                "attributes": {
+                    "last_acknowledged_fault": "command_not_applied",
+                    "last_acknowledged_at": "2026-11-26T09:45:00+11:00",
+                },
+            },
+            CONTROL: "parked",
+        }
+    )
+    assert acknowledged["Heating control problem"]["value"] == "No problems detected"
+    assert acknowledged["Heating control problem"]["tone"] == "ok"
+    assert acknowledged["Supervision"]["value"] == "Heater confirmed off"
+    assert acknowledged["Supervision"]["tone"] == "ok"
+    assert acknowledged["Last acknowledged fault"]["tone"] == "idle"
+    assert "Command not applied" in acknowledged["Last acknowledged fault"]["value"]
+    assert "26 Nov 09:45" in acknowledged["Last acknowledged fault"]["value"]
+    ack_cards = [
+        c
+        for c in walk(view(data, "system"))
+        if c.get("type") == "conditional" and ACK in json.dumps(c)
+    ]
+    assert len(ack_cards) == 1
+    assert {c["state_not"] for c in ack_cards[0]["conditions"]} == {
+        "none",
+        "unknown",
+        "unavailable",
+    }
+    assert ack_cards[0]["card"]["tap_action"]["target"]["entity_id"] == ACK
+    assert ack_cards[0]["card"]["tap_action"]["confirmation"]["text"]
     nothing = rows({})
     assert {nothing[k]["tone"] for k in ("Cloud connection", "Supervision", "Health", "Mode")} == {
         "idle"
