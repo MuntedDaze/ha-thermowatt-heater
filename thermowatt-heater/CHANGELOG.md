@@ -1,5 +1,17 @@
 # Changelog
 
+## Controller 0.18.3 (app 1.5.1 unchanged)
+
+- Targeted fault-recovery release: prevents toggling Automatic control or
+  Hold/Resume from bypassing `fault_locked`, heals persisted orphaned `0.18.2`
+  faults into `fault_locked`, enables safe owner acknowledgement from both
+  `fault_locked` and `disabled` with fresh status reinspection and preserved
+  `last_acknowledged_fault` / `last_acknowledged_at` audit history, populates
+  `sent_at` (from bridge-proven `posted_at`) and `confirmed_at` on confirmed
+  commands, and updates the Home Control System tab to separate active faults
+  from acknowledged historical failures. App code and version (1.5.1) are
+  unchanged. See `shadow_controller/CHANGELOG.md`.
+
 ## [1.5.1] — explicit backoff command refusals (with controller 0.18.2)
 
 Addresses the 25 November 2026 live boundary-race incident (`docs/audits/2026-11-25/CLOUD_OUTAGE_RECOVERY_INVESTIGATION.md`).

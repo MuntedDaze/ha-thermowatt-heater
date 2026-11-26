@@ -360,12 +360,91 @@ def test_fault_sensor_attributes_and_report_distinguish_active_vs_acknowledged_f
     assert fault_sensor.extra_state_attributes["last_acknowledged_at"] is not None
 
     diag = report.build(rig.runtime, rig.now(), "2026.11.1")
+    assert diag["versions"]["controller"] == "0.18.3"
     assert diag["controller"]["fault"] == "none"
     assert diag["controller"]["last_acknowledged_fault"] == "command_not_applied"
     assert (
         diag["controller"]["last_acknowledged_at"]
         == (fault_sensor.extra_state_attributes["last_acknowledged_at"])
     )
+
+
+def test_end_to_end_live_0_18_2_persisted_fault_recovery_both_disabled_and_enabled(
+    tmp_path, monkeypatch
+):
+    """Reproduces upgrading the live 0.18.2 installation (persisted command_not_applied)
+    through real Store persistence, bridge polls, and owner acknowledgement."""
+    # Path 1: Owner turns Automatic OFF before upgrade -> restarts on 0.18.3 ->
+    # acknowledges while OFF -> turns Automatic ON -> waits for fresh poll -> acts safely.
+    start = hobart(MON, 9, 30)  # morning peak
+    rig = Rig(tmp_path, monkeypatch, start, reading=35, mode="Manual", setpoint=62)
+    persisted = rig.executor.controller.to_dict()
+    persisted.update(
+        enabled=False,
+        state=ctl.DISABLED,
+        reason="automatic_control_disabled",
+        fault="command_not_applied",
+        heater=None,
+    )
+    rig.store[rig.executor.store.key] = persisted
+    rig.executor = rig._executor()  # real Store load + Controller.from_dict + restored
+    assert rig.executor.controller.state == ctl.DISABLED
+    assert rig.executor.controller.fault == "command_not_applied"
+    assert not rig.commands()
+
+    # Acknowledge while Automatic control is OFF.
+    assert drive(rig.executor.async_owner_action("acknowledge")) is True
+    assert rig.executor.controller.state == ctl.DISABLED
+    assert rig.executor.controller.fault is None
+    assert rig.executor.controller.last_acknowledged_fault == "command_not_applied"
+    assert rig.executor.controller.last_acknowledged_at is not None
+    assert not rig.commands()
+
+    # Enable Automatic control -> observing until a fresh status poll arrives after enable.
+    rig.enable()
+    assert rig.executor.controller.state == ctl.OBSERVING
+    t1 = start + timedelta(minutes=1)
+    rig.t = t1.timestamp()
+    rig.runtime.update(t1)
+    drive(rig.executor.async_step(t1))
+    assert rig.executor.controller.state == ctl.OBSERVING
+    assert rig.executor.controller.reason == "waiting_for_new_heater_status"
+    assert not rig.commands()
+
+    # Advance through a genuine bridge status poll -> classifies Manual 62 -> sends OFF -> confirms.
+    rig.run(start + timedelta(minutes=35))
+    assert rig.executor.controller.state == ctl.PARKED
+    assert rig.executor.controller.fault is None
+    assert rig.commands() == ["off@62"]
+    last = rig.executor.controller.history[-1]
+    assert last["status"] == "confirmed"
+    assert last["sent_at"] is not None and last["confirmed_at"] is not None
+
+    # Path 2: Upgraded with Automatic ON and orphaned state="parked" + fault="command_not_applied"
+    # -> heals immediately into fault_locked and refuses all commands until acknowledged.
+    orphaned = rig.executor.controller.to_dict()
+    orphaned.update(
+        enabled=True,
+        state=ctl.PARKED,
+        reason="off_confirmed",
+        fault="command_not_applied",
+        heater=ctl.OFF,
+    )
+    rig.store[rig.executor.store.key] = orphaned
+    rig.executor = rig._executor()
+    assert rig.executor.controller.state == ctl.FAULT_LOCKED
+    assert rig.executor.controller.fault == "command_not_applied"
+    assert rig.executor.controller.heater is None
+    before_cmds = list(rig.commands())
+    rig.run(start + timedelta(minutes=70))
+    assert rig.commands() == before_cmds  # zero commands while fault_locked
+    assert rig.executor.controller.state == ctl.FAULT_LOCKED
+    assert drive(rig.executor.async_owner_action("acknowledge")) is True
+    assert rig.executor.controller.state == ctl.OBSERVING
+    assert rig.executor.controller.fault is None
+    rig.run(start + timedelta(minutes=105))
+    assert rig.executor.controller.state == ctl.PARKED
+    assert rig.executor.controller.fault is None
 
 
 # ------------------------------------------------------------------ 3. Solar qualification & fault interaction

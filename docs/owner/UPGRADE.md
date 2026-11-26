@@ -1,18 +1,19 @@
-# Upgrading to Controller 0.18.2 and Thermann Hot Water 1.5.1
+# Upgrading to Controller 0.18.3 (Thermann Hot Water 1.5.1 unchanged)
 
-For the owner's installation (Home Assistant OS, Thermann Hot Water app 1.4.1
-or 1.5.0, Controller 0.17.1 or 0.18.1, CT-free GoodWe, EMHASS, fixed-AEST
-Aurora 93), to Controller 0.18.2 and then app 1.5.1. These steps
-are for the owner after review and approval; they are not permission for an
-agent to deploy, restart or operate anything. The earlier 0.16 / 1.4 guide is in
+For the owner's installation (Home Assistant OS, Thermann Hot Water app 1.5.1,
+Controller 0.18.2 or earlier, CT-free GoodWe, EMHASS, fixed-AEST Aurora 93), to
+Controller 0.18.3. Thermann Hot Water app stays at **1.5.1** (no app update is
+required if already running 1.5.1). These steps are for the owner after review
+and approval; they are not permission for an agent to deploy, restart or
+operate anything. The earlier 0.16 / 1.4 guide is in
 [history](../history/next-major/OWNER_UPGRADE_0_16.md).
 
 What changes is listed in the [controller changelog](../../shadow_controller/CHANGELOG.md)
 and [app changelog](../../thermowatt-heater/CHANGELOG.md);
 the requirements are in [OPERATING_POLICY.md](../OPERATING_POLICY.md).
-Controller 0.18.2 works with app 1.4.1, 1.5.0 and 1.5.1; the app update is a
-separate step (installing both 0.18.2 and 1.5.1 enables full boundary-race
-backoff deferral).
+Controller 0.18.3 works with app 1.4.1, 1.5.0 and 1.5.1 (installing both
+0.18.3 and 1.5.1 enables full boundary-race backoff deferral plus fault-lifecycle
+and command-audit fixes).
 
 ## 1. Before you start
 
@@ -60,13 +61,26 @@ integration or its configuration entry. Restart Home Assistant.
 - **Polling:** the controller follows the app. If the app's polling option is
   Smart, *Actual adaptive polling status* reads `adaptive:…` within a few
   minutes; otherwise the app keeps its fixed 30-minute schedule.
+- **Persisted `0.18.2` fault recovery (if upgrading with a retained `command_not_applied` fault):**
+  - If **Automatic heater control** is OFF, the controller loads in `disabled`
+    with `Controller fault` still showing `command_not_applied`. If Automatic
+    control was ON, 0.18.3 safely locks into `fault_locked` on startup and sends
+    no commands until you acknowledge.
+  - Check the official Thermann app first to confirm the heater's current mode
+    matches what you expect.
+  - Press **Acknowledge controller fault** (on the Home Control **System** tab,
+    the Thermowatt dashboard, or **Settings → Devices & services → Thermann
+    Controller**). Acknowledgement records `last_acknowledged_fault` /
+    `last_acknowledged_at`, clears the active fault, never retries an uncertain
+    command, and waits for a fresh status poll before acting.
 - Turn **Automatic heater control** back on only when you intend to (separate
   decision).
 
-## 4. Update the Thermann Hot Water app to 1.5.1 (separate step)
+## 4. Update the Thermann Hot Water app to 1.5.1 (if not already on 1.5.1)
 
-Do this after the controller is running 0.18.2 (keep **Automatic heater control**
-off and preserve the heater's current Manual 62 °C setting until supervised
+Skip this section if Thermann Hot Water is already running **1.5.1** (no bridge
+code changed for Controller 0.18.3). Otherwise, do this after the controller is
+running 0.18.3 (keep **Automatic heater control** off until supervised
 commissioning).
 
 1. With **Automatic heater control** off, check there is no pending command
