@@ -42,6 +42,9 @@ How forecasts are used (visible in the diagnostic report):
 
 ## EMHASS setup
 
+For migration from direct GoodWe history to a selected energy feed, follow the
+[owner shared-energy procedure](../docs/owner/SHARED_ENERGY.md#emhass-and-historical-household-load).
+
 EMHASS publishes `sensor.p_pv_forecast` and `sensor.p_load_forecast` with a
 `forecasts` attribute (`[{date, p_pv_forecast}, …]`) when horizon publishing is
 enabled (the default). Custom EMHASS entity IDs also work: the value key is the

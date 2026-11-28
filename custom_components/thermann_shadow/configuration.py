@@ -354,6 +354,14 @@ SOURCES = {
         "Dedicated hot-water circuit energy (optional)",
         "Optional raw cumulative import-energy Wh/kWh entity for the same circuit. Keep the power sign unchanged; energy must be validated cumulative import. This improves measurements and does not control a relay.",
     ),
+    "energy_source": (
+        "Shared energy selected source",
+        "Optional selector source sensor. Map it together with shared energy validity. Each mapped grid, solar and household power state needs matching measurement_source and original measurement_observed_at attributes. Leave both selector mappings blank for direct meters.",
+    ),
+    "energy_data_valid": (
+        "Shared energy data valid",
+        "Optional selector validity binary sensor. When mapped, shared readings are accepted only while this sensor is on and each reading passes the controller's own freshness checks.",
+    ),
 }
 
 SCALES = {

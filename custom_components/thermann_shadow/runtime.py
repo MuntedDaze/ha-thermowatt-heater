@@ -1,10 +1,10 @@
-"""Read HA states only, on a fixed local timer. Never call services or a transport.
+"""Read HA states only. Never call services or a transport.
 
 0.9.0: the runtime gathers MEASUREMENTS for the one coordinated policy
 (``simple_policy``) and the read-only displays:
 
 * the Thermann reading, target, mode and poll time (bridge entities);
-* the GoodWe grid power (signed by the owner's verified convention), PV and
+* grid power (signed by the owner's verified convention), PV and
   house load, and the local element estimate (``heater_state``);
 * the EMHASS PV and household-load forecasts as net-export slots (``forecast``);
 * the tariff calendar.
@@ -36,6 +36,7 @@ from .thermal import ThermalObserver
 # cloud sample cannot discard the whole horizon. Window is deliberately fixed.
 PV_AVERAGE_MINUTES = 15
 CLOUD_HEALTH = {"ok", "disabled", "auth_locked", "quota_limited", "backoff", "unavailable"}
+SITE_POWER_KEYS = frozenset({"grid", "pv", "pv_ac", "house"})
 
 LOG = logging.getLogger(__name__)
 
@@ -111,6 +112,8 @@ class ShadowRuntime:
         self.owner_events = deque(maxlen=200)
         self.owner_event_store = None
         self.solar_input_loss_pending = False
+        self._energy_source = None
+        self.shared_grid_voted_at = None
 
     def set_native_reference(self, options):
         self.native_options = {**DEFAULT_OPTIONS, **options}
@@ -151,6 +154,8 @@ class ShadowRuntime:
             self.estimator.reset()
         if changed_mapping:
             self.boot = dt_util.utcnow()
+            self._energy_source = None
+            self.shared_grid_voted_at = None
         self.sources, self.settings, self.tariffs = sources, settings, tariffs
         self.history.configure(settings.tank_litres, settings.element_kw)
         self.set_native_reference(options)
@@ -194,21 +199,80 @@ class ShadowRuntime:
         ):
             return None
         unit = state.attributes.get("unit_of_measurement")
+        observed_at = state.last_reported
+        if key in SITE_POWER_KEYS and self.shared_energy:
+            return self._shared_power(state, self._selected_energy_source())
         if key == "heater":
             unit = self.hass.config.units.temperature_unit
         return Reading(
             state.attributes.get(attribute) if attribute else state.state,
-            state.last_reported,
+            observed_at,
             unit,
             bool(state.attributes.get("restored", False)),
         )
+
+    @property
+    def shared_energy(self):
+        return bool(self.sources.get("energy_source") or self.sources.get("energy_data_valid"))
+
+    def _selected_energy_source(self):
+        source = self._reading("energy_source")
+        valid = self._reading("energy_data_valid")
+        if (
+            source
+            and not source.restored
+            and valid
+            and not valid.restored
+            and valid.value == "on"
+            and isinstance(source.value, str)
+            and source.value.strip()
+        ):
+            return source.value
+        return None
+
+    @staticmethod
+    def _shared_power(state, source):
+        """Trust the physical report identity carried with this value, not the HA write."""
+        attrs = state.attributes
+        if not source or attrs.get("measurement_source") != source:
+            return None
+        try:
+            at = timestamp(attrs.get("measurement_observed_at"))
+        except (ValueError, OverflowError):
+            return None
+        return Reading(
+            state.state,
+            at,
+            attrs.get("unit_of_measurement"),
+            bool(attrs.get("restored", False)),
+        )
+
+    def sync_shared_energy(self, now):
+        if not self.shared_energy:
+            return
+        source = self._selected_energy_source()
+        changed = source != self._energy_source
+        if changed:
+            self._energy_source = source
+            self.pv_samples.clear()
+            self.shared_grid_voted_at = None
+            if self.executor is not None:
+                self.executor.policy.pv_samples.clear()
+        if changed or self._kw("grid", now) is None:
+            # Selector callbacks can run between a snapshot and its queued
+            # policy evaluation. Invalidate the old source's cached grid and CT pair.
+            self.grid_import_kw = self.grid_observed_at = self.power_budget = None
+            if self.executor is not None:
+                self._solar_input_loss()
 
     def _kw(self, key, now, entity_id=None):
         reading = self._reading(key, entity_id=entity_id)
         try:
             if reading and not reading.restored:
                 _fresh(reading, now, self.boot, self.settings.grid_max_age_seconds)
-                return _power(reading)
+                value = _power(reading)
+                if not self.shared_energy or key == "grid" or value >= 0:
+                    return value
         except (ValueError, TypeError, OverflowError):
             pass
         return None
@@ -226,16 +290,24 @@ class ShadowRuntime:
         if key is None or self.executor is None:
             return
         state = event.data.get("new_state")
+        self.sync_shared_energy(now)
         kw = None
         at = state.last_reported if state else None
         if state:
             try:
-                reading = Reading(
-                    state.state,
-                    at,
-                    state.attributes.get("unit_of_measurement"),
-                    bool(state.attributes.get("restored", False)),
+                reading = (
+                    self._shared_power(state, self._energy_source)
+                    if (self.shared_energy and key in SITE_POWER_KEYS)
+                    else Reading(
+                        state.state,
+                        at,
+                        state.attributes.get("unit_of_measurement"),
+                        bool(state.attributes.get("restored", False)),
+                    )
                 )
+                if reading is None:
+                    raise ValueError("missing_physical_report")
+                at = reading.observed_at
                 _fresh(reading, now, self.boot, self.settings.grid_max_age_seconds)
                 if not reading.restored:
                     kw = _power(reading)
@@ -386,7 +458,8 @@ class ShadowRuntime:
         mode_state = self.hass.states.get(self.sources.get("mode", ""))
         mode = mode_state.state if mode_state else None
 
-        # GoodWe meter (local, about every minute). Signed import only when the
+        self.sync_shared_energy(now)
+        # Signed import only when the
         # owner has verified the meter's direction; otherwise no solar evidence.
         grid = self._kw("grid", now)
         export_kw = None if grid is None else grid * (-1 if settings.import_positive else 1)
@@ -403,7 +476,8 @@ class ShadowRuntime:
         raw = self.hass.states.get(self.sources.get("grid") or "")
         reported = getattr(raw, "last_reported", None)
         self.grid_value_missing = bool(
-            grid is None
+            not self.shared_energy
+            and grid is None
             and settings.meter_verified
             and raw is not None
             and not raw.attributes.get("restored", False)
@@ -432,7 +506,12 @@ class ShadowRuntime:
             else None
         )
         house_kw = self._kw("house", now)
-        if house_kw is None and pv_ac_now is not None and export_kw is not None:
+        if (
+            not self.shared_energy
+            and house_kw is None
+            and pv_ac_now is not None
+            and export_kw is not None
+        ):
             house_kw = max(0.0, pv_ac_now - export_kw)
         self.circuit = circuit_power(
             self._reading("heater_power"),

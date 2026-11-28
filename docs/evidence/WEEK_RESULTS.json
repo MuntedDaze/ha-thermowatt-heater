@@ -565,12 +565,8 @@
         }
       ],
       "notifications": [
-        "thermann_shadow_cloud_fault",
-        "thermann_shadow_control_restored",
         "thermann_shadow_override_mode_or_target_changed_outside_controller",
-        "thermann_shadow_peak_lockout_unverified",
-        "thermann_shadow_protective_exit_unresolved",
-        "thermann_shadow_status_stale"
+        "thermann_shadow_protective_exit_unresolved"
       ],
       "clean_history_sessions": 0,
       "common_terminal_stored_kwh": 14.03141,
@@ -1266,10 +1262,7 @@
         }
       ],
       "notifications": [
-        "thermann_shadow_cloud_fault",
-        "thermann_shadow_control_restored",
         "thermann_shadow_override_mode_or_target_changed_outside_controller",
-        "thermann_shadow_peak_lockout_unverified",
         "thermann_shadow_protective_exit_unresolved"
       ],
       "clean_history_sessions": 0,
@@ -1876,13 +1869,8 @@
         }
       ],
       "notifications": [
-        "thermann_shadow_cloud_fault",
-        "thermann_shadow_control_restored",
-        "thermann_shadow_heater_meter_unavailable",
         "thermann_shadow_override_mode_or_target_changed_outside_controller",
-        "thermann_shadow_peak_lockout_unverified",
-        "thermann_shadow_protective_exit_unresolved",
-        "thermann_shadow_status_stale"
+        "thermann_shadow_protective_exit_unresolved"
       ],
       "clean_history_sessions": 0,
       "common_terminal_stored_kwh": 14.03141,
@@ -2566,11 +2554,7 @@
         }
       ],
       "notifications": [
-        "thermann_shadow_cloud_fault",
-        "thermann_shadow_control_restored",
-        "thermann_shadow_heater_meter_unavailable",
         "thermann_shadow_override_mode_or_target_changed_outside_controller",
-        "thermann_shadow_peak_lockout_unverified",
         "thermann_shadow_protective_exit_unresolved"
       ],
       "clean_history_sessions": 0,

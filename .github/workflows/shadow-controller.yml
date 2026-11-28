@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["2026.10.4", "2026.11.1"]
+        version: ["2026.10.4", "2026.11.1", "2026.11.3"]
     steps:
       - uses: actions/checkout@v4
       - name: Load the actual component and config flows without external networking

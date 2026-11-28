@@ -27,6 +27,8 @@ OPTIONAL_SOURCES = {
     "pv_ac": "",
     "heater_power": "",
     "heater_energy": "",
+    "energy_source": "",
+    "energy_data_valid": "",
 }
 # AC-side inverter output, consistent with the AC meter and house load. Used
 # when no explicit pv_ac mapping is saved (existing 0.3.0 entries).

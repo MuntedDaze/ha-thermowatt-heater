@@ -20,7 +20,9 @@
           "forecast_load": "Forecast household electricity use",
           "pv_ac": "Inverter's usable AC output",
           "heater_power": "Dedicated hot-water circuit power (optional)",
-          "heater_energy": "Dedicated hot-water circuit energy (optional)"
+          "heater_energy": "Dedicated hot-water circuit energy (optional)",
+          "energy_source": "Shared energy selected source",
+          "energy_data_valid": "Shared energy data valid"
         },
         "data_description": {
           "heater": "Select the existing Thermann bridge water-heater entity. Reads its temperature attributes only; selecting it sends no command. Cloud status does not prove physical element ON/OFF.",
@@ -37,7 +39,9 @@
           "forecast_load": "Optional timestamped EMHASS household-load forecast. Without a usable one, a conservative 1 kW floor (or the current household load, if higher) is assumed. Neither forecast is required for heating. Stale forecasts are ignored.",
           "pv_ac": "Optional W/kW AC-output sensor, consistent with the grid meter. Existing unmapped installations retain the legacy GoodWe total-power fallback; map your actual inverter for other equipment. Do not substitute panel/DC power.",
           "heater_power": "Optional raw signed W/kW active-power entity for the exclusive heater circuit, from any validated meter. Do not use sensor.em_hot_water_power or a dashboard template. Leave unmapped before the CT is installed. Required storage still works; optional solar-only boost needs commissioning. A failed commissioned meter is a fault, not measured zero.",
-          "heater_energy": "Optional raw cumulative import-energy Wh/kWh entity for the same circuit. Keep the power sign unchanged; energy must be validated cumulative import. This improves measurements and does not control a relay."
+          "heater_energy": "Optional raw cumulative import-energy Wh/kWh entity for the same circuit. Keep the power sign unchanged; energy must be validated cumulative import. This improves measurements and does not control a relay.",
+          "energy_source": "Optional selector source sensor. Map it together with shared energy validity. Each mapped grid, solar and household power state needs matching measurement_source and original measurement_observed_at attributes. Leave both selector mappings blank for direct meters.",
+          "energy_data_valid": "Optional selector validity binary sensor. When mapped, shared readings are accepted only while this sensor is on and each reading passes the controller's own freshness checks."
         }
       }
     },
@@ -255,7 +259,9 @@
           "forecast_load": "Forecast household electricity use",
           "pv_ac": "Inverter's usable AC output",
           "heater_power": "Dedicated hot-water circuit power (optional)",
-          "heater_energy": "Dedicated hot-water circuit energy (optional)"
+          "heater_energy": "Dedicated hot-water circuit energy (optional)",
+          "energy_source": "Shared energy selected source",
+          "energy_data_valid": "Shared energy data valid"
         },
         "data_description": {
           "grid": "Optional signed W or kW net grid sensor. Verify its positive direction below. Buying and exporting must have opposite signs; an unsigned consumption sensor is unsuitable. Basic tariff operation can run without it.",
@@ -267,7 +273,9 @@
           "forecast_load": "Optional timestamped EMHASS household-load forecast. Without a usable one, a conservative 1 kW floor (or the current household load, if higher) is assumed. Neither forecast is required for heating. Stale forecasts are ignored.",
           "pv_ac": "Optional W/kW AC-output sensor, consistent with the grid meter. Existing unmapped installations retain the legacy GoodWe total-power fallback; map your actual inverter for other equipment. Do not substitute panel/DC power.",
           "heater_power": "Optional raw signed W/kW active-power entity for the exclusive heater circuit, from any validated meter. Do not use sensor.em_hot_water_power or a dashboard template. Leave unmapped before the CT is installed. Required storage still works; optional solar-only boost needs commissioning. A failed commissioned meter is a fault, not measured zero.",
-          "heater_energy": "Optional raw cumulative import-energy Wh/kWh entity for the same circuit. Keep the power sign unchanged; energy must be validated cumulative import. This improves measurements and does not control a relay."
+          "heater_energy": "Optional raw cumulative import-energy Wh/kWh entity for the same circuit. Keep the power sign unchanged; energy must be validated cumulative import. This improves measurements and does not control a relay.",
+          "energy_source": "Optional selector source sensor. Map it together with shared energy validity. Each mapped grid, solar and household power state needs matching measurement_source and original measurement_observed_at attributes. Leave both selector mappings blank for direct meters.",
+          "energy_data_valid": "Optional selector validity binary sensor. When mapped, shared readings are accepted only while this sensor is on and each reading passes the controller's own freshness checks."
         }
       },
       "equipment": {
