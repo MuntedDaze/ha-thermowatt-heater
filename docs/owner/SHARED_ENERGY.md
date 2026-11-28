@@ -170,7 +170,7 @@ from the published forecast.
              {% set e = 'sensor.home_energy_household_power' %}
              {% set v = states(e) | float(none) %}
              {% set s = states('sensor.home_energy_source') %}
-             {% set t = as_timestamp(state_attr(e, 'measurement_observed_at'), none) %}
+             {% set t = as_datetime(state_attr(e, 'measurement_observed_at'), none) %}
              {{ is_state('binary_sensor.home_energy_data_valid', 'on')
                 and s not in ['unknown', 'unavailable', '']
                 and state_attr(e, 'measurement_source') == s
@@ -178,7 +178,8 @@ from the published forecast.
                 and state_attr(e, 'unit_of_measurement') in ['W', 'kW']
                 and v is not none
                 and 0 <= (v * (1000 if state_attr(e, 'unit_of_measurement') == 'kW' else 1)) <= 30000
-                and t is not none and 0 <= as_timestamp(now()) - t <= 120 }}
+                and t is not none and t.tzinfo is not none
+                and 0 <= as_timestamp(now()) - as_timestamp(t) <= 120 }}
            state: >-
              {% set e = 'sensor.home_energy_household_power' %}
              {% set v = states(e) | float(none) %}
@@ -211,16 +212,27 @@ from the published forecast.
    optional forecasts disabled if the current load input is known to be
    contaminated.
 5. For an approved cutover, use the same tested setting in production.
-   Before the EMHASS optimization action, require a finite available
-   `sensor.home_energy_emhass_load` value and compare its
-   `measurement_observed_at` with the current time (0–120 s). Keep the
-   existing success checks for optimization and publication and require two
-   newly reported output horizons before advancing the generation timestamp.
-   Verify both Thermann forecast entities have valid recent horizons. On a
-   failed run, leave generation time unchanged and allow the normal
-   forecast-age limits to apply. Roll back by restoring the saved EMHASS
-   input and its preprocessing settings. Neither helper nor forecast output
-   needs to be renamed or deleted.
+   Insert this condition immediately before the EMHASS optimization action.
+
+   ```yaml
+   - condition: template
+     value_template: >-
+       {% set e = 'sensor.home_energy_emhass_load' %}
+       {% set t = as_datetime(state_attr(e, 'measurement_observed_at'), none) %}
+       {{ is_state('binary_sensor.home_energy_data_valid', 'on')
+          and is_number(states(e))
+          and state_attr(e, 'measurement_source') == states('sensor.home_energy_source')
+          and t is not none and t.tzinfo is not none
+          and 0 <= as_timestamp(now()) - as_timestamp(t) <= 120 }}
+   ```
+
+   Keep the existing success checks for optimization and publication and
+   require two newly reported output horizons before advancing the generation
+   timestamp. Verify both Thermann forecast entities have valid recent
+   horizons. On a failed run, leave generation time unchanged and allow the
+   normal forecast-age limits to apply. Roll back by restoring the saved
+   EMHASS input and its preprocessing settings. Keep both old and new history
+   entities and both forecast outputs.
 
 References for the installed version review include [EMHASS configuration](https://emhass.readthedocs.io/en/stable/config.html)
 and [Home Assistant template sensor availability](https://www.home-assistant.io/integrations/template/).
