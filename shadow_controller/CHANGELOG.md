@@ -1,5 +1,17 @@
 # Thermann Controller (formerly Thermann Shadow Planner)
 
+## 0.18.4 — notification reliability and shared energy (app 1.5.1)
+
+- Report forecast and circuit-meter gaps as diagnostics. Consolidate status
+  and cloud alerts, allow startup and routine confirmation to settle, and
+  resolve notices silently after recovery.
+- Accept an optional external energy selector. Each power sample needs its
+  original timestamp, matching source and valid data. A source change or loss
+  clears surplus evidence and invokes the existing optional-heat loss checks.
+- Entry schema remains 1.6. Existing direct mappings work without edits.
+  Switching shared mappings requires verifying meter direction and renewing
+  the grid-only commissioning record, where used.
+
 ## 0.18.3 — fault lifecycle, command audit timestamps, and System dashboard fault display (app 1.5.1 unchanged)
 
 Addresses the post-commissioning findings observed on 26 November 2026 (09:41 AEDT). Thermann Hot Water bridge remains at 1.5.1 with no bridge code changes.

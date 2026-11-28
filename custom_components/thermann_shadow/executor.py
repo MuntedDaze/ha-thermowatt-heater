@@ -49,6 +49,7 @@ from zoneinfo import ZoneInfo
 from .adaptive import smart_plan
 from .simple_policy import HOLD, STORAGE, PolicySettings, SimplePolicy, Snapshot
 from .solar import ct_free_record, grid_sanity
+from .model import timestamp
 
 LOG = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -185,6 +186,8 @@ class Executor:
         self.controller.time_zone = self.runtime.settings.time_zone
         self._saved = data if isinstance(data, dict) else None
         self.controller.restored(dt_util.utcnow())
+        if data is not None:
+            self._dismiss("control_restored")
         self.runtime.controller_active = self.controller.enabled
         # Restart: one guarded on-demand status read, so the first decision does
         # not wait for the next poll (the bridge ignores it unless enabled).
@@ -302,6 +305,10 @@ class Executor:
             and self.runtime.boot <= health_reading.observed_at <= now
             and now - health_reading.observed_at <= timedelta(minutes=self._poll_minutes() + 5)
         )
+        obs.cloud_diagnostics_fresh = bool(
+            diagnostics_fresh and now - health_reading.observed_at <= timedelta(seconds=120)
+        )
+        obs.bridge_starting = now - self.runtime.boot <= timedelta(minutes=self._poll_minutes() + 5)
         obs.bridge_available = (
             mode is not None
             and mode.state != "unavailable"
@@ -366,7 +373,7 @@ class Executor:
         return None
 
     def _quiet_deadline(self, obs, schedule):
-        """Only suppress a passive-age alert; never grants command/temperature authority."""
+        """Use the bridge's accepted schedule for passive alerts only."""
         health = self.runtime._reading("cloud_health")
         if (
             not health
@@ -379,9 +386,7 @@ class Executor:
             not self._bridge_smart(
                 self.hass.states.get(self.runtime.sources.get("cloud_health", ""))
             )
-            or not self._quiet_state(obs, self.last_decision)
             or obs.cloud_health != "ok"
-            or not obs.bridge_available
             or obs.auth_mode != "authorized"
             or not isinstance(schedule, dict)
             or schedule.get("active") is not True
@@ -394,17 +399,33 @@ class Executor:
             return
         owner = schedule.get("owner_check_seconds")
         next_at = schedule.get("next_at")
+        interval = schedule.get("interval_seconds")
+        receipt = self.runtime._reading("cloud_health", "last_successful_poll")
+        try:
+            if receipt is None:
+                return
+            received_at = timestamp(receipt.value)
+            # HA's timestamp sensor state can omit fractional seconds. Its
+            # diagnostics attributes carry the original bridge receipt.
+            if obs.poll_at not in (received_at, received_at.replace(microsecond=0)):
+                return
+        except (ValueError, OverflowError):
+            return
         if (
             type(owner) is not int
             or not 1800 <= owner <= SMART_OWNER_CHECK_MAX_SECONDS
             or type(next_at) not in (int, float)
-            or not obs.poll_at.timestamp() <= next_at <= obs.poll_at.timestamp() + owner + 1
+            or type(interval) not in (int, float)
+            or not 0 < interval <= owner + 1
+            or not obs.poll_at.timestamp()
+            <= next_at
+            <= max(obs.now.timestamp(), obs.poll_at.timestamp() + owner) + 1
         ):
             return
-        obs.passive_status_deadline = min(
-            datetime.fromtimestamp(next_at, obs.poll_at.tzinfo),
-            obs.poll_at + timedelta(seconds=owner),
-        ) + timedelta(minutes=5)
+        # When overdue the bridge clamps next_at to its current wall time.
+        # Bound it by the accepted interval for this actual status sample.
+        delay = min(next_at - obs.poll_at.timestamp(), interval, owner)
+        obs.passive_status_deadline = obs.poll_at + timedelta(seconds=delay, minutes=5)
 
     def _event_decision_at(self, now, decision, decision_at):
         """Observe slightly ahead of real policy transitions so a healthy read
@@ -536,8 +557,19 @@ class Executor:
             at = runtime.grid_observed_at
             if runtime.power_budget is not None:
                 at = min(at, runtime.circuit.observed_at)
-            if at is not None:
+            if at is not None and (
+                not runtime.shared_energy
+                or (
+                    (runtime.power_budget is not None or ct_free_valid)
+                    and (
+                        runtime.shared_grid_voted_at is None
+                        or runtime.grid_observed_at > runtime.shared_grid_voted_at
+                    )
+                )
+            ):
                 self.policy.add_meter(at, grid, heater_kw=watts / 1000)
+                if runtime.shared_energy:
+                    runtime.shared_grid_voted_at = runtime.grid_observed_at
         elif missing_gap:
             self.policy.note_missing()  # unmeasured: pauses qualification, never votes
         else:

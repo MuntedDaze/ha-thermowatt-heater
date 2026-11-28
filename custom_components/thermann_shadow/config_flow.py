@@ -36,7 +36,10 @@ def sources_schema(values, keys=None):
         fields[marker(key, description={"suggested_value": values.get(key, "")})] = (
             selector.EntitySelector(
                 selector.EntitySelectorConfig(
-                    domain="water_heater" if key == "heater" else "sensor"
+                    domain={
+                        "heater": "water_heater",
+                        "energy_data_valid": "binary_sensor",
+                    }.get(key, "sensor")
                 )
             )
         )
@@ -255,6 +258,13 @@ class ShadowOptionsFlow(config_entries.OptionsFlow):
             if updated.get("heater_power") != values.get("heater_power"):
                 result["heater_meter_verification"] = ""
                 result["learning_hardware_qualified"] = False
+            shared_keys = ("energy_source", "energy_data_valid")
+            if any(updated.get(key) or values.get(key) for key in shared_keys) and any(
+                updated.get(key, "") != values.get(key, "")
+                for key in (*shared_keys, "grid", "pv", "pv_ac", "house")
+            ):
+                result["meter_verified"] = False
+                result["ct_free_solar_verification"] = ""
             return self._finish(before, result, step_id, sources_schema(updated, keys))
         return self.async_show_form(step_id=step_id, data_schema=sources_schema(values, keys))
 

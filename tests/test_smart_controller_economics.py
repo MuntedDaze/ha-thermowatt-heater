@@ -76,14 +76,15 @@ def test_economic_preferences_validate_atomically(changes):
         configuration.parse_options(changes)
 
 
-def test_persistent_raw_meter_failure_alerts_once_and_resolves_on_recovery():
+def test_persistent_raw_meter_failure_is_diagnostic_and_clears_on_recovery():
     now = at(MON, 12)
     c = controller_ready(now)
     missing = {"heater_meter_mapped": True, "heater_meter_quality": "stale_or_invalid"}
     c.step(observation(now, **missing), ctl.Want("hold", "policy"), config())
     later = now + 5 * MIN
     effects = c.step(observation(later, **missing), ctl.Want("hold", "policy"), config())
-    assert [e.key for e in effects if e.kind == "notify"] == ["heater_meter_unavailable"]
+    assert "heater_meter_unavailable" in c.active_alerts
+    assert not [e for e in effects if e.kind == "notify"]
     assert not published(effects)
     again = c.step(observation(later + MIN, **missing), ctl.Want("hold", "policy"), config())
     assert not [e for e in again if e.kind == "notify"]
@@ -92,4 +93,5 @@ def test_persistent_raw_meter_failure_alerts_once_and_resolves_on_recovery():
         ctl.Want("hold", "policy"),
         config(),
     )
-    assert "heater_meter_unavailable" in [e.key for e in recovered if e.kind == "resolve"]
+    assert "heater_meter_unavailable" not in c.active_alerts
+    assert not [e for e in recovered if e.kind == "notify"]

@@ -466,6 +466,14 @@ Mapping key: `heater_power`. Optional raw signed W/kW active-power entity for th
 
 Mapping key: `heater_energy`. Optional raw cumulative import-energy Wh/kWh entity for the same circuit. Keep the power sign unchanged; energy must be validated cumulative import. This improves measurements and does not control a relay.
 
+### Shared energy selected source
+
+Mapping key: `energy_source`. Optional selector source sensor. Map it together with shared energy validity. Each mapped grid, solar and household power state needs matching measurement_source and original measurement_observed_at attributes. Leave both selector mappings blank for direct meters.
+
+### Shared energy data valid
+
+Mapping key: `energy_data_valid`. Optional selector validity binary sensor. When mapped, shared readings are accepted only while this sensor is on and each reading passes the controller's own freshness checks.
+
 ## Retired settings
 
 These keys are not settings any more: nothing reads, validates or shows them.

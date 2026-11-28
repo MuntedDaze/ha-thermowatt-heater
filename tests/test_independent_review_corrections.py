@@ -182,15 +182,16 @@ def test_quiet_lease_supervision_requires_fresh_diagnostics_and_actual_deadline(
         "reason": "quiet_before_decision",
         "owner_check_seconds": 28800,
         "next_at": (now + 10 * MIN).timestamp(),
+        "interval_seconds": (now + 10 * MIN - obs.poll_at).total_seconds(),
     }
     rig.executor._quiet_deadline(obs, plan)
     assert obs.passive_status_deadline == now + 15 * MIN
     obs = replace(obs, passive_status_deadline=None, bridge_available=False)
     rig.executor._quiet_deadline(obs, plan)
-    assert obs.passive_status_deadline is None
+    assert obs.passive_status_deadline == now + 15 * MIN
     health = rig.states[rig.sources["cloud_health"]]
     health.last_reported = now - timedelta(seconds=121)
-    obs = replace(obs, bridge_available=True)
+    obs = replace(obs, bridge_available=True, passive_status_deadline=None)
     rig.executor._quiet_deadline(obs, plan)
     assert obs.passive_status_deadline is None
 

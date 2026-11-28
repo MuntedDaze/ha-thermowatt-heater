@@ -1,4 +1,4 @@
-"""Thermann Controller 0.18.3: one coordinated policy (simple_policy.py) and the
+"""Thermann Controller: one coordinated policy (simple_policy.py) and the
 production controller. The controller (executor.py/controller.py) is the only
 component that may publish a Thermann mode command, and it cannot do so until
 the owner completes commissioning and enables automatic control. With control
@@ -122,6 +122,12 @@ async def async_setup_entry(hass, entry):
         # Evaluate immediately when a bridge status lands: a command sent then
         # needs no pre-command status read by the bridge (fewer cloud requests).
         now = dt_util.utcnow()
+        if event.data.get("entity_id") in (
+            runtime.sources.get("energy_source"),
+            runtime.sources.get("energy_data_valid"),
+        ):
+            runtime.sync_shared_energy(now)
+            return
         runtime.capture_input_report(event, now)
         update(now)
 
@@ -140,7 +146,14 @@ async def async_setup_entry(hass, entry):
         entities = sorted(
             {
                 entity
-                for key in ("last_poll", "grid", "heater_power", "pv")
+                for key in (
+                    "last_poll",
+                    "grid",
+                    "heater_power",
+                    "pv",
+                    "energy_source",
+                    "energy_data_valid",
+                )
                 if isinstance(entity := runtime.sources.get(key), str) and entity
             }
         )

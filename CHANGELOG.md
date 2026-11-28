@@ -1,5 +1,15 @@
 # Changelog
 
+## Controller 0.18.4 (app 1.5.1)
+
+- Alert on persistent heater-observation failures, actionable locks and
+  threatened hot water. Use accepted Smart polling deadlines for passive
+  alerts and retain unresolved incidents across Home Assistant reloads.
+- Add optional shared energy mappings with source and physical-report
+  provenance. A source change restarts solar qualification.
+- Document the owner’s notification, forecast and daily statistics audit
+  and staged migration in `docs/owner/SHARED_ENERGY.md`.
+
 ## Controller 0.18.3 (app 1.5.1 unchanged)
 
 - Targeted fault-recovery release: prevents toggling Automatic control or

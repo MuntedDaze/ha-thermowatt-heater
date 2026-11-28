@@ -177,14 +177,15 @@ def test_restart_during_peak_reinspects_before_one_guarded_off():
     settings = cfg(four_state_qualified=True)
     first = restored.step(obs(now, "Manual", 62, poll_at=now), wanted, settings)
     assert not publishes(first)
-    assert any(e.key == "peak_lockout_unverified" for e in first if e.kind == "notify")
+    assert "peak_lockout_unverified" in restored.active_alerts
+    assert not [e for e in first if e.kind == "notify"]
     later = now + MIN
     effects = restored.step(
         obs(later, "Manual", 62, poll_at=later, bridge_transitions=["off@62"]), wanted, settings
     )
     assert publishes(effects) == ["off@62"]
     assert "peak_lockout_unverified" in restored.active_alerts
-    assert not [e for e in effects if e.kind == "notify"]  # notification deduplicates
+    assert not [e for e in effects if e.kind == "notify"]  # normal confirmation window
 
 
 def test_forecast_fluctuation_does_not_toggle_a_qualified_boost():

@@ -73,6 +73,8 @@ def test_disable_and_reenable_never_bypasses_fault_locked():
     assert c.fault == "command_not_applied"
 
     # Re-enabling Automatic control without acknowledging MUST lock immediately into fault_locked.
+    assert "fault_command_not_applied" in c.alerts
+    assert not any(e.kind == "notify" for e in effects)
     c.set_enabled(True, now + 5 * MIN)
     assert c.enabled is True
     assert c.state == ctl.FAULT_LOCKED
@@ -89,7 +91,7 @@ def test_disable_and_reenable_never_bypasses_fault_locked():
     assert not [e for e in effects if e.kind == "publish"]
     assert c.state == ctl.FAULT_LOCKED
     assert c.fault == "command_not_applied"
-    assert any(e.kind == "notify" and e.key == "fault_command_not_applied" for e in effects)
+    assert not any(e.kind == "notify" for e in effects)
     # Subsequent tick must NOT spam duplicate notifications.
     effects_again = c.step(
         obs(now + 7 * MIN, mode="Manual", target_c=62, poll_at=now + 7 * MIN),
@@ -177,7 +179,7 @@ def test_orphaned_0_18_2_fault_heals_on_load_and_restore_and_can_be_acknowledged
     assert loaded.state == ctl.PARKED
     assert loaded.fault is None
     assert any(e.kind == "resolve" and e.key == "fault_command_not_applied" for e in fresh_effects)
-    assert any(e.kind == "notify" and e.key == "control_restored" for e in fresh_effects)
+    assert not any(e.kind == "notify" for e in fresh_effects)
 
 
 def test_acknowledge_while_disabled_clears_fault_and_still_requires_fresh_poll_on_enable():
@@ -360,7 +362,7 @@ def test_fault_sensor_attributes_and_report_distinguish_active_vs_acknowledged_f
     assert fault_sensor.extra_state_attributes["last_acknowledged_at"] is not None
 
     diag = report.build(rig.runtime, rig.now(), "2026.11.1")
-    assert diag["versions"]["controller"] == "0.18.3"
+    assert diag["versions"]["controller"] == "0.18.4"
     assert diag["controller"]["fault"] == "none"
     assert diag["controller"]["last_acknowledged_fault"] == "command_not_applied"
     assert (

@@ -473,7 +473,7 @@ def test_m4_a_lost_forecast_is_reported_and_still_heats_on_solar(tmp_path, monke
     # 0.9.0 with no forecast: Manual 70 at 11:01, 5.2 kWh from the grid.
     assert start[1:] == ("manual", 70) and "13:00" <= start[0] <= "13:35", rig.posts_local()
     assert park[:2] in {("16:58", "off"), ("16:59", "off")}
-    assert any(key.endswith("forecast_unavailable") for key in rig.notifications)
+    assert not any(key.endswith("forecast_unavailable") for key in rig.notifications)
     assert "forecast_unavailable" in rig.executor.controller.active_alerts
 
 

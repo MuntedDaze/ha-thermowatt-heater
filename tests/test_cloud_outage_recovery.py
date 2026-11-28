@@ -195,7 +195,7 @@ def test_outage_before_transition_clean_backoff_and_automatic_recovery(
     assert len(rig.status_attempts) == 1  # zero extra cloud calls during 3,600 s backoff
     assert rig.commands() == []
     assert controller.state == "change_requested"
-    assert rig.notifications.count("thermann_shadow_cloud_fault") == 1
+    assert "thermann_shadow_cloud_fault" not in rig.notifications
     assert rig.notifications.count("thermann_shadow_parked_off_cannot_restore") == 1
 
     # Cross the 3,600 s recovery boundary; bridge recovers and controller restores 45 C.
@@ -558,9 +558,9 @@ def test_failure_to_recover_at_1h_doubles_backoff_and_recovers_later_from_change
     # Zero requests during the 2-hour backoff and zero duplicate notifications.
     advance(rig, second_retry - timedelta(seconds=1))
     assert len(rig.status_attempts) == 2
-    assert rig.notifications.count("thermann_shadow_cloud_fault") == 1
     assert rig.notifications.count("thermann_shadow_parked_off_cannot_restore") == 1
-    assert rig.notifications.count("thermann_shadow_status_stale") == 1
+    assert "thermann_shadow_cloud_fault" not in rig.notifications
+    assert "thermann_shadow_status_stale" not in rig.notifications
 
     # Cloud finally recovers at +3 hours -> automatic restoration to 45 C.
     advance(rig, second_retry + timedelta(minutes=3))
@@ -623,12 +623,10 @@ def test_failure_to_recover_with_no_bridge_reply_still_hits_65m_confirmation_tim
     assert rig.tank.mode == "Off"
 
 
-def test_notifications_preserve_6h_cooldown_across_brief_unavailable_gap(tmp_path, monkeypatch):
-    """Fix #5: consecutive failures in backoff emit cloud_fault once per 6 h
-    cooldown, AND a brief cloud_health='unavailable' gap no longer erases the
-    cooldown or re-fires cloud_fault until the 6 h cooldown actually expires."""
-    rig = make_evening_peak_rig(tmp_path, monkeypatch, hobart(MON, 21, 28), cloud_polling="smart")
-    outage_at = hobart(MON, 21, 58)
+def test_continuous_cloud_fault_notifies_once_across_reload(tmp_path, monkeypatch):
+    rig = AvailabilityRig(tmp_path, monkeypatch, hobart(MON, 1), mode="Manual", setpoint=45)
+    rig.enable()
+    outage_at = hobart(MON, 2)
     rig.bridge.session.request.side_effect = lambda m, u, **k: response(body=CLOUD_SUCCESS_FALSE)
 
     rig.t = outage_at.timestamp()
@@ -637,7 +635,7 @@ def test_notifications_preserve_6h_cooldown_across_brief_unavailable_gap(tmp_pat
     rig.bridge.next_cloud = rig.t
     rig.bridge.tick()
     evaluate(rig)
-    assert rig.notifications.count("thermann_shadow_cloud_fault") == 1
+    assert "thermann_shadow_cloud_fault" not in rig.notifications
 
     # Continuous backoff across 2+ hours (including second failure at +1 h): still 1.
     advance(rig, outage_at + timedelta(hours=2))
@@ -649,8 +647,8 @@ def test_notifications_preserve_6h_cooldown_across_brief_unavailable_gap(tmp_pat
     rig.t += 60
     rig.report(c.DEFAULT_SOURCES["cloud_health"], "unavailable", {})
     evaluate(rig)
-    assert "cloud_fault" not in rig.executor.controller.alerts
-    assert "cloud_fault" in rig.executor.controller.alert_cooldowns
+    assert "cloud_fault" in rig.executor.controller.alerts
+    rig.executor = rig._executor()
 
     rig.t += 60
     rig.states[c.DEFAULT_SOURCES["cloud_health"]] = SimpleNamespace(
@@ -660,10 +658,10 @@ def test_notifications_preserve_6h_cooldown_across_brief_unavailable_gap(tmp_pat
         last_updated=rig.now(),
     )
     evaluate(rig)
-    # Cooldown preserved: still only 1 notification within 6 hours.
+    # An unavailable MQTT tick and reload are part of the same incident.
     assert rig.notifications.count("thermann_shadow_cloud_fault") == 1
 
-    # After the 6-hour cooldown expires, cloud_fault notifies again.
+    # A prolonged, unresolved incident stays deduplicated.
     rig.t = (outage_at + timedelta(hours=6, minutes=1)).timestamp()
     rig.states[c.DEFAULT_SOURCES["cloud_health"]] = SimpleNamespace(
         state=saved_health.state,
@@ -672,7 +670,7 @@ def test_notifications_preserve_6h_cooldown_across_brief_unavailable_gap(tmp_pat
         last_updated=rig.now(),
     )
     evaluate(rig)
-    assert rig.notifications.count("thermann_shadow_cloud_fault") == 2
+    assert rig.notifications.count("thermann_shadow_cloud_fault") == 1
 
 
 def test_smart_mode_ordinary_get_does_not_proactively_refresh_on_cloud_success_false(

@@ -130,7 +130,7 @@ through the Thermann app is never blocked.
 | Notification | When |
 |---|---|
 | Hot water may be running low | Fresh bottom probe below **35 °C** (configurable) within the observation lead before the **evening peak only** (decision 20 Nov 2026). Never before the morning peak. Notification only: it never grants heating permission or changes native protections |
-| Fault, unconfirmed command, protective OFF unconfirmed, parked OFF cannot restore, Manual target not heating, status stale, cloud problem, forecast unavailable | As described in §2.9 |
+| Controller fault, unconfirmed protective OFF, parked OFF cannot restore, Manual target not heating, persistent status or cloud failure | As described in §2.9 |
 
 ### 1.10 Cloud polling
 
@@ -169,7 +169,7 @@ protections untouched.
 
 ---
 
-## 2. Implementation (Controller 0.18.1, app 1.5.0)
+## 2. Implementation (Controller 0.18.4, app 1.5.1)
 
 Paths are relative to the repository root.
 
@@ -213,16 +213,19 @@ the inverter limit and corrected by measured PV for 3 h; the uncertainty margin
 and household allowance are applied; an unusable load series uses the floor
 `FALLBACK_LOAD_KW` (1 kW) or the current house load. Missing or stale forecasts
 assume no future solar for planning: weekday heating starts by the latest
-start, the weekend window starts 62 at once, and an alert follows after 60
-minutes. `simple_policy._boost` prices a boost on the qualified measured
+start, the weekend window starts 62 at once, and an advisory diagnostic appears
+after 60 minutes. `simple_policy._boost` prices a boost on the qualified measured
 surplus when no forecast is available. Evidence:
 `tests/test_forecast_independence_week.py`, `tests/test_final_release_0_18_1.py`
 and [evidence/SCENARIO_COVERAGE.md](evidence/SCENARIO_COVERAGE.md).
 
 ### 2.5 Measurements
 
-`runtime.py` (grid sign, freshness, CT-free record match), `solar.py`
-(`ct_free_record`, `grid_sanity`). PV production opens only the weekend window.
+`runtime.py` (grid sign, freshness, shared-energy report provenance),
+`solar.py` (`ct_free_record`, `grid_sanity`). PV production opens only the
+weekend window. Shared selector data must carry the physical observation
+timestamp and matching source. Source changes clear surplus and PV evidence.
+See [owner mapping instructions](owner/SHARED_ENERGY.md).
 
 ### 2.6 Polling
 
@@ -246,11 +249,11 @@ exit reserve for optional starts. App confirms with reads at 60 s and 300 s.
 
 ### 2.9 Alerts
 
-`controller._supervise_alerts`: `pre_peak_low_hot_water` (evening peak only),
-`protective_exit_unresolved`, `parked_off_cannot_restore`,
-`peak_lockout_unverified`, `heater_meter_unavailable`, `storage_not_heating`,
-`status_stale`, `cloud_fault`, `forecast_unavailable`, Override not applied,
-faults and owner-override notices.
+`controller._supervise_alerts` reports actionable safety, command, availability
+and persistent cloud incidents. Passive status checks use the accepted quiet
+poll deadline where available. A single unresolved incident is tracked through
+reload, with silent dismissal on recovery. Forecast failure, ordinary
+circuit-meter loss and raw status age remain visible in diagnostics.
 
 ### 2.10 Settings
 

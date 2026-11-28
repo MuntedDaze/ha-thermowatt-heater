@@ -122,6 +122,9 @@ OPTIONAL_EXIT_REQUEST_RESERVE = 10
 # Must match the policy: only justified protective peak OFF bypasses spacing.
 SPACING_EXEMPT_REASONS = PROTECTIVE_REASONS
 FORECAST_ALERT_AFTER = timedelta(minutes=60)
+STATUS_ALERT_DELAY = timedelta(minutes=10)
+TRANSIENT_CLOUD_ALERT_DELAY = timedelta(minutes=65)
+PEAK_CONFIRMATION_ALERT_DELAY = timedelta(minutes=6)
 BRIDGE_NOT_CONFIRMED = "not_confirmed_within_limit"
 BRIDGE_UNEXPECTED_STATE = "unexpected_state_after_command"
 
@@ -180,7 +183,6 @@ class ControllerConfig:
     confirmation_timeout_minutes: float = 65.0
     max_requests_per_day: int = 220
     poll_interval_minutes: float = 30.0
-    notification_cooldown_hours: float = 6.0
     expected_command_topic: str | None = None
 
     def missing_commissioning(self) -> list[str]:
@@ -238,6 +240,8 @@ class Observation:
     element: str = "unknown"  # on/off/unknown (local meter estimate)
     element_confidence: str = "none"
     cloud_health: str | None = None
+    cloud_diagnostics_fresh: bool | None = None
+    bridge_starting: bool = False
     auth_mode: str | None = None
     consecutive_failures: int | None = None
     cooldown_seconds: int | None = None
@@ -352,7 +356,6 @@ class Controller:
     last_acknowledged_fault: str | None = None
     last_acknowledged_at: str | None = None
     alerts: dict = field(default_factory=dict)
-    alert_cooldowns: dict = field(default_factory=dict)
     active_alerts: list = field(default_factory=list)
     last_want: dict | None = None
     gate_failures: list = field(default_factory=list)
@@ -367,6 +370,8 @@ class Controller:
     refusal: str | None = None
     forecast_missing_since: str | None = None
     heater_meter_missing_since: str | None = None
+    cloud_problem_since: str | None = None
+    peak_lockout_since: str | None = None
     last_observed_heater: str | None = None
     parked_off_restore_since: str | None = None
     protective_exit: dict | None = None
@@ -1111,18 +1116,22 @@ class Controller:
             self.history = (self.history + [intent])[-20:]
             self.intent = None
         self._lock("publish_failed", "The MQTT publish raised an error.", effects)
+        key = effects[0].key
+        if key in self.alerts:
+            return []
+        self.alerts[key] = _iso(now)
         return effects
 
     def _supervise_alerts(
         self, obs: Observation, want: Want, cfg: ControllerConfig, effects: list[Effect]
     ) -> None:
         now = obs.now
-        if not self.enabled:
+        if not self.enabled and not (self.fault or self.protective_exit):
             self.parked_off_restore_since = None
+            self.cloud_problem_since = self.peak_lockout_since = None
             for key in list(self.alerts):
                 del self.alerts[key]
                 effects.append(Effect("resolve", key=key))
-            self.alert_cooldowns.clear()
             effects[:] = [e for e in effects if e.kind != "notify"]
             return
         alerts: list[tuple[str, str, str]] = []
@@ -1139,6 +1148,13 @@ class Controller:
                 )
             )
         if self.protective_exit:
+            self.active_alerts.append("protective_exit_unresolved")
+        safety_blocked = self.fault or obs.cloud_health in {"auth_locked", "disabled"}
+        if self.protective_exit and (
+            safety_blocked
+            or (obs.cloud_health == "backoff" and self.intent is None)
+            or now - _dt(self.protective_exit["since"]) >= PEAK_CONFIRMATION_ALERT_DELAY
+        ):
             alerts.append(
                 (
                     "protective_exit_unresolved",
@@ -1193,31 +1209,36 @@ class Controller:
                 )
         else:
             self.parked_off_restore_since = None
-        if want.reason == "peak_lockout" and (self.heater != OFF or self.state == CONFIRMING):
-            alerts.append(
-                (
-                    "peak_lockout_unverified",
-                    "Hot water: peak lockout not yet confirmed",
-                    "Routine peak heating is locked out, but software OFF has not been confirmed. "
-                    "Cloud failures or an in-flight command may delay it. No command is blindly repeated. "
-                    "Software OFF never proves zero electrical power; native protections and owner intervention remain independent.",
+        peak_unverified = (
+            want.reason == "peak_lockout"
+            and not self.hold
+            and self.state != OWNER_OVERRIDE
+            and (self.heater != OFF or self.state == CONFIRMING)
+        )
+        if peak_unverified:
+            self.active_alerts.append("peak_lockout_unverified")
+            self.peak_lockout_since = self.peak_lockout_since or _iso(now)
+            if not self.protective_exit and (
+                safety_blocked
+                or now - _dt(self.peak_lockout_since) >= PEAK_CONFIRMATION_ALERT_DELAY
+            ):
+                alerts.append(
+                    (
+                        "peak_lockout_unverified",
+                        "Hot water: peak lockout not yet confirmed",
+                        "Routine peak heating is locked out, but software OFF has not been confirmed. "
+                        "Check the controller and the Thermann app. Software OFF does not prove zero electrical power.",
+                    )
                 )
-            )
+        else:
+            self.peak_lockout_since = None
         if obs.heater_meter_mapped and obs.heater_meter_quality not in ("verified", "unverified"):
             since = _dt(self.heater_meter_missing_since)
             if since is None or since > now:
                 self.heater_meter_missing_since = _iso(now)
                 since = now
             if now - since >= timedelta(minutes=5):
-                alerts.append(
-                    (
-                        "heater_meter_unavailable",
-                        "Hot water: raw circuit meter unavailable",
-                        f"Circuit power is {obs.heater_meter_quality or 'unknown'}. Optional solar heat is blocked; "
-                        "essential off-peak heat retains its normal guards. Check the raw meter entity, sign, units "
-                        "and last_reported cadence, including steady 0 W. Repeated evaluations do not prove liveness.",
-                    )
-                )
+                self.active_alerts.append("heater_meter_unavailable")
         else:
             self.heater_meter_missing_since = None
         if (
@@ -1246,50 +1267,66 @@ class Controller:
                 )
         else:
             self.storage_idle_since = None
-        passive_ok = (
-            obs.passive_status_deadline is not None
-            and obs.poll_at is not None
-            and obs.poll_at <= now <= obs.passive_status_deadline
-            and obs.passive_status_deadline - obs.poll_at <= timedelta(hours=12, minutes=5)
-        )
-        if not passive_ok and (
-            obs.poll_at is None
-            or not timedelta(0)
-            <= now - obs.poll_at
-            <= timedelta(minutes=2 * cfg.poll_interval_minutes + 5)
-        ):
-            alerts.append(
-                (
-                    "status_stale",
-                    "Hot water: heater status missing",
-                    "Thermann status is missing, future-dated or beyond the configured freshness window. "
-                    "Automatic commands require a valid status. "
-                    "Check the Thermann Hot Water app and cloud health.",
+        poll = obs.poll_at
+        deadline = obs.passive_status_deadline
+        status_missing = True
+        if poll is not None and poll <= now:
+            if deadline is None or not timedelta(0) <= deadline - poll <= timedelta(
+                hours=12, minutes=5
+            ):
+                deadline = poll + timedelta(minutes=2 * cfg.poll_interval_minutes + 5)
+            status_missing = now > deadline
+        if status_missing:
+            self.active_alerts.append("status_stale")
+        health = obs.cloud_health if obs.cloud_diagnostics_fresh is not False else None
+        if status_missing or health != "ok":
+            self.cloud_problem_since = self.cloud_problem_since or _iso(now)
+            elapsed = now - _dt(self.cloud_problem_since)
+            locked = health == "auth_locked" or (
+                health == "quota_limited" and obs.auth_mode == "blocked"
+            )
+            persistent = (
+                (health in {"backoff", "quota_limited"} and (obs.consecutive_failures or 0) >= 2)
+                or elapsed >= TRANSIENT_CLOUD_ALERT_DELAY
+                or (
+                    elapsed >= STATUS_ALERT_DELAY
+                    and (
+                        health == "disabled"
+                        or (status_missing and health not in {"backoff", "quota_limited"})
+                    )
                 )
             )
-        if obs.cloud_health not in (None, "ok"):
-            alerts.append(
-                (
-                    "cloud_fault",
-                    "Hot water: Thermann cloud problem",
-                    f"Bridge cloud health is {obs.cloud_health}. No commands are sent. "
-                    "Authentication locks are never reset automatically; see the app "
-                    "documentation.",
+            # Reuse the existing incident when upgrading with an open stale-status notice.
+            if "status_stale" in self.alerts:
+                self.alerts.setdefault("cloud_fault", self.alerts.pop("status_stale"))
+                effects.append(Effect("resolve", key="status_stale"))
+            related = {
+                "parked_off_cannot_restore",
+                "protective_exit_unresolved",
+                "peak_lockout_unverified",
+            }
+            if "cloud_fault" in self.alerts or (
+                (locked or (persistent and not obs.bridge_starting))
+                and not any(key in related for key, _, _ in alerts)
+                and not self.fault
+            ):
+                alerts.append(
+                    (
+                        "cloud_fault",
+                        "Hot water: Thermann status or cloud unavailable",
+                        "The controller cannot reliably observe the heater. Check the Thermann Hot Water "
+                        "app and its cloud health, authentication guard and request budget. "
+                        "Authentication locks are never reset automatically.",
+                    )
                 )
-            )
+            elif health != "ok":
+                self.active_alerts.append("cloud_fault")
+        else:
+            self.cloud_problem_since = None
         if obs.forecast_available is False:
             self.forecast_missing_since = self.forecast_missing_since or _iso(now)
             if now - _dt(self.forecast_missing_since) >= FORECAST_ALERT_AFTER:
-                alerts.append(
-                    (
-                        "forecast_unavailable",
-                        "Hot water: EMHASS forecast unavailable",
-                        "No usable published PV and household-load forecast for over an hour. "
-                        "No future solar is assumed: weekday 62 storage starts by its latest "
-                        "start and the weekend window starts 62 at once when it opens. "
-                        "Check the EMHASS forecast sensors and 'Use published forecasts'.",
-                    )
-                )
+                self.active_alerts.append("forecast_unavailable")
         else:
             self.forecast_missing_since = None
         started = _dt(self.guest_started)
@@ -1312,26 +1349,25 @@ class Controller:
                     f"apply it ({detail}). {RECOVERY['guest_mode_not_applied']}",
                 )
             )
-        cooldown = timedelta(hours=cfg.notification_cooldown_hours)
+        if not self.enabled:
+            alerts = [alert for alert in alerts if alert[0] == "protective_exit_unresolved"]
+            self.active_alerts = [
+                key for key in self.active_alerts if key == "protective_exit_unresolved"
+            ]
+            self.cloud_problem_since = self.peak_lockout_since = None
+        notified = {key for key, _, _ in alerts}
         for key, title, message in alerts:
-            self.active_alerts.append(key)
-            last = _dt(self.alert_cooldowns.get(key) or self.alerts.get(key))
-            if last is None or now - last >= cooldown:
-                stamp = _iso(now)
-                self.alerts[key] = stamp
-                self.alert_cooldowns[key] = stamp
+            if key not in self.active_alerts:
+                self.active_alerts.append(key)
+            if key not in self.alerts:
+                self.alerts[key] = _iso(now)
                 effects.append(Effect("notify", key=key, title=title, message=message))
         for key in list(self.alerts):
-            if key not in self.active_alerts and not key.startswith(EVENT_PREFIXES):
+            if key not in notified and not key.startswith(EVENT_PREFIXES):
                 del self.alerts[key]
                 effects.append(Effect("resolve", key=key))
-        for key in list(self.alert_cooldowns):
-            recorded = _dt(self.alert_cooldowns.get(key))
-            if key not in self.alerts and (recorded is None or now - recorded >= cooldown):
-                del self.alert_cooldowns[key]
         if (
-            self.state == FAULT_LOCKED
-            and self.fault
+            self.fault
             and f"fault_{self.fault}" not in self.alerts
             and not any(e.kind == "notify" and e.key == f"fault_{self.fault}" for e in effects)
         ):
@@ -1354,14 +1390,6 @@ class Controller:
             for key in events:
                 del self.alerts[key]
                 effects.append(Effect("resolve", key=key))
-            effects.append(
-                Effect(
-                    "notify",
-                    key="control_restored",
-                    title="Hot water: automatic control restored",
-                    message=f"The controller is operating normally again ({self.state}).",
-                )
-            )
 
     # ------------------------------------------------------------------ display
     def guidance(self) -> str:
