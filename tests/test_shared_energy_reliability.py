@@ -238,6 +238,37 @@ def test_upgrade_preserves_open_legacy_status_notice_until_recovery():
     assert [(e.kind, e.key) for e in effects] == [("resolve", "status_stale")]
 
 
+def test_quota_lock_prioritises_unconfirmed_protective_off_notice():
+    now = local(hour=17, minute=30)
+    controller = ready(now, "Manual", 70)
+    effects = controller.step(
+        obs(now, "Manual", 70, cloud_health="quota_limited", auth_mode="blocked"),
+        want("off", "peak_solar_withdrawn"),
+        cfg(),
+    )
+    assert [(e.kind, e.key) for e in effects] == [("notify", "protective_exit_unresolved")]
+
+
+def test_pre_alert_incident_timer_is_preserved_through_reload():
+    now = local(hour=2)
+    controller = ready(now, "Manual", 45)
+    stale = obs(now, "Manual", 45, poll_at=None, cloud_health="unavailable")
+    assert not controller.step(stale, want("hold"), cfg())
+    at = now + timedelta(minutes=9)
+    controller = ctl.Controller.from_dict(controller.to_dict())
+    controller.restored(at)
+    assert not controller.step(
+        obs(at, "Manual", 45, poll_at=None, cloud_health="unavailable", bridge_starting=True),
+        want("hold"),
+        cfg(),
+    )
+    at += timedelta(minutes=1)
+    effects = controller.step(
+        obs(at, "Manual", 45, poll_at=None, cloud_health="unavailable"), want("hold"), cfg()
+    )
+    assert [(e.kind, e.key) for e in effects] == [("notify", "cloud_fault")]
+
+
 def test_publish_failure_notification_is_persisted_before_next_step():
     now = local(hour=2)
     controller = ready(now, "Manual", 45)

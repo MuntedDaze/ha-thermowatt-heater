@@ -1149,7 +1149,10 @@ class Controller:
             )
         if self.protective_exit:
             self.active_alerts.append("protective_exit_unresolved")
-        safety_blocked = self.fault or obs.cloud_health in {"auth_locked", "disabled"}
+        cloud_locked = obs.cloud_health == "auth_locked" or (
+            obs.cloud_health == "quota_limited" and obs.auth_mode == "blocked"
+        )
+        safety_blocked = self.fault or cloud_locked or obs.cloud_health == "disabled"
         if self.protective_exit and (
             safety_blocked
             or (obs.cloud_health == "backoff" and self.intent is None)
@@ -1282,9 +1285,7 @@ class Controller:
         if status_missing or health != "ok":
             self.cloud_problem_since = self.cloud_problem_since or _iso(now)
             elapsed = now - _dt(self.cloud_problem_since)
-            locked = health == "auth_locked" or (
-                health == "quota_limited" and obs.auth_mode == "blocked"
-            )
+            locked = cloud_locked and health is not None
             persistent = (
                 (health in {"backoff", "quota_limited"} and (obs.consecutive_failures or 0) >= 2)
                 or elapsed >= TRANSIENT_CLOUD_ALERT_DELAY
