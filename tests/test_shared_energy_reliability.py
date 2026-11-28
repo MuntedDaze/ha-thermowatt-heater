@@ -224,6 +224,20 @@ def test_quota_cooldown_is_quiet_but_manual_intervention_alerts():
         )
 
 
+def test_upgrade_preserves_open_legacy_status_notice_until_recovery():
+    now = local(hour=2)
+    controller = ready(now, "Manual", 45)
+    legacy = {**controller.to_dict(), "alerts": {"status_stale": now.isoformat()}}
+    controller = ctl.Controller.from_dict(legacy)
+    controller.restored(now)
+    still_stale = obs(now, "Manual", 45, poll_at=now - timedelta(hours=2))
+    assert not controller.step(still_stale, want("hold"), cfg())
+    assert controller.alerts == legacy["alerts"]
+    healthy = obs(now + timedelta(minutes=1), "Manual", 45, poll_age=0)
+    effects = controller.step(healthy, want("hold"), cfg())
+    assert [(e.kind, e.key) for e in effects] == [("resolve", "status_stale")]
+
+
 def test_publish_failure_notification_is_persisted_before_next_step():
     now = local(hour=2)
     controller = ready(now, "Manual", 45)

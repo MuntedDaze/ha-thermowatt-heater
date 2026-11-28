@@ -1296,23 +1296,24 @@ class Controller:
                     )
                 )
             )
-            # Reuse the existing incident when upgrading with an open stale-status notice.
-            if "status_stale" in self.alerts:
-                self.alerts.setdefault("cloud_fault", self.alerts.pop("status_stale"))
-                effects.append(Effect("resolve", key="status_stale"))
+            # Keep an existing HA notification under its original ID until
+            # recovery. Relabeling it would dismiss the only visible notice.
+            key = "cloud_fault"
+            if key not in self.alerts and "status_stale" in self.alerts:
+                key = "status_stale"
             related = {
                 "parked_off_cannot_restore",
                 "protective_exit_unresolved",
                 "peak_lockout_unverified",
             }
-            if "cloud_fault" in self.alerts or (
+            if key in self.alerts or (
                 (locked or (persistent and not obs.bridge_starting))
                 and not any(key in related for key, _, _ in alerts)
                 and not self.fault
             ):
                 alerts.append(
                     (
-                        "cloud_fault",
+                        key,
                         "Hot water: Thermann status or cloud unavailable",
                         "The controller cannot reliably observe the heater. Check the Thermann Hot Water "
                         "app and its cloud health, authentication guard and request budget. "
